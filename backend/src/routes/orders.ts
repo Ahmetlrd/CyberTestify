@@ -4,7 +4,7 @@ import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { SCAN_PACKAGES, getPackageDef } from '../services/scanPackages.js';
 import { getPricing, currencyFor } from '../services/pricing.js';
-import { initiatePayment } from '../services/payment/iyzico.js';
+import { getPaymentProvider } from '../services/payment/index.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -124,7 +124,8 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     },
   });
 
-  const payment = await initiatePayment(order.id);
+  // Bölgeye göre ödeme sağlayıcı (tr→iyzico, us/ae→stripe; hepsi sandbox).
+  const payment = await getPaymentProvider(region).initiatePayment(order.id);
 
   res.json({ orderId: order.id, ...payment });
 });

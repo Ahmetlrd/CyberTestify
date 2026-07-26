@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyWebhookSignature, handlePaymentSucceeded } from '../services/payment/iyzico.js';
+import { verifyWebhookSignature, handlePaymentSucceeded } from '../services/payment/index.js';
 
 export const webhooksRouter = Router();
 
