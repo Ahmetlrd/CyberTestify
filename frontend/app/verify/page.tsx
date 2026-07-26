@@ -95,6 +95,28 @@ export default function VerifyHub() {
     }
   }
 
+  async function del(id: string) {
+    setError(null);
+    try {
+      await api.deleteDomain(id);
+      await refresh();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  async function delAll() {
+    if (!window.confirm('Taraması olmayan tüm alan adları silinsin mi?')) return;
+    setError(null);
+    try {
+      const r = await api.deleteAllDomains();
+      await refresh();
+      if (r.kept > 0) setError(`${r.deleted} alan adı silindi; taraması olan ${r.kept} tanesi korundu.`);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
   function logout() {
     window.localStorage.removeItem('token');
     router.push('/');
@@ -165,9 +187,14 @@ export default function VerifyHub() {
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Doğrulandı · geçerli
                       </span>
                     </div>
-                    <button onClick={() => router.push(`/order?domainId=${d.id}`)} className="btn-primary shrink-0">
-                      Taramayı Başlat
-                    </button>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button onClick={() => router.push(`/order?domainId=${d.id}`)} className="btn-primary">
+                        Taramayı Başlat
+                      </button>
+                      <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
+                        Sil
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -193,9 +220,14 @@ export default function VerifyHub() {
                             {expired ? 'Süresi doldu — yeniden doğrula' : 'Henüz doğrulanmadı'}
                           </span>
                         </div>
-                        <button onClick={() => setOpenId(open ? null : d.id)} className="btn-outline shrink-0 text-sm">
-                          {open ? 'Gizle' : 'Doğrula'}
-                        </button>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button onClick={() => setOpenId(open ? null : d.id)} className="btn-outline text-sm">
+                            {open ? 'Gizle' : 'Doğrula'}
+                          </button>
+                          <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
+                            Sil
+                          </button>
+                        </div>
                       </div>
                       {open && (
                         <div className="mt-4 border-t border-line pt-4">
@@ -225,9 +257,16 @@ export default function VerifyHub() {
           {/* Yeni alan adı ekle */}
           <section className="mt-8">
             {!showAdd ? (
-              <button onClick={() => setShowAdd(true)} className="btn-outline">
-                + Yeni alan adı ekle
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <button onClick={() => setShowAdd(true)} className="btn-outline">
+                  + Yeni alan adı ekle
+                </button>
+                {domains.length > 0 && (
+                  <button onClick={delAll} className="btn-ghost text-sm text-red-600">
+                    Tümünü sil
+                  </button>
+                )}
+              </div>
             ) : (
               <form onSubmit={addDomain} className="card p-5">
                 <label className="label">Yeni alan adı</label>

@@ -157,7 +157,7 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
     include: {
       flow: true,
       domain: { select: { hostname: true } },
-      report: { select: { id: true, createdAt: true, deliveredAt: true, devAccessSecret: true } },
+      report: { select: { id: true, createdAt: true, deliveredAt: true, devAccessSecret: true, incomplete: true, incompleteReason: true } },
     },
   });
   res.json(order);

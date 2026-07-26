@@ -10,7 +10,16 @@ import { requireAuth } from '../middleware/auth.js';
 
 export const domainsRouter = Router();
 
-const createSchema = z.object({ hostname: z.string().min(3) });
+// Gecerli bir alan adi olmali (rastgele metin degil): en az bir nokta, gecerli
+// etiketler, protokol/path yok. Ornek: ornek.com, alt.ornek.com.tr
+const HOSTNAME_RE = /^(?=.{4,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))+$/;
+const createSchema = z.object({
+  hostname: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(HOSTNAME_RE, 'Gecerli bir alan adi girin (ornek: ornek.com).'),
+});
 
 // Musterinin daha once ekledigi domainler + guncel gecerlilik + DNS talimatlari.
 // Frontend, yeni siparis baslatirken bunu gosterip gecerli olanlarda dogrudan
@@ -56,4 +65,31 @@ domainsRouter.post('/', requireAuth, async (req, res) => {
 domainsRouter.post('/:domainId/verify', requireAuth, async (req, res) => {
   const verified = await checkDomainVerification(req.params.domainId);
   res.json({ verified });
+});
+
+// Tek alan adi sil. Taramasi (siparisi) olan alan adi silinemez (kayit butunlugu).
+domainsRouter.delete('/:domainId', requireAuth, async (req, res) => {
+  const domain = await prisma.domain.findFirst({
+    where: { id: req.params.domainId, customerId: req.customerId! },
+  });
+  if (!domain) return res.status(404).json({ error: 'Bulunamadi.' });
+  const orderCount = await prisma.order.count({ where: { domainId: domain.id } });
+  if (orderCount > 0) {
+    return res.status(409).json({ error: 'Bu alan adinin taramalari var, silinemez.' });
+  }
+  await prisma.scheduledScan.deleteMany({ where: { domainId: domain.id } });
+  await prisma.domain.delete({ where: { id: domain.id } });
+  res.json({ ok: true });
+});
+
+// Taramasi olmayan TUM alan adlarini sil (taramasi olanlar korunur).
+domainsRouter.delete('/', requireAuth, async (req, res) => {
+  const domains = await prisma.domain.findMany({ where: { customerId: req.customerId! }, select: { id: true } });
+  const deletable: string[] = [];
+  for (const d of domains) {
+    if ((await prisma.order.count({ where: { domainId: d.id } })) === 0) deletable.push(d.id);
+  }
+  await prisma.scheduledScan.deleteMany({ where: { domainId: { in: deletable } } });
+  await prisma.domain.deleteMany({ where: { id: { in: deletable } } });
+  res.json({ ok: true, deleted: deletable.length, kept: domains.length - deletable.length });
 });

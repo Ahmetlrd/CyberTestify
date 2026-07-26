@@ -49,10 +49,12 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Cok fazla deneme. Lutfen bir sure sonra tekrar deneyin.' },
 });
-// Genel API: siparis/domain/rapor gibi yazma islemlerini asiri kullanimdan koru.
+// Genel API: siparis/domain/rapor gibi islemleri asiri kullanimdan koru. NOT:
+// panel (dashboard/verify) durum icin periyodik polling yapar; pencere+tavan buna
+// gore ayarli (aksi halde normal kullanimda "cok fazla istek" ile kilitleniyordu).
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: 60 * 1000, // 1 dk
+  max: 300, // dk basina 300 istek (polling + normal kullanim icin rahat, abuse'a karsi hala kapali)
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Cok fazla istek. Lutfen bir sure sonra tekrar deneyin.' },

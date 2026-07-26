@@ -224,6 +224,11 @@ model Report {
   createdAt         DateTime  @default(now())
   deliveredAt       DateTime?
 
+  // Tarama beklenenden erken bitti/durduruldu ve rapor icerigi eksik/bos olabilir
+  // (or. PentAGI'den manuel durdurma, cokme). Musteriye acik uyari gostermek icin.
+  incomplete        Boolean   @default(false)
+  incompleteReason  String?
+
   // SADECE DEV/MOCK modu icin: e-posta servisi henuz yokken erisim sifresini
   // panelde gosterebilmek adina burada tutulur. Gercek odeme (mockPayment=false)
   // modunda ASLA doldurulmaz — sifre sadece e-posta ile ayri kanaldan gider.

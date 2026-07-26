@@ -37,6 +37,10 @@ export const api = {
     ),
   verifyDomain: (domainId: string) =>
     request<{ verified: boolean }>(`/domains/${domainId}/verify`, { method: 'POST' }),
+  deleteDomain: (domainId: string) =>
+    request<{ ok: boolean }>(`/domains/${domainId}`, { method: 'DELETE' }),
+  deleteAllDomains: () =>
+    request<{ ok: boolean; deleted: number; kept: number }>('/domains', { method: 'DELETE' }),
   listDomains: () =>
     request<
       Array<{

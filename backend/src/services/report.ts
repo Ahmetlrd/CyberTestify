@@ -28,6 +28,15 @@ export async function generateAndStoreReport(flowId: string) {
   const markdown = redactAll(
     renderReportMarkdown(flow.order.domain.hostname, flow.order.package.displayName, logs),
   );
+  // EKSIK RAPOR TESPITI: tarama erken durdurulduysa/coktuyse rapor bos/eksik olur.
+  // Sonucu (result) dolu en az bir gorev yoksa raporu "eksik" isaretle → musteriye
+  // panelde acik uyari gosterilir (kimse "raporunuz hazir" deyip bos rapor almasin).
+  const completedTasks = logs.tasks.filter((t) => (t.result ?? '').trim().length > 0);
+  const incomplete = completedTasks.length === 0;
+  const incompleteReason = incomplete
+    ? 'Tarama tamamlanamadan sonlandi (erken durdurma veya bir hata olabilir); rapor eksik.'
+    : null;
+
   const accessSecret = generateReportAccessSecret();
   const { encryptedBlob, iv, authTag, keyDerivationSalt } = encryptReport(
     Buffer.from(markdown, 'utf-8'),
@@ -41,6 +50,8 @@ export async function generateAndStoreReport(flowId: string) {
       iv,
       authTag,
       keyDerivationSalt,
+      incomplete,
+      incompleteReason,
     },
   });
 

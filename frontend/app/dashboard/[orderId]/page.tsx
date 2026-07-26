@@ -103,7 +103,11 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   return (
     <main className="container-page max-w-xl py-16">
       <p className="eyebrow">Sipariş Durumu</p>
-      <h1 className="mt-2 text-3xl font-extrabold text-brand">{HEADLINE[status] ?? status}</h1>
+      <h1 className="mt-2 text-3xl font-extrabold text-brand">
+        {status === 'scan_completed' && order?.report?.incomplete
+          ? 'Rapor hazır — ancak eksik'
+          : HEADLINE[status] ?? status}
+      </h1>
       {order && <p className="mt-1 text-sm text-ink-muted">Hedef: {hostname}</p>}
 
       <div className="mt-8">
@@ -149,6 +153,19 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
 
       {status === 'scan_completed' && (
         <div className="mt-8 space-y-6">
+          {order.report?.incomplete && (
+            <div className="rounded-card border border-amber-300 bg-amber-50 px-4 py-3.5 text-sm text-amber-900">
+              <strong>⚠️ Bu tarama eksik tamamlandı.</strong>{' '}
+              {order.report.incompleteReason ??
+                'Tarama beklenenden erken sonlandı ve rapor içeriği eksik/boş olabilir.'}{' '}
+              Ücret iadesi veya taramanın yeniden çalıştırılması için{' '}
+              <a href="mailto:destek@cybertestify.com" className="font-semibold underline">
+                destek@cybertestify.com
+              </a>{' '}
+              ile iletişime geçin (sipariş no: {order.id}).
+            </div>
+          )}
+
           <ScopeCertificate hostname={hostname} flow={order.flow} />
 
           {/* Rapor teslim — kilit mikro-etkilesimi */}
