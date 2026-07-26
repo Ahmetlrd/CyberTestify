@@ -70,7 +70,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   if (!order && !error) return <main>Yükleniyor...</main>;
 
   return (
-    <main>
+    <main className="container-page max-w-xl py-16">
       <h1>Sipariş Durumu</h1>
       {order && (
         <>

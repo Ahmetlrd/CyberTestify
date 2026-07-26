@@ -23,7 +23,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main>
+    <main className="container-page max-w-md py-16">
       <h1>Giriş Yap</h1>
       <form onSubmit={handleSubmit}>
         <div>

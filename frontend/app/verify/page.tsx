@@ -51,7 +51,7 @@ export default function VerifyPage() {
   }
 
   return (
-    <main>
+    <main className="container-page max-w-xl py-16">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Site Sahipliğini Doğrula</h1>
         <button type="button" onClick={handleLogout} style={{ height: 32 }}>

@@ -29,7 +29,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <main>
+    <main className="container-page max-w-md py-16">
       <h1>Hesap Oluştur</h1>
       <form onSubmit={handleSubmit}>
         <div>

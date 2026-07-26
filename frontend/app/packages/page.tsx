@@ -63,7 +63,7 @@ export default function PackagesPage() {
   };
 
   return (
-    <main>
+    <main className="container-page max-w-content py-14">
       <h1>Taramanızı Başlatın</h1>
       {!domainId && (
         <p style={{ color: 'crimson' }}>

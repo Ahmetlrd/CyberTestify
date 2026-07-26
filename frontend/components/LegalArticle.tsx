@@ -7,7 +7,7 @@ import { COMPANY } from '../lib/company';
  */
 export function LegalArticle({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <main style={{ lineHeight: 1.7 }}>
+    <main className="container-page max-w-3xl py-12" style={{ lineHeight: 1.7 }}>
       <p style={{ fontSize: 13 }}>
         <Link href="/">← Ana sayfa</Link>
       </p>
