@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { COMPANY } from '../lib/company';
 import { Logo } from './Logo';
+import type { RegionConfig } from '../config/regions';
+import { getDict } from '../config/i18n';
 
 const LEGAL_LINKS: Array<[string, string]> = [
   ['Kullanım Koşulları', '/legal/kullanim-kosullari'],
@@ -13,7 +15,12 @@ const LEGAL_LINKS: Array<[string, string]> = [
   ['Sorumluluk Reddi', '/legal/sorumluluk-reddi'],
 ];
 
-export function Footer() {
+export function Footer({ region }: { region: RegionConfig }) {
+  const d = getDict(region).footer;
+  // TR fatura yöntemi = e-Arşiv → tam imprint (MERSİS/vergi). Diğer bölgeler için
+  // kendi tüzel kişilik/vergi bilgileri ayrıca hazırlanacak (config-driven).
+  const showTrImprint = region.invoicingMethod === 'earsiv';
+
   return (
     <footer className="mt-24 bg-brand-deep text-white/80">
       <div className="container-page py-14">
@@ -23,55 +30,55 @@ export function Footer() {
               <Logo className="h-8 w-8" />
               <span className="text-lg font-extrabold tracking-tight text-white">CyberTestify</span>
             </div>
-            <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/70">
-              Yalnızca sahipliğini doğruladığınız alan adına karşı, tamamen otonom yapay zeka ile
-              güvenlik ön-değerlendirmesi. Resmi denetim/sertifikasyon yerine geçmez.
-            </p>
+            <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/70">{d.tagline}</p>
             <p className="mt-4 text-sm">
-              Sorularınız mı var?{' '}
-              <a href={`mailto:${COMPANY.email}`} className="font-medium text-accent hover:underline">
-                {COMPANY.email}
+              {d.questions}{' '}
+              <a href={`mailto:${region.supportEmail}`} className="font-medium text-accent hover:underline">
+                {region.supportEmail}
               </a>
             </p>
           </div>
 
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-widest text-white/50">Yasal</h3>
-            <ul className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              {LEGAL_LINKS.map(([label, href]) => (
-                <li key={href}>
-                  <Link href={href} className="text-sm text-white/70 transition hover:text-white">
-                    {label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-white/50">{d.legal}</h3>
+            {region.legalReady ? (
+              <ul className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {LEGAL_LINKS.map(([label, href]) => (
+                  <li key={href}>
+                    <Link href={href} className="text-sm text-white/70 transition hover:text-white">
+                      {label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-4 text-sm text-white/50">
+                Legal documents for this region are being prepared.
+              </p>
+            )}
           </div>
         </div>
 
-        {/* İşletme kimliği (imprint) — 6563 s. Kanun / TKHK gereği zorunlu */}
         <div className="mt-12 border-t border-white/10 pt-6 text-xs leading-relaxed text-white/55">
-          <div className="font-semibold text-white/75">{COMPANY.legalName}</div>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-            <span>MERSİS: {COMPANY.mersisNo}</span>
-            <span>
-              Vergi D./No: {COMPANY.taxOffice} / {COMPANY.taxNo}
-            </span>
-            <span>{COMPANY.address}</span>
-            <span>Tel: {COMPANY.phone}</span>
-            <span>KEP: {COMPANY.kep}</span>
-          </div>
-          <div className="mt-3">
-            {COMPANY.etbisRegistered ? (
-              <span>ETBİS kayıtlıdır. (Doğrulama karekodu burada gösterilir.)</span>
-            ) : (
-              <span className="text-accent/80">
-                [ETBİS kaydı sonrası doğrulama karekodu buraya eklenecek — yayına almadan önce zorunlu.]
+          <div className="font-semibold text-white/75">{region.companyLegalName}</div>
+          {showTrImprint && (
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+              <span>MERSİS: {COMPANY.mersisNo}</span>
+              <span>
+                Vergi D./No: {COMPANY.taxOffice} / {COMPANY.taxNo}
               </span>
-            )}
-          </div>
+              <span>{COMPANY.address}</span>
+              <span>Tel: {COMPANY.phone}</span>
+              <span>KEP: {COMPANY.kep}</span>
+            </div>
+          )}
+          {showTrImprint && (
+            <div className="mt-3 text-accent/80">
+              [ETBİS kaydı sonrası doğrulama karekodu buraya eklenecek — yayına almadan önce zorunlu.]
+            </div>
+          )}
           <div className="mt-3 text-white/40">
-            © {COMPANY.brand} — Güvenlik ön-değerlendirme hizmeti. Sürüm {COMPANY.legalVersion}.
+            © {COMPANY.brand} — {d.disclaimer} v{COMPANY.legalVersion}
           </div>
         </div>
       </div>

@@ -1,20 +1,34 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { Lang } from '../../config/regions';
 
 type Line = { t: string; tone: 'muted' | 'run' | 'ok' | 'warn' | 'lock' };
 
-const LINES: Line[] = [
-  { t: '$ cybertestify scan ornek.com', tone: 'muted' },
-  { t: '✓ Alan adı sahipliği doğrulandı', tone: 'ok' },
-  { t: '→ Hedef taranıyor…', tone: 'run' },
-  { t: '→ HTTP güvenlik başlıkları inceleniyor…', tone: 'run' },
-  { t: '→ TLS yapılandırması kontrol ediliyor…', tone: 'run' },
-  { t: '⚠ Bulgu: eksik Content-Security-Policy başlığı', tone: 'warn' },
-  { t: '→ Bulgular önem derecesine göre sıralanıyor…', tone: 'run' },
-  { t: '🔒 Rapor uçtan uca şifreleniyor…', tone: 'lock' },
-  { t: '✓ Rapor hazır · 3 dk 12 sn · 0 kapsam dışı erişim', tone: 'ok' },
-];
+const LINES: Record<Lang, Line[]> = {
+  tr: [
+    { t: '$ cybertestify scan ornek.com', tone: 'muted' },
+    { t: '✓ Alan adı sahipliği doğrulandı', tone: 'ok' },
+    { t: '→ Hedef taranıyor…', tone: 'run' },
+    { t: '→ HTTP güvenlik başlıkları inceleniyor…', tone: 'run' },
+    { t: '→ TLS yapılandırması kontrol ediliyor…', tone: 'run' },
+    { t: '⚠ Bulgu: eksik Content-Security-Policy başlığı', tone: 'warn' },
+    { t: '→ Bulgular önem derecesine göre sıralanıyor…', tone: 'run' },
+    { t: '🔒 Rapor uçtan uca şifreleniyor…', tone: 'lock' },
+    { t: '✓ Rapor hazır · 3 dk 12 sn · 0 kapsam dışı erişim', tone: 'ok' },
+  ],
+  en: [
+    { t: '$ cybertestify scan example.com', tone: 'muted' },
+    { t: '✓ Domain ownership verified', tone: 'ok' },
+    { t: '→ Scanning target…', tone: 'run' },
+    { t: '→ Inspecting HTTP security headers…', tone: 'run' },
+    { t: '→ Checking TLS configuration…', tone: 'run' },
+    { t: '⚠ Finding: missing Content-Security-Policy header', tone: 'warn' },
+    { t: '→ Prioritizing findings by severity…', tone: 'run' },
+    { t: '🔒 Encrypting report end-to-end…', tone: 'lock' },
+    { t: '✓ Report ready · 3m 12s · 0 out-of-scope access', tone: 'ok' },
+  ],
+};
 
 const TONE: Record<Line['tone'], string> = {
   muted: 'text-white/45',
@@ -24,15 +38,16 @@ const TONE: Record<Line['tone'], string> = {
   lock: 'text-brand-300',
 };
 
-export function LiveDemo() {
+export function LiveDemo({ lang = 'tr' }: { lang?: Lang }) {
+  const lines = LINES[lang];
   const [shown, setShown] = useState(1);
 
   useEffect(() => {
     const id = setInterval(() => {
-      setShown((n) => (n >= LINES.length ? 1 : n + 1));
+      setShown((n) => (n >= lines.length ? 1 : n + 1));
     }, 950);
     return () => clearInterval(id);
-  }, []);
+  }, [lines.length]);
 
   return (
     <div className="overflow-hidden rounded-card border border-white/10 bg-[#0A1F1C] shadow-2xl">
@@ -40,13 +55,13 @@ export function LiveDemo() {
         <span className="h-3 w-3 rounded-full bg-red-400/70" />
         <span className="h-3 w-3 rounded-full bg-accent/70" />
         <span className="h-3 w-3 rounded-full bg-emerald-400/70" />
-        <span className="ml-3 text-xs font-medium text-white/40">cybertestify — canlı tarama</span>
+        <span className="ml-3 text-xs font-medium text-white/40">cybertestify — live scan</span>
       </div>
       <div className="min-h-[268px] p-5 font-mono text-[13px] leading-7">
-        {LINES.slice(0, shown).map((l, i) => (
-          <div key={i} className={TONE[l.tone]}>
+        {lines.slice(0, shown).map((l, i) => (
+          <div key={i} className={TONE[l.tone]} dir="ltr">
             {l.t}
-            {i === shown - 1 && shown < LINES.length && (
+            {i === shown - 1 && shown < lines.length && (
               <span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" />
             )}
           </div>

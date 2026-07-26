@@ -1,8 +1,10 @@
 import './globals.css';
+import { cookies } from 'next/headers';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import { Nav } from '../components/Nav';
 import { Footer } from '../components/Footer';
 import { CookieBanner } from '../components/CookieBanner';
+import { getRegion } from '../config/regions';
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -17,12 +19,14 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const region = getRegion(cookies().get('region')?.value);
+
   return (
-    <html lang="tr" className={jakarta.variable}>
+    <html lang={region.lang} dir={region.dir} className={jakarta.variable}>
       <body className="flex min-h-screen flex-col font-sans">
-        <Nav />
+        <Nav region={region} />
         <div className="flex-1">{children}</div>
-        <Footer />
+        <Footer region={region} />
         <CookieBanner />
       </body>
     </html>
