@@ -37,6 +37,17 @@ export const api = {
     ),
   verifyDomain: (domainId: string) =>
     request<{ verified: boolean }>(`/domains/${domainId}/verify`, { method: 'POST' }),
+  listDomains: () =>
+    request<
+      Array<{
+        id: string;
+        hostname: string;
+        status: string;
+        verifiedAt: string | null;
+        valid: boolean;
+        instructions: { recordName: string; recordValue: string };
+      }>
+    >('/domains'),
   listPackages: (region = 'tr') =>
     request<Array<{ key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string }>>(
       `/orders/packages?region=${region}`,
