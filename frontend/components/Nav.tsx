@@ -31,7 +31,7 @@ export function Nav() {
           <span className="hidden items-center gap-1 rounded-pill border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-ink-muted sm:inline-flex">
             🇹🇷 TR
           </span>
-          <Link href="/login" className="btn-ghost hidden sm:inline-flex">
+          <Link href="/login" className="btn-ghost">
             Giriş
           </Link>
           <Link href="/register" className="btn-primary">
