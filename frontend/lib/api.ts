@@ -80,6 +80,7 @@ export const api = {
     packageKey: string;
     intervalDays: number;
     runs: number;
+    startAt?: string; // ISO — ileri tarihli ilk calisma (yoksa hemen)
     region: string;
   }) => request<{ id: string }>('/schedules', { method: 'POST', body: JSON.stringify(body) }),
   cancelSchedule: (id: string) => request<{ ok: boolean }>(`/schedules/${id}`, { method: 'DELETE' }),

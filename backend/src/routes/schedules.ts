@@ -22,6 +22,7 @@ const createSchema = z.object({
   ]),
   intervalDays: z.number().int(),
   runs: z.number().int().min(1).max(52), // pesin odenen tekrar sayisi (N)
+  startAt: z.string().datetime().optional(), // ISO; ilk taramanin ILERI tarihi (yoksa hemen)
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
 });
 
@@ -48,11 +49,23 @@ schedulesRouter.get('/', requireAuth, async (req, res) => {
 schedulesRouter.post('/', requireAuth, async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { domainId, packageKey, intervalDays, runs, region } = parsed.data;
+  const { domainId, packageKey, intervalDays, runs, startAt, region } = parsed.data;
 
-  // IS KURALI: haftaliktan sik YOK (maliyet + egress/concurrency yuku).
-  if (intervalDays < config.minScheduleIntervalDays) {
+  // IS KURALI: haftaliktan sik tekrar YOK (maliyet + egress/concurrency yuku).
+  // Tek seferlik (runs===1) taramada TEKRAR olmadigi icin aralik kurali gecersiz —
+  // bu durumda intervalDays yalnizca ileri-tarihli tek atisi ifade eder.
+  if (runs > 1 && intervalDays < config.minScheduleIntervalDays) {
     return res.status(400).json({ error: `Tarama araligi en az ${config.minScheduleIntervalDays} gun olmalidir.` });
+  }
+
+  // Ileri tarihli baslatma: verilirse GELECEKTE olmali. Yoksa hemen (bir sonraki tick).
+  let nextRunAt = new Date();
+  if (startAt) {
+    const t = new Date(startAt);
+    if (Number.isNaN(t.getTime()) || t.getTime() <= Date.now()) {
+      return res.status(400).json({ error: 'Baslangic tarihi gelecekte bir zaman olmalidir.' });
+    }
+    nextRunAt = t;
   }
 
   const packageDef = getPackageDef(packageKey);
@@ -81,8 +94,9 @@ schedulesRouter.post('/', requireAuth, async (req, res) => {
       region,
       intervalDays,
       remainingRuns: runs,
-      // Ilk tarama hemen (worker bir sonraki tick'te tetikler); sonrakiler intervalDays sonra.
-      nextRunAt: new Date(),
+      // Ilk tarama: startAt verildiyse o tarihte, yoksa hemen (bir sonraki tick).
+      // Sonraki tekrarlar intervalDays sonra (runDueSchedules ilerletir).
+      nextRunAt,
       active: true,
     },
   });

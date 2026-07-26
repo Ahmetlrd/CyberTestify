@@ -29,6 +29,10 @@ export default function OrderPage() {
   const [intervalDays, setIntervalDays] = useState(7); // haftalık
   const [runs, setRuns] = useState(4);
 
+  // Başlangıç zamanı: hemen mi, ileri tarih mi
+  const [startMode, setStartMode] = useState<'now' | 'later'>('now');
+  const [startAt, setStartAt] = useState(''); // datetime-local değeri
+
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.localStorage.getItem('token')) {
       router.push('/login');
@@ -43,13 +47,29 @@ export default function OrderPage() {
     if (!domainId || busy) return;
     if (!selected) return setError('Lütfen bir paket seçin.');
     if (!allConsents) return setError('Devam etmek için üç onayın tümünü işaretlemelisiniz.');
+    // İleri tarih seçildiyse geçerli ve gelecekte olmalı.
+    let startAtIso: string | undefined;
+    if (startMode === 'later') {
+      const t = new Date(startAt);
+      if (!startAt || Number.isNaN(t.getTime()) || t.getTime() <= Date.now()) {
+        return setError('İleri tarih için gelecekte bir tarih/saat seçin.');
+      }
+      startAtIso = t.toISOString();
+    }
     setBusy(true);
     setError(null);
     try {
-      if (recurring) {
-        // Düzenli tarama: N tekrarlık kayıt oluştur; ilk tarama worker tarafından
-        // kısa süre içinde başlar (concurrency=1 kuyruğuna girer).
-        await api.createSchedule({ domainId, packageKey: selected, intervalDays, runs, region });
+      // Düzenli tarama VEYA ileri tarihli tek atış → zamanlama motoruna gider
+      // (aynı concurrency=1 kuyruğu, doğrulama tazeliği kontrolü, prepaid-N).
+      if (recurring || startMode === 'later') {
+        await api.createSchedule({
+          domainId,
+          packageKey: selected,
+          intervalDays: recurring ? intervalDays : 7, // tek atışta yok sayılır (runs=1)
+          runs: recurring ? runs : 1,
+          startAt: startAtIso,
+          region,
+        });
         router.push('/schedules');
         return;
       }
@@ -195,6 +215,35 @@ export default function OrderPage() {
         )}
       </div>
 
+      {/* Başlangıç zamanı */}
+      <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">
+        4 · Başlangıç {recurring && <span className="font-normal normal-case text-ink-muted">(ilk tarama)</span>}
+      </h2>
+      <div className="mt-3 space-y-2.5">
+        <label className={`flex items-center gap-3 rounded-card border p-3.5 text-sm ${startMode === 'now' ? 'border-brand-300 bg-brand-50/50' : 'border-line'}`}>
+          <input type="radio" checked={startMode === 'now'} onChange={() => setStartMode('now')} className="h-4 w-4 accent-brand" />
+          <span className="font-medium text-ink">Hemen başlat</span>
+        </label>
+        <label className={`flex items-center gap-3 rounded-card border p-3.5 text-sm ${startMode === 'later' ? 'border-brand-300 bg-brand-50/50' : 'border-line'}`}>
+          <input type="radio" checked={startMode === 'later'} onChange={() => setStartMode('later')} className="h-4 w-4 accent-brand" />
+          <span className="font-medium text-ink">Belirli bir tarihte başlat</span>
+        </label>
+        {startMode === 'later' && (
+          <div className="rounded-card border border-line bg-white p-4">
+            <label className="label">Başlangıç tarihi ve saati</label>
+            <input
+              type="datetime-local"
+              value={startAt}
+              onChange={(e) => setStartAt(e.target.value)}
+              className="field"
+            />
+            <p className="mt-2 text-xs text-ink-muted">
+              Tarama seçtiğiniz zamana en yakın kontrol turunda (birkaç dakika içinde) başlar.
+            </p>
+          </div>
+        )}
+      </div>
+
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
       <button
@@ -202,11 +251,17 @@ export default function OrderPage() {
         disabled={!domainId || busy || !selected || !allConsents}
         className="btn-primary mt-6 w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
       >
-        {busy ? 'Başlatılıyor…' : recurring ? 'Düzenli Taramayı Kur' : 'Taramayı Başlat'}
+        {busy
+          ? 'Başlatılıyor…'
+          : recurring
+            ? 'Düzenli Taramayı Kur'
+            : startMode === 'later'
+              ? 'Taramayı Zamanla'
+              : 'Taramayı Başlat'}
       </button>
       <p className="mt-3 text-xs text-ink-muted">
-        {recurring
-          ? 'İlk tarama hemen başlar; kayıtlarınızı “Zamanlanmış taramalarım” ekranından yönetebilirsiniz.'
+        {recurring || startMode === 'later'
+          ? 'Kayıtlarınızı “Zamanlanmış taramalarım” ekranından görüntüleyip iptal edebilirsiniz.'
           : 'Ödeme onaylandığında tarama otomatik ve anında başlar.'}
       </p>
     </main>

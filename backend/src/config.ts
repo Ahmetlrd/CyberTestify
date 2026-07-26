@@ -54,6 +54,13 @@ export const config = {
   maxActiveScheduledScans: Number(process.env.MAX_ACTIVE_SCHEDULED_SCANS ?? 100),
   minScheduleIntervalDays: Number(process.env.MIN_SCHEDULE_INTERVAL_DAYS ?? 7),
   scheduledQueueWarnThreshold: Number(process.env.SCHEDULED_QUEUE_WARN_THRESHOLD ?? 20),
+  // WATCHDOG (dayaniklilik): bir tarama bu sureden uzun 'running' kalirsa takilmis
+  // sayilir (sunucu/PentAGI cokmesi, kredi/token bitmesi, ag kesintisi vs) → basa
+  // alinir, siparis scan_failed olur, concurrency=1 slotu SERBEST kalir (kuyruk
+  // sonsuza kadar kilitlenmez). Orphan rezervasyon (createFlow tamamlanmadan process
+  // olduyse pentagiFlowId 'reserving-...' kalir) daha kisa esikte temizlenir.
+  scanTimeoutMinutes: Number(process.env.SCAN_TIMEOUT_MINUTES ?? 120),
+  reservationTimeoutMinutes: Number(process.env.RESERVATION_TIMEOUT_MINUTES ?? 3),
   scopeAllowlist: (process.env.SCOPE_ALLOWLIST ??
     [
       'cve.mitre.org', 'cve.org', 'nvd.nist.gov', 'exploit-db.com', 'cvedetails.com',

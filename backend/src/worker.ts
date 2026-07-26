@@ -8,6 +8,7 @@ import { buildActivityFeed } from './services/activityFeed.js';
 import { promoteQueued } from './services/orchestrator.js';
 import { checkEgressProxyHealth } from './services/egressHealth.js';
 import { runDueSchedules, recordScheduleOutcome } from './services/schedules.js';
+import { reapStuckFlows } from './services/watchdog.js';
 
 // Fail-fast: kapsam kilidi konfigurasyonu eksik/gecersizse hemen dur.
 validateScopeLockConfig();
@@ -26,6 +27,11 @@ validateScopeLockConfig();
 const POLL_INTERVAL_MS = 8000;
 
 async function tick() {
+  // Once takilan flow'lari basa al (slotu serbest birak) — PentAGI'ye ULASILAMASA
+  // bile calisir, cunku sadece DB'deki startedAt'e bakar. Ana poll dongusunun
+  // ONUNDE olmali ki serbest kalan slot ayni cycle'da promoteQueued ile dolabilsin.
+  await reapStuckFlows();
+
   const runningFlows = await prisma.flow.findMany({
     where: { status: 'running' },
     include: { order: { include: { package: true, domain: true } } },

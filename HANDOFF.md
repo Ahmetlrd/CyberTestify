@@ -250,8 +250,28 @@ yapılan HER adımın o bölge için **ayrıca ve bağımsız** yapılması gere
   kuyruk `SCHEDULED_QUEUE_WARN_THRESHOLD` (20) aşılırsa worker loud uyarır; bir
   zamanlanmış tarama **3 ardarda başarısız** olursa `active=false` (sonsuz kuyruk
   meşgul etmesin). `failCount` worker'da izlenir.
+- **İleri tarihli başlatma:** `/order`'da "Belirli bir tarihte başlat" (datetime) —
+  tek atış da düzenli de gelecekte başlayabilir. `POST /schedules` `startAt` (ISO,
+  gelecek olmalı) alır → `nextRunAt=startAt`. Tek seferlik (runs===1) taramada
+  tekrar olmadığı için min-7-gün kuralı uygulanmaz (worker o tarihte tetikler).
 - **Frontend:** `/order`'da "Düzenli tekrarla" (haftalık/2-hafta/aylık + peşin N) +
-  `/schedules` liste/iptal ekranı (Panelim'den erişilir).
+  "Başlangıç: hemen / belirli tarih" + `/schedules` liste/iptal ekranı.
+
+### Dayanıklılık — WATCHDOG (kesinti/çökme/token-bitmesi)
+Tek emniyet supabı: **`services/watchdog.ts` `reapStuckFlows()`** worker'ın her
+tick'inde EN BAŞTA çalışır (PentAGI'ye ulaşılamasa bile — yalnızca DB'deki
+`Flow.startedAt`'e bakar). Bir tarama `SCAN_TIMEOUT_MINUTES` (vars. 120) üzeri
+'running' kaldıysa takılmış sayılır → flow `failed`, sipariş `scan_failed`,
+**concurrency=1 slotu serbest** (kuyruk sonsuza kadar kilitlenmez); zamanlanmışsa
+`failCount++`. Bu tek kontrol şu senaryoların HEPSİNİ kapsar — çünkü hepsi aynı
+belirtiyle biter (flow 'running'da asılı kalır): **sunucu/PentAGI çökmesi, güç
+kesintisi, Anthropic kredi/token bitmesi, ağ kesintisi/PentAGI'ye ulaşılamaması**.
+Ayrıca **orphan rezervasyon** (`pentagiFlowId` hâlâ `reserving-...`, createFlow
+tamamlanmadan process öldü) `RESERVATION_TIMEOUT_MINUTES` (vars. 3) eşikte hızlıca
+temizlenir. Not: concurrency=1 partial-unique-index gereği aynı anda yalnızca TEK
+running flow olabilir, dolayısıyla aynı anda tek takılı flow olur. Test:
+`reapStuckFlows` — 3sa takılı flow → reaped+slot 0; orphan (5dk) → reaped; taze
+flow → dokunulmadı (PASS).
 
 ### BİLEREK ERTELENEN (dürüstlük payı)
 - **Gerçek otomatik tekrarlayan ödeme (recurring billing) YOK.** Şu an
@@ -261,6 +281,12 @@ yapılan HER adımın o bölge için **ayrıca ve bağımsız** yapılması gere
 - **E-posta bildirimleri** (TTL-süresi-doldu, 3-başarısızlık-durduruldu): şu an
   yalnızca loglanıyor; gerçek e-posta servisi bağlanınca `services/schedules.ts` ve
   `worker.ts` içindeki `TODO(email)` noktalarına eklenecek.
+- **Başarısız/takılan taramada OTOMATİK iade veya yeniden-deneme YOK.** Watchdog
+  takılan taramayı `scan_failed` yapıp slotu serbest bırakır ama bir kerelik sipariş
+  için otomatik para iadesi (`refunded` durumu şemada var ama akış yok) ya da
+  otomatik retry uygulanmıyor. Şu an operatörün elle müdahalesi gerekir. Zamanlanmış
+  taramalarda 3-ardarda-başarısız → pasifleştirme kısmi güvence sağlar. Gerçek
+  iade/retry politikası (ör. 1 otomatik retry, sonra iade) ayrı görev.
 
 ## Kapsam dışı (sıradaki görevler)
 Gerçek iyzico/stripe ödeme + recurring billing, gerçek e-Arşiv/US/AE fatura,

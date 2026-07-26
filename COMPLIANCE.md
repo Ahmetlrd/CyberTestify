@@ -106,6 +106,14 @@ Son güncelleme: 2026-07-26 · Hukuki metin sürümü: `2026-07-26`
 - 🟡 **[İŞ] E-posta bildirimleri** (doğrulama süresi doldu / zamanlanmış tarama
   durduruldu) şu an loglanıyor; gerçek e-posta servisi (SPF/DKIM/DMARC) eklenince
   bağlanacak.
+- ✅ **[KOD] Dayanıklılık (watchdog):** Çökme/güç kesintisi/token bitmesi/ağ
+  kesintisinde takılan tarama otomatik `scan_failed` yapılır ve kuyruk kilidi
+  açılır (`services/watchdog.ts`). Müşteri "sonsuza kadar bekleyen" siparişte kalmaz.
+- 🔴 **[HUKUK/İŞ] Başarısız taramada iade akışı YOK (bilerek):** Hizmet ifa
+  edilemezse (watchdog `scan_failed`) müşteriye **otomatik iade uygulanmıyor** —
+  şu an elle müdahale. Tüketici mevzuatı gereği ifa edilemeyen dijital hizmette
+  bedel iadesi gerekebilir; gerçek ödeme entegrasyonuyla birlikte otomatik
+  iade/retry politikası tanımlanmalı. Bkz `HANDOFF.md`.
 
 ## 7. Kaynaklar (araştırma çıktılarından)
 
