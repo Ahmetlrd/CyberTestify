@@ -10,6 +10,14 @@ import { formatMoney } from '../../config/i18n';
 
 type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string };
 
+// datetime-local `min` icin yerel saatte YYYY-MM-DDTHH:mm — gecmis tarihleri
+// tarayici soluklastirir/secilemez yapar.
+function minDateTimeLocal(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export default function OrderPage() {
   const router = useRouter();
   const domainId = useSearchParams().get('domainId');
@@ -234,6 +242,7 @@ export default function OrderPage() {
             <input
               type="datetime-local"
               value={startAt}
+              min={minDateTimeLocal()}
               onChange={(e) => setStartAt(e.target.value)}
               className="field"
             />

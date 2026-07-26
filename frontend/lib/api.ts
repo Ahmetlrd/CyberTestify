@@ -63,6 +63,10 @@ export const api = {
       body: JSON.stringify({ domainId, packageKey, ...consents, region }),
     }),
   getOrder: (orderId: string) => request<any>(`/orders/${orderId}`),
+  listOrders: () =>
+    request<
+      Array<{ id: string; hostname: string; packageName: string; status: string; createdAt: string }>
+    >('/orders'),
   listSchedules: () =>
     request<
       Array<{

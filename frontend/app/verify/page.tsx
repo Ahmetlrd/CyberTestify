@@ -13,9 +13,31 @@ type Domain = {
   instructions: { recordName: string; recordValue: string };
 };
 
+type Order = {
+  id: string;
+  hostname: string;
+  packageName: string;
+  status: string;
+  createdAt: string;
+};
+
+const ORDER_STATUS_LABEL: Record<string, string> = {
+  awaiting_payment: 'Ödeme bekleniyor',
+  paid: 'Sıraya alınıyor',
+  scan_queued: 'Sırada',
+  scan_running: 'Taranıyor',
+  scan_completed: 'Rapor hazır',
+  report_delivered: 'Rapor hazır',
+  scan_failed: 'Başarısız',
+  scope_violation: 'Durduruldu (kapsam dışı)',
+  report_purged: 'Süresi doldu',
+  refunded: 'İade edildi',
+};
+
 export default function VerifyHub() {
   const router = useRouter();
   const [domains, setDomains] = useState<Domain[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [newHostname, setNewHostname] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -24,8 +46,9 @@ export default function VerifyHub() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const list = await api.listDomains();
+    const [list, ord] = await Promise.all([api.listDomains(), api.listOrders()]);
     setDomains(list);
+    setOrders(ord);
     return list;
   }, []);
 
@@ -101,6 +124,32 @@ export default function VerifyHub() {
         <div className="mt-8 h-32 animate-pulse rounded-card bg-brand-50" />
       ) : (
         <>
+          {/* Taramalarım — sekme kapatılsa da buradan rapora/duruma dönülür */}
+          {orders.length > 0 && (
+            <section className="mt-8">
+              <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">
+                Taramalarım
+              </h2>
+              <div className="mt-3 space-y-2.5">
+                {orders.map((o) => (
+                  <button
+                    key={o.id}
+                    onClick={() => router.push(`/dashboard/${o.id}`)}
+                    className="card flex w-full items-center justify-between gap-3 p-4 text-left transition hover:border-brand-300"
+                  >
+                    <div>
+                      <div className="font-semibold text-ink">{o.hostname}</div>
+                      <div className="mt-0.5 text-xs text-ink-muted">
+                        {o.packageName} · {new Date(o.createdAt).toLocaleDateString('tr-TR')}
+                      </div>
+                    </div>
+                    <span className="badge shrink-0">{ORDER_STATUS_LABEL[o.status] ?? o.status}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Geçerli (doğrulanmış) domainler → doğrudan tarama */}
           {validDomains.length > 0 && (
             <section className="mt-8">

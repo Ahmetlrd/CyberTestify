@@ -130,6 +130,27 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   res.json({ orderId: order.id, ...payment });
 });
 
+// Musterinin tum taramalari (panelde listelemek icin — sekme kapatilsa da erisilir).
+ordersRouter.get('/', requireAuth, async (req, res) => {
+  const orders = await prisma.order.findMany({
+    where: { customerId: req.customerId! },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      domain: { select: { hostname: true } },
+      package: { select: { displayName: true } },
+    },
+  });
+  res.json(
+    orders.map((o) => ({
+      id: o.id,
+      hostname: o.domain.hostname,
+      packageName: o.package.displayName,
+      status: o.status,
+      createdAt: o.createdAt,
+    })),
+  );
+});
+
 ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
   const order = await prisma.order.findFirstOrThrow({
     where: { id: req.params.orderId, customerId: req.customerId! },
