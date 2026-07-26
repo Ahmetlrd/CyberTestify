@@ -44,7 +44,7 @@ export default function VerifyPage() {
     try {
       const res = await api.verifyDomain(domainId);
       setStatus(res.verified ? 'verified' : 'failed');
-      if (res.verified) router.push(`/packages?domainId=${domainId}`);
+      if (res.verified) router.push(`/order?domainId=${domainId}`);
     } catch (err: any) {
       setError(err.message);
     }

@@ -4,7 +4,7 @@ import { Logo } from './Logo';
 const LINKS: Array<[string, string]> = [
   ['Nasıl Çalışır', '/#nasil-calisir'],
   ['Neden Biz', '/#neden-biz'],
-  ['Paketler', '/#paketler'],
+  ['Paketler', '/packages'],
 ];
 
 export function Nav() {

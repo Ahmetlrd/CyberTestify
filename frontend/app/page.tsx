@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { PricingPreview } from '../components/landing/PricingPreview';
+import { AutonomousSection } from '../components/landing/AutonomousSection';
 
 const DOT_BG = {
   backgroundImage: 'radial-gradient(rgba(255,255,255,0.08) 1px, transparent 1px)',
@@ -102,11 +102,6 @@ const REASONS = [
     icon: 'M12 2l7 4v6c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6l7-4zM12 8v4M12 15h.01',
   },
   {
-    t: 'Tamamen Otonom AI',
-    d: 'İnsan pentester beklemeyin — yapay zeka ajanlarımız saniyeler içinde başlar, saatler içinde bitirir.',
-    icon: 'M12 3a4 4 0 014 4v1a5 5 0 01-8 0V7a4 4 0 014-4zM6 21v-2a6 6 0 0112 0v2',
-  },
-  {
     t: 'Şifreli, Tek Seferlik Teslim',
     d: 'Raporunuz uçtan uca şifrelenir; yalnızca size özel tek kullanımlık bir kodla açılır.',
     icon: 'M6 10V7a6 6 0 1112 0v3M5 10h14v10H5zM12 14v3',
@@ -126,7 +121,7 @@ function WhyUs() {
             Rakiplerin çoğu güvenliği <em>söyler</em>. Biz onu koda gömdük.
           </p>
         </div>
-        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {REASONS.map((r) => (
             <div
               key={r.t}
@@ -161,9 +156,14 @@ function FinalCTA() {
           <p className="mx-auto mt-3 max-w-lg text-white/75">
             Doğrulama ücretsiz. Yalnızca taramayı başlattığınızda ödeme yaparsınız.
           </p>
-          <Link href="/register" className="btn-primary mt-8">
-            Ücretsiz Doğrula ve Başla
-          </Link>
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link href="/register" className="btn-primary w-full sm:w-auto">
+              Ücretsiz Doğrula ve Başla
+            </Link>
+            <Link href="/packages" className="btn w-full border border-white/25 text-white hover:bg-white/10 sm:w-auto">
+              Fiyatları Gör →
+            </Link>
+          </div>
         </div>
       </div>
     </section>
@@ -174,9 +174,9 @@ export default function HomePage() {
   return (
     <>
       <Hero />
+      <AutonomousSection />
       <HowItWorks />
       <WhyUs />
-      <PricingPreview />
       <FinalCTA />
     </>
   );

@@ -1,0 +1,57 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
+type Line = { t: string; tone: 'muted' | 'run' | 'ok' | 'warn' | 'lock' };
+
+const LINES: Line[] = [
+  { t: '$ cybertestify scan ornek.com', tone: 'muted' },
+  { t: '✓ Alan adı sahipliği doğrulandı', tone: 'ok' },
+  { t: '→ Hedef taranıyor…', tone: 'run' },
+  { t: '→ HTTP güvenlik başlıkları inceleniyor…', tone: 'run' },
+  { t: '→ TLS yapılandırması kontrol ediliyor…', tone: 'run' },
+  { t: '⚠ Bulgu: eksik Content-Security-Policy başlığı', tone: 'warn' },
+  { t: '→ Bulgular önem derecesine göre sıralanıyor…', tone: 'run' },
+  { t: '🔒 Rapor uçtan uca şifreleniyor…', tone: 'lock' },
+  { t: '✓ Rapor hazır · 3 dk 12 sn · 0 kapsam dışı erişim', tone: 'ok' },
+];
+
+const TONE: Record<Line['tone'], string> = {
+  muted: 'text-white/45',
+  run: 'text-white/80',
+  ok: 'text-emerald-300',
+  warn: 'text-accent',
+  lock: 'text-brand-300',
+};
+
+export function LiveDemo() {
+  const [shown, setShown] = useState(1);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setShown((n) => (n >= LINES.length ? 1 : n + 1));
+    }, 950);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div className="overflow-hidden rounded-card border border-white/10 bg-[#0A1F1C] shadow-2xl">
+      <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+        <span className="h-3 w-3 rounded-full bg-red-400/70" />
+        <span className="h-3 w-3 rounded-full bg-accent/70" />
+        <span className="h-3 w-3 rounded-full bg-emerald-400/70" />
+        <span className="ml-3 text-xs font-medium text-white/40">cybertestify — canlı tarama</span>
+      </div>
+      <div className="min-h-[268px] p-5 font-mono text-[13px] leading-7">
+        {LINES.slice(0, shown).map((l, i) => (
+          <div key={i} className={TONE[l.tone]}>
+            {l.t}
+            {i === shown - 1 && shown < LINES.length && (
+              <span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

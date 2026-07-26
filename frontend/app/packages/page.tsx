@@ -1,119 +1,110 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { api } from '../../lib/api';
 
-export default function PackagesPage() {
-  const router = useRouter();
-  const domainId = useSearchParams().get('domainId');
-  const [packages, setPackages] = useState<
-    Array<{ key: string; displayName: string; description: string; priceMinorUnit: number }>
-  >([]);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+export const metadata = {
+  title: 'Fiyatlar — Web Sitesi Güvenlik Tarama Paketleri | CyberTestify',
+  description:
+    'Sabit kapsam, sabit fiyat, sürpriz maliyet yok. Otonom yapay zeka ile web sitesi güvenlik tarama paketleri ve fiyatları (TRY). Yerli sunucu, Türkçe destek, e-Arşiv faturalı.',
+};
 
-  // Uc ayri riza (KVKK/TCK ve tuketici mevzuati geregi ayri ayri alinir).
-  const [authConsent, setAuthConsent] = useState(false); // pentest yetkilendirme (TCK 243)
-  const [contractConsent, setContractConsent] = useState(false); // MSS + On Bilgilendirme
-  const [withdrawalConsent, setWithdrawalConsent] = useState(false); // cayma feragat
+type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number };
 
-  const allConsents = authConsent && contractConsent && withdrawalConsent;
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const POPULAR_KEY = 'pci_hazirlik';
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !window.localStorage.getItem('token')) {
-      router.push('/login');
-      return;
-    }
-    api.listPackages().then(setPackages).catch((err) => setError(err.message));
-  }, [router]);
-
-  async function handleSelect(key: string) {
-    if (!domainId || busy) return;
-    if (!allConsents) {
-      setError('Devam etmek için aşağıdaki üç onayın tümünü işaretlemelisiniz.');
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.createOrder(domainId, key, {
-        ownershipConfirmed: authConsent,
-        distanceContractAccepted: contractConsent,
-        withdrawalWaived: withdrawalConsent,
-      });
-      window.location.href = res.paymentPageUrl;
-    } catch (err: any) {
-      setError(err.message);
-      setBusy(false);
-    }
+async function getPackages(): Promise<Pkg[]> {
+  try {
+    const r = await fetch(`${API}/orders/packages`, { cache: 'no-store' });
+    if (!r.ok) return [];
+    return (await r.json()) as Pkg[];
+  } catch {
+    return [];
   }
+}
 
-  const box: React.CSSProperties = {
-    display: 'flex',
-    gap: 10,
-    alignItems: 'flex-start',
-    background: '#f6f8fa',
-    border: '1px solid #d0d7de',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
-    fontSize: 14,
-  };
+const TRUST = ['🇹🇷 Yerli sunucu', '💬 Türkçe destek', '🧾 e-Arşiv faturalı', '🔒 Uçtan uca şifreli rapor'];
+
+export default async function PackagesPage() {
+  const packages = await getPackages();
 
   return (
-    <main className="container-page max-w-content py-14">
-      <h1>Taramanızı Başlatın</h1>
-      {!domainId && (
-        <p style={{ color: 'crimson' }}>
-          Önce site sahipliğinizi doğrulamalısınız. <a href="/verify">Doğrulamaya git →</a>
-        </p>
-      )}
-
-      <h3 style={{ marginBottom: 8 }}>Onaylar</h3>
-      <label style={box}>
-        <input type="checkbox" checked={authConsent} onChange={(e) => setAuthConsent(e.target.checked)} style={{ marginTop: 3 }} />
-        <span>
-          Bu alan adının <strong>ve bağlı altyapısının</strong> münhasır sahibi olduğumu veya adına
-          işlem yapmaya yasal olarak yetkili olduğumu; yalnızca bu alan adı kapsamında, saldırgan
-          olmayan pasif bir güvenlik taraması yapılmasına rıza gösterdiğimi beyan ederim. Kapsam dışı
-          hiçbir hedefe erişilmeyeceğini anladım.
-        </span>
-      </label>
-      <label style={box}>
-        <input type="checkbox" checked={contractConsent} onChange={(e) => setContractConsent(e.target.checked)} style={{ marginTop: 3 }} />
-        <span>
-          <Link href="/legal/on-bilgilendirme" target="_blank">Ön Bilgilendirme Formu</Link>&apos;nu ve{' '}
-          <Link href="/legal/mesafeli-satis" target="_blank">Mesafeli Satış Sözleşmesi</Link>&apos;ni okudum, onaylıyorum.
-        </span>
-      </label>
-      <label style={box}>
-        <input type="checkbox" checked={withdrawalConsent} onChange={(e) => setWithdrawalConsent(e.target.checked)} style={{ marginTop: 3 }} />
-        <span>
-          Satın aldığım hizmetin dijital olarak <strong>anında ifa</strong> edildiğini; açık onayımla
-          ifasına hemen başlanacağını ve Mesafeli Sözleşmeler Yönetmeliği md. 15 uyarınca ifaya
-          başlanmasıyla <strong>cayma hakkımı kullanamayacağımı</strong> okudum, kabul ediyorum.
-        </span>
-      </label>
-
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
-
-      <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
-        {packages.map((p) => (
-          <div key={p.key} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 16 }}>
-            <h3>{p.displayName}</h3>
-            <p>{p.description}</p>
-            <p>
-              <strong>{(p.priceMinorUnit / 100).toLocaleString('tr-TR')} TRY</strong>{' '}
-              <span style={{ fontSize: 12, color: '#57606a' }}>(tüm vergiler dahil)</span>
-            </p>
-            <button disabled={!domainId || busy || !allConsents} onClick={() => handleSelect(p.key)}>
-              {busy ? 'Başlatılıyor…' : 'Taramayı Başlat'}
-            </button>
+    <>
+      <section className="bg-brand-50/60 py-16">
+        <div className="container-page text-center">
+          <p className="eyebrow">Fiyatlar</p>
+          <h1 className="mx-auto mt-3 max-w-2xl text-4xl font-extrabold text-brand sm:text-5xl">
+            Şeffaf, sabit fiyatlandırma
+          </h1>
+          <p className="mx-auto mt-4 max-w-xl text-lg text-ink-soft">
+            Kapsam sabit, fiyat sabit, sürpriz maliyet yok. Tüm fiyatlar vergiler dahildir.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+            {TRUST.map((t) => (
+              <span key={t} className="badge">
+                {t}
+              </span>
+            ))}
           </div>
-        ))}
-      </div>
-    </main>
+        </div>
+      </section>
+
+      <section className="container-page py-16">
+        {packages.length === 0 ? (
+          <p className="text-center text-sm text-ink-muted">
+            Paketler şu an yüklenemedi.{' '}
+            <Link href="/register" className="text-accent-600 underline">
+              Yine de başlayın →
+            </Link>
+          </p>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {packages.map((p) => {
+              const popular = p.key === POPULAR_KEY;
+              return (
+                <div key={p.key} className={`card relative flex flex-col p-6 ${popular ? 'ring-2 ring-accent' : ''}`}>
+                  {popular && (
+                    <span className="absolute -top-3 left-6 rounded-pill bg-accent px-3 py-1 text-xs font-bold text-ink">
+                      Popüler
+                    </span>
+                  )}
+                  <h2 className="text-lg font-bold text-brand">{p.displayName}</h2>
+                  <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-soft">{p.description}</p>
+                  <div className="mt-5">
+                    <span className="text-3xl font-extrabold text-ink">
+                      {(p.priceMinorUnit / 100).toLocaleString('tr-TR')}
+                    </span>
+                    <span className="ml-1 text-sm font-medium text-ink-muted">TRY</span>
+                    <span className="ml-1 text-xs text-ink-muted">/ tarama</span>
+                  </div>
+                  <Link href="/register" className={`mt-6 w-full ${popular ? 'btn-primary' : 'btn-outline'}`}>
+                    Seç ve Doğrula
+                  </Link>
+                </div>
+              );
+            })}
+
+            {/* BYOK — gelişmiş kullanıcı kartı */}
+            <div className="card flex flex-col border-dashed p-6">
+              <span className="badge w-fit">Gelişmiş Kullanıcılar İçin</span>
+              <h2 className="mt-3 text-lg font-bold text-brand">Kendi API Anahtarınla (BYOK)</h2>
+              <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-soft">
+                Kendi Anthropic anahtarınızla daha geniş kapsamlı tarama. Teknik kullanıcılar için;
+                maliyet kontrolü sizde.
+              </p>
+              <span className="mt-6 w-full btn-ghost cursor-default">Yakında</span>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-14 rounded-[20px] bg-brand-deep px-8 py-12 text-center text-white">
+          <h2 className="text-2xl font-extrabold sm:text-3xl">Doğrulama ücretsiz</h2>
+          <p className="mx-auto mt-2 max-w-md text-white/75">
+            Yalnızca taramayı başlattığınızda ödeme yaparsınız. Alan adınızı doğrulayarak başlayın.
+          </p>
+          <Link href="/register" className="btn-primary mt-7">
+            Ücretsiz Doğrula ve Başla
+          </Link>
+        </div>
+      </section>
+    </>
   );
 }
