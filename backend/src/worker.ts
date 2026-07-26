@@ -112,11 +112,28 @@ async function tick() {
       }
 
       // PentAGI ajani isini bitirince cogu zaman 'finished' yerine 'waiting'
-      // durumuna gecip YENI KOMUT bekler (interaktif mod). Bizim servis otonom
-      // ve tek atislik oldugu icin: is yapilmis (toolCallCount>0) ve bir onceki
-      // poll'dan beri yeni arac cagrisi OLMAMISSA (idle), bunu tamamlanmis say.
-      const idleWaiting =
-        remoteStatus.status === 'waiting' && toolCallCount > 0 && toolCallCount === prevCount;
+      // durumuna gecip YENI KOMUT bekler (interaktif mod). stopFlow / PentAGI UI'dan
+      // manuel durdurma da flow'u 'waiting'e alir. Bir onceki poll'dan beri yeni
+      // arac cagrisi OLMAMISSA (idle) bunu sonlanmis say.
+      const idleWaiting = remoteStatus.status === 'waiting' && toolCallCount === prevCount;
+
+      // ERKEN DURDURMA: hic arac cagrisi yapilmadan (toolCallCount===0) flow 'waiting'e
+      // dustuyse tarama daha basında durdurulmus/coktu demektir. Kisa bir baslangic
+      // toleransindan (ajan henuz ilk cagrisini yapmamis olabilir) sonra, RAPOR
+      // URETMEDEN dogrudan basarisiz say — musteri "hazir ama bos rapor" gormesin,
+      // 120 dk watchdog'u da beklemesin.
+      const graceMs = config.emptyScanGraceSeconds * 1000;
+      if (idleWaiting && toolCallCount === 0 && Date.now() - flow.startedAt.getTime() > graceMs) {
+        await pentagi.stopFlow(flow.pentagiFlowId).catch(() => {});
+        await prisma.flow.update({
+          where: { id: flow.id },
+          data: { status: 'failed', finishedAt: new Date(), errorMessage: 'Tarama hicbir islem yapmadan sonlandi/durduruldu.' },
+        });
+        await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scan_failed' } });
+        await recordScheduleOutcome(flow.order.scheduledScanId, false);
+        console.warn(`[worker] Flow ${flow.pentagiFlowId} arac cagrisi yapmadan durdu -> scan_failed.`);
+        continue;
+      }
 
       // Bitirme kosulu: dogal 'finished' | maliyet tavani asildi | idle 'waiting'.
       // ONEMLI: stopFlow flow'u 'finished' DEGIL 'waiting' durumuna alir

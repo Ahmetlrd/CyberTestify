@@ -53,5 +53,21 @@ export async function reapStuckFlows() {
     await recordScheduleOutcome(flow.order.scheduledScanId, false);
     reaped++;
   }
+
+  // MUTABAKAT: bir siparis 'scan_running' ama hicbir Flow'u YOKSA (guc kesintisi,
+  // olusum sirasinda cokme, tutarsiz durum) — normalde scan_running her zaman bir
+  // running flow'a eslik eder. Baslangic toleransindan sonra bunu scan_failed yap;
+  // aksi halde musteri panelinde sonsuza kadar "tarama calisiyor" gorunur.
+  const graceCutoff = new Date(nowMs - config.emptyScanGraceSeconds * 1000);
+  const orphanOrders = await prisma.order.findMany({
+    where: { status: 'scan_running', flow: null, createdAt: { lt: graceCutoff } },
+    select: { id: true, scheduledScanId: true },
+  });
+  for (const o of orphanOrders) {
+    console.error(`[watchdog] Siparis ${o.id} 'scan_running' ama flow yok -> scan_failed (tutarsiz durum).`);
+    await prisma.order.update({ where: { id: o.id }, data: { status: 'scan_failed' } }).catch(() => {});
+    await recordScheduleOutcome(o.scheduledScanId, false);
+    reaped++;
+  }
   return reaped;
 }

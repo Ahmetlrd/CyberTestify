@@ -61,6 +61,9 @@ export const config = {
   // olduyse pentagiFlowId 'reserving-...' kalir) daha kisa esikte temizlenir.
   scanTimeoutMinutes: Number(process.env.SCAN_TIMEOUT_MINUTES ?? 120),
   reservationTimeoutMinutes: Number(process.env.RESERVATION_TIMEOUT_MINUTES ?? 3),
+  // Tarama basladiktan sonra ajan hic arac cagrisi yapmadan 'waiting'e duserse (erken
+  // durdurma/cokme), bu tolerans suresi gecince RAPOR URETMEDEN scan_failed yapilir.
+  emptyScanGraceSeconds: Number(process.env.EMPTY_SCAN_GRACE_SECONDS ?? 60),
   scopeAllowlist: (process.env.SCOPE_ALLOWLIST ??
     [
       'cve.mitre.org', 'cve.org', 'nvd.nist.gov', 'exploit-db.com', 'cvedetails.com',
