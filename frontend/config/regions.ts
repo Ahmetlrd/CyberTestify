@@ -23,9 +23,11 @@ export interface RegionConfig {
   locale: string; // Intl locale (para/tarih biçimi)
   lang: Lang; // hangi sözlük
   dir: 'ltr' | 'rtl'; // RTL (Arapça) için hazır; şimdilik hepsi ltr
-  currency: 'TRY' | 'USD' | 'AED';
-  paymentProvider: 'iyzico' | 'stripe'; // Faz 5c: factory bu değere göre seçer
-  invoicingMethod: 'earsiv' | 'us_receipt' | 'uae_vat'; // Faz 5c
+  // Aşağıdakiler string: yeni bölge eklemek için TİP değiştirmek gerekmez —
+  // yalnızca bu dosyaya bir RegionConfig eklemek yeterli (genişleyebilirlik).
+  currency: string; // ISO 4217 (TRY/USD/AED/EUR…) — Intl ile biçimlenir
+  paymentProvider: string; // backend factory bu ada göre seçer (fallback: iyzico)
+  invoicingMethod: string; // backend factory (fallback: earsiv)
   supportEmail: string;
   companyLegalName: string;
   legalReady: boolean; // hukuki metinler bu bölge için hazır mı (tr: evet)

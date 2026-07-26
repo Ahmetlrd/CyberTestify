@@ -179,5 +179,51 @@ aktive edilirse o çıkışa da redaksiyon eklenmeli (henüz yok).
 pipeline'ı sahte PII'yi 5/5 türde maskeledi, ham sızıntı yok; patched image ile
 gerçek nomorelink.com taraması tamamlandı + rapor üretildi (yama akışı bozmuyor).
 
+## Çok-bölgeli altyapı (multi-region) — 2026-07-26
+
+Site `tr / us / ae` bölgeleri için config-driven, genişleyebilir bir altyapıya
+sahiptir. **Yeni bölge eklemek = tek dosyaya (`frontend/config/regions.ts`) bir
+`RegionConfig` girişi** (gerekiyorsa i18n dili). `de` (Almanya) eklenerek bunun
+gerçekten tek-dosya olduğu test edildi ve sonra kaldırıldı.
+
+**Yapı:**
+- **Routing:** `middleware.ts` (cookie > coğrafi header > Accept-Language > `tr`)
+  `/` ve `/packages`'i `/{bölge}`'ye yönlendirir. Marketing sayfaları
+  `app/[region]/` (landing, fiyat); uygulama akışı (login/order/dashboard/legal)
+  bölge-bağımsız URL, bölgeyi `region` cookie'sinden okur.
+- **i18n:** `config/i18n.ts` (tr→Türkçe, us/ae→İngilizce). RegionSelector (Nav)
+  bölge/dili değiştirir, cookie'ye yazar.
+- **Fiyat:** `PackagePricing` DB tablosu (bölge×paket) + `services/pricing.ts`
+  (TR authoritative, US/AE **tahmini placeholder**). `GET /orders/packages?region=`
+  ve `createOrder` bölgesel fiyat/para birimi döndürür. `Intl` ile biçimlenir.
+- **Ödeme:** `services/payment/` — `PaymentProvider` interface + factory
+  (`tr→iyzico`, `us/ae→stripe`). Hepsi **sandbox** (mockInitiate); gerçek iyzico
+  ve stripe entegrasyonları İSKELET, ayrı görev.
+- **Fatura:** `services/invoicing/` — `earsiv / us_receipt / uae_vat` iskeletleri
+  (para birimine göre factory). Hiçbiri gerçek değil.
+- **Hukuki matris:** `LegalArticle` bölge-farkında; yalnızca `legalReady` bölgede
+  (tr) gerçek metin, diğerlerinde "hazırlanıyor" placeholder. Footer da böyle.
+
+### DÜRÜSTLÜK PAYI — "altyapı hazır" ≠ "yayına hazır"
+
+Bu TEKNİK bir hazırlıktır; **üç bölgede birden satışa hazır olmak anlamına
+GELMEZ.** ABD ve BAE'de gerçekten müşteri kabul etmeden önce, Türkiye için
+yapılan HER adımın o bölge için **ayrıca ve bağımsız** yapılması gerekir:
+- **Hukuk:** bölgenin veri koruma mevzuatı (US: CCPA/CPRA; AE: PDPL — Federal
+  Decree-Law No. 45/2021), tüketici/e-ticaret kuralları, sözleşme metinleri.
+- **Vergi/fatura:** US eyalet satış vergisi (bir ABD mali müşaviriyle), AE KDV
+  %5 + FTA fatura alanları; gerçek fatura entegrasyonu.
+- **Ödeme:** stripe (veya AE için Telr/PayTabs/Network International) gerçek
+  merchant sözleşmesi + entegrasyonu.
+- **Bilişim suçları / kapsam-rıza çerçevesi:** her ülkenin kendi mevzuatı.
+- **Fiyatlar:** US/AE tutarları şu an tahmini; gerçek pazar kalibrasyonu gerekir.
+
+### Faz-2 TODO (bilerek ertelendi)
+- **Arapça (RTL):** i18n `dir:'rtl'` altyapısı hazır; Arapça sözlük + RTL layout
+  testi eklenmedi. Yeni bir dil (`ar`) + `dir:'rtl'` ile aktive edilecek.
+- **`de` vb. yeni bölgeler:** config girişiyle çalışır ama gerçek içerik/hukuk
+  yukarıdaki listeyi gerektirir.
+
 ## Kapsam dışı (sıradaki görevler)
-iyzico gerçek ödeme, UI/UX cilası, e-Arşiv fatura — ayrı görevler.
+Gerçek iyzico/stripe ödeme, gerçek e-Arşiv/US/AE fatura, US/AE hukuki metinler
++ fiyat kalibrasyonu — hepsi ayrı görevler.

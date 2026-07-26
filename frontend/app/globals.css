@@ -53,4 +53,19 @@
   .form-error {
     @apply rounded-card border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700;
   }
+  .legal-body h3 {
+    @apply mb-1 mt-6 text-base font-bold text-ink;
+  }
+  .legal-body p {
+    @apply my-2 text-sm leading-relaxed text-ink-soft;
+  }
+  .legal-body ul {
+    @apply my-2 list-disc space-y-1 pl-5 text-sm text-ink-soft;
+  }
+  .legal-body a {
+    @apply text-accent-600 underline;
+  }
+  .legal-body strong {
+    @apply text-ink;
+  }
 }
