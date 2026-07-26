@@ -101,7 +101,21 @@ model ScanPackage {
   promptTemplate  String         // sabit, kullanicinin degistiremedigi prompt sablonu
   active          Boolean        @default(true)
 
-  orders Order[]
+  orders  Order[]
+  pricing PackagePricing[]
+}
+
+// Cok-bolgeli fiyatlandirma. priceMinorUnit (TRY) taban/geriye-uyum icin durur;
+// bolgesel gercek fiyatlar burada tutulur. Yeni bolge = yeni satirlar (seed).
+model PackagePricing {
+  id              String         @id @default(uuid())
+  packageKey      ScanPackageKey
+  package         ScanPackage    @relation(fields: [packageKey], references: [key])
+  region          String         // 'tr' | 'us' | 'ae' ...
+  currency        String         // 'TRY' | 'USD' | 'AED'
+  amountMinorUnit Int
+
+  @@unique([packageKey, region])
 }
 
 model Order {

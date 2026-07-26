@@ -3,24 +3,35 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { SCAN_PACKAGES, getPackageDef } from '../services/scanPackages.js';
+import { getPricing, currencyFor } from '../services/pricing.js';
 import { initiatePayment } from '../services/payment/iyzico.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
 export const ordersRouter = Router();
 
-ordersRouter.get('/packages', async (_req, res) => {
+// ?region=tr|us|ae — bolgesel fiyat + para birimi ile paket listesi.
+ordersRouter.get('/packages', async (req, res) => {
+  const region = typeof req.query.region === 'string' ? req.query.region : 'tr';
+  const pricingRows = await prisma.packagePricing.findMany({ where: { region } });
+  const priceByKey = new Map(pricingRows.map((r) => [r.packageKey, r]));
+
   res.json(
     SCAN_PACKAGES
       // Ham ag/port (networkLayer) paketleri, bypass-proof izolasyon aktif
       // DEGILSE musteriye HIC gosterilmez (bkz HARDENED_NETWORK_ISOLATION).
       .filter((p) => !p.networkLayer || config.hardenedNetworkIsolation)
-      .map((p) => ({
-        key: p.key,
-        displayName: p.displayName,
-        description: p.description,
-        priceMinorUnit: p.priceMinorUnit,
-      })),
+      .map((p) => {
+        const row = priceByKey.get(p.key);
+        return {
+          key: p.key,
+          displayName: p.displayName,
+          description: p.description,
+          // Bolge satiri yoksa TR tabanina guvenli dusus.
+          priceMinorUnit: row?.amountMinorUnit ?? p.priceMinorUnit,
+          currency: row?.currency ?? currencyFor(region),
+        };
+      }),
   );
 });
 
@@ -48,12 +59,14 @@ const createOrderSchema = z.object({
   withdrawalWaived: z.literal(true, {
     errorMap: () => ({ message: 'Cayma hakki feragat beyani onaylanmalidir.' }),
   }),
+  // Bolge (fiyat + para birimi). Yoksa tr.
+  region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
 });
 
 ordersRouter.post('/', requireAuth, async (req, res) => {
   const parsed = createOrderSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { domainId, packageKey } = parsed.data;
+  const { domainId, packageKey, region } = parsed.data;
 
   const domain = await prisma.domain.findFirstOrThrow({
     where: { id: domainId, customerId: req.customerId! },
@@ -91,12 +104,16 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     });
   }
 
+  // Bolgesel fiyat + para birimi (config-driven; bkz services/pricing.ts).
+  const { amountMinorUnit, currency } = getPricing(packageKey, region);
+
   const order = await prisma.order.create({
     data: {
       customerId: req.customerId!,
       domainId: domain.id,
       packageId: packageDb.id,
-      amountMinorUnit: packageDef.priceMinorUnit,
+      amountMinorUnit,
+      currency,
       status: 'awaiting_payment',
       // Rizalarin zaman damgali + IP + surum ile kaydi (ispat yuku bizde).
       ownershipConfirmedAt: new Date(),

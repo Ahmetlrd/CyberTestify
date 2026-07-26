@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 import { getDict, formatMoney } from '../../../config/i18n';
 
-type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number };
+type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string };
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const POPULAR_KEY = 'pci_hazirlik';
@@ -18,9 +18,9 @@ export function generateMetadata({ params }: { params: { region: string } }) {
   return { title: d.metaTitle, description: d.metaDesc };
 }
 
-async function getPackages(): Promise<Pkg[]> {
+async function getPackages(region: string): Promise<Pkg[]> {
   try {
-    const r = await fetch(`${API}/orders/packages`, { cache: 'no-store' });
+    const r = await fetch(`${API}/orders/packages?region=${region}`, { cache: 'no-store' });
     if (!r.ok) return [];
     return (await r.json()) as Pkg[];
   } catch {
@@ -32,7 +32,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
   if (!isRegionCode(params.region)) notFound();
   const region = getRegion(params.region);
   const d = getDict(region).pkg;
-  const packages = await getPackages();
+  const packages = await getPackages(region.code);
   // Faz 5b'ye kadar fiyatlar yalnızca TRY tabanlı; TR dışı bölgelerde gösterge
   // niteliğinde (PackagePricing tablosu + bölgesel kalibrasyon gelecek).
   const indicative = region.currency !== 'TRY';

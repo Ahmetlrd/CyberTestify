@@ -37,18 +37,19 @@ export const api = {
     ),
   verifyDomain: (domainId: string) =>
     request<{ verified: boolean }>(`/domains/${domainId}/verify`, { method: 'POST' }),
-  listPackages: () =>
-    request<Array<{ key: string; displayName: string; description: string; priceMinorUnit: number }>>(
-      '/orders/packages',
+  listPackages: (region = 'tr') =>
+    request<Array<{ key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string }>>(
+      `/orders/packages?region=${region}`,
     ),
   createOrder: (
     domainId: string,
     packageKey: string,
     consents: { ownershipConfirmed: boolean; distanceContractAccepted: boolean; withdrawalWaived: boolean },
+    region = 'tr',
   ) =>
     request<{ orderId: string; paymentPageUrl: string }>('/orders', {
       method: 'POST',
-      body: JSON.stringify({ domainId, packageKey, ...consents }),
+      body: JSON.stringify({ domainId, packageKey, ...consents, region }),
     }),
   getOrder: (orderId: string) => request<any>(`/orders/${orderId}`),
   downloadReport: async (orderId: string, accessSecret: string) => {

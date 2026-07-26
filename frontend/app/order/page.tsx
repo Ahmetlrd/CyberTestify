@@ -4,14 +4,18 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../lib/api';
+import { readRegionCookie } from '../../lib/region';
+import { getRegion, type RegionCode } from '../../config/regions';
+import { formatMoney } from '../../config/i18n';
 
-type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number };
+type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string };
 
 export default function OrderPage() {
   const router = useRouter();
   const domainId = useSearchParams().get('domainId');
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [region, setRegion] = useState<RegionCode>('tr');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -25,7 +29,9 @@ export default function OrderPage() {
       router.push('/login');
       return;
     }
-    api.listPackages().then(setPackages).catch((err) => setError(err.message));
+    const rc = readRegionCookie();
+    setRegion(rc);
+    api.listPackages(rc).then(setPackages).catch((err) => setError(err.message));
   }, [router]);
 
   async function handleStart() {
@@ -35,11 +41,16 @@ export default function OrderPage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await api.createOrder(domainId, selected, {
-        ownershipConfirmed: authConsent,
-        distanceContractAccepted: contractConsent,
-        withdrawalWaived: withdrawalConsent,
-      });
+      const res = await api.createOrder(
+        domainId,
+        selected,
+        {
+          ownershipConfirmed: authConsent,
+          distanceContractAccepted: contractConsent,
+          withdrawalWaived: withdrawalConsent,
+        },
+        region,
+      );
       window.location.href = res.paymentPageUrl;
     } catch (err: any) {
       setError(err.message);
@@ -111,7 +122,7 @@ export default function OrderPage() {
               </div>
               <p className="mt-1 text-xs leading-relaxed text-ink-soft">{p.description}</p>
               <p className="mt-2 font-bold text-ink">
-                {(p.priceMinorUnit / 100).toLocaleString('tr-TR')} TRY{' '}
+                {formatMoney(p.priceMinorUnit, getRegion(region))}{' '}
                 <span className="text-xs font-normal text-ink-muted">· vergiler dahil</span>
               </p>
             </button>

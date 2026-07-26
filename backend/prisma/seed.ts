@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { SCAN_PACKAGES } from '../src/services/scanPackages.js';
+import { REGIONAL_PRICING, currencyFor } from '../src/services/pricing.js';
 
 const prisma = new PrismaClient();
 
@@ -47,6 +48,21 @@ async function main() {
     data: { active: false },
   });
   if (deactivated.count > 0) console.log(`[seed] ${deactivated.count} eski paket pasiflestirildi.`);
+
+  // Cok-bolgeli fiyatlandirma satirlari (tr/us/ae). TR authoritative, US/AE tahmini.
+  let priceRows = 0;
+  for (const pkg of SCAN_PACKAGES) {
+    const byRegion = REGIONAL_PRICING[pkg.key] ?? {};
+    for (const region of Object.keys(byRegion)) {
+      await prisma.packagePricing.upsert({
+        where: { packageKey_region: { packageKey: pkg.key, region } },
+        update: { currency: currencyFor(region), amountMinorUnit: byRegion[region] },
+        create: { packageKey: pkg.key, region, currency: currencyFor(region), amountMinorUnit: byRegion[region] },
+      });
+      priceRows++;
+    }
+  }
+  console.log(`[seed] ${priceRows} bolgesel fiyat satiri yazildi (PackagePricing).`);
 }
 
 main()
