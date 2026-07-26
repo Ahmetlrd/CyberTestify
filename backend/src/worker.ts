@@ -4,6 +4,7 @@ import * as pentagi from './pentagi/client.js';
 import { getPackageDef } from './services/scanPackages.js';
 import { generateAndStoreReport } from './services/report.js';
 import { findOutOfScope } from './services/scope.js';
+import { buildActivityFeed } from './services/activityFeed.js';
 import { promoteQueued } from './services/orchestrator.js';
 import { checkEgressProxyHealth } from './services/egressHealth.js';
 
@@ -56,15 +57,19 @@ async function tick() {
       // Ajanin calistirdigi komut/tool argumanlarindan eristigi hedefleri cikar;
       // izin verilen kapsam (dogrulanan hostname + cozumlenen IP'ler + referans
       // allowlist) disinda bir hedef varsa flow'u durdur (enforce) veya logla.
-      if (!flow.scopeViolationTarget) {
-        try {
-          const logs = await pentagi.getScopeLogs(flow.pentagiFlowId);
-          // ONEMLI: SADECE ajanin ISTEDIGI hedefi (tool cagri ARGUMANLARI) tara.
-          // Yanit govdeleri (result) ve terminal CIKTISI, taranan sayfanin
-          // icindeki 3. taraf linklerini (googletagmanager, facebook vb.) icerir
-          // — ajan onlara BAGLANMASA bile — ve bunlari taramak YANLIS POZITIF
-          // uretir. Gercek egress kontrolu zaten Seviye 1 proxy'de (baglantilari
-          // gorur). Seviye 3 burada yalnizca istek-tarafi (args) sinyalini kullanir.
+      try {
+        const logs = await pentagi.getScopeLogs(flow.pentagiFlowId);
+
+        // (A) DOSTANE aktivite akışı — her tick güncelle. Ham log DEĞİL;
+        // kategorilenmiş + redakte (bkz activityFeed.ts). Müşteriye bu gösterilir.
+        const feed = buildActivityFeed(logs.toolCallLogs);
+        await prisma.flow.update({ where: { id: flow.id }, data: { activityFeed: JSON.stringify(feed) } });
+
+        // (B) SEVIYE 3 kapsam izleme — yalnızca henüz ihlal kaydı yoksa.
+        // SADECE ajanin ISTEDIGI hedefi (tool cagri ARGUMANLARI) tara; yanıt
+        // gövdeleri 3. taraf linkleri içerir → yanlış pozitif. Gerçek egress
+        // kontrolü zaten Seviye 1 proxy'de.
+        if (!flow.scopeViolationTarget) {
           const texts = logs.toolCallLogs.map((t) => t.args);
           const scope = {
             hostname: flow.order.domain.hostname,
@@ -75,9 +80,6 @@ async function tick() {
           if (violations.length) {
             const target = violations.join(', ').slice(0, 500);
             await prisma.flow.update({ where: { id: flow.id }, data: { scopeViolationTarget: target } });
-            // Yuksek gorunurluklu, greplenebilir log. TODO(alerting): burada
-            // gercek uyari kanalina (email/Slack/webhook) da bildirim gonderilmeli
-            // — kapsam ihlali guvenlik/hukuki acidan kritik bir olaydir.
             console.error(
               `[SCOPE-VIOLATION] Flow ${flow.pentagiFlowId} order ${flow.orderId} hedef "${scope.hostname}" — kapsam disi: ${target} (mod=${config.scopeEnforcement})`,
             );
@@ -88,9 +90,9 @@ async function tick() {
               continue; // rapor URETME — tarama kapsam ihlali nedeniyle iptal
             }
           }
-        } catch (err) {
-          console.error(`[worker][SCOPE] Flow ${flow.pentagiFlowId} kapsam kontrolu hatasi:`, err);
         }
+      } catch (err) {
+        console.error(`[worker][SCOPE/FEED] Flow ${flow.pentagiFlowId} log islenirken hata:`, err);
       }
 
       // PentAGI tarafinda gercekten basarisiz olduysa -> siparisi de basarisiz say.

@@ -37,6 +37,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const [order, setOrder] = useState<any>(null);
   const [accessSecret, setAccessSecret] = useState('');
   const [unlocked, setUnlocked] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -92,6 +93,13 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const hostname = order?.domain?.hostname ?? 'hedef';
   const active = status === 'scan_running' || status === 'paid' || status === 'scan_queued';
 
+  let feed: Array<{ seq: number; text: string }> = [];
+  try {
+    if (order?.flow?.activityFeed) feed = JSON.parse(order.flow.activityFeed);
+  } catch {
+    feed = [];
+  }
+
   return (
     <main className="container-page max-w-xl py-16">
       <p className="eyebrow">Sipariş Durumu</p>
@@ -103,10 +111,40 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       </div>
 
       {active && (
-        <p className="mt-4 rounded-card bg-brand-50/70 px-4 py-3 text-sm text-ink-soft">
-          Tarama arka planda çalışıyor. Bu sayfa otomatik güncelleniyor — kapatabilirsiniz; sonuç
-          hazır olduğunda erişim kodu e-postanıza gönderilecek.
-        </p>
+        <>
+          <p className="mt-4 rounded-card bg-brand-50/70 px-4 py-3 text-sm text-ink-soft">
+            Tarama arka planda çalışıyor. Bu sayfa otomatik güncelleniyor — kapatabilirsiniz; sonuç
+            hazır olduğunda erişim kodu e-postanıza gönderilecek.
+          </p>
+
+          <div className="mt-4">
+            <button
+              onClick={() => setShowDetails((v) => !v)}
+              className="text-sm font-medium text-accent-600 hover:underline"
+            >
+              {showDetails ? 'Detayları gizle' : 'Detayları göster'}
+            </button>
+            {showDetails && (
+              <div className="card mt-3 p-4">
+                {feed.length === 0 ? (
+                  <p className="text-sm text-ink-muted">Aktivite bekleniyor…</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {feed.map((it) => (
+                      <li key={it.seq} className="flex items-center gap-2.5 text-sm text-ink-soft">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-300" />
+                        {it.text}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mt-3 border-t border-line pt-3 text-xs text-ink-muted">
+                  Teknik loglar güvenlik ve gizlilik nedeniyle gizlenmiştir; yalnızca genel aktivite gösterilir.
+                </p>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {status === 'scan_completed' && (
