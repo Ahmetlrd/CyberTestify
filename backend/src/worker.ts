@@ -1,0 +1,193 @@
+import { prisma } from './db.js';
+import { config, validateScopeLockConfig } from './config.js';
+import * as pentagi from './pentagi/client.js';
+import { getPackageDef } from './services/scanPackages.js';
+import { generateAndStoreReport } from './services/report.js';
+import { findOutOfScope } from './services/scope.js';
+import { promoteQueued } from './services/orchestrator.js';
+import { checkEgressProxyHealth } from './services/egressHealth.js';
+
+// Fail-fast: kapsam kilidi konfigurasyonu eksik/gecersizse hemen dur.
+validateScopeLockConfig();
+
+/**
+ * Arka plan poller — calisan flow'lari periyodik olarak kontrol eder:
+ *  1) Paketin tool-call tavanini asan flow'lari durdurur (maliyet korumasi;
+ *     bkz pentagi/client.ts'teki not — bu API seviyesinde degil, polling
+ *     seviyesinde uygulanan yumusak bir tavan).
+ *  2) Tamamlanan flow'lar icin rapor uretimini tetikler.
+ *
+ * Production'da bunu ayri bir process/cron olarak (ör. `npm run worker`)
+ * calistir, web sunucusuyla ayni process'te degil.
+ */
+
+const POLL_INTERVAL_MS = 8000;
+
+async function tick() {
+  const runningFlows = await prisma.flow.findMany({
+    where: { status: 'running' },
+    include: { order: { include: { package: true, domain: true } } },
+  });
+
+  // Periyodik egress proxy saglik kontrolu: proxy tarama SIRASINDA cokerse
+  // yuksek gorunurlukle uyar (terminaller cikis yapamaz → tarama dogal olarak
+  // basarisiz olur; burada surface ediyoruz). Yeni tarama zaten reddedilir.
+  if (runningFlows.length > 0 && !(await checkEgressProxyHealth())) {
+    console.error(
+      '[worker][GUARD] ⚠️  Egress proxy AYAKTA DEGIL ama calisan tarama(lar) var! ' +
+        'Terminaller cikis yapamaz; taramalar basarisiz olabilir. Proxy\'yi baslatin.',
+    );
+  }
+
+  for (const flow of runningFlows) {
+    try {
+      const pkg = getPackageDef(flow.order.package.key);
+      const prevCount = flow.toolCallCount;
+      const toolCallCount = await pentagi.getToolCallCount(flow.pentagiFlowId);
+
+      if (toolCallCount !== prevCount) {
+        await prisma.flow.update({ where: { id: flow.id }, data: { toolCallCount } });
+      }
+
+      const remoteStatus = await pentagi.getFlowStatus(flow.pentagiFlowId);
+      const overCap = toolCallCount >= pkg.maxToolCalls;
+
+      // --- SEVIYE 3: Kapsam (scope) izleme -----------------------------------
+      // Ajanin calistirdigi komut/tool argumanlarindan eristigi hedefleri cikar;
+      // izin verilen kapsam (dogrulanan hostname + cozumlenen IP'ler + referans
+      // allowlist) disinda bir hedef varsa flow'u durdur (enforce) veya logla.
+      if (!flow.scopeViolationTarget) {
+        try {
+          const logs = await pentagi.getScopeLogs(flow.pentagiFlowId);
+          // ONEMLI: SADECE ajanin ISTEDIGI hedefi (tool cagri ARGUMANLARI) tara.
+          // Yanit govdeleri (result) ve terminal CIKTISI, taranan sayfanin
+          // icindeki 3. taraf linklerini (googletagmanager, facebook vb.) icerir
+          // — ajan onlara BAGLANMASA bile — ve bunlari taramak YANLIS POZITIF
+          // uretir. Gercek egress kontrolu zaten Seviye 1 proxy'de (baglantilari
+          // gorur). Seviye 3 burada yalnizca istek-tarafi (args) sinyalini kullanir.
+          const texts = logs.toolCallLogs.map((t) => t.args);
+          const scope = {
+            hostname: flow.order.domain.hostname,
+            ips: (flow.order.domain.resolvedIps ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+            allowlist: config.scopeAllowlist,
+          };
+          const violations = findOutOfScope(texts, scope);
+          if (violations.length) {
+            const target = violations.join(', ').slice(0, 500);
+            await prisma.flow.update({ where: { id: flow.id }, data: { scopeViolationTarget: target } });
+            // Yuksek gorunurluklu, greplenebilir log. TODO(alerting): burada
+            // gercek uyari kanalina (email/Slack/webhook) da bildirim gonderilmeli
+            // — kapsam ihlali guvenlik/hukuki acidan kritik bir olaydir.
+            console.error(
+              `[SCOPE-VIOLATION] Flow ${flow.pentagiFlowId} order ${flow.orderId} hedef "${scope.hostname}" — kapsam disi: ${target} (mod=${config.scopeEnforcement})`,
+            );
+            if (config.scopeEnforcement === 'enforce') {
+              await pentagi.stopFlow(flow.pentagiFlowId);
+              await prisma.flow.update({ where: { id: flow.id }, data: { status: 'finished', finishedAt: new Date() } });
+              await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scope_violation' } });
+              continue; // rapor URETME — tarama kapsam ihlali nedeniyle iptal
+            }
+          }
+        } catch (err) {
+          console.error(`[worker][SCOPE] Flow ${flow.pentagiFlowId} kapsam kontrolu hatasi:`, err);
+        }
+      }
+
+      // PentAGI tarafinda gercekten basarisiz olduysa -> siparisi de basarisiz say.
+      if (remoteStatus.status === 'failed') {
+        await prisma.flow.update({ where: { id: flow.id }, data: { status: 'failed', finishedAt: new Date() } });
+        await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scan_failed' } });
+        continue;
+      }
+
+      // PentAGI ajani isini bitirince cogu zaman 'finished' yerine 'waiting'
+      // durumuna gecip YENI KOMUT bekler (interaktif mod). Bizim servis otonom
+      // ve tek atislik oldugu icin: is yapilmis (toolCallCount>0) ve bir onceki
+      // poll'dan beri yeni arac cagrisi OLMAMISSA (idle), bunu tamamlanmis say.
+      const idleWaiting =
+        remoteStatus.status === 'waiting' && toolCallCount > 0 && toolCallCount === prevCount;
+
+      // Bitirme kosulu: dogal 'finished' | maliyet tavani asildi | idle 'waiting'.
+      // ONEMLI: stopFlow flow'u 'finished' DEGIL 'waiting' durumuna alir
+      // (PentAGI'de "stopped" statusu yok), bu yuzden bitirmeyi BIZ tetikliyoruz.
+      const done = remoteStatus.status === 'finished' || overCap || idleWaiting;
+      if (done) {
+        if (overCap && remoteStatus.status !== 'finished') {
+          console.warn(`[worker] Flow ${flow.pentagiFlowId} tavani asti (${toolCallCount}/${pkg.maxToolCalls}), durduruluyor ve rapor uretiliyor.`);
+          await pentagi.stopFlow(flow.pentagiFlowId);
+        }
+
+        // Rapor uret (siparisi scan_completed yapar, ham veriyi PentAGI'den siler).
+        const { accessSecret } = await generateAndStoreReport(flow.id);
+        // generateAndStoreReport flow.status'u degistirmez; burada 'finished'
+        // yapiyoruz ki bir sonraki tick'te tekrar islenmesin.
+        await prisma.flow.update({ where: { id: flow.id }, data: { status: 'finished', finishedAt: new Date() } });
+
+        // DEV/MOCK modu: e-posta servisi henuz yok — erisim sifresini panelde
+        // gosterebilmek icin sakla. Gercek odeme modunda ASLA saklanmaz.
+        if (config.mockPayment) {
+          await prisma.report.update({
+            where: { orderId: flow.orderId },
+            data: { devAccessSecret: accessSecret },
+          });
+        }
+
+        // TODO: e-posta gonderim servisine baglan — accessSecret'i rapor indirme
+        // linkinden AYRI bir e-postada musteriye ilet.
+        console.log(`[worker] Rapor hazir, siparis ${flow.orderId}. Erisim sifresi (dev'de panelde de gorunur, prod'da e-postaya tasi): ${accessSecret}`);
+      }
+    } catch (err) {
+      console.error(`[worker] Flow ${flow.pentagiFlowId} islenirken hata:`, err);
+    }
+  }
+}
+
+/**
+ * Veri saklama suresi dolan raporlarin ICERIGINI siler. Rapor satiri (sifreli
+ * blob + erisim metadatasi) tamamen kaldirilir; SIPARIS kaydi (kim/ne zaman/ne
+ * kadar) KORUNUR — muhasebe ve fatura mevzuati geregi. Ham PentAGI verisi zaten
+ * rapor uretilir uretilmez siliniyor (report.ts -> purgeFlowRawData).
+ */
+async function purgeExpiredReports() {
+  const cutoff = new Date(Date.now() - config.reportRetentionDays * 24 * 60 * 60 * 1000);
+  const expired = await prisma.report.findMany({
+    where: { createdAt: { lt: cutoff } },
+    select: { id: true, orderId: true },
+  });
+  if (expired.length === 0) return;
+  await prisma.report.deleteMany({ where: { id: { in: expired.map((r) => r.id) } } });
+  // Siparisi "raporu suresi doldu/silindi" olarak isaretle (kayit korunur).
+  await prisma.order.updateMany({
+    where: { id: { in: expired.map((r) => r.orderId) } },
+    data: { status: 'report_purged' },
+  });
+  console.log(`[worker] ${expired.length} adet suresi dolmus rapor icerigi silindi (siparis kaydi korundu).`);
+}
+
+async function main() {
+  console.log('[worker] Baslatildi, PentAGI flow durumlari izleniyor...');
+  // Acilista egress proxy sagligini kontrol et (loud uyari — proxy'siz tarama yok).
+  if (await checkEgressProxyHealth()) console.log('[worker] Egress proxy (kapsam kilidi) SAGLIKLI.');
+  else console.warn('[worker] ⚠️  UYARI: Egress proxy AYAKTA DEGIL! `npm run egress-proxy` calistirin.');
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    await tick();
+    try {
+      // Concurrency=1: aktif tarama bittiyse kuyruktaki bir sonrakini baslat.
+      await promoteQueued();
+    } catch (err) {
+      console.error('[worker] Kuyruk promote sirasinda hata:', err);
+    }
+    try {
+      await purgeExpiredReports();
+    } catch (err) {
+      console.error('[worker] Rapor saklama temizligi sirasinda hata:', err);
+    }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
+}
+
+main().catch((err) => {
+  console.error('[worker] Beklenmeyen hata, process kapatiliyor:', err);
+  process.exit(1);
+});

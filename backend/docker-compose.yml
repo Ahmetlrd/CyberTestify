@@ -1,0 +1,63 @@
+# CyberTestify backend — PROD kurulum sablonu.
+#
+# KRITIK GUVENCE: egress-proxy ayri bir servistir; api ve worker ona
+# `depends_on: condition: service_healthy` ile baglidir. Yani egress-proxy
+# saglikli olmadan api/worker AYAGA KALKAMAZ → proxy'siz (kapsam kilidi
+# devre disi) bir prod kurulum fiilen imkansizdir.
+#
+# NOT: PentAGI terminal container'larinin bu proxy'ye ulasabilmesi icin ag
+# baglantisi ayrica kurulmali (bkz HANDOFF.md — pentagi-egress network +
+# PROXY_URL). Bu dosya CyberTestify backend'i icindir, PentAGI'nin kendi
+# compose'undan ayridir.
+
+services:
+  egress-proxy:
+    build: .
+    command: ["npx", "tsx", "src/egress-proxy/server.ts"]
+    restart: always
+    env_file: .env
+    environment:
+      BACKEND_INTERNAL_URL: "http://api:4000"
+      EGRESS_PROXY_URL: "http://localhost:8899"
+    ports:
+      - "8899:8899"
+    networks:
+      - cybertestify
+      - pentagi-egress   # PentAGI terminal'lerinin bagli oldugu izole ag (harici)
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8899/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  api:
+    build: .
+    command: ["npx", "tsx", "src/server.ts"]
+    restart: always
+    env_file: .env
+    ports:
+      - "4000:4000"
+    depends_on:
+      egress-proxy:
+        condition: service_healthy   # proxy saglikli olmadan API kalkmaz
+    networks:
+      - cybertestify
+
+  worker:
+    build: .
+    command: ["npx", "tsx", "src/worker.ts"]
+    restart: always
+    env_file: .env
+    depends_on:
+      egress-proxy:
+        condition: service_healthy   # proxy saglikli olmadan worker kalkmaz
+    networks:
+      - cybertestify
+
+networks:
+  cybertestify:
+  # PentAGI terminal'lerinin bagli oldugu izole ag — PentAGI compose'unda veya
+  # `docker network create pentagi-egress` ile disaridan olusturulur.
+  pentagi-egress:
+    external: true

@@ -1,0 +1,54 @@
+# ============================================================
+# SECRETS / ENV — ASLA commit edilmez
+# ============================================================
+.env
+.env.*
+# Guvenli sablon dosyalari (placeholder) commit edilir:
+!.env.example
+!.env.local.example
+# Her ihtimale karsi derinlemesine:
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Sertifika / anahtar dosyalari
+*.pem
+*.key
+*.pfx
+*.p12
+id_rsa*
+
+# ============================================================
+# Veritabani yedekleri — ASLA commit edilmez (musteri verisi olabilir)
+# ============================================================
+backups/
+*.dump
+*.pgdump
+*.sql.gz
+*.sqlite
+*.sqlite3
+# NOT: Prisma migration.sql dosyalari (prisma/migrations/**) commit EDILIR —
+# yukaridaki desenler onlari etkilemez (onlar dizin altinda ve .sql uzantili).
+
+# ============================================================
+# Bagimliliklar / build ciktilari
+# ============================================================
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# ============================================================
+# Loglar / gecici / OS
+# ============================================================
+*.log
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+coverage/
+tmp/

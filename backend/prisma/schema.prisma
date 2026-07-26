@@ -1,0 +1,191 @@
+// Prisma schema — kendi backend'imizin veritabanı.
+// PentAGI'nin kendi veritabanına (Postgres+pgvector) hiç dokunmuyoruz;
+// bu şema tamamen bizim müşteri/sipariş/rapor katmanımız için.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DomainVerificationStatus {
+  pending
+  verified
+  failed
+  expired
+}
+
+enum OrderStatus {
+  awaiting_payment
+  paid
+  scan_queued
+  scan_running
+  scan_completed
+  scan_failed
+  scope_violation  // izin disi hedefe erisim tespit edildi, tarama durduruldu
+  report_delivered
+  report_purged   // saklama suresi doldu, rapor icerigi silindi (siparis kaydi durur)
+  refunded
+}
+
+enum ScanPackageKey {
+  basit_tarama       // Ucuz, guvenli, pasif OWASP on-taramasi
+  ssl_tls            // SSL/TLS yapilandirma denetimi
+  header_leak        // Guvenlik basliklari + bilgi sizintisi (.git/.env vb.)
+  dns_email          // DNS + e-posta guvenligi (SPF/DKIM/DMARC)
+  cms_cve            // CMS/framework parmak izi + bilinen CVE tespiti
+  pci_hazirlik       // PCI-DSS hazirlik on-degerlendirmesi (resmi ASV/QSA testi DEGIL)
+  kvkk_hazirlik      // KVKK on uyum kontrolu (hukuki danismanlik DEGIL)
+  iso27001_hazirlik  // ISO 27001 hazirlik kontrol listesi (resmi sertifikasyon DEGIL)
+  // --- Asagidakiler eski/pasif, sadece gecmis kayit butunlugu icin duruyor ---
+  standard_web
+  premium_web
+  network_ports
+  api_scan
+  byok_custom
+}
+
+model Customer {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String
+  fullName      String?
+  createdAt     DateTime @default(now())
+
+  // Kayit aninda Kullanim Kosullari + KVKK Aydinlatma metninin okundugunun
+  // teyidi (zaman damgali + metin surumu). Aydinlatma bilgilendiricidir; ToS
+  // sozlesmeseldir. Ispat yuku bizde oldugundan kayit tutulur.
+  termsAcceptedAt DateTime?
+  termsVersion    String?
+
+  domains Domain[]
+  orders  Order[]
+}
+
+model Domain {
+  id                 String                    @id @default(uuid())
+  customerId         String
+  customer           Customer                  @relation(fields: [customerId], references: [id])
+  hostname           String
+  verificationToken  String                    // "pentest-verify=<random>" seklinde uretilir
+  verificationMethod String                    @default("dns_txt") // dns_txt | file_upload
+  status             DomainVerificationStatus  @default(pending)
+  verifiedAt         DateTime?
+  lastCheckedAt      DateTime?
+  createdAt          DateTime                  @default(now())
+
+  // Dogrulama aninda cozumlenen hedef IP'ler (virgulle) — kapsam kontrolu icin.
+  resolvedIps        String?
+  // Paylasimli mi dedicated mi (kapsam kilidi icin). unknown|shared|dedicated.
+  hostingType        String                    @default("unknown")
+
+  orders Order[]
+
+  @@unique([customerId, hostname])
+}
+
+// Sabit "buton" paketleri — serbest prompt yok (BYOK harici).
+// Her paketin maliyet tavani PentAGI'deki MAX_GENERAL_AGENT_TOOL_CALLS /
+// MAX_LIMITED_AGENT_TOOL_CALLS limitlerini flow bazinda override eder.
+model ScanPackage {
+  id              String         @id @default(uuid())
+  key             ScanPackageKey @unique
+  displayName     String
+  description     String
+  priceMinorUnit  Int            // kurus cinsinden (TRY)
+  modelProvider   String         // pentagi provider profile adi (ör. "claude-haiku", "claude-opus")
+  maxToolCalls    Int            // flow'a uygulanacak sert tavan
+  promptTemplate  String         // sabit, kullanicinin degistiremedigi prompt sablonu
+  active          Boolean        @default(true)
+
+  orders Order[]
+}
+
+model Order {
+  id              String       @id @default(uuid())
+  customerId      String
+  customer        Customer     @relation(fields: [customerId], references: [id])
+  domainId        String
+  domain          Domain       @relation(fields: [domainId], references: [id])
+  packageId       String
+  package         ScanPackage  @relation(fields: [packageId], references: [id])
+
+  status          OrderStatus  @default(awaiting_payment)
+  amountMinorUnit Int
+  currency        String       @default("TRY")
+
+  paymentProvider String?      // "iyzico"
+  paymentRef      String?      // saglayicidaki islem id'si
+  paidAt          DateTime?
+
+  // --- Rizalar (siparis aninda, ayri ayri; ispat yuku bizde) --------------
+  // 1) Pentest yetkilendirmesi (TCK 243 hukuka uygunluk): "bu alan adinin VE
+  //    altyapisinin sahibiyim/yasal yetkilisiyim, yalnizca dogrulanan hostname
+  //    kapsaminda pasif taramaya riza gosteriyorum".
+  ownershipConfirmedAt DateTime?
+  // 2) Mesafeli Satis Sozlesmesi + On Bilgilendirme Formu onayi.
+  distanceContractAcceptedAt DateTime?
+  // 3) Cayma hakki feragati (dijital/aninda ifa — Mesafeli Sozlesmeler Yon. m.15).
+  withdrawalWaivedAt DateTime?
+  // Rizanin alindigi IP ve yururlukteki hukuki metin surumu (ispat icin).
+  consentIp      String?
+  consentVersion String?
+
+  // BYOK: musteri kendi anahtarini girdiyse burada (encrypted) tutulur,
+  // flow bitince veya 24s icinde silinir — asla log'lanmaz.
+  byokKeyEncrypted String?
+  customPrompt     String?     // sadece byok_custom paketinde dolu
+
+  flow   Flow?
+  report Report?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// PentAGI tarafinda acilan flow'un bizim tarafimizdaki izi.
+model Flow {
+  id              String    @id @default(uuid())
+  orderId         String    @unique
+  order           Order     @relation(fields: [orderId], references: [id])
+
+  pentagiFlowId   String    @unique   // PentAGI GraphQL createFlow donus ID'si
+  status          String    @default("created") // created|running|finished|stopped|error
+  toolCallCount   Int       @default(0)
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  errorMessage    String?
+  // Kapsam ihlali tespit edilirse, izin disi hedef(ler) buraya audit icin yazilir.
+  scopeViolationTarget String?
+
+  // Ham log/ekran goruntusu verisi PentAGI'nin kendi MinIO/Postgres'inde
+  // duruyor; biz sadece flow ID'sini ve durumunu tutuyoruz. Rapor
+  // olusturulduktan sonra PentAGI tarafindaki flow-{id}-data dizini
+  // otomatik temizlik job'iyla silinir (bkz cleanup worker).
+  rawDataPurgedAt DateTime?
+}
+
+model Report {
+  id                String    @id @default(uuid())
+  orderId           String    @unique
+  order             Order     @relation(fields: [orderId], references: [id])
+
+  // Rapor iceriği musteriye ozel bir anahtarla AES-256-GCM ile sifrelenir.
+  // Anahtarin kendisi bu tabloda TUTULMAZ — sadece sifreli blob + IV + authTag.
+  // Anahtar musteriye ayri bir kanaldan (e-posta) tek seferlik gosterilir.
+  encryptedBlob     Bytes
+  iv                Bytes
+  authTag           Bytes
+  keyDerivationSalt Bytes     // musteri sifresinden anahtar turetmek icin (scrypt/argon2)
+
+  createdAt         DateTime  @default(now())
+  deliveredAt       DateTime?
+
+  // SADECE DEV/MOCK modu icin: e-posta servisi henuz yokken erisim sifresini
+  // panelde gosterebilmek adina burada tutulur. Gercek odeme (mockPayment=false)
+  // modunda ASLA doldurulmaz — sifre sadece e-posta ile ayri kanaldan gider.
+  devAccessSecret   String?
+}

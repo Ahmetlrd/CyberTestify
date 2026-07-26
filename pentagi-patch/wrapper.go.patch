@@ -1,0 +1,24 @@
+diff --git a/backend/pkg/providers/provider/wrapper.go b/backend/pkg/providers/provider/wrapper.go
+index f9bfe89..7392e45 100644
+--- a/backend/pkg/providers/provider/wrapper.go
++++ b/backend/pkg/providers/provider/wrapper.go
+@@ -124,6 +124,9 @@ func WrapGenerateFromSinglePrompt(
+ 	prompt string,
+ 	options ...llms.CallOption,
+ ) (string, error) {
++	// CyberTestify PII yamasi (bkz PATCHES.md): prompt, ABD'deki LLM'e gitmeden
++	// ONCE yapisal kisisel veriden arindirilir.
++	prompt = RedactAll(prompt)
+ 	ctx, observation := obs.Observer.NewObservation(ctx)
+ 	modelWithPrefix := provider.ModelWithPrefix(opt)
+ 	messages := []llms.MessageContent{
+@@ -252,6 +255,9 @@ func WrapGenerateContent(
+ 	messages []llms.MessageContent,
+ 	options ...llms.CallOption,
+ ) (*llms.ContentResponse, error) {
++	// CyberTestify PII yamasi (bkz PATCHES.md): tool sonuclari dahil TUM mesaj
++	// zinciri, ABD'deki LLM'e gitmeden ONCE yapisal kisisel veriden arindirilir.
++	messages = RedactMessages(messages)
+ 	ctx, observation := obs.Observer.NewObservation(ctx)
+ 	modelWithPrefix := provider.ModelWithPrefix(opt)
+ 	metadata := buildMetadata(provider, opt, messages, options...)

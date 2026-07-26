@@ -1,0 +1,183 @@
+# CyberTestify — Devir/Çalıştırma Notu (HANDOFF)
+
+Bu dosya, projeyi çalıştırmak ve son eklenen **Seviye 1 egress kilidi**ni
+anlamak için gereken pratik bilgileri içerir. Uyum/hukuk için `COMPLIANCE.md`,
+mimari kararlar için kod içi yorumlara bakın.
+
+## Çalıştırma (localhost / dev)
+
+Portlar: backend `:4000`, frontend `:3000`, kendi Postgres `:5433` (Docker),
+PentAGI `:8443` (Docker), **egress proxy `:8899`** (yeni).
+
+```bash
+# 1) Kendi Postgres + PentAGI zaten Docker'da çalışıyor.
+# 2) İzole egress network'ü (bir kez):
+docker network create pentagi-egress   # zaten varsa hata verir, önemsiz
+
+# 3) Backend (3 process):
+cd backend
+npm run dev            # API (:4000)
+npm run worker         # flow poller + kapsam izleme + kuyruk promote
+npm run egress-proxy   # SEVIYE 1 filtreleyen egress proxy (:8899) — ZORUNLU
+
+# 4) Frontend:
+cd frontend && npm run dev   # :3000
+```
+
+> **ÖNEMLİ:** `egress-proxy` çalışmıyorsa, PentAGI terminal container'ları
+> `PROXY_URL` üzerinden çıkış yapamaz ve taramalar başarısız olur. Backend
+> `dev`/`worker` ile birlikte **her zaman** çalışmalı. (Prod'da 3'ü de servis
+> olarak kalıcı çalıştırın.)
+
+## Seviye 1 — Egress kilidi (proaktif kapsam kontrolü)
+
+Amaç: PentAGI tarama container'larının internete çıkışını, o an aktif olan
+**tek** flow'un kapsamıyla (doğrulanan hostname + `Domain.resolvedIps` +
+referans allowlist + private/loopback) sınırlamak. Önceki katmanlar reaktifti
+(tespit→durdur); bu katman isteği **baştan engeller**.
+
+**Nasıl çalışıyor:**
+1. `backend/src/egress-proxy/server.ts` — HTTP forward + CONNECT proxy (:8899).
+   Her isteğin hedefini `services/scope.ts` (Seviye 3 ile AYNI kod) ile kontrol
+   eder; kapsam dışıysa 403/tünel-kapat + backend'e audit yazar.
+2. Aktif kapsamı backend'ten çeker: `GET /internal/active-scope` (secret'li,
+   `x-internal-secret`). Backend bu endpoint'te o an `running` olan flow'un
+   hostname+IP'lerini döndürür. Aktif tarama yoksa **fail-closed** (yalnız
+   allowlist/private geçer).
+3. Bloklar `POST /internal/scope-audit` ile `Flow.scopeViolationTarget`'a
+   yazılır (Seviye 3 audit'iyle aynı alan).
+4. PentAGI `.env` (kurulum: `~/Downloads/pentagi/`):
+   - `PROXY_URL=http://host.docker.internal:8899`
+   - `DOCKER_NETWORK=pentagi-egress`
+   Değişiklik `docker compose up -d` ile uygulandı; `.env` yedeği
+   `~/Downloads/pentagi/.env.bak-egress-*`.
+
+**Env değişkenleri (backend):**
+- `EGRESS_PROXY_PORT` (vars. 8899)
+- `INTERNAL_API_SECRET` (vars. `dev-internal-secret-change-me` — **prod'da değiştir**)
+- `BACKEND_INTERNAL_URL` (vars. `http://localhost:4000`)
+- `SCOPE_ENFORCEMENT` = `enforce` | `monitor` (vars. enforce)
+- `SCOPE_ALLOWLIST` (virgüllü; vars. CVE/NVD/github/paket aynaları)
+
+## Concurrency = 1 (bilinçli kısıt)
+
+**Aynı anda yalnızca TEK tarama `scan_running` olabilir.** Fazla siparişler
+`scan_queued`'da bekler; worker her tick sonunda `promoteQueued` ile sıradaki
+en eskiyi başlatır (FIFO).
+
+**Neden:** Egress proxy'nin allowlist'i o an aktif olan tek flow'un kapsamıyla
+eşleşir. Birden fazla flow aynı anda çalışırsa proxy tüm aktif hedeflerin
+**birleşimine** izin vermek zorunda kalır → müşteriler arası (cross-tenant)
+kapsam sızıntısı riski. Bu yüzden concurrency=1 bilinçli bir tercihtir.
+
+**Vedat için pratik anlamı:** Aynı anda sadece bir müşterinin taraması çalışır;
+yoğunlukta diğerleri otomatik sıraya girer ve öncekiler bitince başlar.
+
+**Ne zaman kaldırılabilir:** Per-flow dinamik allowlist/izolasyon yazıldığında
+(her terminal'in yalnız kendi flow'unun kapsamına çıkabildiği bir mimari — ör.
+per-flow ayrı proxy örneği/network veya proxy'nin isteği başlatan flow'u
+tanıması). O zamana kadar concurrency=1 kalır.
+
+## Bilinen sınır / hardening yolu (bypass-proof izolasyon)
+
+Şu anki kurulum **"yumuşak" izolasyondur**: `pentagi-egress` normal (internal
+olmayan) bir bridge'dir → terminaller `PROXY_URL` üzerinden çıkar (tüm mevcut
+paketler HTTP/TLS olduğu için gerçekten filtrelenir), ancak teorik olarak ham
+soket ile proxy'yi baypas edip doğrudan çıkabilirler. Mevcut katalog tamamen
+HTTP/uygulama katmanı olduğundan (ham ağ/port paketleri Seviye 2'de zaten
+bloklu) bu pratikte riski büyük ölçüde kapatır.
+
+**Tam (bypass-proof) izolasyon için sonraki adım:**
+1. `pentagi-egress`'i `internal: true` yap (doğrudan egress'i kes).
+2. Egress proxy'yi bu ağa bağlı bir **container** olarak çalıştır ve aynı anda
+   dış ağa da bağla (dual-homed) → tek çıkış yolu proxy olur.
+3. Proxy'yi `config.ts`'ten ayır (kendi env'ini okusun) ki container'da tam
+   backend env'i gerekmesin. `services/scope.ts` importu korunur.
+Bu, ham nmap/port taramaları eklenmeden önce yapılmalı.
+
+## Kapsam kilidi kapanışı (2026-07-26) — operasyonel sertleştirme
+
+Kapsam kilidi artık "unutulamaz/atlanamaz":
+
+1. **Egress-proxy zorunlu, koda gömülü.** Proxy'de `/health` var. Backend ve
+   worker açılışta proxy sağlığını kontrol edip loud loglar. En önemlisi:
+   `enqueueOrStartScan` / `startScanForOrder` / `promoteQueued` proxy sağlıksızsa
+   YENİ tarama başlatmayı REDDEDER (Order `scan_failed` + `[orchestrator][GUARD]`
+   logu). Worker her tick'te de kontrol eder (tarama sırasında çökerse yakalar).
+   `npm run dev:all` (concurrently) üçünü birlikte başlatır; prod için
+   `backend/docker-compose.yml` egress-proxy'yi `restart: always` + `healthcheck`
+   ile ayrı servis yapar, api/worker `depends_on: service_healthy` → **proxy'siz
+   prod ayağa kalkamaz**.
+2. **Fail-fast config:** `validateScopeLockConfig()` açılışta çağrılır;
+   `INTERNAL_API_SECRET`/`EGRESS_PROXY_PORT`/URL'ler eksik/geçersizse process durur.
+3. **networkLayer paket gate:** `HARDENED_NETWORK_ISOLATION=true` olmadan ham
+   ağ/port paketi hiçbir yerde aktif olamaz — seed'de `active:false`, `/packages`
+   listesinde gizli, order route + orchestrator'da reddedilir.
+4. **[SCOPE-VIOLATION] logları:** ihlaller yüksek görünürlüklü, greplenebilir
+   prefixle loglanır (worker + proxy audit). Gerçek alerting (email/Slack) için
+   yer `TODO(alerting)` ile işaretli (bu görevde zorunlu değildi).
+5. **Concurrency=1 yarış-güvenli:** `startScanForOrder` Postgres advisory lock
+   (transaction) ile serileştirir + kısmi unique index (`Flow_single_running_idx`,
+   `WHERE status='running'`) DB-level ikinci hat. İki eşzamanlı istek → ikincisi
+   kuyruğa alınır.
+
+**KRİTİK yanlış-pozitif düzeltmesi:** Seviye 3 (worker log izleme) önceden tool
+`result`/terminal ÇIKTISINI de tarıyordu → taranan sayfanın içindeki 3. taraf
+linkleri (googletagmanager, facebook vb.) kapsam dışı sanılıp **her gerçek site
+taraması scope_violation ile ölüyordu**. Düzeltildi: Seviye 3 artık YALNIZCA
+istek-tarafı sinyalini (`toolCallLogs.args` — ajanın istediği hedef) tarar; yanıt
+gövdeleri gerçek egress kontrolüne (Seviye 1 proxy) bırakılır.
+
+**Canlı doğrulama (nomorelink.com, basit_tarama):**
+- Terminal `pentagi-terminal-9` gerçekten `pentagi-egress` ağında açıldı.
+- Tarama normal tamamlandı, rapor üretildi, `scopeViolationTarget=null` (yanlış
+  pozitif yok), proxy BLOCK=0 (ajan kapsamda kaldı).
+- Proxy `kill` edilince yeni sipariş GERÇEKTEN reddedildi (`scan_failed` +
+  GUARD logu); proxy geri gelince tarama normal çalıştı.
+
+**Kod tarafında kapsam kilidiyle ilgili kalan AÇIK YOK.** Bilerek sonraya
+bırakılan iki şey (ikisi de bu görevin kapsamı dışıydı, net olarak işaretli):
+- **Bypass-proof tam izolasyon** (`internal:true` network + dual-homed container
+  proxy) — şu an "yumuşak" izolasyon; ham ağ/port paketi eklenmeden önce
+  yapılmalı (yukarıdaki "hardening yolu"). networkLayer gate bunu zaten kilitliyor.
+- **Gerçek alerting** (email/Slack) — kod içinde `TODO(alerting)` ile işaretli.
+
+## PII / veri minimizasyonu (2026-07-26)
+
+Tarama sırasında toplanan hedef içeriğindeki **yapısal kişisel veri**, veri
+Anthropic'e (ABD) gitmeden ÖNCE ve bizim DB'mize yazılmadan önce maskelenir.
+
+**İki katman:**
+1. **PentAGI kaynağında (asıl kritik — ABD aktarımı):** Anthropic çağrısını
+   PentAGI'nin Go backend'i yapıyor; bizim Node backend'imiz o akışta değil.
+   Bu yüzden redaksiyon PentAGI kaynağına yamalandı:
+   `backend/pkg/providers/provider/pii_redaction.go` + `wrapper.go` içindeki iki
+   evrensel choke point (`WrapGenerateContent` = ajan zinciri, tool sonuçları dahil;
+   `WrapGenerateFromSinglePrompt` = tek prompt) — TÜM sağlayıcılar buradan geçer.
+   Belge: `~/Downloads/pentagi/PATCHES.md`. **Devreye alma:** resmi image yerine
+   yamalı image (`cybertestify/pentagi:pii`) — `.env`'de
+   `PENTAGI_IMAGE=cybertestify/pentagi:pii` (aktif). Geri alma: bu satırı boşalt +
+   `docker compose up -d`.
+2. **Kendi tarafımızda:** `services/piiRedaction.ts`, `report.ts` içinde rapor
+   şifreli DB'mize yazılmadan önce (`redactAll(renderReportMarkdown(...))`) —
+   sızan ham PII bizde tam haliyle saklanmaz.
+
+**DÜRÜSTLÜK PAYI — hangi PII engelleniyor, hangisi engellenMİYOR:**
+- ✅ **Engellenen (yapısal):** e-posta, TR telefon (05xx/+90), **TCKN** (11 hane +
+  resmi checksum), **kredi kartı** (13–19 hane + Luhn), **IBAN** (mod-97). Sahte
+  format/checksum tutmayanlar maskelenmez (false-positive azaltma).
+- ❌ **Engellenemeyen (bilinen kalıntı risk):** serbest metindeki **isim, adres**
+  ve diğer yapısal-olmayan kişisel veriler. Regex/checksum tabanlı bir sistemin
+  doğal sınırıdır; NER (isim tanıma) bilerek kapsam dışı bırakıldı. **Avukatın
+  KVKK md.9 değerlendirmesinde bunu dikkate alması gerekir** — "tamamen minimize
+  edildi" demek YANLIŞ olur; "yapısal PII maskelenir, isim/adres maskelenmez" doğru.
+
+**Not:** Embedding yolu (`EMBEDDING_URL/PROVIDER`) kullanıcının .env'inde boş → pasif;
+aktive edilirse o çıkışa da redaksiyon eklenmeli (henüz yok).
+
+**Doğrulama:** TS birim testleri **24/24** (pozitif + negatif/checksum); rapor
+pipeline'ı sahte PII'yi 5/5 türde maskeledi, ham sızıntı yok; patched image ile
+gerçek nomorelink.com taraması tamamlandı + rapor üretildi (yama akışı bozmuyor).
+
+## Kapsam dışı (sıradaki görevler)
+iyzico gerçek ödeme, UI/UX cilası, e-Arşiv fatura — ayrı görevler.

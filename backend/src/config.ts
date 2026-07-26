@@ -1,0 +1,101 @@
+import 'dotenv/config';
+
+function required(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`Eksik ortam degiskeni: ${name}`);
+  return v;
+}
+
+export const config = {
+  port: Number(process.env.PORT ?? 4000),
+  databaseUrl: required('DATABASE_URL'),
+  // Frontend'in origin'i — CORS ve mock odeme sonrasi yonlendirme icin.
+  frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+  // Gercek iyzico kimlik bilgisi girilene kadar odeme "mock" modda calisir:
+  // siparis olusturulunca otomatik odendi sayilip tarama baslar. IYZICO_API_KEY
+  // tanimlaninca otomatik olarak gercek odeme akisina gecilir.
+  mockPayment: (process.env.MOCK_PAYMENT ?? 'true') === 'true' && !process.env.IYZICO_API_KEY,
+  pentagi: {
+    graphqlUrl: required('PENTAGI_GRAPHQL_URL'),
+    serviceToken: required('PENTAGI_SERVICE_TOKEN'),
+  },
+  jwtSecret: required('JWT_SECRET'),
+  reportEncryptionPepper: required('REPORT_ENCRYPTION_PEPPER'),
+  // Veri minimizasyonu: rapor icerigi bu sure sonunda silinir (siparis/odeme
+  // kaydi KORUNUR — muhasebe/fatura mevzuati). Ham PentAGI verisi zaten rapor
+  // uretilir uretilmez siliniyor.
+  reportRetentionDays: Number(process.env.REPORT_RETENTION_DAYS ?? 30),
+  dnsVerificationPrefix: process.env.DNS_VERIFICATION_PREFIX ?? 'pentest-verify',
+  // Yururlukteki hukuki metinlerin (ToS/KVKK/MSS/OBF) surumu. Metinler
+  // guncellenince artirilir; rizalar bu surumle damgalanir (ispat icin).
+  legalVersion: process.env.LEGAL_VERSION ?? '2026-07-26',
+  // Kapsam (scope) izleme modu: 'enforce' = izin disi hedefte flow'u durdur;
+  // 'monitor' = sadece logla/audit birak (yanlis pozitif riskini test ederken).
+  scopeEnforcement: (process.env.SCOPE_ENFORCEMENT ?? 'enforce') as 'enforce' | 'monitor',
+  // PentAGI ajaninin mesru sekilde eristigi referans/altyapi alanlari — kapsam
+  // ihlali sayilmaz (CVE/zafiyet DB'leri, paket aynalari, arac depolari).
+  // Egress proxy <-> backend arasi internal API sirri (yalnizca ic ag). Proxy,
+  // aktif flow kapsamini bu endpoint'ten ceker; header ile dogrulanir.
+  internalApiSecret: process.env.INTERNAL_API_SECRET ?? 'dev-internal-secret-change-me',
+  // Egress proxy'nin dinledigi port (PentAGI terminal container'lari buraya
+  // PROXY_URL uzerinden baglanir).
+  egressProxyPort: Number(process.env.EGRESS_PROXY_PORT ?? 8899),
+  // Backend/worker'in egress proxy'ye saglik kontrolu icin ulasacagi URL.
+  egressProxyUrl: process.env.EGRESS_PROXY_URL ?? `http://localhost:${Number(process.env.EGRESS_PROXY_PORT ?? 8899)}`,
+  // Egress proxy'nin backend'e (internal endpoint) ulasacagi URL. Docker'da
+  // proxy container'i host'taki backend'e host.docker.internal ile ulasir.
+  backendInternalUrl: process.env.BACKEND_INTERNAL_URL ?? 'http://localhost:4000',
+  // Ham ag/port (networkLayer) paketleri ANCAK bypass-proof izolasyon
+  // (internal:true network + dual-homed proxy container — bkz HANDOFF.md)
+  // tamamlandiginda ve bu bayrak true iken aktif olabilir. Aksi halde runtime
+  // olarak pasiflestirilir/reddedilir (insan hafizasina guvenmeyiz).
+  hardenedNetworkIsolation: (process.env.HARDENED_NETWORK_ISOLATION ?? 'false') === 'true',
+  scopeAllowlist: (process.env.SCOPE_ALLOWLIST ??
+    [
+      'cve.mitre.org', 'cve.org', 'nvd.nist.gov', 'exploit-db.com', 'cvedetails.com',
+      'github.com', 'raw.githubusercontent.com', 'pypi.org', 'files.pythonhosted.org',
+      'registry.npmjs.org', 'deb.debian.org', 'archive.ubuntu.com', 'security.ubuntu.com',
+      'alpinelinux.org', 'dl-cdn.alpinelinux.org', 'crt.sh', 'api.anthropic.com',
+    ].join(',')
+  ).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+  iyzico: {
+    apiKey: process.env.IYZICO_API_KEY ?? '',
+    secretKey: process.env.IYZICO_SECRET_KEY ?? '',
+    baseUrl: process.env.IYZICO_BASE_URL ?? 'https://sandbox-api.iyzipay.com',
+  },
+};
+
+/**
+ * Kapsam kilidiyle (scope lock) ilgili KRITIK konfigurasyonu acilistata dogrula.
+ * Eksik/gecersizse process sessizce yanlis konfigurasyonla ayaga KALKMAMALI —
+ * hemen anlamli bir hatayla dursun (fail-fast). server/worker/egress-proxy
+ * acilisinda cagrilir.
+ */
+export function validateScopeLockConfig(): void {
+  const errors: string[] = [];
+  if (!config.internalApiSecret || config.internalApiSecret.trim() === '') {
+    errors.push('INTERNAL_API_SECRET bos olamaz (egress proxy <-> backend kimlik dogrulamasi).');
+  }
+  if (!Number.isFinite(config.egressProxyPort) || config.egressProxyPort <= 0) {
+    errors.push(`EGRESS_PROXY_PORT gecersiz: ${process.env.EGRESS_PROXY_PORT}`);
+  }
+  for (const [name, val] of [
+    ['BACKEND_INTERNAL_URL', config.backendInternalUrl],
+    ['EGRESS_PROXY_URL', config.egressProxyUrl],
+  ] as const) {
+    try {
+      new URL(val);
+    } catch {
+      errors.push(`${name} gecerli bir URL degil: ${val}`);
+    }
+  }
+  // Prod'da varsayilan sir birakilmamali.
+  if (process.env.NODE_ENV === 'production' && config.internalApiSecret === 'dev-internal-secret-change-me') {
+    errors.push('Production ortaminda varsayilan INTERNAL_API_SECRET kullanilamaz.');
+  }
+  if (errors.length) {
+    throw new Error(
+      '[config] Kapsam kilidi konfigurasyon dogrulamasi BASARISIZ:\n  - ' + errors.join('\n  - '),
+    );
+  }
+}

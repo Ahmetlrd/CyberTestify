@@ -1,0 +1,15 @@
+# CyberTestify PII yamasi — resmi PentAGI image'ini taban alip yalnizca yamali
+# Go binary'sini uzerine koyar (frontend/conf/entrypoint resmi image'dan gelir).
+# Alpine tabanli build → musl uyumlu statik/cgo binary (resmi image Alpine).
+# Build: docker build -f backend/Dockerfile.cybertestify-pii -t cybertestify/pentagi:pii backend
+# DB driver pure-Go (lib/pq); go-sqlite3 import edilmiyor → CGO gerekmez.
+# CGO_ENABLED=0 statik binary → Alpine tabanli resmi image'da sorunsuz calisir.
+FROM golang:1.24 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . ./
+RUN CGO_ENABLED=0 go build -trimpath -o /pentagi ./cmd/pentagi
+
+FROM vxcontrol/pentagi:latest
+COPY --from=build /pentagi /opt/pentagi/bin/pentagi
