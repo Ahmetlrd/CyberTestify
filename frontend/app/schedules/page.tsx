@@ -1,0 +1,98 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { api } from '../../lib/api';
+
+type Schedule = {
+  id: string;
+  hostname: string;
+  packageKey: string;
+  intervalDays: number;
+  remainingRuns: number;
+  nextRunAt: string;
+  active: boolean;
+};
+
+const FREQ: Record<number, string> = { 7: 'Haftalık', 14: 'İki haftada bir', 30: 'Aylık' };
+
+export default function SchedulesPage() {
+  const router = useRouter();
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    const list = await api.listSchedules();
+    setSchedules(list);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.localStorage.getItem('token')) {
+      router.push('/login');
+      return;
+    }
+    refresh()
+      .catch((e: any) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [router, refresh]);
+
+  async function cancel(id: string) {
+    setError(null);
+    try {
+      await api.cancelSchedule(id);
+      await refresh();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  return (
+    <main className="container-page max-w-2xl py-14">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="eyebrow">Panelim</p>
+          <h1 className="mt-1 text-2xl font-extrabold text-brand">Zamanlanmış Taramalarım</h1>
+        </div>
+        <Link href="/verify" className="btn-ghost text-sm">
+          ← Panele dön
+        </Link>
+      </div>
+
+      {loading ? (
+        <div className="mt-8 h-24 animate-pulse rounded-card bg-brand-50" />
+      ) : schedules.length === 0 ? (
+        <p className="mt-8 text-sm text-ink-muted">
+          Henüz zamanlanmış taramanız yok. Bir taramayı başlatırken “Düzenli tekrarla” seçeneğini
+          kullanabilirsiniz.
+        </p>
+      ) : (
+        <div className="mt-8 space-y-2.5">
+          {schedules.map((s) => (
+            <div key={s.id} className="card flex items-center justify-between gap-3 p-4">
+              <div>
+                <div className="font-semibold text-ink">{s.hostname}</div>
+                <div className="mt-0.5 text-xs text-ink-muted">
+                  {FREQ[s.intervalDays] ?? `${s.intervalDays} günde bir`} · kalan {s.remainingRuns} tarama
+                  {s.active && (
+                    <> · sonraki: {new Date(s.nextRunAt).toLocaleDateString('tr-TR')}</>
+                  )}
+                </div>
+              </div>
+              {s.active ? (
+                <button onClick={() => cancel(s.id)} className="btn-outline shrink-0 text-sm">
+                  İptal et
+                </button>
+              ) : (
+                <span className="badge shrink-0">Pasif</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && <p className="form-error mt-6">{error}</p>}
+    </main>
+  );
+}

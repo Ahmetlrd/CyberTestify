@@ -63,6 +63,26 @@ export const api = {
       body: JSON.stringify({ domainId, packageKey, ...consents, region }),
     }),
   getOrder: (orderId: string) => request<any>(`/orders/${orderId}`),
+  listSchedules: () =>
+    request<
+      Array<{
+        id: string;
+        hostname: string;
+        packageKey: string;
+        intervalDays: number;
+        remainingRuns: number;
+        nextRunAt: string;
+        active: boolean;
+      }>
+    >('/schedules'),
+  createSchedule: (body: {
+    domainId: string;
+    packageKey: string;
+    intervalDays: number;
+    runs: number;
+    region: string;
+  }) => request<{ id: string }>('/schedules', { method: 'POST', body: JSON.stringify(body) }),
+  cancelSchedule: (id: string) => request<{ ok: boolean }>(`/schedules/${id}`, { method: 'DELETE' }),
   downloadReport: async (orderId: string, accessSecret: string) => {
     const res = await fetch(`${API_URL}/reports/${orderId}/download`, {
       method: 'POST',

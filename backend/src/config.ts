@@ -50,6 +50,10 @@ export const config = {
   // tamamlandiginda ve bu bayrak true iken aktif olabilir. Aksi halde runtime
   // olarak pasiflestirilir/reddedilir (insan hafizasina guvenmeyiz).
   hardenedNetworkIsolation: (process.env.HARDENED_NETWORK_ISOLATION ?? 'false') === 'true',
+  // Periyodik tarama guvenceleri (sistemi zorlamamak icin).
+  maxActiveScheduledScans: Number(process.env.MAX_ACTIVE_SCHEDULED_SCANS ?? 100),
+  minScheduleIntervalDays: Number(process.env.MIN_SCHEDULE_INTERVAL_DAYS ?? 7),
+  scheduledQueueWarnThreshold: Number(process.env.SCHEDULED_QUEUE_WARN_THRESHOLD ?? 20),
   scopeAllowlist: (process.env.SCOPE_ALLOWLIST ??
     [
       'cve.mitre.org', 'cve.org', 'nvd.nist.gov', 'exploit-db.com', 'cvedetails.com',

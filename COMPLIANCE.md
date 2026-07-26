@@ -93,6 +93,20 @@ Son güncelleme: 2026-07-26 · Hukuki metin sürümü: `2026-07-26`
 - 8 hukuki sayfa (`/legal/*`) + footer imprint + çerez banner
 - `lib/company.ts` işletme bilgisi modülü (placeholder → doldurulacak)
 
+## 6.1 Güncellemeler (2026-07-26) — durum ekranı + periyodik tarama
+
+- ✅ **[KOD] Veri minimizasyonu (aktivite akışı):** Müşteriye ham PentAGI logu
+  GÖSTERİLMEZ; yalnızca sabit, kategorilenmiş dostane cümleler + `redactAll()`
+  invariant'ı. KVKK md.4 minimizasyon ilkesiyle uyumlu.
+- 🔴 **[HUKUK/İŞ] Periyodik tarama — recurring billing YOK (bilerek):** Şu an
+  **peşin N-tarama** modeli. Gerçek otomatik tekrarlayan ödeme eklendiğinde,
+  Mesafeli Satış Sözleşmesi'ne **abonelik/otomatik yenileme** şartları (ön
+  bilgilendirme, iptal, ücret iadesi) eklenmeli ve iyzico abonelik akışı + KVKK
+  aydınlatması güncellenmeli. Bkz `HANDOFF.md`.
+- 🟡 **[İŞ] E-posta bildirimleri** (doğrulama süresi doldu / zamanlanmış tarama
+  durduruldu) şu an loglanıyor; gerçek e-posta servisi (SPF/DKIM/DMARC) eklenince
+  bağlanacak.
+
 ## 7. Kaynaklar (araştırma çıktılarından)
 
 - Anthropic AUP / Commercial Terms / CVP: anthropic.com/legal/aup · /legal/commercial-terms · support.claude.com (CVP)

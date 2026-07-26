@@ -24,6 +24,11 @@ export default function OrderPage() {
   const [withdrawalConsent, setWithdrawalConsent] = useState(false);
   const allConsents = authConsent && contractConsent && withdrawalConsent;
 
+  // Düzenli (periyodik) tarama seçeneği
+  const [recurring, setRecurring] = useState(false);
+  const [intervalDays, setIntervalDays] = useState(7); // haftalık
+  const [runs, setRuns] = useState(4);
+
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.localStorage.getItem('token')) {
       router.push('/login');
@@ -41,6 +46,13 @@ export default function OrderPage() {
     setBusy(true);
     setError(null);
     try {
+      if (recurring) {
+        // Düzenli tarama: N tekrarlık kayıt oluştur; ilk tarama worker tarafından
+        // kısa süre içinde başlar (concurrency=1 kuyruğuna girer).
+        await api.createSchedule({ domainId, packageKey: selected, intervalDays, runs, region });
+        router.push('/schedules');
+        return;
+      }
       const res = await api.createOrder(
         domainId,
         selected,
@@ -141,6 +153,48 @@ export default function OrderPage() {
         ))}
       </div>
 
+      {/* Düzenli tekrar (opsiyonel) */}
+      <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">3 · Tekrar</h2>
+      <div className="mt-3 space-y-2.5">
+        <label className={`flex items-center gap-3 rounded-card border p-3.5 text-sm ${!recurring ? 'border-brand-300 bg-brand-50/50' : 'border-line'}`}>
+          <input type="radio" checked={!recurring} onChange={() => setRecurring(false)} className="h-4 w-4 accent-brand" />
+          <span className="font-medium text-ink">Tek seferlik tarama</span>
+        </label>
+        <label className={`flex items-center gap-3 rounded-card border p-3.5 text-sm ${recurring ? 'border-brand-300 bg-brand-50/50' : 'border-line'}`}>
+          <input type="radio" checked={recurring} onChange={() => setRecurring(true)} className="h-4 w-4 accent-brand" />
+          <span className="font-medium text-ink">Düzenli tekrarla</span>
+        </label>
+        {recurring && (
+          <div className="rounded-card border border-line bg-white p-4">
+            <div className="flex flex-wrap items-end gap-4">
+              <div>
+                <label className="label">Sıklık</label>
+                <select value={intervalDays} onChange={(e) => setIntervalDays(Number(e.target.value))} className="field">
+                  <option value={7}>Haftalık</option>
+                  <option value={14}>İki haftada bir</option>
+                  <option value={30}>Aylık</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Kaç tarama (peşin)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={52}
+                  value={runs}
+                  onChange={(e) => setRuns(Math.max(1, Math.min(52, Number(e.target.value))))}
+                  className="field w-28"
+                />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-ink-muted">
+              {runs} tarama için baştan ödeme yaparsınız; ilki hemen, sonrakiler seçtiğiniz sıklıkta
+              çalışır. (Minimum sıklık: haftalık.)
+            </p>
+          </div>
+        )}
+      </div>
+
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
       <button
@@ -148,9 +202,13 @@ export default function OrderPage() {
         disabled={!domainId || busy || !selected || !allConsents}
         className="btn-primary mt-6 w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
       >
-        {busy ? 'Başlatılıyor…' : 'Taramayı Başlat'}
+        {busy ? 'Başlatılıyor…' : recurring ? 'Düzenli Taramayı Kur' : 'Taramayı Başlat'}
       </button>
-      <p className="mt-3 text-xs text-ink-muted">Ödeme onaylandığında tarama otomatik ve anında başlar.</p>
+      <p className="mt-3 text-xs text-ink-muted">
+        {recurring
+          ? 'İlk tarama hemen başlar; kayıtlarınızı “Zamanlanmış taramalarım” ekranından yönetebilirsiniz.'
+          : 'Ödeme onaylandığında tarama otomatik ve anında başlar.'}
+      </p>
     </main>
   );
 }

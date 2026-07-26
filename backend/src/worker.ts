@@ -7,6 +7,7 @@ import { findOutOfScope } from './services/scope.js';
 import { buildActivityFeed } from './services/activityFeed.js';
 import { promoteQueued } from './services/orchestrator.js';
 import { checkEgressProxyHealth } from './services/egressHealth.js';
+import { runDueSchedules, recordScheduleOutcome } from './services/schedules.js';
 
 // Fail-fast: kapsam kilidi konfigurasyonu eksik/gecersizse hemen dur.
 validateScopeLockConfig();
@@ -87,6 +88,7 @@ async function tick() {
               await pentagi.stopFlow(flow.pentagiFlowId);
               await prisma.flow.update({ where: { id: flow.id }, data: { status: 'finished', finishedAt: new Date() } });
               await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scope_violation' } });
+              await recordScheduleOutcome(flow.order.scheduledScanId, false);
               continue; // rapor URETME — tarama kapsam ihlali nedeniyle iptal
             }
           }
@@ -99,6 +101,7 @@ async function tick() {
       if (remoteStatus.status === 'failed') {
         await prisma.flow.update({ where: { id: flow.id }, data: { status: 'failed', finishedAt: new Date() } });
         await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scan_failed' } });
+        await recordScheduleOutcome(flow.order.scheduledScanId, false);
         continue;
       }
 
@@ -137,6 +140,8 @@ async function tick() {
         // TODO: e-posta gonderim servisine baglan — accessSecret'i rapor indirme
         // linkinden AYRI bir e-postada musteriye ilet.
         console.log(`[worker] Rapor hazir, siparis ${flow.orderId}. Erisim sifresi (dev'de panelde de gorunur, prod'da e-postaya tasi): ${accessSecret}`);
+        // Zamanlanmis taramadan olustuysa: basari -> failCount sifirla.
+        await recordScheduleOutcome(flow.order.scheduledScanId, true);
       }
     } catch (err) {
       console.error(`[worker] Flow ${flow.pentagiFlowId} islenirken hata:`, err);
@@ -184,6 +189,21 @@ async function main() {
       await purgeExpiredReports();
     } catch (err) {
       console.error('[worker] Rapor saklama temizligi sirasinda hata:', err);
+    }
+    try {
+      // Zamani gelen periyodik taramalari tetikle (normal siparis akisi, concurrency=1).
+      await runDueSchedules();
+    } catch (err) {
+      console.error('[worker] Zamanlanmis tarama tetikleme sirasinda hata:', err);
+    }
+    try {
+      // Kuyruk cok birikirse gorunur uyari (sistemin zorlandiginin isareti).
+      const queued = await prisma.order.count({ where: { status: 'scan_queued' } });
+      if (queued >= config.scheduledQueueWarnThreshold) {
+        console.warn(`[worker] ⚠️  Kuyrukta ${queued} sipariş bekliyor (esik ${config.scheduledQueueWarnThreshold}) — sistem yogun.`);
+      }
+    } catch {
+      /* sayim hatasi kritik degil */
     }
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }

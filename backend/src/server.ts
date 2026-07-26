@@ -11,6 +11,7 @@ import { ordersRouter } from './routes/orders.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { reportsRouter } from './routes/reports.js';
 import { internalRouter } from './routes/internal.js';
+import { schedulesRouter } from './routes/schedules.js';
 import cors from 'cors';
 
 // Fail-fast: kapsam kilidi konfigurasyonu eksik/gecersizse hemen dur.
@@ -61,6 +62,7 @@ app.use('/auth', authLimiter, authRouter);
 app.use('/domains', apiLimiter, domainsRouter);
 app.use('/orders', apiLimiter, ordersRouter);
 app.use('/reports', apiLimiter, reportsRouter);
+app.use('/schedules', apiLimiter, schedulesRouter);
 // Ic ag endpoint'leri (egress proxy icin) — CORS/rate-limit yok, secret korumali.
 app.use('/internal', internalRouter);
 

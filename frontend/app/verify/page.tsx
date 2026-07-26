@@ -87,9 +87,14 @@ export default function VerifyHub() {
           <p className="eyebrow">Panelim</p>
           <h1 className="mt-1 text-2xl font-extrabold text-brand">Taramaya Başla</h1>
         </div>
-        <button type="button" onClick={logout} className="btn-ghost text-sm">
-          Çıkış
-        </button>
+        <div className="flex items-center gap-3">
+          <a href="/schedules" className="text-sm font-medium text-accent-600 hover:underline">
+            Zamanlanmış taramalarım
+          </a>
+          <button type="button" onClick={logout} className="btn-ghost text-sm">
+            Çıkış
+          </button>
+        </div>
       </div>
 
       {loading ? (

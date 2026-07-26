@@ -224,6 +224,44 @@ yapılan HER adımın o bölge için **ayrıca ve bağımsız** yapılması gere
 - **`de` vb. yeni bölgeler:** config girişiyle çalışır ama gerçek içerik/hukuk
   yukarıdaki listeyi gerektirir.
 
+## Tarama durumu ekranı + Periyodik tarama — 2026-07-26
+
+### A) Aktivite akışı (ham log DEĞİL)
+- Aşama göstergesi (`StatusTracker`) + opsiyonel **"Detayları göster"** paneli.
+- `services/activityFeed.ts`: tool-call adı → DOSTANE kategori cümlesi; ham
+  komut/çıktı ASLA gösterilmez. **Her satır `redactAll()`'dan geçer** (rapor
+  üretimiyle aynı invariant). Feed yalnızca sabit kategori cümleleri ürettiği
+  için ham PII zaten akışa girmez (defense-in-depth). Sahte % göstergesi YOK.
+- `Flow.activityFeed` (JSON); worker `getScopeLogs`'u paylaşarak her tick üretir;
+  `GET /orders/:id` döndürür; dashboard 5 sn'de bir polling yapar.
+
+### B) Periyodik (zamanlanmış) tarama
+- `ScheduledScan` tablosu; `Order.scheduledScanId` ile üretilen siparişler izlenir.
+- **Motor:** `services/schedules.ts` → `runDueSchedules()` worker tick'inde çalışır.
+  Zamanı gelen aktif kayıtlar için **NORMAL sipariş akışıyla** (`enqueueOrStartScan`)
+  order açar → **concurrency=1 kuyruğuna girer** (ayrı yol açmaz, egress/kilit
+  bozulmaz). Test edildi: aktif tarama varken tetiklenen zamanlanmış tarama
+  `scan_queued`'a alındı, ikinci flow AÇILMADI.
+- **İş kuralı:** min aralık **7 gün** (`MIN_SCHEDULE_INTERVAL_DAYS`) — haftalıktan sık yok.
+- **Doğrulama tazeliği:** her tetiklemede `isVerificationStillValid` (30 gün);
+  süresi dolmuşsa tarama BAŞLATILMAZ, kayıt `active=false` + müşteri bilgilendirilmeli
+  (şu an loglanır; **e-posta TODO**). Test edildi: süresi dolmuş domain → pasif, order yok.
+- **Güvenceler:** `MAX_ACTIVE_SCHEDULED_SCANS` (vars. 100) aşılırsa yeni kayıt 503;
+  kuyruk `SCHEDULED_QUEUE_WARN_THRESHOLD` (20) aşılırsa worker loud uyarır; bir
+  zamanlanmış tarama **3 ardarda başarısız** olursa `active=false` (sonsuz kuyruk
+  meşgul etmesin). `failCount` worker'da izlenir.
+- **Frontend:** `/order`'da "Düzenli tekrarla" (haftalık/2-hafta/aylık + peşin N) +
+  `/schedules` liste/iptal ekranı (Panelim'den erişilir).
+
+### BİLEREK ERTELENEN (dürüstlük payı)
+- **Gerçek otomatik tekrarlayan ödeme (recurring billing) YOK.** Şu an
+  **peşin (prepaid) N-tarama** modeli: müşteri N tarama için baştan öder (sandbox'ta
+  ücret alınmaz), N bitince kayıt kapanır. iyzico abonelik/tekrarlayan ödeme akışı
+  ayrı, daha büyük bir görev.
+- **E-posta bildirimleri** (TTL-süresi-doldu, 3-başarısızlık-durduruldu): şu an
+  yalnızca loglanıyor; gerçek e-posta servisi bağlanınca `services/schedules.ts` ve
+  `worker.ts` içindeki `TODO(email)` noktalarına eklenecek.
+
 ## Kapsam dışı (sıradaki görevler)
-Gerçek iyzico/stripe ödeme, gerçek e-Arşiv/US/AE fatura, US/AE hukuki metinler
-+ fiyat kalibrasyonu — hepsi ayrı görevler.
+Gerçek iyzico/stripe ödeme + recurring billing, gerçek e-Arşiv/US/AE fatura,
+US/AE hukuki metinler + fiyat kalibrasyonu, e-posta servisi — hepsi ayrı görevler.
