@@ -3,21 +3,40 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '../../../lib/api';
+import { StatusTracker } from '../../../components/dashboard/StatusTracker';
+import { ScopeCertificate } from '../../../components/dashboard/ScopeCertificate';
 
-const STATUS_LABELS: Record<string, string> = {
+const TERMINAL = new Set(['scan_completed', 'scan_failed', 'scope_violation', 'report_purged']);
+
+const HEADLINE: Record<string, string> = {
   awaiting_payment: 'Ödeme bekleniyor',
-  paid: 'Ödeme alındı, tarama hazırlanıyor',
-  scan_running: 'Tarama devam ediyor',
-  scan_completed: 'Tarama tamamlandı',
+  paid: 'Ödeme alındı — tarama hazırlanıyor',
+  scan_queued: 'Sırada bekliyor',
+  scan_running: 'Taramanız çalışıyor',
+  scan_completed: 'Raporunuz hazır 🎉',
   scan_failed: 'Tarama tamamlanamadı',
+  scope_violation: 'Tarama güvenlik nedeniyle durduruldu',
+  report_purged: 'Rapor saklama süresi doldu',
 };
 
-const TERMINAL = new Set(['scan_completed', 'scan_failed']);
+function LockIcon({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-7 w-7 text-brand transition-all duration-500" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path
+        className="transition-all duration-500 origin-center"
+        d={open ? 'M8 11V7a4 4 0 017.9-1' : 'M8 11V7a4 4 0 018 0v4'}
+      />
+      {open && <path d="M12 15v2" className="text-accent" stroke="currentColor" />}
+    </svg>
+  );
+}
 
 export default function OrderDashboard({ params }: { params: { orderId: string } }) {
   const router = useRouter();
   const [order, setOrder] = useState<any>(null);
   const [accessSecret, setAccessSecret] = useState('');
+  const [unlocked, setUnlocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -26,16 +45,11 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       router.push('/login');
       return;
     }
-
     async function load() {
       try {
         const o = await api.getOrder(params.orderId);
         setOrder(o);
-        // DEV modu: e-posta ile gelmesi gereken erisim sifresi panelde donuyorsa
-        // indirme kutusunu otomatik dolduralim (musteri deneyimini kolaylastirir).
-        if (o.report?.devAccessSecret) {
-          setAccessSecret((prev) => prev || o.report.devAccessSecret);
-        }
+        if (o.report?.devAccessSecret) setAccessSecret((prev) => prev || o.report.devAccessSecret);
         if (TERMINAL.has(o.status) && timer.current) {
           clearInterval(timer.current);
           timer.current = null;
@@ -44,9 +58,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
         setError(err.message);
       }
     }
-
     load();
-    // Tarama bitene kadar her 5 sn'de bir durumu tazele.
     timer.current = setInterval(load, 5000);
     return () => {
       if (timer.current) clearInterval(timer.current);
@@ -57,6 +69,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
     setError(null);
     try {
       const blob = await api.downloadReport(params.orderId, accessSecret);
+      setUnlocked(true);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -67,64 +80,92 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
     }
   }
 
-  if (!order && !error) return <main>Yükleniyor...</main>;
+  if (!order && !error) {
+    return (
+      <main className="container-page max-w-xl py-16">
+        <div className="h-40 animate-pulse rounded-card bg-brand-50" />
+      </main>
+    );
+  }
+
+  const status = order?.status as string;
+  const hostname = order?.domain?.hostname ?? 'hedef';
+  const active = status === 'scan_running' || status === 'paid' || status === 'scan_queued';
 
   return (
     <main className="container-page max-w-xl py-16">
-      <h1>Sipariş Durumu</h1>
-      {order && (
-        <>
-          <p>
-            Durum: <strong>{STATUS_LABELS[order.status] ?? order.status}</strong>
-          </p>
+      <p className="eyebrow">Sipariş Durumu</p>
+      <h1 className="mt-2 text-3xl font-extrabold text-brand">{HEADLINE[status] ?? status}</h1>
+      {order && <p className="mt-1 text-sm text-ink-muted">Hedef: {hostname}</p>}
 
-          {(order.status === 'scan_running' || order.status === 'paid') && (
-            <p style={{ color: '#666' }}>
-              Tarama arka planda çalışıyor. Bu sayfa otomatik olarak güncelleniyor,
-              kapatabilirsiniz — sonuç hazır olduğunda erişim şifresi e-postanıza gönderilecek.
-            </p>
-          )}
+      <div className="mt-8">
+        <StatusTracker status={status} />
+      </div>
 
-          {order.status === 'scan_completed' && (
-            <div>
-              <p>Raporunuz hazır. E-posta ile gönderilen tek seferlik erişim şifresini girin:</p>
-              {order.report?.devAccessSecret && (
-                <p
-                  style={{
-                    background: '#fff8e1',
-                    border: '1px solid #f0d000',
-                    borderRadius: 6,
-                    padding: 10,
-                    fontSize: 13,
-                  }}
-                >
-                  <strong>Geliştirme modu:</strong> E-posta servisi henüz bağlı olmadığı için
-                  erişim şifreniz burada gösteriliyor ve kutuya otomatik dolduruldu. Gerçek
-                  sistemde bu şifre yalnızca e-posta ile gelir.
-                  <br />
-                  <code>{order.report.devAccessSecret}</code>
-                </p>
-              )}
-              <input
-                style={{ width: '100%', maxWidth: 420 }}
-                value={accessSecret}
-                onChange={(e) => setAccessSecret(e.target.value)}
-              />
-              <div style={{ marginTop: 8 }}>
-                <button onClick={handleDownload}>Raporu indir</button>
-              </div>
-            </div>
-          )}
-
-          {order.status === 'scan_failed' && (
-            <p style={{ color: 'crimson' }}>
-              Tarama tamamlanamadı. Lütfen tekrar deneyin veya destek ile iletişime geçin.
-            </p>
-          )}
-        </>
+      {active && (
+        <p className="mt-4 rounded-card bg-brand-50/70 px-4 py-3 text-sm text-ink-soft">
+          Tarama arka planda çalışıyor. Bu sayfa otomatik güncelleniyor — kapatabilirsiniz; sonuç
+          hazır olduğunda erişim kodu e-postanıza gönderilecek.
+        </p>
       )}
 
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
+      {status === 'scan_completed' && (
+        <div className="mt-8 space-y-6">
+          <ScopeCertificate hostname={hostname} flow={order.flow} />
+
+          {/* Rapor teslim — kilit mikro-etkilesimi */}
+          <div className="card p-6">
+            <div className="flex items-center gap-3">
+              <span className={`flex h-12 w-12 items-center justify-center rounded-full ${unlocked ? 'bg-emerald-50' : 'bg-brand-50'}`}>
+                <LockIcon open={unlocked} />
+              </span>
+              <div>
+                <h2 className="font-bold text-ink">{unlocked ? 'Rapor indirildi ✓' : 'Şifreli raporunuz hazır'}</h2>
+                <p className="text-xs text-ink-muted">Tek kullanımlık erişim koduyla açılır</p>
+              </div>
+            </div>
+
+            {order.report?.devAccessSecret && (
+              <div className="mt-4 rounded-card border border-accent/40 bg-accent-soft/50 p-3 text-xs text-ink-soft">
+                <strong>Geliştirme modu:</strong> E-posta servisi henüz bağlı olmadığı için erişim
+                kodunuz burada gösterilip kutuya dolduruldu. Gerçek sistemde yalnızca e-posta ile gelir.
+                <div className="mt-1 font-mono text-ink">{order.report.devAccessSecret}</div>
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <input
+                value={accessSecret}
+                onChange={(e) => setAccessSecret(e.target.value)}
+                placeholder="Erişim kodu"
+                className="flex-1 rounded-card border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100"
+              />
+              <button onClick={handleDownload} disabled={!accessSecret} className="btn-primary disabled:opacity-50">
+                Raporu indir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {status === 'scope_violation' && (
+        <p className="mt-6 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Tarama, kapsam dışı bir hedefe erişim girişimi tespit edildiği için güvenlik gereği
+          durduruldu. Bu, sizi ve üçüncü tarafları koruyan bilinçli bir önlemdir.
+        </p>
+      )}
+
+      {status === 'scan_failed' && (
+        <p className="mt-6 rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Tarama tamamlanamadı. Lütfen tekrar deneyin veya{' '}
+          <a href="mailto:destek@cybertestify.com" className="font-semibold underline">
+            destek
+          </a>{' '}
+          ile iletişime geçin.
+        </p>
+      )}
+
+      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
     </main>
   );
 }

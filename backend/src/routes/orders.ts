@@ -117,6 +117,7 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
     where: { id: req.params.orderId, customerId: req.customerId! },
     include: {
       flow: true,
+      domain: { select: { hostname: true } },
       report: { select: { id: true, createdAt: true, deliveredAt: true, devAccessSecret: true } },
     },
   });
