@@ -44,8 +44,11 @@ services:
     environment:
       BACKEND_INTERNAL_URL: "http://api:4000"
       EGRESS_PROXY_URL: "http://localhost:8899"
-    # cybertestify (internet + backend) + pentagi-egress (PentAGI terminal'leri).
-    networks: [cybertestify, pentagi-egress]
+    # cybertestify (internet + backend) + pentagi-egress (PentAGI terminal'leri) +
+    # pentagi-network: PentAGI ORCHESTRATOR'unun (pentagi container) kendi LLM
+    # cagrilarini da PROXY_URL=egress-proxy uzerinden yapabilmesi icin — aksi halde
+    # 'lookup egress-proxy: server misbehaving' ile createFlow patlar.
+    networks: [cybertestify, pentagi-egress, pentagi-network]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8899/health"]
       interval: 10s
