@@ -58,7 +58,10 @@ export const SCAN_PACKAGES: ScanPackageDef[] = [
       'sunucu banner ozeti. Birkac dakikada biten en ucuz giris paketi.',
     priceMinorUnit: 49900, // 499,00 TRY
     modelProvider: PROVIDER,
-    maxToolCalls: 12,
+    // 12 cok dusuktu: PentAGI overhead'i (docker secimi, terminal init, ekran
+    // goruntusu, sayfa cekme) tavani ajan BULGULARINI YAZMADAN tuketiyordu → her
+    // rapor "incomplete" + bos cikiyordu. Pasif kontrol + ozet icin 25 yeterli.
+    maxToolCalls: 25,
     promptTemplate: (host) => `
 Bu bir HIZLI, PASIF ve KISA on-kontroldur — derin tarama DEGIL. Yalnizca
 asagidaki TEK hedefin ANA SAYFASINA normal bir GET istegi atip su pasif bilgileri
