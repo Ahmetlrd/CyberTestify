@@ -4,6 +4,12 @@
 # NOT: admin.cybertestify.com BILEREK yok — PentAGI paneli disariya ACILMAZ
 # (yalniz SSH tuneli ile erisilir). Bu yuzden burada tanimlanmadi.
 
+# Apex (cybertestify.com) -> app'e kalici (301) yonlendirme. {uri} ile yol korunur.
+# Caddy bu site blogu icin Let's Encrypt sertifikasini da otomatik alir.
+cybertestify.com {
+	redir https://app.cybertestify.com{uri} permanent
+}
+
 app.cybertestify.com {
 	encode gzip zstd
 	reverse_proxy frontend:3000
