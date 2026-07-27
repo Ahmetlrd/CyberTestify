@@ -338,6 +338,40 @@ restart sonrası 10 container healthy; yedek scripti iki dump üretti; do-agent 
   anahtarı deploy key olarak duruyor. Repo-özel **salt-okunur deploy key** ile
   değiştirilmesi önerilir (GitHub → repo → Deploy keys).
 
+## Kapsam kilidi — Seviye-3 `monitor` kararı (2026-07-27)
+Seviye-3 (tool-args pattern tarama) **`SCOPE_ENFORCEMENT=monitor`** modunda çalışıyor
+— **audit/log amaçlı, otomatik durdurma YAPMIYOR.** Gerçek kapsam kilidi **Seviye-1
+egress-proxy**'dir (network seviyesinde engelleme, canlı testte kapsam-dışı hedefe
+**403** ile doğrulandı). Seviye-3'ün `enforce` moduna alınmaması **bilinçli bir
+karar**: gerçek ajan çalışmalarında 3. parti script referansları (analytics/tracking
+scriptleri — ör. googletagmanager.com, facebook.net, clarity.ms) ve ajan reasoning
+metni nedeniyle **yüksek yanlış-pozitif** oranı gözlemlendi, bu da meşru taramaları
+gereksiz yere `scope_violation` ile sonlandırıyordu. Değiştirmek: sunucu `app/.env`
+içinde `SCOPE_ENFORCEMENT=enforce` (önerilmez — bkz yukarıdaki gerekçe).
+
+## Production hardening — uçtan uca canlı test bulguları (2026-07-27)
+Gerçek tarama (createFlow → PentAGI → rapor) ile uçtan uca doğrulama sırasında
+bulunup düzeltilenler:
+- **Ağ:** `pentagi` orchestrator'ı LLM çağrısını `PROXY_URL=egress-proxy` üzerinden
+  yapıyor ama `egress-proxy`'yi çözemiyordu → `createFlow` "lookup egress-proxy:
+  server misbehaving" ile patlıyordu. Fix: egress-proxy `pentagi-network`'e de
+  bağlandı. **`adacac5`**
+- **Bug — scope extraction (yanlış-pozitif):** `extractTargets` URL host regex'i
+  JSON-escaped `\n` gibi kaçışlarda durmuyor, `nomorelink.com\n\nrequired` gibi bozuk
+  host çıkarıp **kapsam-İÇİ hedefi** ihlal sayıyordu → meşru tarama ölüyordu. Fix:
+  host'u yalnız geçerli karakterlere (`[A-Za-z0-9.-]`) ayıkla. **`a6b90a0`**
+- **Bug — enforce bypass:** worker'daki enforce-stop, `stopFlow` hatasını yutan bir
+  `try/catch` içindeydi → `stopFlow` patlarsa ihlalli tarama yine tamamlanıp rapor
+  üretiyordu. Fix: enforce eylemi try/catch DIŞINA alındı (stopFlow best-effort,
+  sonraki tick'te tekrar dener). **`a6b90a0`**
+- **Tuning — maxToolCalls:** `basit_tarama` 12 çok düşüktü; PentAGI overhead'i (docker
+  seçimi, terminal init, screenshot, sayfa çekme) tavanı ajan bulgularını YAZMADAN
+  tüketiyordu → her rapor boş/`incomplete`. 12 → 25; artık tam rapor üretiliyor. **`43ae5e6`**
+
+**Doğrulanan (canlı):** kapsam-403, concurrency=1 (2. sipariş scan_queued), PII
+redaksiyonu (email/telefon/TCKN/kart/IBAN → [X_REDACTED]), tam rapor üretim+teslim
+(TLS/başlık/banner bulgularıyla, şifreli, accessSecret ile çözülüyor).
+
 ## Kapsam dışı (sıradaki görevler)
 Gerçek iyzico/stripe ödeme + recurring billing, gerçek e-Arşiv/US/AE fatura,
 US/AE hukuki metinler + fiyat kalibrasyonu, e-posta servisi — hepsi ayrı görevler.

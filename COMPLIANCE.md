@@ -128,6 +128,16 @@ Son güncelleme: 2026-07-26 · Hukuki metin sürümü: `2026-07-26`
   anahtar placeholder. "Yerelde geçti = prod'da geçer" varsayımı YAPILMADI.
 - ✅ **[VERİ] Yedekleme:** her iki DB günlük pg_dump (7 gün). Sunucu-dışı (DO Spaces)
   kopyalama DO kimlik bilgisi gelince (TODO). Yedekler git'e YAZILMAZ.
+- ✅ **[GÜVENLİK] Kapsam kilidi — Seviye-3 `monitor` (bilinçli karar):** Seviye-3
+  (tool-args pattern tarama) `SCOPE_ENFORCEMENT=monitor` — audit/log amaçlı, otomatik
+  durdurma yapmıyor. **Gerçek kapsam kilidi Seviye-1 egress-proxy'dir** (network
+  seviyesinde engelleme, canlı testte kapsam-dışı hedefe **403** ile doğrulandı).
+  Seviye-3'ün enforce'a alınmaması bilinçli: gerçek ajan çalışmalarında 3. parti
+  script referansları (analytics/tracking) ve ajan reasoning metni nedeniyle yüksek
+  yanlış-pozitif gözlemlendi, meşru taramaları gereksiz sonlandırıyordu. Bkz `HANDOFF.md`.
+- ✅ **[SÜREÇ] Acceptance testleri canlıda GEÇTİ (2026-07-27):** kapsam-403,
+  concurrency=1, PII redaksiyonu (yapısal PII → [X_REDACTED]), tam rapor üretim+teslim
+  gerçek Anthropic anahtarıyla uçtan uca doğrulandı.
 
 ## 7. Kaynaklar (araştırma çıktılarından)
 
