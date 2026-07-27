@@ -288,6 +288,56 @@ flow → dokunulmadı (PASS).
   taramalarda 3-ardarda-başarısız → pasifleştirme kısmi güvence sağlar. Gerçek
   iade/retry politikası (ör. 1 otomatik retry, sonra iade) ayrı görev.
 
+## PRODUCTION — DigitalOcean (2026-07-27)
+
+**Sunucu:** DO Droplet, Frankfurt (FRA1), Ubuntu 22.04, 2 vCPU/4GB/80GB. Erişim:
+sudo'lu `cybertestify` kullanıcısı (key-only). Root SSH girişi kapatıldı.
+UFW: yalnız 22/80/443.
+
+**Dizinler (sunucu):**
+- `/opt/cybertestify/app` — bu repo (**ui-ux** dalı; deploy oradan).
+- `/opt/cybertestify/pentagi` — PentAGI upstream `879e87c` + PII yaması + `pii` image.
+- `/opt/cybertestify/ops` — `backup.sh`, `cleanup-terminals.sh`.
+- `/opt/cybertestify/backups` — günlük pg_dump (7 gün).
+- `.env` dosyaları yalnız sunucuda (`app/.env`, `pentagi/.env`) — **git'e yazılmaz.**
+
+**Orkestrasyon:** `docker compose -f docker-compose.prod.yml up -d` TEK komut. `include`
+ile PentAGI'nin kendi compose'u (pentagi/pgvector/scraper/pgexporter) + bizim stack
+(cybertestify-db, egress-proxy, api, worker, frontend, caddy). Hepsi `restart: always`.
+- **Ağ/izolasyon:** PentAGI ve tüm iç servisler DIŞARIYA KAPALI (yalnız 127.0.0.1 veya
+  hiç yayınlanmamış). Dışarı yalnız Caddy 80/443. `api/worker` → `pentagi:8443` (iç,
+  `SERVER_USE_SSL=false` düz http). egress-proxy `cybertestify`+`pentagi-egress` (dual-homed);
+  api/worker ona `service_healthy` ile bağlı (proxy'siz kalkmaz). PentAGI terminal'leri
+  `DOCKER_NETWORK=pentagi-egress` + `PROXY_URL=http://egress-proxy:8899`.
+- **TLS:** Caddy + Let's Encrypt otomatik. `app.cybertestify.com`→frontend,
+  `api.cybertestify.com`→api. `admin.` BİLEREK yok (PentAGI paneli yalnız SSH tüneli).
+
+**Doğrulanan:** `https://api.cybertestify.com/health`={"ok":true} geçerli LE sertifikası;
+`https://app.cybertestify.com`=200; paketler API'si seed'li fiyatlarla dönüyor; docker
+restart sonrası 10 container healthy; yedek scripti iki dump üretti; do-agent aktif.
+
+**Deploy:** `cd /opt/cybertestify/app && ./deploy.sh` (aktif tarama varsa onay ister;
+`--force` ile atlar). git pull(ui-ux)+build+up+migrate.
+
+### PROD'da BİLEREK ERTELENEN / Vedat'ın yapacakları
+- 🔴 **ANTHROPIC_API_KEY** `pentagi/.env`'de `__SET_BY_VEDAT__` placeholder. Vedat:
+  `ssh cybertestify@... "sudo sed -i s/__SET_BY_VEDAT__/GERÇEK_KEY/ /opt/cybertestify/pentagi/.env"`
+  değil — dosyayı editleyip `docker compose -f docker-compose.prod.yml up -d pentagi`.
+  Bu OLMADAN gerçek tarama, dolayısıyla **canlı tarama / PII / kapsam-403 / concurrency=1**
+  acceptance testleri çalıştırılamadı → anahtar girilince koşulmalı.
+- 🔴 **PENTAGI_SERVICE_TOKEN** `app/.env`'de placeholder. PentAGI admin panelinden
+  (SSH tüneli: `ssh -L 8443:localhost:8443 cybertestify@...` → http://localhost:8443)
+  bir API token üretilip `app/.env`'e yazılıp `... up -d api worker` gerekir.
+- 🟡 **Embedding sağlayıcı:** PentAGI vektör belleği için embedding ister; Anthropic'in
+  embedding API'si yok. Yalnız-Anthropic ile tam işlevsellik için ek bir embedding
+  anahtarı (ör. OpenAI) gerekebilir — anahtar adımında netleşir.
+- 🟡 **DO Container Registry** (bkz PATCHES.md) ve **Spaces'e sunucu-dışı yedek**
+  (ops/backup.sh TODO) — DO kimlik bilgisi gelince.
+- 🟡 **DO disk %80 alarmı** — do-agent aktif; alarm DO panelinden kurulmalı.
+- 🟡 **GitHub deploy anahtarı:** şu an sunucuda Ahmetlrd'nin kişisel (yazma yetkili)
+  anahtarı deploy key olarak duruyor. Repo-özel **salt-okunur deploy key** ile
+  değiştirilmesi önerilir (GitHub → repo → Deploy keys).
+
 ## Kapsam dışı (sıradaki görevler)
 Gerçek iyzico/stripe ödeme + recurring billing, gerçek e-Arşiv/US/AE fatura,
 US/AE hukuki metinler + fiyat kalibrasyonu, e-posta servisi — hepsi ayrı görevler.

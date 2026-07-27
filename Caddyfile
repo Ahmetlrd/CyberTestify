@@ -1,0 +1,15 @@
+# CyberTestify — Caddy reverse proxy + otomatik Let's Encrypt TLS.
+# app  -> frontend (Next.js :3000)
+# api  -> backend  (:4000)
+# NOT: admin.cybertestify.com BILEREK yok — PentAGI paneli disariya ACILMAZ
+# (yalniz SSH tuneli ile erisilir). Bu yuzden burada tanimlanmadi.
+
+app.cybertestify.com {
+	encode gzip zstd
+	reverse_proxy frontend:3000
+}
+
+api.cybertestify.com {
+	encode gzip zstd
+	reverse_proxy api:4000
+}

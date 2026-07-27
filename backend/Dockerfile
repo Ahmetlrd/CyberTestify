@@ -2,7 +2,9 @@
 # Ayni imaj, docker-compose'da farkli komutlarla 3 servis olarak calisir.
 FROM node:20-alpine AS base
 WORKDIR /app
-RUN apk add --no-cache wget
+# openssl: Prisma'nin (Alpine/musl) schema & query engine'i libssl'e ihtiyac duyar;
+# olmadan "failed to detect libssl" -> migrate/seed patlar.
+RUN apk add --no-cache wget openssl
 COPY package.json package-lock.json* ./
 RUN npm ci || npm install
 COPY prisma ./prisma

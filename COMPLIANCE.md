@@ -115,6 +115,20 @@ Son güncelleme: 2026-07-26 · Hukuki metin sürümü: `2026-07-26`
   bedel iadesi gerekebilir; gerçek ödeme entegrasyonuyla birlikte otomatik
   iade/retry politikası tanımlanmalı. Bkz `HANDOFF.md`.
 
+## 6.2 Production altyapısı (2026-07-27)
+
+- ✅ **[KOD/GÜVENLİK] İzolasyon:** PentAGI ve tüm iç servisler dışarıya kapalı
+  (yalnız Caddy 80/443). Kapsam kilidi (egress-proxy) prod'da da api/worker'ın
+  `service_healthy` bağımlılığı — proxy'siz sistem ayağa kalkmaz. TLS: Let's Encrypt.
+- ✅ **[KVKK md.9 — yurt dışı aktarım] PII yaması canlıda:** Anthropic'e (ABD) veri
+  gitmeden önce yapısal PII maskeleme yaması (`cybertestify/pentagi:pii`) production
+  image'ında aktif (bkz `PATCHES.md`). Kalıntı risk (isim/adres) değişmedi.
+- 🔴 **[SÜREÇ] Acceptance testleri (canlı tarama + kapsam-403 + PII):** gerçek
+  Anthropic anahtarı prod'a girilince koşulacak (bkz `HANDOFF.md`); altyapı hazır,
+  anahtar placeholder. "Yerelde geçti = prod'da geçer" varsayımı YAPILMADI.
+- ✅ **[VERİ] Yedekleme:** her iki DB günlük pg_dump (7 gün). Sunucu-dışı (DO Spaces)
+  kopyalama DO kimlik bilgisi gelince (TODO). Yedekler git'e YAZILMAZ.
+
 ## 7. Kaynaklar (araştırma çıktılarından)
 
 - Anthropic AUP / Commercial Terms / CVP: anthropic.com/legal/aup · /legal/commercial-terms · support.claude.com (CVP)

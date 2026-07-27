@@ -1,0 +1,132 @@
+# CyberTestify — PRODUCTION tek-dosya orkestrasyonu.
+#
+# `docker compose -f docker-compose.prod.yml up -d` TEK komutla hem bizim
+# servislerimizi hem de PentAGI'nin kendi yiginini (patch'li image ile) ayaga
+# kaldirir. PentAGI'nin compose'u `include` ile katilir — boylece upstream
+# dosyayi DEGISTIRMEDEN (patch/registry akisi bozulmadan) ve onun goreli-yol
+# mount'lari (../pentagi/ dizinine gore) korunarak birlesir.
+#
+# GUVENLIK: PentAGI ve tum ic servisler DISARIYA ACILMAZ (yalniz 127.0.0.1'e
+# bagli veya hic yayinlanmamis). Disariya yalniz Caddy (80/443) cikar.
+# Kapsam kilidi: egress-proxy `cybertestify` + `pentagi-egress` aglarinda;
+# api/worker ona `service_healthy` ile baglidir (proxy'siz kalkmaz).
+
+name: cybertestify
+
+include:
+  - path: ../pentagi/docker-compose.yml
+    env_file: ../pentagi/.env
+
+services:
+  cybertestify-db:
+    image: postgres:16-alpine
+    container_name: cybertestify-db
+    restart: always
+    environment:
+      POSTGRES_USER: cyber
+      POSTGRES_PASSWORD: ${CYBER_DB_PASSWORD}
+      POSTGRES_DB: cybertestify
+    volumes:
+      - cybertestify-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cyber -d cybertestify"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [cybertestify]
+
+  egress-proxy:
+    build: ./backend
+    command: ["npx", "tsx", "src/egress-proxy/server.ts"]
+    container_name: cybertestify-egress-proxy
+    restart: always
+    env_file: ./.env
+    environment:
+      BACKEND_INTERNAL_URL: "http://api:4000"
+      EGRESS_PROXY_URL: "http://localhost:8899"
+    # cybertestify (internet + backend) + pentagi-egress (PentAGI terminal'leri).
+    networks: [cybertestify, pentagi-egress]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8899/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  api:
+    build: ./backend
+    command: ["npx", "tsx", "src/server.ts"]
+    container_name: cybertestify-api
+    restart: always
+    env_file: ./.env
+    depends_on:
+      egress-proxy:
+        condition: service_healthy   # proxy saglikli olmadan API kalkmaz
+      cybertestify-db:
+        condition: service_healthy
+    # pentagi-network: PentAGI GraphQL'e (http://pentagi:8443) ulasmak icin.
+    networks: [cybertestify, pentagi-network]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    build: ./backend
+    command: ["npx", "tsx", "src/worker.ts"]
+    container_name: cybertestify-worker
+    restart: always
+    env_file: ./.env
+    depends_on:
+      egress-proxy:
+        condition: service_healthy
+      cybertestify-db:
+        condition: service_healthy
+    networks: [cybertestify, pentagi-network]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # NEXT_PUBLIC_* build-time'da gomulur; tarayici bu URL'e gider.
+        NEXT_PUBLIC_API_URL: "https://api.cybertestify.com"
+    container_name: cybertestify-frontend
+    restart: always
+    networks: [cybertestify]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 25s
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: cybertestify-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [api, frontend]
+    networks: [cybertestify]
+
+volumes:
+  cybertestify-db-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  cybertestify:
+    name: cybertestify
+  # PentAGI terminal container'larinin izole egress agi (once olusturulur:
+  # docker network create pentagi-egress). egress-proxy buraya da baglidir.
+  pentagi-egress:
+    external: true
+  # NOT: `pentagi-network` PentAGI compose'undan `include` ile gelir; burada
+  # yeniden TANIMLANMAZ (api/worker yalnizca referans verir).
