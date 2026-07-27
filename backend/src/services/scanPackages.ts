@@ -34,7 +34,11 @@ export interface ScanPackageDef {
   promptTemplate: (targetHostname: string) => string;
 }
 
-const PROVIDER = 'nomorelink-test';
+// PentAGI Providers ekranindaki profil adiyla BIREBIR eslesmeli (createFlow'a
+// aynen gider; eslesmezse tarama "provider bulunamadi" ile patlar). Prod'da
+// profil adi 'cybertestify-anthropic'. Isim degisirse PENTAGI_PROVIDER env'i
+// ile kod degistirmeden gecersin.
+const PROVIDER = process.env.PENTAGI_PROVIDER ?? 'cybertestify-anthropic';
 
 // Her pakette AYNEN tasinan hukuki/teknik guvenlik kisiti.
 const SAFETY = `
