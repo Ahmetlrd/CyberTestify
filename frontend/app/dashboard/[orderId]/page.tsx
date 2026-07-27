@@ -37,7 +37,6 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const [order, setOrder] = useState<any>(null);
   const [accessSecret, setAccessSecret] = useState('');
   const [unlocked, setUnlocked] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -121,32 +120,37 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
             hazır olduğunda erişim kodu e-postanıza gönderilecek.
           </p>
 
-          <div className="mt-4">
-            <button
-              onClick={() => setShowDetails((v) => !v)}
-              className="text-sm font-medium text-accent-600 hover:underline"
-            >
-              {showDetails ? 'Detayları gizle' : 'Detayları göster'}
-            </button>
-            {showDetails && (
-              <div className="card mt-3 p-4">
-                {feed.length === 0 ? (
-                  <p className="text-sm text-ink-muted">Aktivite bekleniyor…</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {feed.map((it) => (
-                      <li key={it.seq} className="flex items-center gap-2.5 text-sm text-ink-soft">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-300" />
-                        {it.text}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className="mt-3 border-t border-line pt-3 text-xs text-ink-muted">
-                  Teknik loglar güvenlik ve gizlilik nedeniyle gizlenmiştir; yalnızca genel aktivite gösterilir.
-                </p>
-              </div>
-            )}
+          {/* Canlı aktivite — landing'deki terminal görünümüyle aynı; içerik GERÇEK
+              (worker'ın ürettiği redakte/kategorilenmiş akış), her 5 sn güncellenir. */}
+          <div className="mt-4 overflow-hidden rounded-card border border-white/10 bg-[#0A1F1C] shadow-lg">
+            <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+              <span className="h-3 w-3 rounded-full bg-red-400/70" />
+              <span className="h-3 w-3 rounded-full bg-accent/70" />
+              <span className="h-3 w-3 rounded-full bg-emerald-400/70" />
+              <span className="ml-3 text-xs font-medium text-white/40">cybertestify — live scan</span>
+            </div>
+            <div className="min-h-[180px] p-5 font-mono text-[13px] leading-7">
+              <div className="text-white/45" dir="ltr">$ cybertestify scan {hostname}</div>
+              <div className="text-emerald-300" dir="ltr">✓ Alan adı sahipliği doğrulandı</div>
+              {feed.length === 0 ? (
+                <div className="text-white/80" dir="ltr">
+                  → Tarama başlatılıyor…
+                  <span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" />
+                </div>
+              ) : (
+                feed.map((it, i) => (
+                  <div key={it.seq} className="text-white/80" dir="ltr">
+                    → {it.text}
+                    {i === feed.length - 1 && (
+                      <span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" />
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="border-t border-white/10 px-5 py-3 text-xs text-white/40">
+              Teknik loglar güvenlik ve gizlilik nedeniyle gizlenmiştir; yalnızca genel aktivite gösterilir.
+            </div>
           </div>
         </>
       )}
