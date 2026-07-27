@@ -20,6 +20,12 @@ export const config = {
     serviceToken: required('PENTAGI_SERVICE_TOKEN'),
   },
   jwtSecret: required('JWT_SECRET'),
+  // Ic yonetim paneli (admin) — MUSTERI JWT'sinden TAMAMEN AYRI secret. Musteri
+  // token'i (jwtSecret ile imzali) admin endpoint'lerinde ASLA gecerli olmasin.
+  adminJwtSecret: required('ADMIN_JWT_SECRET'),
+  // Admin paneli IP kisitlamasi (opsiyonel). Bos ise kisitlama YOK. Virgulle IP.
+  adminIpAllowlist: (process.env.ADMIN_IP_ALLOWLIST ?? '')
+    .split(',').map((s) => s.trim()).filter(Boolean),
   reportEncryptionPepper: required('REPORT_ENCRYPTION_PEPPER'),
   // Veri minimizasyonu: rapor icerigi bu sure sonunda silinir (siparis/odeme
   // kaydi KORUNUR — muhasebe/fatura mevzuati). Ham PentAGI verisi zaten rapor

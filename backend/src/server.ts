@@ -12,6 +12,9 @@ import { webhooksRouter } from './routes/webhooks.js';
 import { reportsRouter } from './routes/reports.js';
 import { internalRouter } from './routes/internal.js';
 import { schedulesRouter } from './routes/schedules.js';
+import { adminAuthRouter } from './routes/adminAuth.js';
+import { adminRouter } from './routes/admin.js';
+import { requireAdmin, adminIpAllowlist } from './middleware/adminAuth.js';
 import cors from 'cors';
 
 // Fail-fast: kapsam kilidi konfigurasyonu eksik/gecersizse hemen dur.
@@ -65,6 +68,14 @@ app.use('/domains', apiLimiter, domainsRouter);
 app.use('/orders', apiLimiter, ordersRouter);
 app.use('/reports', apiLimiter, reportsRouter);
 app.use('/schedules', apiLimiter, schedulesRouter);
+
+// --- Ic yonetim paneli (admin) — MUSTERI sisteminden TAMAMEN AYRI ---------
+// Opsiyonel IP allowlist (bos ise kisitlama yok) hepsine uygulanir. Login ayri
+// (register YOK) + siki authLimiter; veri endpoint'leri requireAdmin arkasinda.
+// '/admin/auth' once mount edilir ki '/admin' requireAdmin login'i engellemesin.
+app.use('/admin/auth', adminIpAllowlist, authLimiter, adminAuthRouter);
+app.use('/admin', adminIpAllowlist, apiLimiter, requireAdmin, adminRouter);
+
 // Ic ag endpoint'leri (egress proxy icin) — CORS/rate-limit yok, secret korumali.
 app.use('/internal', internalRouter);
 

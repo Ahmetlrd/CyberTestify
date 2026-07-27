@@ -19,3 +19,13 @@ api.cybertestify.com {
 	encode gzip zstd
 	reverse_proxy api:4000
 }
+
+# İç yönetim paneli — aynı Next.js frontend'inin /admin/* rotaları. Kök '/' -> login.
+# Erişim API tarafında AYRI admin auth + (opsiyonel) ADMIN_IP_ALLOWLIST ile korunur;
+# istenirse burada Caddy seviyesinde de IP kısıtı eklenebilir (remote_ip matcher).
+admin.cybertestify.com {
+	encode gzip zstd
+	@root path /
+	redir @root /admin/login permanent
+	reverse_proxy frontend:3000
+}

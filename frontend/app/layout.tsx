@@ -1,5 +1,5 @@
 import './globals.css';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import { Nav } from '../components/Nav';
 import { Footer } from '../components/Footer';
@@ -20,14 +20,23 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const region = getRegion(cookies().get('region')?.value);
+  // Admin paneli MUSTERI sitesinden ayri: musteri Nav/Footer/CookieBanner GOSTERILMEZ
+  // (admin'in kendi layout'u var — app/admin/layout.tsx).
+  const isAdmin = (headers().get('x-pathname') ?? '').startsWith('/admin');
 
   return (
     <html lang={region.lang} dir={region.dir} className={jakarta.variable}>
       <body className="flex min-h-screen flex-col font-sans">
-        <Nav region={region} />
-        <div className="flex-1">{children}</div>
-        <Footer region={region} />
-        <CookieBanner />
+        {isAdmin ? (
+          children
+        ) : (
+          <>
+            <Nav region={region} />
+            <div className="flex-1">{children}</div>
+            <Footer region={region} />
+            <CookieBanner />
+          </>
+        )}
       </body>
     </html>
   );

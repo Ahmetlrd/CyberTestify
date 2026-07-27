@@ -27,9 +27,15 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const seg = pathname.split('/')[1];
 
+  // Server component'lerin (root layout) hangi path'te olduklarini bilebilmesi
+  // icin path'i request header olarak tasi (/admin'de musteri Nav/Footer gizlenir).
+  const headers = new Headers(req.headers);
+  headers.set('x-pathname', pathname);
+  const pass = () => NextResponse.next({ request: { headers } });
+
   // Zaten bölge önekli (/tr, /us, /ae): tercihi cookie'ye yaz, geç.
   if (isRegionCode(seg)) {
-    const res = NextResponse.next();
+    const res = pass();
     res.cookies.set('region', seg, { path: '/', maxAge: YEAR });
     return res;
   }
@@ -43,8 +49,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL(`/${region}/packages`, req.url));
   }
 
-  // Uygulama/hukuki/statik rotalar bölge-bağımsız — dokunma.
-  return NextResponse.next();
+  // Uygulama/hukuki/statik/admin rotalar bölge-bağımsız — dokunma.
+  return pass();
 }
 
 export const config = {

@@ -238,3 +238,17 @@ model Report {
   // modunda ASLA doldurulmaz — sifre sadece e-posta ile ayri kanaldan gider.
   devAccessSecret   String?
 }
+
+// --- Ic yonetim paneli (admin) — MUSTERI sisteminden TAMAMEN AYRI --------------
+// Customer tablosundan bagimsiz; ayri JWT secret + ayri login. Register endpoint'i
+// YOK: admin yalnizca CLI/DB ile eklenir (bkz prisma/createAdmin.ts).
+model AdminUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  // 2FA (TOTP) — su an login'de ZORUNLU DEGIL; alan ileride icin ayrildi.
+  // Etkinlestirme akisi HANDOFF.md'de TODO olarak belgelendi.
+  totpSecret   String?
+  createdAt    DateTime  @default(now())
+  lastLoginAt  DateTime?
+}
