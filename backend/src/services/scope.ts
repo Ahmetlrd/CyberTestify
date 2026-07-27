@@ -17,8 +17,12 @@ export function extractTargets(text: string | null | undefined): string[] {
   const urlRe = /\bhttps?:\/\/([^/\s"'`)\]}<>]+)/gi;
   let m: RegExpExecArray | null;
   while ((m = urlRe.exec(text)) !== null) {
-    let host = m[1].split('@').pop() ?? '';
-    host = host.replace(/:\d+$/, ''); // port ayikla
+    const raw = m[1].split('@').pop() ?? '';
+    // Yalnizca GECERLI host karakterlerini (harf/rakam/nokta/tire) al: JSON-escaped
+    // args'ta host'un hemen ardindan '\n', ',', ':port' gibi cop gelebilir; bunlari
+    // host'a dahil etmek kapsam-ICI hedefi bile yanlis-pozitif isaretliyordu
+    // (or. "nomorelink.com\\n\\nrequired"). Bastaki gecerli host bolumunu ayikla.
+    const host = (raw.match(/^[A-Za-z0-9.-]+/)?.[0] ?? '');
     if (host) found.add(host.toLowerCase());
   }
   // Ciplak IPv4 (bir komutta hedef olarak gecen)

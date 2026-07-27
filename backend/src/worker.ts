@@ -64,6 +64,7 @@ async function tick() {
       // Ajanin calistirdigi komut/tool argumanlarindan eristigi hedefleri cikar;
       // izin verilen kapsam (dogrulanan hostname + cozumlenen IP'ler + referans
       // allowlist) disinda bir hedef varsa flow'u durdur (enforce) veya logla.
+      let violationTarget: string | null = flow.scopeViolationTarget;
       try {
         const logs = await pentagi.getScopeLogs(flow.pentagiFlowId);
 
@@ -76,7 +77,7 @@ async function tick() {
         // SADECE ajanin ISTEDIGI hedefi (tool cagri ARGUMANLARI) tara; yanıt
         // gövdeleri 3. taraf linkleri içerir → yanlış pozitif. Gerçek egress
         // kontrolü zaten Seviye 1 proxy'de.
-        if (!flow.scopeViolationTarget) {
+        if (!violationTarget) {
           const texts = logs.toolCallLogs.map((t) => t.args);
           const scope = {
             hostname: flow.order.domain.hostname,
@@ -85,22 +86,29 @@ async function tick() {
           };
           const violations = findOutOfScope(texts, scope);
           if (violations.length) {
-            const target = violations.join(', ').slice(0, 500);
-            await prisma.flow.update({ where: { id: flow.id }, data: { scopeViolationTarget: target } });
+            violationTarget = violations.join(', ').slice(0, 500);
+            await prisma.flow.update({ where: { id: flow.id }, data: { scopeViolationTarget: violationTarget } });
             console.error(
-              `[SCOPE-VIOLATION] Flow ${flow.pentagiFlowId} order ${flow.orderId} hedef "${scope.hostname}" — kapsam disi: ${target} (mod=${config.scopeEnforcement})`,
+              `[SCOPE-VIOLATION] Flow ${flow.pentagiFlowId} order ${flow.orderId} hedef "${scope.hostname}" — kapsam disi: ${violationTarget} (mod=${config.scopeEnforcement})`,
             );
-            if (config.scopeEnforcement === 'enforce') {
-              await pentagi.stopFlow(flow.pentagiFlowId);
-              await prisma.flow.update({ where: { id: flow.id }, data: { status: 'finished', finishedAt: new Date() } });
-              await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scope_violation' } });
-              await recordScheduleOutcome(flow.order.scheduledScanId, false);
-              continue; // rapor URETME — tarama kapsam ihlali nedeniyle iptal
-            }
           }
         }
       } catch (err) {
         console.error(`[worker][SCOPE/FEED] Flow ${flow.pentagiFlowId} log islenirken hata:`, err);
+      }
+
+      // ENFORCE — try/catch DISINDA olmali: stopFlow HATA verse bile rapor
+      // URETILMEMELI (aksi halde ihlalli tarama tamamlanip teslim edilir). Onceki
+      // tick'te stopFlow patlayip iz kaldiysa (violationTarget dolu) burada tekrar
+      // denenir. monitor modunda durdurmayiz — yalnizca loglanir, tarama surer.
+      if (violationTarget && config.scopeEnforcement === 'enforce') {
+        await pentagi
+          .stopFlow(flow.pentagiFlowId)
+          .catch((e) => console.error(`[worker] stopFlow hata (yine de scope_violation): ${e?.message ?? e}`));
+        await prisma.flow.update({ where: { id: flow.id }, data: { status: 'finished', finishedAt: new Date() } });
+        await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scope_violation' } });
+        await recordScheduleOutcome(flow.order.scheduledScanId, false);
+        continue; // rapor URETME — tarama kapsam ihlali nedeniyle iptal
       }
 
       // PentAGI tarafinda gercekten basarisiz olduysa -> siparisi de basarisiz say.
