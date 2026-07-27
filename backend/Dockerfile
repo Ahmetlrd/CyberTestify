@@ -9,6 +9,10 @@ COPY package.json package-lock.json* ./
 RUN npm ci || npm install
 COPY prisma ./prisma
 RUN npx prisma generate
+# Alpine/musl'da Prisma runtime openssl surumunu bazen tespit edemeyip yanlis
+# engine adini (libquery_engine-linux-musl.so.node / openssl-1.1) arayip patliyor.
+# binaryTargets ile URETILEN openssl-3.0.x engine'ini ACIKCA zorla (deterministik).
+ENV PRISMA_QUERY_ENGINE_LIBRARY=/app/node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node
 COPY tsconfig.json ./
 COPY src ./src
 # tsx ile calistiriyoruz (build adimina gerek yok); prod'da `npm run build` +
