@@ -13,7 +13,7 @@ const HEADLINE: Record<string, string> = {
   paid: 'Ödeme alındı — tarama hazırlanıyor',
   scan_queued: 'Sırada bekliyor',
   scan_running: 'Taramanız çalışıyor',
-  scan_completed: 'Raporunuz hazır 🎉',
+  scan_completed: 'Raporunuz hazır',
   scan_failed: 'Tarama tamamlanamadı',
   scope_violation: 'Tarama güvenlik nedeniyle durduruldu',
   report_purged: 'Rapor saklama süresi doldu',
