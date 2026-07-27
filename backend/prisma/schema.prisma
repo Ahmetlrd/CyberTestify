@@ -3,7 +3,11 @@
 // bu şema tamamen bizim müşteri/sipariş/rapor katmanımız için.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // native: yerel gelistirme (macOS). linux-musl-openssl-3.0.x: prod Docker imaji
+  // (node:20-alpine = OpenSSL 3) — aksi halde Prisma engine libssl.so.1.1 arar ve
+  // "Error loading shared library libssl.so.1.1" ile patlar.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
