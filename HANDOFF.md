@@ -372,6 +372,42 @@ bulunup düzeltilenler:
 redaksiyonu (email/telefon/TCKN/kart/IBAN → [X_REDACTED]), tam rapor üretim+teslim
 (TLS/başlık/banner bulgularıyla, şifreli, accessSecret ile çözülüyor).
 
+## İç yönetim paneli (admin) — 2026-07-27
+**Müşteri sisteminden TAMAMEN AYRI.** Ayrı `AdminUser` tablosu, ayrı JWT secret
+(`ADMIN_JWT_SECRET`), payload'ta `typ:'admin'`. Müşteri token'ı admin
+endpoint'lerinde geçmez (canlı doğrulandı: müşteri JWT → 401, auth'suz → 401).
+
+**Erişim:**
+- Panel: **https://admin.cybertestify.com** (kök `/` → `/admin/login`). Aynı sayfalar
+  `app.cybertestify.com/admin/*` altından da açılır (auth-guard'lı, güvenlik farkı yok).
+- Admin API: `api.cybertestify.com/admin/*` (backend, ayrı auth). `POST /admin/auth/login`
+  (register endpoint'i YOK). Veri uçları: `/admin/customers`, `/admin/orders`
+  (status filtreli), `/admin/orders/:id`, `/admin/scope-violations`,
+  `/admin/system-health`. Hepsi sayfalı (`?page&pageSize`, max 100).
+- Rate limit: login sıkı (`authLimiter`, 15dk/20), veri uçları `apiLimiter` (dk/300).
+
+**İlk admin oluşturma** (register YOK — yalnız CLI/DB):
+```bash
+docker exec -e ADMIN_EMAIL='vedat@...' -e ADMIN_PASSWORD='guclu-sifre-min-10' \
+  cybertestify-api npx tsx prisma/createAdmin.ts
+# veya argümanla:  ... createAdmin.ts vedat@... 'guclu-sifre'
+```
+Idempotent: aynı email varsa ŞİFREYİ günceller (şifre sıfırlama için de kullanılır).
+`ADMIN_JWT_SECRET` sunucu `app/.env`'inde üretildi (JWT_SECRET'tan ayrı). **Şu an DB'de
+0 admin var** — Vedat yukarıdaki komutla kendi hesabını oluşturmalı.
+
+**IP allowlist (opsiyonel):** `app/.env`'de `ADMIN_IP_ALLOWLIST="1.2.3.4,5.6.7.8"` →
+tüm `/admin/*` (login dahil) yalnız bu IP'lere açılır; sonra `up -d --force-recreate
+api worker egress-proxy`. **Boş = kısıtlama yok** (Vedat sabit IP'sini bilmiyorsa boş
+bırak). İstenirse Caddy'de de `admin.cybertestify.com` bloğuna `@ok remote_ip ...` +
+`abort` eklenebilir (network seviyesi).
+
+**2FA (TOTP) — TODO (bilerek ertelendi):** `AdminUser.totpSecret` alanı hazır ama
+login'de ZORUNLU DEĞİL. Etkinleştirme: (1) `otplib` ekle, (2) admin başına secret
+üret + QR ile enrollment (CLI/panel), (3) `routes/adminAuth.ts` login'inde
+`admin.totpSecret` doluysa istekten gelen `totp` kodunu `authenticator.verify` ile
+doğrula. Kod içinde `TODO(2FA)` işaretli.
+
 ## Kapsam dışı (sıradaki görevler)
 Gerçek iyzico/stripe ödeme + recurring billing, gerçek e-Arşiv/US/AE fatura,
 US/AE hukuki metinler + fiyat kalibrasyonu, e-posta servisi — hepsi ayrı görevler.
