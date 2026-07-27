@@ -29,9 +29,12 @@ app.set('trust proxy', 1);
 // Guvenlik basliklari (CSP, HSTS vb.). API oldugu icin varsayilan yeterli.
 app.use(helmet());
 
-// Frontend origin'i config'ten (dev'de http://localhost:3000). Gercek domaine
-// gecince FRONTEND_URL env'i guncellenir.
-app.use(cors({ origin: config.frontendUrl, credentials: true }));
+// Izin verilen origin'ler: musteri sitesi (FRONTEND_URL) + admin paneli (ADMIN_URL,
+// ayri subdomain). ADMIN_URL virgulle birden fazla olabilir. Bos olanlar elenir.
+const corsOrigins = [config.frontendUrl, ...config.adminUrl.split(',')]
+  .map((s) => s.trim())
+  .filter(Boolean);
+app.use(cors({ origin: corsOrigins, credentials: true }));
 
 // Webhook route'u RAW body istiyor (imza dogrulamasi icin) — bu yuzden
 // genel json() middleware'inden ONCE, sadece bu path icin ozel isleniyor.

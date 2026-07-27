@@ -11,6 +11,10 @@ export const config = {
   databaseUrl: required('DATABASE_URL'),
   // Frontend'in origin'i — CORS ve mock odeme sonrasi yonlendirme icin.
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+  // Admin paneli AYRI subdomain'den (admin.cybertestify.com) servis edilir; CORS'a
+  // eklenmezse admin.* origin'inden yapilan istekler bloklanir. Dev'de bos (admin
+  // ayni origin'de calisir). Birden fazla ise virgulle.
+  adminUrl: process.env.ADMIN_URL ?? '',
   // Gercek iyzico kimlik bilgisi girilene kadar odeme "mock" modda calisir:
   // siparis olusturulunca otomatik odendi sayilip tarama baslar. IYZICO_API_KEY
   // tanimlaninca otomatik olarak gercek odeme akisina gecilir.
