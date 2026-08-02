@@ -387,22 +387,24 @@ Target: ${host}
       'eksikligi. Tamamen pasif, saldirgan olmayan bir kontrol.',
     priceMinorUnit: 79900, // 799,00 TRY — PLACEHOLDER (Vedat onayi bekleniyor)
     modelProvider: PROVIDER,
-    maxToolCalls: 18,
+    maxToolCalls: 25,
     available: true,
     promptTemplate: (host) => `
 Run a PASSIVE, NARROW check of CORS and cookie security on the SINGLE target below. Use
 GET/HEAD only; do NOT use web search, do NOT browse other sites, do NOT open subtasks.
 
-Check ONLY ${host}:
-1. CORS: Send a normal GET (you may include an "Origin: https://example.org" request header
-   to probe reflection). Inspect the response headers: Is "Access-Control-Allow-Origin"
+Check ONLY ${host} — issue AT MOST 2-3 requests total, all against ${host}:
+1. CORS: Send ONE GET to ${host} with the request header "Origin: https://probe.example"
+   (this string is ONLY a header value to test reflection — do NOT resolve, visit, or scan
+   that origin). Inspect the RESPONSE headers of ${host}: Is "Access-Control-Allow-Origin"
    present? Is its value "*" or does it REFLECT the supplied Origin (risky)? Is
    "Access-Control-Allow-Credentials: true" combined with a permissive/reflected origin
    (HIGH risk)?
-2. Cookies: For every "Set-Cookie" response header, check the "Secure", "HttpOnly" and
-   "SameSite" attributes. List which flags are MISSING per cookie.
+2. Cookies: From the "Set-Cookie" response headers of ${host}, check the "Secure",
+   "HttpOnly" and "SameSite" attributes. List which flags are MISSING per cookie.
 
-After these checks, immediately WRITE the report and FINISH. Nothing else.
+Do NOT repeat requests or explore further. After these checks, immediately WRITE the report
+and FINISH. Nothing else.
 ${SAFETY_EN}
 ${BUDGET_GUARD_EN}
 ${FIX_SUGGESTIONS_STEP_EN}
@@ -421,7 +423,7 @@ Target: ${host}
       'direktifler, default-src tanimli mi, eksik/zayif yapilandirma. Tamamen pasif.',
     priceMinorUnit: 79900, // 799,00 TRY — PLACEHOLDER (Vedat onayi bekleniyor)
     modelProvider: PROVIDER,
-    maxToolCalls: 18,
+    maxToolCalls: 25,
     available: true,
     promptTemplate: (host) => `
 Run a PASSIVE, NARROW analysis of the Content-Security-Policy (CSP) of the SINGLE target
