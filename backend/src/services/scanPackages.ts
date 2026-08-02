@@ -273,7 +273,7 @@ Target: ${host}
     priceMinorUnit: 249900,
     modelProvider: PROVIDER,
     // DAR/deterministik prompt — genis kesif YOK, dusuk tavan odaklanmayi zorlar.
-    maxToolCalls: 25,
+    maxToolCalls: 35,
     available: false, // dar-prompt testi gecince true yapilacak (bkz HANDOFF)
 
     promptTemplate: (host) => `
@@ -346,7 +346,7 @@ Hedef: ${host}
     modelProvider: PROVIDER,
     // DAR/deterministik prompt (bkz asagi) — genis kesif YOK, bu yuzden dusuk tavan
     // yeterli ve odaklanmayi zorlar (header_leak gibi guvenilir tamamlanir).
-    maxToolCalls: 25,
+    maxToolCalls: 35,
     available: false, // dar-prompt testi gecince true yapilacak (bkz HANDOFF)
 
     promptTemplate: (host) => `
