@@ -37,6 +37,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const [order, setOrder] = useState<any>(null);
   const [accessSecret, setAccessSecret] = useState('');
   const [unlocked, setUnlocked] = useState(false);
+  const [busyFix, setBusyFix] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -65,16 +66,45 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
     };
   }, [params.orderId, router]);
 
+  function downloadBlob(blob: Blob, name: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+  }
+
   async function handleDownload() {
     setError(null);
     try {
       const blob = await api.downloadReport(params.orderId, accessSecret);
       setUnlocked(true);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `rapor-${params.orderId}.md`;
-      a.click();
+      downloadBlob(blob, `rapor-${params.orderId}.md`);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
+  // (3) AI Cozum Onerileri: satin al (unlock) -> siparisi yenile.
+  async function handleUnlockFix() {
+    setBusyFix(true);
+    setError(null);
+    try {
+      await api.unlockFixSuggestions(params.orderId);
+      const o = await api.getOrder(params.orderId);
+      setOrder(o);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusyFix(false);
+    }
+  }
+
+  async function handleDownloadFix() {
+    setError(null);
+    try {
+      const blob = await api.downloadFixSuggestions(params.orderId, accessSecret);
+      downloadBlob(blob, `cozum-onerileri-${params.orderId}.md`);
     } catch (err: any) {
       setError(err.message);
     }
@@ -204,6 +234,42 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               </button>
             </div>
           </div>
+
+          {/* (3) Ücretli eklenti: AI Çözüm Önerileri */}
+          {order.report?.hasFixSuggestions && (
+            <div className="card p-6">
+              <h2 className="font-bold text-ink">AI Çözüm Önerileri</h2>
+              <p className="mt-1 text-xs text-ink-muted">
+                Bulgularınız için somut, uygulanabilir düzeltme adımları (güvenli kod/config örnekleriyle).
+              </p>
+              {order.report.fixSuggestionsUnlocked ? (
+                <>
+                  <button onClick={handleDownloadFix} disabled={!accessSecret} className="btn-primary mt-4 disabled:opacity-50">
+                    Çözüm önerilerini indir
+                  </button>
+                  {!accessSecret && (
+                    <p className="mt-2 text-xs text-ink-muted">Önce yukarıdaki erişim kodunu girin.</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="mt-3 rounded-card border border-line bg-brand-50/40 px-4 py-3 text-sm text-ink-soft">
+                    🔒 Bu içerik kilitli.{' '}
+                    {order.report.fixSuggestionPriceMinorUnit != null && (
+                      <strong>
+                        {(order.report.fixSuggestionPriceMinorUnit / 100).toLocaleString('tr-TR')} {order.currency}
+                      </strong>
+                    )}{' '}
+                    karşılığında açılır.
+                  </div>
+                  <button onClick={handleUnlockFix} disabled={busyFix} className="btn-primary mt-3 disabled:opacity-60">
+                    {busyFix ? 'İşleniyor…' : 'Satın al ve aç'}
+                  </button>
+                  <p className="mt-2 text-xs text-ink-muted">Ödeme şu an sandbox/test modundadır.</p>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 

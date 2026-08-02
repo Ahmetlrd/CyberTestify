@@ -1,6 +1,6 @@
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { getPackageDef } from './scanPackages.js';
+import { getPackageDef, localeFor } from './scanPackages.js';
 import { getPricing } from './pricing.js';
 import { isVerificationStillValid } from './verification.js';
 import { enqueueOrStartScan } from './orchestrator.js';
@@ -35,6 +35,7 @@ export async function createScheduledOrder(schedule: {
       amountMinorUnit,
       currency,
       status: 'paid', // prepaid (pesin) — odeme adimi yok, dogrudan kuyruga
+      locale: localeFor(schedule.region), // (2) cikti dili
       paidAt: new Date(),
       scheduledScanId: schedule.id,
       // Musteri zamanlama olustururken riza vermisti; her tetiklemede damgalanir.

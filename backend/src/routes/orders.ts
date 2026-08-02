@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { SCAN_PACKAGES, getPackageDef } from '../services/scanPackages.js';
+import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice } from '../services/scanPackages.js';
 import { getPricing, currencyFor } from '../services/pricing.js';
 import { getPaymentProvider } from '../services/payment/index.js';
 import { isVerificationStillValid } from '../services/verification.js';
@@ -13,6 +13,7 @@ export const ordersRouter = Router();
 // ?region=tr|us|ae — bolgesel fiyat + para birimi ile paket listesi.
 ordersRouter.get('/packages', async (req, res) => {
   const region = typeof req.query.region === 'string' ? req.query.region : 'tr';
+  const locale = localeFor(region);
   const pricingRows = await prisma.packagePricing.findMany({ where: { region } });
   const priceByKey = new Map(pricingRows.map((r) => [r.packageKey, r]));
 
@@ -21,15 +22,21 @@ ordersRouter.get('/packages', async (req, res) => {
       // Ham ag/port (networkLayer) paketleri, bypass-proof izolasyon aktif
       // DEGILSE musteriye HIC gosterilmez (bkz HARDENED_NETWORK_ISOLATION).
       .filter((p) => !p.networkLayer || config.hardenedNetworkIsolation)
+      // (2) kvkk_hazirlik Turkiye'ye ozel mevzuattir; EN/global menude GOSTERILMEZ.
+      // GDPR/CCPA esdegerleri ileride ayri paket olarak eklenecek (bkz HANDOFF).
+      .filter((p) => !(locale === 'en' && p.key === 'kvkk_hazirlik'))
       .map((p) => {
         const row = priceByKey.get(p.key);
+        const t = localizedPackage(p, locale);
         return {
           key: p.key,
-          displayName: p.displayName,
-          description: p.description,
+          displayName: t.displayName,
+          description: t.description,
           // Bolge satiri yoksa TR tabanina guvenli dusus.
           priceMinorUnit: row?.amountMinorUnit ?? p.priceMinorUnit,
           currency: row?.currency ?? currencyFor(region),
+          // (3) Ucretli "AI Cozum Onerileri" eklentisi fiyati (PLACEHOLDER).
+          fixSuggestionPriceMinorUnit: fixSuggestionPrice(p),
         };
       }),
   );
@@ -115,6 +122,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
       amountMinorUnit,
       currency,
       status: 'awaiting_payment',
+      locale: localeFor(region), // (2) cikti dili bolgeden turetilir
       // Rizalarin zaman damgali + IP + surum ile kaydi (ispat yuku bizde).
       ownershipConfirmedAt: new Date(),
       distanceContractAcceptedAt: new Date(),
@@ -157,8 +165,29 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
     include: {
       flow: true,
       domain: { select: { hostname: true } },
-      report: { select: { id: true, createdAt: true, deliveredAt: true, devAccessSecret: true, incomplete: true, incompleteReason: true } },
+      package: { select: { key: true } },
+      // fixSuggestions BLOB'unu ASLA gonderme; yalnizca varlik (iv) + kilit durumu.
+      report: {
+        select: {
+          id: true, createdAt: true, deliveredAt: true, devAccessSecret: true,
+          incomplete: true, incompleteReason: true,
+          fixSuggestionsIv: true, fixSuggestionsUnlockedAt: true,
+        },
+      },
     },
   });
-  res.json(order);
+
+  // (3) Rapor cikisini guvenli sekilde donustur: icerik degil, DURUM bilgisi.
+  const r = order.report;
+  const report = r
+    ? {
+        id: r.id, createdAt: r.createdAt, deliveredAt: r.deliveredAt, devAccessSecret: r.devAccessSecret,
+        incomplete: r.incomplete, incompleteReason: r.incompleteReason,
+        hasFixSuggestions: r.fixSuggestionsIv != null,
+        fixSuggestionsUnlocked: r.fixSuggestionsUnlockedAt != null,
+        fixSuggestionPriceMinorUnit: fixSuggestionPrice(getPackageDef(order.package.key)),
+      }
+    : null;
+
+  res.json({ ...order, package: undefined, report });
 });

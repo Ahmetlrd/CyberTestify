@@ -154,6 +154,9 @@ model Order {
   consentIp      String?
   consentVersion String?
 
+  // Cikti dili (rapor + ajan yaniti). Bolgeden turetilir: tr->tr, us/ae->en.
+  locale         String       @default("tr")
+
   // BYOK: musteri kendi anahtarini girdiyse burada (encrypted) tutulur,
   // flow bitince veya 24s icinde silinir — asla log'lanmaz.
   byokKeyEncrypted String?
@@ -237,6 +240,17 @@ model Report {
   // panelde gosterebilmek adina burada tutulur. Gercek odeme (mockPayment=false)
   // modunda ASLA doldurulmaz — sifre sadece e-posta ile ayri kanaldan gider.
   devAccessSecret   String?
+
+  // --- Ucretli eklenti: AI Cozum Onerileri (fix suggestions) --------------------
+  // Ayni flow'da (ekstra LLM cagrisi olmadan) uretilir; ANA rapordan AYRI, ayni
+  // accessSecret ile sifreli saklanir. Odeme (unlock) yapilana kadar API bunu
+  // DONDURMEZ (kilitli). Icerik: remediation/duzeltme — asla istismar kodu.
+  fixSuggestions        Bytes?
+  fixSuggestionsIv      Bytes?
+  fixSuggestionsAuthTag Bytes?
+  fixSuggestionsSalt    Bytes?
+  // Odeme onayi (mock/sandbox). null = kilitli. Dolu = eklenti satin alindi.
+  fixSuggestionsUnlockedAt DateTime?
 }
 
 // --- Ic yonetim paneli (admin) — MUSTERI sisteminden TAMAMEN AYRI --------------

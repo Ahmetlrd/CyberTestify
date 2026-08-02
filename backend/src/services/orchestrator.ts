@@ -97,7 +97,13 @@ export async function startScanForOrder(orderId: string) {
   // Su an tek paket (basit_tarama) var; hepsi bizim tek servis provider'imizi
   // ("anthropic") kullanir. BYOK (musteri kendi anahtari) akisi ileride ayri
   // bir provider create/delete mantigiyla eklenecek.
-  const prompt = pkg.promptTemplate(order.domain.hostname);
+  // (2) Cikti dili: siparisin locale'ine gore ajana YANIT dilini soyle (prompt
+  // govdesini cevirmeye gerek yok; ajan cok-dilli). tr->Turkce, en->Ingilizce.
+  const langLine =
+    order.locale === 'en'
+      ? '\n\nIMPORTANT — LANGUAGE: Write the ENTIRE report, all findings and all fix suggestions in ENGLISH.'
+      : '\n\nONEMLI — DIL: Raporun tamamini, tum bulgulari ve cozum onerilerini TURKCE yaz.';
+  const prompt = pkg.promptTemplate(order.domain.hostname) + langLine;
   const modelProvider = pkg.modelProvider;
 
   // YARIS-GUVENLI concurrency=1: PentAGI'yi cagirmadan ONCE 'running' slotunu

@@ -31,7 +31,40 @@ export interface ScanPackageDef {
   // hostingType='dedicated' hedeflerde acilir (bkz orders.ts). Su anki tum
   // paketler HTTP/uygulama katmanidir (Host'a bagli) → false.
   networkLayer?: boolean;
+  // Ucretli "AI Cozum Onerileri" eklentisi fiyati (kurus). Verilmezse taban
+  // fiyatin %50'si PLACEHOLDER olarak kullanilir (bkz fixSuggestionPrice + HANDOFF).
+  fixSuggestionPriceMinorUnit?: number;
   promptTemplate: (targetHostname: string) => string;
+}
+
+// Cikti dili bolgeden turetilir: tr -> tr, digerleri (us/ae/...) -> en.
+export function localeFor(region: string | undefined | null): 'tr' | 'en' {
+  return region === 'tr' ? 'tr' : 'en';
+}
+
+// Eklenti (fix suggestions) fiyati — PLACEHOLDER: taban fiyatin %50'si (Vedat
+// onayina kadar). Paket bazinda override icin ScanPackageDef.fixSuggestionPriceMinorUnit.
+export function fixSuggestionPrice(def: ScanPackageDef): number {
+  return def.fixSuggestionPriceMinorUnit ?? Math.round(def.priceMinorUnit * 0.5);
+}
+
+// Kullaniciya gosterilen paket adi/aciklamasinin EN karsiligi. Sadece pazarlama
+// metni cevrilir; prompt govdesi cevrilmez (ajana yalnizca yanit dili soylenir).
+const PACKAGE_I18N: Partial<Record<ScanPackageDef['key'], { displayName: string; description: string }>> = {
+  basit_tarama: { displayName: 'Basic Scan', description: 'Fast passive pre-check: homepage security headers, TLS validity and server banner summary. The cheapest entry package, done in minutes.' },
+  ssl_tls: { displayName: 'SSL/TLS Configuration Audit', description: 'Certificate validity/expiry, weak protocol and cipher suite usage, missing HSTS. A fully passive, non-intrusive encryption audit.' },
+  header_leak: { displayName: 'Security Headers & Information Leakage', description: 'Missing security headers (CSP, X-Frame-Options, etc.) and passive check for accidentally exposed sensitive files (.git, .env, backups).' },
+  dns_email: { displayName: 'DNS & Email Security', description: 'SPF/DKIM/DMARC gaps, DNSSEC and DNS misconfigurations. Valuable against email spoofing, fully passive.' },
+  cms_cve: { displayName: 'CMS & Known-CVE Scan', description: 'CMS/framework fingerprinting, version detection and known-CVE mapping. DETECTION ONLY — no exploit is attempted.' },
+  pci_hazirlik: { displayName: 'PCI-DSS Readiness Pre-Assessment', description: 'A passive readiness report mapping your external surface (TLS, headers, exposed files, known version issues, cookie/session security) to PCI-DSS requirements. NOT an official ASV/QSA test.' },
+  iso27001_hazirlik: { displayName: 'ISO 27001 Readiness Checklist', description: 'A passive readiness report mapping externally observable technical controls to ISO 27001 Annex A. NOT an official certification/audit.' },
+};
+
+// Paketi locale'e gore adlandir (EN yoksa TR'ye guvenli dusus). kvkk_hazirlik
+// EN sozlukte YOK — global menude gosterilmemeli (bkz orders.ts packages filtresi).
+export function localizedPackage(def: ScanPackageDef, locale: 'tr' | 'en') {
+  const t = locale === 'en' ? PACKAGE_I18N[def.key] : undefined;
+  return { displayName: t?.displayName ?? def.displayName, description: t?.description ?? def.description };
 }
 
 // PentAGI Providers ekranindaki profil adiyla BIREBIR eslesmeli (createFlow'a
@@ -48,6 +81,29 @@ veri degistiren/yazan istekler (POST/PUT/DELETE), yuk/stres/DoS ve kapsam disi
 (belirtilen host disindaki) HERHANGI bir hedefe erisim. Paylasimli hosting
 ihtimaline karsi IP/port degil, HOSTNAME/uygulama katmaninda kal. Suphedeysen o
 adimi ATLA.`.trim();
+
+// TAMAMLAMA GARANTISI — her pakette bulunur. Amac: arac cagri butcesi tukenip
+// tavana carpsa BILE musteriye ASLA bos/yarim rapor gitmesin. Ajan, butce azalinca
+// yeni kesif yapmayi birakip O ANA KADARKI bulgulariyla raporu HEMEN yazar.
+const BUDGET_GUARD = `
+COK ONEMLI — TAMAMLAMA KURALI: Arac cagri butcen sinirli. Butcenin yaklasik
+yarisina geldiginde YENI kategori/kesif ACMAYI BIRAK ve o ana kadar topladigin
+bulgularla raporu YAZMAYA BASLA. Her ihtimalde, GOREVI SONLANDIRMADAN ONCE mutlaka
+somut bir bulgu/ozet metni yaz — asla bulgu yazmadan, bos veya yarim birakma.
+Eksik kalan kategori olursa raporda "incelenemedi" diye belirt ama ELINDEKINI yaz.`.trim();
+
+// UCRETLI EKLENTI: AI Cozum Onerileri. Ajan, bulgulari yazdiktan SONRA ayni akista
+// (ekstra maliyet YOK) her bulgu icin somut duzeltme onerisi yazar; delimiter ile
+// ayrilir (report.ts ayirip AYRI/kilitli alanda saklar). ASLA istismar kodu degil.
+export const FIX_SUGGESTIONS_DELIM = '===FIX_SUGGESTIONS===';
+const FIX_SUGGESTIONS_STEP = `
+EN SON ADIM — COZUM ONERILERI: Tum bulgulari yazip bitirdikten SONRA, tam olarak su
+satiri TEK BASINA yaz:
+${FIX_SUGGESTIONS_DELIM}
+ve bu satirin ALTINA, tespit ettigin her onemli bulgu icin somut ve uygulanabilir bir
+DUZELTME (remediation) onerisi yaz — gerektiginde GUVENLI config/kod ornegiyle.
+MUTLAK KURAL: bu bolum SADECE duzeltme icindir; ASLA calistirilabilir istismar/exploit
+kodu, saldiri payload'u veya araci ICERMEZ. Hic bulgu yoksa delimiter'i yazma.`.trim();
 
 export const SCAN_PACKAGES: ScanPackageDef[] = [
   {
@@ -70,6 +126,8 @@ sunucu/teknoloji banner'i ve TLS sertifikasinin gecerli olup olmadigi.
 
 EN FAZLA 2-3 ARACLA ISLEM yap, sonra HEMEN bitir. Yeni alt gorevler ACMA.
 ${SAFETY}
+${BUDGET_GUARD}
+${FIX_SUGGESTIONS_STEP}
 
 Cikti: birkac maddelik KISA bir ozet yaz ve GOREVI HEMEN TAMAMLA.
 
@@ -94,6 +152,8 @@ gozlemiyle sunlari degerlendir:
 - Zayif/eskimis cipher suite'ler
 - HSTS basliginin varligi ve suresi
 ${SAFETY}
+${BUDGET_GUARD}
+${FIX_SUGGESTIONS_STEP}
 
 Cikti: bulgulari onem derecesine gore siralayip kisa oneri listesiyle sun.
 En fazla ~12 arac cagrisinda bitir ve GOREVI TAMAMLA.
@@ -119,6 +179,8 @@ Yalnizca asagidaki TEK hedefe karsi PASIF bir kontrol yap:
    GET ile kontrol (dizin ZORLAMA/brute-force YOK): /robots.txt, /.git/config,
    /.env, /backup.zip, /.DS_Store gibi standart dosyalar erisilebilir mi?
 ${SAFETY}
+${BUDGET_GUARD}
+${FIX_SUGGESTIONS_STEP}
 
 Cikti: eksik header'lari ve varsa acik dosyalari onem sirasiyla, somut oneriyle
 listele. En fazla ~12 arac cagrisinda bitir ve GOREVI TAMAMLA.
@@ -143,6 +205,8 @@ yap (dig/nslookup gibi araclarla, sadece SORGU — hicbir kayit degistirme):
 - DKIM: yaygin selector'larla (default, google, selector1/2) kayit gozlemle
 - DNSSEC etkin mi, MX kayitlari makul mu?
 ${SAFETY}
+${BUDGET_GUARD}
+${FIX_SUGGESTIONS_STEP}
 
 Cikti: her bulguyu (SPF/DKIM/DMARC/DNSSEC) durum + oneriyle tabloda ozetle.
 En fazla ~12 arac cagrisinda bitir ve GOREVI TAMAMLA.
@@ -170,6 +234,8 @@ yap (whatweb / wappalyzer tarzi pasif gozlem + acik sayfalardaki surum ipuclari)
 ONEMLI: Tespit edilen CVE'leri DENEME/DOGRULAMA amacli ISTISMAR ETME — sadece
 "bu surumde su CVE'ler bilinmektedir" diye raporla.
 ${SAFETY}
+${BUDGET_GUARD}
+${FIX_SUGGESTIONS_STEP}
 
 Cikti: tespit edilen teknoloji + surum + bilinen CVE listesi (CVSS ile) + guncelleme
 onerisi. En fazla ~18 arac cagrisinda bitir ve GOREVI TAMAMLA.
@@ -186,7 +252,10 @@ Hedef: ${host}
       'eslestiren pasif bir hazirlik raporu. RESMI ASV/QSA testi DEGILDIR.',
     priceMinorUnit: 249900, // 2.499,00 TRY
     modelProvider: PROVIDER,
-    maxToolCalls: 40,
+    // 40 tavan cok-kategorili PCI prompt'u icin yetersizdi (ajan bulgu yazamadan
+    // tavana carpip rapor bos/incomplete cikiyordu — bkz iso27001 loglari). 60'a
+    // cikarildi; BUDGET_GUARD ile tavana yaklasinca elindekini yazar.
+    maxToolCalls: 60,
     promptTemplate: (host) => `
 Yalnizca asagidaki TEK hedefe karsi PASIF bir "PCI-DSS HAZIRLIK ON-DEGERLENDIRMESI"
 yap. Bu RESMI bir PCI ASV taramasi veya sizma testi DEGILDIR; amac disaridan
@@ -200,10 +269,12 @@ Sadece normal GET istekleriyle sunlari kontrol edip PCI maddesine esle:
 - Bilinen surum CVE'leri (banner'dan) -> Req 6.2/6.3
 - Acikta kalan hassas dosyalar (.git/.env/yedek) -> Req 3 / veri aciga cikma
 ${SAFETY}
+${BUDGET_GUARD}
+${FIX_SUGGESTIONS_STEP}
 
 Cikti (Markdown tablo): "PCI Maddesi | Bulgu | Durum (Uygun/Dikkat/Eksik) | Oneri".
 Sonda: "Bu rapor resmi PCI uyumluluk testi degildir; ic ag/CDE, segmentasyon, ASV
-taramasi ve sizma testi KAPSAM DISIDIR" notu. En fazla ~30 arac cagrisinda bitir.
+taramasi ve sizma testi KAPSAM DISIDIR" notu. En fazla ~50 arac cagrisinda bitir.
 
 Hedef: ${host}
 `.trim(),
@@ -217,7 +288,7 @@ Hedef: ${host}
       'DEGILDIR — farkindalik ve eksik tespiti amaclidir.',
     priceMinorUnit: 199900, // 1.999,00 TRY
     modelProvider: PROVIDER,
-    maxToolCalls: 30,
+    maxToolCalls: 45, // 30 yetersizdi (bkz iso27001); BUDGET_GUARD + tampon.
     promptTemplate: (host) => `
 Yalnizca asagidaki TEK hedefin HERKESE ACIK sayfalarini PASIF gozlemleyerek bir
 "KVKK ON UYUM KONTROLU" yap. Bu HUKUKI DANISMANLIK DEGILDIR; amac disaridan
@@ -231,10 +302,12 @@ Sadece normal GET ile gozlemle:
 - Veri sorumlusu / iletisim / VERBIS atifi gozlemleniyor mu?
 - Ucuncu taraf izleyiciler (analytics, pixel) gozlemleniyor mu?
 ${SAFETY}
+${BUDGET_GUARD}
+${FIX_SUGGESTIONS_STEP}
 
 Cikti (Markdown tablo): "KVKK Ilkesi/Konu | Gozlem | Durum (Uygun/Dikkat/Eksik) |
 Oneri". Sonda: "Bu rapor hukuki gorus/uyum beyani degildir; nihai degerlendirme
-icin KVKK uzmani/avukat gerekir" notu. En fazla ~22 arac cagrisinda bitir.
+icin KVKK uzmani/avukat gerekir" notu. En fazla ~36 arac cagrisinda bitir.
 
 Hedef: ${host}
 `.trim(),
@@ -247,7 +320,9 @@ Hedef: ${host}
       'eslestirildigi pasif hazirlik raporu. RESMI sertifikasyon/denetim DEGILDIR.',
     priceMinorUnit: 299900, // 2.999,00 TRY
     modelProvider: PROVIDER,
-    maxToolCalls: 30,
+    // Canli log: iso27001 flow 31 cagri kullanip 30 tavana carpti, HIC bulgu
+    // yazamadan -> incomplete/bos rapor. 50'ye cikarildi + BUDGET_GUARD.
+    maxToolCalls: 50,
     promptTemplate: (host) => `
 Yalnizca asagidaki TEK hedefe karsi PASIF gozlemle, disaridan gorulebilen teknik
 kontrolleri ISO/IEC 27001 Ek-A ile eslestiren bir "HAZIRLIK KONTROL LISTESI" cikar.
@@ -259,10 +334,12 @@ Gozlemler ve eslesme ornekleri:
 - Bilgi sizintisi/acik dosyalar -> A.5/A.8 (erisim, varlik yonetimi)
 - Gizlilik/guvenlik politikasi sayfasi gorunurlugu -> A.5 (politikalar)
 ${SAFETY}
+${BUDGET_GUARD}
+${FIX_SUGGESTIONS_STEP}
 
 Cikti (Markdown tablo): "Ek-A Maddesi | Gozlem | Durum | Oneri". Sonda: "Bu rapor
 resmi ISO 27001 denetimi/sertifikasyonu degildir; ISMS kapsami, dokumantasyon ve
-ic surecler KAPSAM DISIDIR" notu. En fazla ~22 arac cagrisinda bitir.
+ic surecler KAPSAM DISIDIR" notu. En fazla ~40 arac cagrisinda bitir.
 
 Hedef: ${host}
 `.trim(),

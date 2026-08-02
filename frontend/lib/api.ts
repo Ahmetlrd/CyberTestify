@@ -101,4 +101,16 @@ export const api = {
     if (!res.ok) throw new Error('Rapor indirilemedi. Erişim şifresini kontrol edin.');
     return res.blob();
   },
+  // (3) AI Cozum Onerileri eklentisi: satin al (unlock) + indir.
+  unlockFixSuggestions: (orderId: string) =>
+    request<{ ok: boolean; unlockedAt: string }>(`/reports/${orderId}/fix-suggestions/unlock`, { method: 'POST' }),
+  downloadFixSuggestions: async (orderId: string, accessSecret: string) => {
+    const res = await fetch(`${API_URL}/reports/${orderId}/fix-suggestions/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ accessSecret }),
+    });
+    if (!res.ok) throw new Error('Çözüm önerileri indirilemedi. Erişim şifresini/kilit durumunu kontrol edin.');
+    return res.blob();
+  },
 };
