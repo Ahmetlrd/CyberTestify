@@ -19,40 +19,71 @@ type Locale = 'tr' | 'en';
  * rapora yaziyordu (iso27001/kvkk/header_leak'te ayni sistemik hata). Artik yalniz
  * `result` (tamamlama) alanlarini okuyoruz; uzunluk/sezgi tahmini YOK, resmi alan ayrimi.
  *
- * Oncelik: (1) task-seviyesi sentez (Task.result) — dogal bitiste dolu; yoksa
- * (2) TUM alt-gorev tamamlamalari (Subtask.result) birlestirilir — tavana carpsa
- * bile dolu; yoksa (3) report-tipi MessageLog'larin `result`'i; yoksa (4) done'in
- * `result`'i. Hicbir asamada ATAMA metni (message/description) bulgu sayilmaz.
+ * Oncelik: (1) NIHAI SENTEZ alt-gorevi — result'i ${FIX_SUGGESTIONS_DELIM} iceren
+ * subtask musteriye yonelik TEK temiz rapor + cozum onerileridir; VARSA yalniz onu al
+ * (ham arastirma subtask'larini ONUNE EKLEME); yoksa (2) task-seviyesi sentez (Task.result,
+ * dogal bitiste dolu); yoksa (3) TUM alt-gorev tamamlamalari birlestirilir (tavana carpan
+ * taramada bile dolu); yoksa (4) report-msglog.result; yoksa (5) done.result. Hicbir asamada
+ * ATAMA metni (message/description) bulgu sayilmaz. Tum ciktilara SUREC-DILI temizligi
+ * (stripProcessLanguage) uygulanir — bu bir GUVENLIK AGIDIR; asil cozum promptta (ajan
+ * tek temiz rapor yazar). Bkz scanPackages BUDGET_GUARD/FIX_SUGGESTIONS.
  */
 function collectFindings(logs: pentagi.FlowLogs): string {
   const join = (parts: string[]) => parts.filter((p) => p.trim().length > 0).join('\n\n---\n\n').trim();
+  const subs = logs.tasks.flatMap((t) => t.subtasks ?? []).filter((st) => (st.result ?? '').trim().length > 0);
 
-  // (1) Task-seviyesi tamamlama sentezi (dogal bitiste PentAGI reporter'i doldurur).
+  // (1) NIHAI SENTEZ alt-gorevi: result'i FIX_SUGGESTIONS delimiter'i iceren subtask, ajanin
+  //     yazmaya YONLENDIRILDIGI musteriye-yonelik tek rapor + fix'tir. VARSA yalniz onu al —
+  //     boylece ham "arastirma" subtask'lari (surec dili) rapora KARISMAZ + fix bolumu gelir.
+  const synth = subs.filter((st) => (st.result ?? '').includes(FIX_SUGGESTIONS_DELIM));
+  if (synth.length) return stripProcessLanguage(join(synth.map((st) => (st.result ?? '').trim())));
+
+  // (2) Task-seviyesi tamamlama sentezi (dogal bitiste PentAGI reporter'i doldurur).
   const taskText = join(
     logs.tasks
       .filter((t) => (t.result ?? '').trim().length > 0)
       .map((t) => `### ${t.title}\n\n${(t.result ?? '').trim()}`),
   );
-  if (taskText) return taskText;
+  if (taskText) return stripProcessLanguage(taskText);
 
-  // (2) TUM alt-gorev TAMAMLAMALARI (Subtask.result). Tavana carpan taramada Task.result
-  //     bos olsa da alt-gorevler kendi sonuclarini yazmis olur — hepsini birlestir.
-  const subtaskText = join(
-    logs.tasks
-      .flatMap((t) => t.subtasks ?? [])
-      .filter((st) => (st.result ?? '').trim().length > 0)
-      .map((st) => `### ${st.title}\n\n${(st.result ?? '').trim()}`),
-  );
-  if (subtaskText) return subtaskText;
+  // (3) TUM alt-gorev TAMAMLAMALARI. Tavana carpan taramada sentez subtask'i CALISMAMIS
+  //     olabilir; elde ne varsa birlestir (surec-dili temizligiyle).
+  const subtaskText = join(subs.map((st) => `### ${st.title}\n\n${(st.result ?? '').trim()}`));
+  if (subtaskText) return stripProcessLanguage(subtaskText);
 
-  // (3) report-tipi MessageLog'larin TAMAMLAMASI (message DEGIL, result).
+  // (4) report-tipi MessageLog'larin TAMAMLAMASI (message DEGIL, result).
   const reportText = join(
     logs.messageLogs.filter((m) => m.type === 'report').map((m) => (m.result ?? '').trim()),
   );
-  if (reportText) return reportText;
+  if (reportText) return stripProcessLanguage(reportText);
 
-  // (4) Son care: done-tipi MessageLog'un result'i (yoksa message'a dusme — atama olabilir).
-  return join(logs.messageLogs.filter((m) => m.type === 'done').map((m) => (m.result ?? '').trim()));
+  // (5) Son care: done-tipi MessageLog'un result'i (yoksa message'a dusme — atama olabilir).
+  return stripProcessLanguage(join(logs.messageLogs.filter((m) => m.type === 'done').map((m) => (m.result ?? '').trim())));
+}
+
+/**
+ * GUVENLIK AGI: rapor metninden ic-surec (workflow) dilini temizler. Asil cozum promptta
+ * (ajan bunlari hic yazmamali); bu, capped/eski taramalarda kalan kalintilar icin. Yalniz
+ * ACIKCA surec-satirlarini duser + baslik "Subtask/Alt-Gorev N ... Raporu" onekini yumusatir;
+ * icerigi (teknik bulgu) bozmaz.
+ */
+export function stripProcessLanguage(md: string): string {
+  const dropLine = [
+    /^#{1,6}\s*(alt[-\s]?g[oö]rev|subtask)\b/i, // "### Subtask 308 ...", "## Alt-Görev 335"
+    /^\s*[*_-]*\s*(✅|✔|☑)?\s*(g[oö]rev\s+(basar|tamamland)|task\s+completed|görev başarıyla)/i,
+    /^\s*[*_-]*\s*(ba[sş]ar[iı] durumu|success status)\s*[:：]/i,
+    /^\s*#{0,6}\s*[*_-]*\s*(sonraki ad[iı]m|next steps?|siradaki ad[iı]m)\b/i,
+    /^\s*[*_-]*\s*(subtask|alt[-\s]?g[oö]rev)\s*\d+.{0,50}(tamamlama raporu|completion report|sonu[cç] raporu)/i,
+  ];
+  const kept = md
+    .split('\n')
+    .filter((ln) => !dropLine.some((re) => re.test(ln.trim())));
+  return kept
+    .join('\n')
+    // Baslik/cumle ici "Subtask 308:" / "Alt-Görev 335 -" oneklerini kaldir (baglami koru).
+    .replace(/(^|[\s(])(subtask|alt[-\s]?g[oö]rev)\s*\d+\s*[:：\-–—]\s*/gi, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /** Bulgulardan "cozum onerileri" bolumunu (delimiter sonrasi) ayirir. */
@@ -169,6 +200,11 @@ export function renderReportMarkdown(
   locale: Locale = 'tr',
 ): string {
   const t = T[locale];
+  // Ekran goruntusu bolumu YALNIZCA icerik varsa gosterilir — bos "Yok" bolumu koymayiz.
+  const screenshotsBlock =
+    screenshots.length > 0
+      ? `\n\n---\n\n## ${t.screenshots}\n\n${screenshots.map((s) => `- ${s.name}: ${s.url}`).join('\n')}`
+      : '';
   return `# ${t.title}
 
 **${t.target}:** ${hostname}
@@ -179,13 +215,7 @@ export function renderReportMarkdown(
 
 ## ${t.findings}
 
-${findingsMd.trim() || t.noFindings}
-
----
-
-## ${t.screenshots}
-
-${screenshots.map((s) => `- ${s.name}: ${s.url}`).join('\n') || t.none}
+${findingsMd.trim() || t.noFindings}${screenshotsBlock}
 
 ---
 

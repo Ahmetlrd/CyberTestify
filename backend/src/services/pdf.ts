@@ -40,6 +40,11 @@ const L = {
     fixLocked: 'Bu bölüm kilitli — "AI Çözüm Önerileri" eklentisi satın alınınca rapora eklenir.',
     footerLegal: 'Yapay zeka üretimi pasif tarama raporu — resmi denetim/sertifikasyon değildir. Gizlidir.',
     page: 'Sayfa',
+    assessTitle: 'Genel Değerlendirme',
+    riskHigh: 'Yüksek Risk', riskMedium: 'Orta Risk', riskLow: 'Düşük Risk',
+    assessHigh: 'Bu taramada acil müdahale gerektiren kritik güvenlik bulguları tespit edildi; öncelikli olarak ele alınması önerilir.',
+    assessMedium: 'Bu taramada kısa vadede giderilmesi önerilen önemli güvenlik bulguları tespit edildi.',
+    assessLow: 'Bu taramada ciddi/kritik bir güvenlik açığı öne çıkmadı; rapor iyileştirme fırsatlarını listeler.',
   },
   en: {
     brandTagline: 'Automated Security Scan Report',
@@ -48,8 +53,28 @@ const L = {
     fixLocked: 'This section is locked — it is added once the "AI Fix Suggestions" add-on is purchased.',
     footerLegal: 'AI-generated passive scan report — not an official audit/certification. Confidential.',
     page: 'Page',
+    assessTitle: 'Overall Assessment',
+    riskHigh: 'High Risk', riskMedium: 'Medium Risk', riskLow: 'Low Risk',
+    assessHigh: 'This scan surfaced critical security findings that require prompt action; they should be prioritised.',
+    assessMedium: 'This scan surfaced important security findings that should be addressed in the near term.',
+    assessLow: 'This scan did not surface a serious/critical vulnerability; the report lists improvement opportunities.',
   },
 } as const;
+
+// Rapor metnindeki siddet sinyallerinden GENEL RISK seviyesi turetir (ek LLM YOK).
+// "kritik" tek basina guvenilir siddet terimidir; "yuksek/orta" applicability etiketiyle
+// karismasin diye "seviye/severity/oncelik/risk" baglamı arar.
+function assessRisk(md: string, locale: 'tr' | 'en'): { level: 'high' | 'medium' | 'low'; label: string; sentence: string } {
+  const s = md.toLocaleLowerCase('tr');
+  const hasCritical = /kr[iİ]t[iİ]k|critical/.test(s);
+  const hasHigh = /(y[uü]ksek\s+(seviye|önem|öncelik|risk)|high[\s-]+(severity|risk|priority))/.test(s);
+  const hasMedium = /(orta\s+(seviye|önem|öncelik|risk)|medium[\s-]+(severity|risk))/.test(s);
+  const t = L[locale];
+  if (hasCritical) return { level: 'high', label: t.riskHigh, sentence: t.assessHigh };
+  if (hasHigh) return { level: 'medium', label: t.riskMedium, sentence: t.assessMedium };
+  void hasMedium;
+  return { level: 'low', label: t.riskLow, sentence: t.assessLow };
+}
 
 // CyberTestify kalkan logosu (inline SVG — dis kaynak yok).
 const LOGO_SVG = `
@@ -75,6 +100,19 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
     const hr = effectiveMd.indexOf('\n---\n');
     if (hr !== -1 && hr < 500) effectiveMd = effectiveMd.slice(hr + 5);
   }
+  // GUVENLIK AGI: eski raporlarda kalan bos "## Ekran Goruntuleri / _Yok_" bolumunu at
+  // (yeni raporlar bunu zaten uretmiyor — bkz report.ts renderReportMarkdown).
+  effectiveMd = effectiveMd.replace(
+    /\n*(?:---\s*\n)?\s*#{1,6}\s*(?:Ekran\s*Gör?[uü]nt[uü]leri|Screenshots)\s*\n+_?(?:Yok|None)_?\s*(?=\n---|\s*$)/gi,
+    '',
+  );
+
+  // Genel Degerlendirme (banner altina) — siddet dagilimindan risk seviyesi (ek LLM YOK).
+  const risk = assessRisk(effectiveMd, meta.locale);
+  const assessBox = `<div class="assess assess-${risk.level}">
+    <div class="assess-head"><span class="assess-title">${escapeHtml(t.assessTitle)}</span>
+      <span class="risk-badge risk-${risk.level}">${escapeHtml(risk.label)}</span></div>
+    <p class="assess-body">${escapeHtml(risk.sentence)}</p></div>`;
 
   let bodyHtml = md.render(effectiveMd);
 
@@ -107,6 +145,18 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
   .meta .k { color: #5FA396; text-transform: uppercase; letter-spacing: .5px; font-size: 9px; font-weight: 700; }
   .meta .v { color: #123F3A; font-weight: 600; font-size: 12.5px; }
   .content { padding: 20px 34px 30px; }
+  /* Genel Degerlendirme kutusu (banner alti) */
+  .assess { border-radius: 8px; padding: 14px 16px; margin: 4px 0 20px; border: 1px solid #DCEAE6; background: #F6FAF8; }
+  .assess-high { background: #FCECEA; border-color: #F1C9C4; }
+  .assess-medium { background: #FDF3DE; border-color: #F5D9A0; }
+  .assess-low { background: #EEF5F3; border-color: #CFE5DF; }
+  .assess-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .assess-title { font-size: 13px; font-weight: 700; color: #123F3A; text-transform: uppercase; letter-spacing: .5px; }
+  .assess-body { margin: 8px 0 0; font-size: 12px; color: #1b2b28; }
+  .risk-badge { color: #fff; padding: 3px 12px; border-radius: 12px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .risk-high { background: #B3261E; }
+  .risk-medium { background: #E0940E; }
+  .risk-low { background: #1C6B60; }
   h1 { color: #123F3A; font-size: 20px; margin: 6px 0 14px; border-bottom: 2px solid #DCEAE6; padding-bottom: 8px; }
   h2 { color: #14514A; font-size: 15px; margin: 20px 0 8px; }
   h3 { color: #1C6B60; font-size: 13px; margin: 14px 0 6px; }
@@ -153,7 +203,7 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
     <div><div class="k">${escapeHtml(t.pkg)}</div><div class="v">${escapeHtml(meta.packageName)}</div></div>
     <div><div class="k">${escapeHtml(t.date)}</div><div class="v">${escapeHtml(dateStr)}</div></div>
   </div>
-  <div class="content">${bodyHtml}</div>
+  <div class="content">${assessBox}${bodyHtml}</div>
   <script>
     // Siddet kelimelerine gore tablo hucrelerini renklendir (TR+EN, buyuk/kucuk duyarsiz).
     (function () {

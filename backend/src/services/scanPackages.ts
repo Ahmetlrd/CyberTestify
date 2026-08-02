@@ -91,21 +91,30 @@ already available or SKIP that specific check and note it as "not reviewed (tool
 unavailable)". Spending your tool-call budget on setup/installation is FORBIDDEN.`.trim();
 
 const BUDGET_GUARD_EN = `
-COMPLETION RULE (very important): Your tool-call budget is limited. Once you reach
-about half of it, STOP opening new categories/exploration and START writing the report
-with what you have. In every case, before ending the task you MUST write concrete
-findings/summary text — never finish empty or half-done. If a category was not covered,
-note it as "not reviewed" but still WRITE what you have.`.trim();
+COMPLETION & OUTPUT RULE (HIGHEST PRIORITY): Writing the final findings report AND the
+${FIX_SUGGESTIONS_DELIM} section is your #1 deliverable — more important than extra probing.
+Do ONLY minimal probing, then IMMEDIATELY write the complete report AND fix-suggestions IN
+THE SAME step. Do NOT split the final report or fix-suggestions into a separate later
+step/subtask — a later subtask may run out of budget and NEVER execute (this loses the whole
+deliverable). Your tool-call budget is limited; once you reach about half, STOP exploring and
+WRITE. Never finish empty or half-done; if a category was not covered, note it "not reviewed"
+but still write what you have.
+SINGLE CLEAN REPORT: Produce ONE fluent, professional, customer-facing report as if written
+start-to-finish in a single sitting, grouped by severity. The customer must NOT see our
+internal workflow — NEVER use process/meta language such as "Subtask"/"SubTask N",
+"TASK COMPLETED", "Next step", "verification step", "success status", or workflow step
+numbers. Write findings directly, not as a log of completed steps.`.trim();
 
 export const FIX_SUGGESTIONS_DELIM = '===FIX_SUGGESTIONS===';
 const FIX_SUGGESTIONS_STEP_EN = `
-FINAL STEP — FIX SUGGESTIONS: After writing all findings, output EXACTLY this line on
-its own:
+MANDATORY FIX SUGGESTIONS (do NOT skip when there are findings): In the SAME step, right
+after the findings, output EXACTLY this line on its own:
 ${FIX_SUGGESTIONS_DELIM}
-and BELOW it, for each important finding write a concrete, actionable remediation
-(with a SAFE config/code example when useful). ABSOLUTE RULE: this section is remediation
-ONLY; it must NEVER contain runnable exploit code, attack payloads, or attack tooling.
-If there are no findings, do not write the delimiter.`.trim();
+and BELOW it, for EACH important finding write a concrete, actionable remediation (with a
+SAFE config/code example when useful). This is a PAID deliverable — never omit it, never
+leave it for a later subtask. ABSOLUTE RULE: remediation ONLY; it must NEVER contain runnable
+exploit code, attack payloads, or attack tooling. Only if there are genuinely NO findings at
+all, omit the delimiter.`.trim();
 
 // NOT: HAZIRLIK_FOCUS_EN kaldirildi — iso27001/pci promptlari artik DAR/deterministik
 // (acikca "arastirma/arama yok, yalniz bu kontroller") oldugu icin ayri odak-kisiti
@@ -127,17 +136,25 @@ varsa KURMA — standart bir aracla yap ya da o kontrolu ATLA ("incelenmedi (ara
 dus). Butceyi kuruluma harcamak YASAK.`.trim();
 
 const BUDGET_GUARD_TR = `
-TAMAMLAMA KURALI: Arac cagri butcen sinirli. Butcenin yaklasik yarisinda YENI kesif
-ACMAYI BIRAK ve elindeki bulgularla raporu YAZMAYA BASLA. Her ihtimalde gorevi
-bitirmeden ONCE somut bulgu/ozet yaz — asla bos/yarim birakma.`.trim();
+TAMAMLAMA & CIKTI KURALI (EN YUKSEK ONCELIK): Nihai bulgu raporunu VE ${FIX_SUGGESTIONS_DELIM}
+bolumunu yazmak 1 numarali teslimatin — ek incelemeden daha onemli. YALNIZCA minimum inceleme
+yap, sonra tam raporu VE cozum onerilerini AYNI adimda HEMEN yaz. Nihai raporu ya da cozum
+onerilerini AYRI/GEC bir adima/subtask'a BIRAKMA — sonraki bir adim butce bitince HIC
+calismayabilir (tum teslimat kaybolur). Butcenin yaklasik yarisinda kesfi BIRAK ve YAZ. Asla
+bos/yarim birakma; bir kategori incelenmediyse "incelenmedi" not dus ama elindekini yaz.
+TEK TEMIZ RAPOR: Tek, akici, profesyonel, MUSTERIYE yonelik bir rapor yaz — sanki bastan sona
+tek oturusta yazilmis gibi, siddete gore gruplu. Musteri ic is akisimizi GORMEMELI: "Alt-Gorev"/
+"Subtask N", "GOREV TAMAMLANDI", "Sonraki adim", "dogrulama adimi", "basari durumu" gibi surec/
+meta ifadeler ASLA kullanma. Bulgulari dogrudan yaz, tamamlanan adimlarin gunlugu gibi degil.`.trim();
 
 const FIX_SUGGESTIONS_STEP_TR = `
-EN SON ADIM — COZUM ONERILERI: Tum bulgulari yazdiktan SONRA tam olarak su satiri tek
-basina yaz:
+ZORUNLU COZUM ONERILERI (bulgu varsa ATLAMA): Bulgularin hemen ardindan, AYNI adimda, tam
+olarak su satiri tek basina yaz:
 ${FIX_SUGGESTIONS_DELIM}
-ve altina her onemli bulgu icin somut duzeltme onerisi (gerektiginde GUVENLI config/kod
-ornegiyle) yaz. MUTLAK KURAL: yalniz remediation; ASLA istismar kodu/payload icermez.
-Bulgu yoksa delimiter'i yazma.`.trim();
+ve altina HER onemli bulgu icin somut duzeltme onerisi (gerektiginde GUVENLI config/kod
+ornegiyle) yaz. Bu UCRETLI bir teslimat — asla atlama, asla sonraki bir adima birakma.
+MUTLAK KURAL: yalniz remediation; ASLA istismar kodu/payload icermez. Yalniz gercekten HIC
+bulgu yoksa delimiter'i yazma.`.trim();
 
 const HAZIRLIK_FOCUS_TR = `
 ODAK KURALI: Ilgili mevzuatin maddelerini ZATEN BILIYORSUN. Standardi/cerceveyi
@@ -178,10 +195,11 @@ Target: ${host}
       'eksikligi. Tamamen pasif, saldirgan olmayan bir sifreleme denetimi.',
     priceMinorUnit: 79900,
     modelProvider: PROVIDER,
-    // 18->25: TLS denetimi cok adimli (cert + TLS1.0/1.1/1.2/1.3 probe + cipher + HSTS +
-    // rapor yazimi). Araclar artik terminal image'inda gomulu (kurulum israfi yok) ama
-    // adim sayisi yuksek; 25 dogal tamamlanmayi (rapor yazma dahil) garantiler.
-    maxToolCalls: 25,
+    // 25->40: TLS denetimi cok adimli (cert + TLS1.0/1.1/1.2/1.3 probe + cipher + HSTS +
+    // NIHAI rapor + FIX_SUGGESTIONS yazimi). 25'te ajan arastirma subtask'larinda butceyi
+    // bitirip sentez+fix subtask'ina ULASAMIYORDU (rapor ham/surec-dili, fix bos geliyordu).
+    // 40, sentez adiminin dogal tamamlanmasina alan birakir (bkz prompt: fix'i AYNI adimda yaz).
+    maxToolCalls: 40,
     promptTemplate: (host) => `
 Perform a PASSIVE SSL/TLS configuration audit against the single target below only.
 Do NOT install testssl.sh, sslyze, nmap or any other tool, and do NOT attempt any install.
