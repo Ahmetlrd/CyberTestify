@@ -3,7 +3,7 @@ import { config, validateScopeLockConfig } from './config.js';
 import * as pentagi from './pentagi/client.js';
 import { getPackageDef } from './services/scanPackages.js';
 import { generateAndStoreReport } from './services/report.js';
-import { findOutOfScope } from './services/scope.js';
+import { findOutOfScope, findForbiddenMethods } from './services/scope.js';
 import { buildActivityFeed } from './services/activityFeed.js';
 import { promoteQueued } from './services/orchestrator.js';
 import { checkEgressProxyHealth } from './services/egressHealth.js';
@@ -65,6 +65,7 @@ async function tick() {
       // izin verilen kapsam (dogrulanan hostname + cozumlenen IP'ler + referans
       // allowlist) disinda bir hedef varsa flow'u durdur (enforce) veya logla.
       let violationTarget: string | null = flow.scopeViolationTarget;
+      let forbiddenMethodHit: string | null = null;
       try {
         const logs = await pentagi.getScopeLogs(flow.pentagiFlowId);
 
@@ -72,6 +73,15 @@ async function tick() {
         // kategorilenmiş + redakte (bkz activityFeed.ts). Müşteriye bu gösterilir.
         const feed = buildActivityFeed(logs.toolCallLogs);
         await prisma.flow.update({ where: { id: flow.id }, data: { activityFeed: JSON.stringify(feed) } });
+
+        // (C) YASAK HTTP METODU — tum paketlerimiz PASIF (yalniz GET/HEAD/OPTIONS).
+        // Ajan POST/PUT/DELETE/PATCH denerse bu APACIK bir ihlaldir; HTTP metodu
+        // NET bir sinyal (yanlis-pozitif riski yok) → SCOPE_ENFORCEMENT modundan
+        // BAGIMSIZ, HER ZAMAN durdurulur (bkz asagidaki always-enforce blogu).
+        if (!pkg.networkLayer) {
+          const methods = findForbiddenMethods(logs.toolCallLogs.map((t) => t.args));
+          if (methods.length) forbiddenMethodHit = methods.join(', ');
+        }
 
         // (B) SEVIYE 3 kapsam izleme — yalnızca henüz ihlal kaydı yoksa.
         // SADECE ajanin ISTEDIGI hedefi (tool cagri ARGUMANLARI) tara; yanıt
@@ -95,6 +105,24 @@ async function tick() {
         }
       } catch (err) {
         console.error(`[worker][SCOPE/FEED] Flow ${flow.pentagiFlowId} log islenirken hata:`, err);
+      }
+
+      // YASAK METOT — HER ZAMAN ENFORCE (SCOPE_ENFORCEMENT'tan bagimsiz). Veri
+      // degistiren metot (POST/PUT/DELETE/PATCH) pasif pakette apacik ihlaldir ve
+      // metot net bir sinyaldir → monitor modunda BILE durdurulur.
+      if (forbiddenMethodHit) {
+        await pentagi
+          .stopFlow(flow.pentagiFlowId)
+          .catch((e) => console.error(`[worker] stopFlow hata (yine de durduruluyor): ${e?.message ?? e}`));
+        const target = `yasak HTTP metodu: ${forbiddenMethodHit}`;
+        await prisma.flow.update({
+          where: { id: flow.id },
+          data: { status: 'finished', finishedAt: new Date(), scopeViolationTarget: (flow.scopeViolationTarget ? flow.scopeViolationTarget + ' | ' : '') + target },
+        });
+        await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scope_violation' } });
+        await recordScheduleOutcome(flow.order.scheduledScanId, false);
+        console.error(`[POLICY-VIOLATION] Flow ${flow.pentagiFlowId} order ${flow.orderId} — ${target} tespit edildi, tarama DURDURULDU (always-enforce).`);
+        continue; // rapor URETME
       }
 
       // ENFORCE — try/catch DISINDA olmali: stopFlow HATA verse bile rapor

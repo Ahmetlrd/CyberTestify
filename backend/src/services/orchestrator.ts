@@ -103,7 +103,18 @@ export async function startScanForOrder(orderId: string) {
     order.locale === 'en'
       ? '\n\nIMPORTANT — LANGUAGE: Write the ENTIRE report, all findings and all fix suggestions in ENGLISH.'
       : '\n\nONEMLI — DIL: Raporun tamamini, tum bulgulari ve cozum onerilerini TURKCE yaz.';
-  const prompt = pkg.promptTemplate(order.domain.hostname) + langLine;
+
+  // (2) SOMUT butce esigi. "Yaklasik yari" gibi goreceli ifade ise yaramiyordu
+  // (ajan tool-call sayacini bilmiyor). Net sayi ver: butcenin ~%55'inde kesfi
+  // birak, kalanini rapor yazmaya ayir. Boylece tavana carpmadan ONCE rapor uretilir.
+  const budget = pkg.maxToolCalls;
+  const stopAt = Math.max(3, Math.floor(budget * 0.55));
+  const budgetLine =
+    order.locale === 'en'
+      ? `\n\nTOOL-CALL BUDGET: You have at most ${budget} tool calls. After about the ${stopAt}th call, STOP all new exploration and START writing the report (findings + '===FIX_SUGGESTIONS===' if any). Never hit the limit with an empty report.`
+      : `\n\nARAC CAGRI BUTCESI: En fazla ${budget} arac cagrin var. Yaklasik ${stopAt}. cagridan sonra TUM yeni kesfi DURDUR ve raporu (bulgular + varsa '===FIX_SUGGESTIONS===') YAZMAYA BASLA. Tavana bos raporla carpma.`;
+
+  const prompt = pkg.promptTemplate(order.domain.hostname) + langLine + budgetLine;
   const modelProvider = pkg.modelProvider;
 
   // YARIS-GUVENLI concurrency=1: PentAGI'yi cagirmadan ONCE 'running' slotunu

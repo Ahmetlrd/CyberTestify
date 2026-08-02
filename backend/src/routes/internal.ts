@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
+import { getPackageDef } from '../services/scanPackages.js';
 
 /** Sabit-zamanli sir karsilastirmasi (timing attack'a karsi). */
 function secretMatches(provided: string | undefined): boolean {
@@ -33,11 +34,20 @@ internalRouter.use((req, res, next) => {
 internalRouter.get('/active-scope', async (_req, res) => {
   const flow = await prisma.flow.findFirst({
     where: { status: 'running' },
-    include: { order: { include: { domain: true } } },
+    include: { order: { include: { domain: true, package: true } } },
     orderBy: { startedAt: 'desc' },
   });
   if (!flow) return res.json({ active: false, allowlist: config.scopeAllowlist });
   const ips = (flow.order.domain.resolvedIps ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  // Pasif paket (networkLayer degil) → proxy, veri degistiren HTTP metotlarini
+  // (POST/PUT/DELETE/PATCH) DUZ HTTP'de reddeder (defense-in-depth; HTTPS tunelde
+  // metot gorunmez, o yuzden asil enforce worker'daki tool-call tespitindedir).
+  let passiveOnly = true;
+  try {
+    passiveOnly = !getPackageDef(flow.order.package.key).networkLayer;
+  } catch {
+    passiveOnly = true; // bilinmeyen paket → guvenli taraf
+  }
   res.json({
     active: true,
     flowId: flow.id,
@@ -45,6 +55,7 @@ internalRouter.get('/active-scope', async (_req, res) => {
     hostname: flow.order.domain.hostname,
     ips,
     allowlist: config.scopeAllowlist,
+    passiveOnly,
   });
 });
 

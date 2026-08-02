@@ -82,3 +82,30 @@ export function findOutOfScope(texts: Array<string | null | undefined>, scope: S
   }
   return [...out];
 }
+
+/**
+ * Tool-call argumanlarindan YASAK HTTP metodu (POST/PUT/DELETE/PATCH) girisimlerini
+ * tespit eder. Tum paketlerimiz PASIF (yalniz GET/HEAD/OPTIONS); veri degistiren
+ * metot apacik bir ihlaldir. HTTP metodu NET bir sinyal (sayfa icindeki URL gecisi
+ * gibi belirsiz degil) → yanlis-pozitif riski dusuk, ENFORCE edilebilir. Sadece
+ * kesin desenlere bakariz (curl -X/-d, "method":"POST", ham istek satiri); "post"
+ * kelimesinin URL icinde gecmesi (or. /wp/v2/posts) tetiklemez.
+ */
+const FORBIDDEN_METHODS = ['POST', 'PUT', 'DELETE', 'PATCH'];
+export function findForbiddenMethods(texts: Array<string | null | undefined>): string[] {
+  const hits = new Set<string>();
+  for (const t of texts) {
+    if (!t) continue;
+    for (const m of FORBIDDEN_METHODS) {
+      // curl -X POST | -XPOST | --request POST | --method POST
+      if (new RegExp(`-X\\s*['"]?${m}\\b|--request\\s+['"]?${m}\\b|--method\\s+['"]?${m}\\b`, 'i').test(t)) hits.add(m);
+      // JSON gövdesi: "method":"POST"
+      if (new RegExp(`["']method["']\\s*:\\s*["']${m}["']`, 'i').test(t)) hits.add(m);
+      // Ham HTTP istek satiri: POST /path HTTP/1.1
+      if (new RegExp(`\\b${m}\\s+/\\S*\\s+HTTP/`, 'i').test(t)) hits.add(m);
+    }
+    // curl'de veri gonderen bayraklar POST'u zorlar (-d/--data.../-F/--form).
+    if (/curl/i.test(t) && /(^|\s)(-d|--data(-raw|-binary|-urlencode)?|-F|--form)(\s|=)/i.test(t)) hits.add('POST');
+  }
+  return [...hits];
+}

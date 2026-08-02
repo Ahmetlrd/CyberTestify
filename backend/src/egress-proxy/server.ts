@@ -28,7 +28,11 @@ interface ActiveScope {
   hostname?: string;
   ips?: string[];
   allowlist: string[];
+  passiveOnly?: boolean;
 }
+
+// Pasif paketlerde izin verilen (veri DEGISTIRMEYEN) HTTP metotlari.
+const PASSIVE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 // Aktif kapsami backend'ten cek, kisa TTL ile cache'le (istek basina DB'ye gitme).
 let cache: { at: number; scope: ActiveScope } | null = null;
@@ -96,6 +100,19 @@ server.on('request', async (req, res) => {
     return;
   }
   const host = target.hostname;
+
+  // METOT FILTRESI (defense-in-depth): pasif pakette veri degistiren HTTP metodu
+  // (POST/PUT/DELETE/PATCH...) DUZ HTTP'de reddedilir. NOT: HTTPS CONNECT tunelinde
+  // metot sifrelidir, gorunmez → orada asil enforce worker'daki tool-call tespitidir.
+  const activeScope = await getActiveScope();
+  const method = (req.method ?? 'GET').toUpperCase();
+  if (activeScope.passiveOnly !== false && !PASSIVE_METHODS.has(method)) {
+    auditBlock(`forbidden-method:${method} ${host}`);
+    console.warn(`[egress-proxy][BLOCK] Yasak HTTP metodu (pasif paket): ${method} ${host}`);
+    res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8', allow: 'GET, HEAD, OPTIONS' });
+    res.end('Pasif tarama: yalnizca GET/HEAD/OPTIONS izinli (egress policy).');
+    return;
+  }
 
   if (!(await allowed(host))) {
     auditBlock(host);
