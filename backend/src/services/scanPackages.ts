@@ -82,7 +82,13 @@ ANY data-modifying/writing request. Use ONLY GET/HEAD/OPTIONS; POST/PUT/DELETE/P
 are prohibited AND technically blocked: a single such attempt is a policy violation
 that IMMEDIATELY TERMINATES this scan with NO report. Also forbidden: load/stress/DoS
 and accessing ANY target other than the specified host. Stay at the HOSTNAME/application
-layer (not IP/port) to be safe on shared hosting. When in doubt, SKIP that step.`.trim();
+layer (not IP/port) to be safe on shared hosting. When in doubt, SKIP that step.
+NO INSTALLS: do NOT install or attempt to install ANY tool/package (no apt/apt-get,
+pip/pip3, npm, go install, git clone of tools, curl|bash, downloading binaries, etc.).
+Use ONLY tools already present in the container (curl, wget, openssl, dig, nslookup, host,
+python3 stdlib). If a specialized tool is missing, do NOT install it — use a standard tool
+already available or SKIP that specific check and note it as "not reviewed (tool
+unavailable)". Spending your tool-call budget on setup/installation is FORBIDDEN.`.trim();
 
 const BUDGET_GUARD_EN = `
 COMPLETION RULE (very important): Your tool-call budget is limited. Once you reach
@@ -113,7 +119,12 @@ KRITIK — veri degistiren/yazan HERHANGI bir istek. YALNIZCA GET/HEAD/OPTIONS k
 POST/PUT/DELETE/PATCH yasaktir VE teknik olarak engellidir: tek bir deneme bile
 taramayi RAPORSUZ sonlandirir. Ayrica yuk/stres/DoS ve belirtilen host disindaki
 hedeflere erisim yasaktir. Paylasimli hosting'e karsi IP/port degil HOSTNAME/uygulama
-katmaninda kal. Suphedeysen o adimi ATLA.`.trim();
+katmaninda kal. Suphedeysen o adimi ATLA.
+KURULUM YOK: Gorev icin HICBIR arac/paket kurma veya kurmayi DENEME (apt/apt-get, pip/pip3,
+npm, git clone, curl|bash, ikili indirme vb.). YALNIZCA container'da HAZIR bulunan standart
+araclarla (curl, wget, openssl, dig, nslookup, host, python3 stdlib) calis. Eksik ozel arac
+varsa KURMA — standart bir aracla yap ya da o kontrolu ATLA ("incelenmedi (arac yok)" notu
+dus). Butceyi kuruluma harcamak YASAK.`.trim();
 
 const BUDGET_GUARD_TR = `
 TAMAMLAMA KURALI: Arac cagri butcen sinirli. Butcenin yaklasik yarisinda YENI kesif
@@ -170,12 +181,17 @@ Target: ${host}
     maxToolCalls: 18,
     promptTemplate: (host) => `
 Perform a PASSIVE SSL/TLS configuration audit against the single target below only.
-Using tools like testssl.sh / sslyze / openssl if available, otherwise by observing the
-TLS handshake manually, evaluate:
+Do NOT install testssl.sh, sslyze, nmap or any other tool, and do NOT attempt any install.
+Use ONLY tools ALREADY present in the container — primarily "openssl s_client" and
+"curl -Iv" — to observe the TLS handshake and evaluate:
 - Certificate: validity, expiry date, chain/CA, hostname match
-- Supported protocols (whether legacy TLS 1.0/1.1 are enabled)
-- Weak/outdated cipher suites
-- Presence and duration of the HSTS header
+  (e.g. "echo | openssl s_client -connect ${host}:443 -servername ${host}" then read the cert)
+- Supported protocols: probe legacy versions with "openssl s_client -connect ${host}:443
+  -tls1_1" / "-tls1" and see whether the handshake succeeds
+- Weak/outdated cipher suites (from the negotiated cipher and any suites you can observe)
+- Presence and duration of the HSTS header (from "curl -Iv https://${host}")
+If a specific check cannot be done with these pre-installed tools, SKIP it and note "not
+reviewed (tool unavailable)" — NEVER install anything.
 ${SAFETY_EN}
 ${BUDGET_GUARD_EN}
 ${FIX_SUGGESTIONS_STEP_EN}
@@ -249,7 +265,9 @@ Target: ${host}
     maxToolCalls: 25,
     promptTemplate: (host) => `
 Perform PASSIVE fingerprinting and known-vulnerability DETECTION against the single
-target below (whatweb / wappalyzer style passive observation + version hints on public pages):
+target below. Do NOT install whatweb, wappalyzer, nmap or any scanner — observe using ONLY
+"curl"/GET on public pages: inspect response headers, HTML <meta generator> tags, script/asset
+paths, and well-known version files (e.g. /readme.html, /CHANGELOG.txt) already reachable:
 - Which CMS/framework is running (WordPress, Joomla, Drupal, Laravel, etc.)?
 - Detectable version information
 - KNOWN CVEs for that version(s) (mapping/reporting ONLY)
@@ -314,6 +332,10 @@ Target: ${host}
     priceMinorUnit: 199900,
     modelProvider: PROVIDER,
     maxToolCalls: 45,
+    // GECICI GIZLI (2026-08-02): canli testte collectFindings() kok hatasi bu pakette
+    // de gorundu (rapor = subtask ATAMA metni, completion DEGIL). Kok duzeltme (report.ts)
+    // dogrulanip test edilince tekrar true yapilacak (bkz HANDOFF).
+    available: false,
     // ISTISNA: Turk hukuku terminolojisi — bu promptTemplate TURKCE kalir (Turkce
     // sabitleri kullanir). Yalniz TR bolgesinde gosterilir.
     promptTemplate: (host) => `
