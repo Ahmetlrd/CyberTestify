@@ -79,7 +79,8 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
     try {
       const blob = await api.downloadReport(params.orderId, accessSecret);
       setUnlocked(true);
-      downloadBlob(blob, `rapor-${params.orderId}.md`);
+      // Rapor artik PDF olarak uretiliyor (bkz backend reports.ts /download).
+      downloadBlob(blob, `cybertestify-rapor-${params.orderId}.pdf`);
     } catch (err: any) {
       setError(err.message);
     }
