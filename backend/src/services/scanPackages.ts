@@ -105,6 +105,17 @@ DUZELTME (remediation) onerisi yaz — gerektiginde GUVENLI config/kod ornegiyle
 MUTLAK KURAL: bu bolum SADECE duzeltme icindir; ASLA calistirilabilir istismar/exploit
 kodu, saldiri payload'u veya araci ICERMEZ. Hic bulgu yoksa delimiter'i yazma.`.trim();
 
+// HAZIRLIK paketleri (pci/kvkk/iso27001) icin ODAK kisiti. Onceki canli testte ajan,
+// standardin KENDISINI internette arastirip (linkedin/wikipedia/nist gezip) butceyi
+// tuketti ve HEDEF hakkinda gercek bulgu uretemedi. Cozum: standardi arastirmayi
+// yasakla, butceyi yalnizca HEDEFI pasif incelemeye harcat.
+const HAZIRLIK_FOCUS = `
+ODAK KURALI: Ilgili standardin/mevzuatin maddelerini ZATEN BILIYORSUN. Standardi,
+cerceveyi veya kontrol listesini internette ARASTIRMA; referans/blog/wiki sitelerini
+GEZME (bu hem butce israfi hem kapsam disidir). Butcenin TAMAMINI yalnizca HEDEFI
+pasif inceleyip gozlemlerini ilgili maddelerle eslemeye harca. Arastirma degil,
+HEDEF DEGERLENDIRMESI yap.`.trim();
+
 export const SCAN_PACKAGES: ScanPackageDef[] = [
   {
     key: 'basit_tarama',
@@ -260,6 +271,7 @@ Hedef: ${host}
 Yalnizca asagidaki TEK hedefe karsi PASIF bir "PCI-DSS HAZIRLIK ON-DEGERLENDIRMESI"
 yap. Bu RESMI bir PCI ASV taramasi veya sizma testi DEGILDIR; amac disaridan
 gozlemlenebilen kontrolleri ilgili PCI-DSS maddeleriyle eslestirmek.
+${HAZIRLIK_FOCUS}
 
 Sadece normal GET istekleriyle sunlari kontrol edip PCI maddesine esle:
 - TLS surumu/cipher/sertifika -> Req 4.2.1 (aktarimda guclu sifreleme)
@@ -293,6 +305,7 @@ Hedef: ${host}
 Yalnizca asagidaki TEK hedefin HERKESE ACIK sayfalarini PASIF gozlemleyerek bir
 "KVKK ON UYUM KONTROLU" yap. Bu HUKUKI DANISMANLIK DEGILDIR; amac disaridan
 gorulebilen eksikleri KVKK ilkeleriyle eslestirmek.
+${HAZIRLIK_FOCUS}
 
 Sadece normal GET ile gozlemle:
 - Aydinlatma metni / Gizlilik politikasi sayfasi var mi, erisilebilir mi?
@@ -327,6 +340,7 @@ Hedef: ${host}
 Yalnizca asagidaki TEK hedefe karsi PASIF gozlemle, disaridan gorulebilen teknik
 kontrolleri ISO/IEC 27001 Ek-A ile eslestiren bir "HAZIRLIK KONTROL LISTESI" cikar.
 Bu RESMI bir sertifikasyon denetimi DEGILDIR.
+${HAZIRLIK_FOCUS}
 
 Gozlemler ve eslesme ornekleri:
 - TLS/sifreleme, guvenli aktarim -> A.8 (kriptografi/iletisim guvenligi)
