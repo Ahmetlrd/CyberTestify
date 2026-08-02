@@ -457,6 +457,14 @@ Tüm paketler PASİF (yalnız GET/HEAD/OPTIONS). Ajan POST/PUT/DELETE/PATCH dene
 - **Prompt:** POST yasağı SONUCUYLA güçlendirildi ("bir deneme taramayı raporsuz
   sonlandırır") → ajan denemekten caydırılır (savunma katmanı, garanti değil).
 
+**KARAR (2026-08-02):** Canlı testte iso27001 ajanı güçlendirilmiş prompta RAĞMEN
+ısrarla POST deniyor → tarama güvenlik gereği durup rapor üretmiyor. Bu yüzden:
+- **iso27001 + pci GEÇİCİ olarak menüden gizlendi** (`scanPackages available:false`;
+  packages listesinde yok + createOrder/createSchedule reddeder). Şu an satılmıyorlar.
+- **Kalıcı çözüm:** PentAGI **tool-level GET-only** patch'i (ajan POST'u FİZİKSEL
+  yapamasın) — ayrı görev, plan `PATCHES.md`'de. Doğrulanınca iki paket tekrar açılır.
+- **worker strict-halt KALICI:** GET-only patch gelse bile defense-in-depth olarak durur.
+
 ## Boş rapor + iç prompt dili (2026-08-02)
 - **Somut bütçe eşiği:** orchestrator, `pkg.maxToolCalls`'a göre "~%55'inde keşfi bırak,
   raporu yaz" talimatı ekler ("yaklaşık yarı" göreceli ifadesi işe yaramıyordu).
