@@ -560,3 +560,15 @@ gösterilmez. **SAF RENDER — ek LLM/Anthropic maliyeti YOK.** Chromium backend
 gömüldü (Dockerfile: chromium+fontlar, PUPPETEER_SKIP_DOWNLOAD). Aynı accessSecret'lı
 şifreli teslimat korundu. Örnek: gerçek ssl_tls raporundan 5 sayfalık PDF üretilip görsel
 doğrulandı.
+
+## Rapor sunum kalitesi + FIX_SUGGESTIONS guvenilirligi (2026-08-02, ek)
+Kok neden (ikisi ortak): ajan isi COK subtask'a boluyor (arastir -> siniflandir -> NIHAI rapor+FIX
+yaz); butce son SENTEZ subtask'ina yetmiyor (flow35: subtask 319 "Nihai Rapor ve FIX_SUGGESTIONS"
+status=created/bos). collectFindings da ham arastirma subtask'larini topluyordu (surec dili) + fix hic
+yoktu. Duzeltme: (1) BUDGET_GUARD/FIX_SUGGESTIONS promptlari (EN+TR) — tek temiz musteri raporu,
+surec-dili yasak, fix'i AYNI adimda yaz, ayri gec subtask'a birakma. (2) collectFindings: FIX_SUGGESTIONS
+delimiter'i iceren SENTEZ-subtask varsa YALNIZ onu al (ham subtask'lari eleme) + stripProcessLanguage
+guvenlik agi. (3) ssl_tls cap 25->40 (sentez adimina alan). Canli kanit (flow 39): subtask 370 "nihai
+rapor+FIX" calisti, incomplete=false, has_fix=TRUE, surec-dili YOK, 7 sayfa temiz PDF + 6 somut fix.
+PDF: bos "Ekran Goruntuleri" bolumu kaldirildi + "Genel Degerlendirme" ozeti (siddetten risk seviyesi;
+negasyon-farkinda: "KRITIK: yok" false-positive uretmez; ek LLM YOK). Frontend rapor indirme .md->.pdf.
