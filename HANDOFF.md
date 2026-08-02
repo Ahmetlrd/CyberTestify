@@ -493,6 +493,26 @@ Tüm paketler PASİF (yalnız GET/HEAD/OPTIONS). Ajan POST/PUT/DELETE/PATCH dene
   header_leak gibi DAR/GET-only'ye indir (guvenilir ama daha ince rapor), (b) bu
   paketler icin web-arama tool'larini kapat, (c) tavani cok yukselt. Karar bekleniyor.
 
+## İki yeni pasif paket eklendi: cors_cookie + csp_analiz (2026-08-02)
+- **cors_cookie** ("CORS & Çerez Güvenliği") + **csp_analiz** ("CSP Analizi") —
+  `scanPackages.ts`'e eklendi. header_leak stili: dar/deterministik, İngilizce iç prompt,
+  SAFETY_EN/BUDGET_GUARD_EN/FIX_SUGGESTIONS_STEP_EN, `networkLayer:false`,
+  `available:true`, **TR+EN** menüde. Schema enum (`ScanPackageKey`) + migration
+  `20260802130000_cors_csp_packages` + PACKAGE_I18N EN + pricing.ts ESTIMATED (us/ae) +
+  orders/schedules zod enum. Frontend menü dinamik → otomatik gösterir (kod değişmedi).
+- **🟡 FİYAT PLACEHOLDER — VEDAT ONAYI BEKLENİYOR:** ikisi de `priceMinorUnit: 79900`
+  (**799,00 TL**, header_leak seviyesi) + us $29 / ae 109 AED tahmini. Nihai fiyat
+  Vedat tarafından netleştirilecek (pricing.ts ESTIMATED + scanPackages.priceMinorUnit).
+- **maxToolCalls: 25** (ilk deneme 18'di → flow soft-cap'e takılıp doğal bitmeden
+  `incomplete=true` boş rapor üretti; iso27001'le AYNI yapısal sorun). 25'e çıkarıldı +
+  CORS prompt daraltıldı → canlı test: flow **22/25 ile DOĞAL bitti**, rapor
+  **`incomplete=false`** (blob 4202 byte, gerçek içerik). csp_analiz ayrı test edilmedi
+  (maliyet kuralı: iki paket çok benzer, csp daha hafif → cors bitiyorsa csp de biter).
+- **⚠️ Bilinen not (zararsız):** CORS prompt reflection testi için `Origin: https://probe.example`
+  header'ı yollar; scope-monitor bunu her taramada `SCOPE-VIOLATION ... probe.example (mod=monitor)`
+  diye LOGLAR (yalnız log, halt YOK). `.example` rezerve TLD, çözümlenemez/egress'e çıkamaz.
+  SCOPE_ENFORCEMENT ileride `enforce`'a alınırsa cors_cookie için allowlist gerekebilir.
+
 ## Kapsam dışı (sıradaki görevler)
 Gerçek iyzico/stripe ödeme + recurring billing + fix-önerisi ek-ödemesi, gerçek
 e-Arşiv/US/AE fatura, US/AE + GDPR/CCPA hukuki metinler/paketler + fiyat
