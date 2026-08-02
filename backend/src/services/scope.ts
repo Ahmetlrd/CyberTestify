@@ -92,10 +92,31 @@ export function findOutOfScope(texts: Array<string | null | undefined>, scope: S
  * kelimesinin URL icinde gecmesi (or. /wp/v2/posts) tetiklemez.
  */
 const FORBIDDEN_METHODS = ['POST', 'PUT', 'DELETE', 'PATCH'];
-export function findForbiddenMethods(texts: Array<string | null | undefined>): string[] {
+
+// GET-only guard'in (passive_guard.go) tool sonucundaki imzasi. Guard bir komutu
+// TOOL SEVIYESINDE reddettiyse bu ibare result'ta gorunur → o deneme ZATEN
+// engellendi, worker'in AYRICA flow'u durdurmasina gerek yok (ajan GET ile devam
+// edip raporu tamamlayabilsin). worker strict-halt YALNIZ guard'i ATLATAN (result'ta
+// bu imza OLMAYAN, ama gerceklesmis) bir POST icin devreye girer (defense-in-depth).
+const GUARD_BLOCK_MARKER = /passive scan policy|blocked at tool level/i;
+
+/**
+ * Guard tarafindan ENGELLENMEMIS (yani gerceklesmis olabilecek) yasak-metot
+ * girisimlerini dondurur. items: tool-call {args, result}. Bir cagrida args yasak
+ * metot iceriyor VE result guard-imzasi ICERMIYOR VE result BOS DEGIL (yani calisti)
+ * ise ihlal sayilir. result bos ise (henuz sonuc yok) su an atlanir (yaris onleme).
+ */
+export function findForbiddenMethods(
+  items: Array<{ args: string | null | undefined; result?: string | null }>,
+): string[] {
   const hits = new Set<string>();
-  for (const t of texts) {
+  for (const it of items) {
+    const t = it.args;
     if (!t) continue;
+    // Guard bu denemeyi zaten engellemis → gormezden gel (ajan toparlanabilir).
+    if (it.result && GUARD_BLOCK_MARKER.test(it.result)) continue;
+    // result henuz yok → guard sonucu olusmamis olabilir; su tick'te halt etme.
+    if (!it.result) continue;
     for (const m of FORBIDDEN_METHODS) {
       // curl -X POST | -XPOST | --request POST | --method POST
       if (new RegExp(`-X\\s*['"]?${m}\\b|--request\\s+['"]?${m}\\b|--method\\s+['"]?${m}\\b`, 'i').test(t)) hits.add(m);

@@ -78,8 +78,14 @@ async function tick() {
         // Ajan POST/PUT/DELETE/PATCH denerse bu APACIK bir ihlaldir; HTTP metodu
         // NET bir sinyal (yanlis-pozitif riski yok) → SCOPE_ENFORCEMENT modundan
         // BAGIMSIZ, HER ZAMAN durdurulur (bkz asagidaki always-enforce blogu).
+        // GET-only guard (passive_guard.go) POST'u ARAC SEVIYESINDE zaten engelliyor;
+        // burada worker YALNIZ guard'i ATLATAN (result'ta guard imzasi olmayan,
+        // gerceklesmis) bir yasak-metot icin halt eder (defense-in-depth). Guard'in
+        // blokladigi denemeler gormezden gelinir → ajan GET ile devam edip raporu bitirir.
         if (!pkg.networkLayer) {
-          const methods = findForbiddenMethods(logs.toolCallLogs.map((t) => t.args));
+          const methods = findForbiddenMethods(
+            logs.toolCallLogs.map((t) => ({ args: t.args, result: t.result })),
+          );
           if (methods.length) forbiddenMethodHit = methods.join(', ');
         }
 
