@@ -56,6 +56,8 @@ const createOrderSchema = z.object({
     'pci_hazirlik',
     'kvkk_hazirlik',
     'iso27001_hazirlik',
+    'cors_cookie',
+    'csp_analiz',
   ]),
   // Pentest yetkilendirmesi (TCK 243 hukuka uygunluk) — true olmadan siparis yok.
   ownershipConfirmed: z.literal(true, {

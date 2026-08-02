@@ -18,6 +18,8 @@ const ESTIMATED: Record<string, { us: number; ae: number }> = {
   pci_hazirlik: { us: 9900, ae: 36900 },
   kvkk_hazirlik: { us: 7900, ae: 29900 },
   iso27001_hazirlik: { us: 11900, ae: 43900 },
+  cors_cookie: { us: 2900, ae: 10900 }, // PLACEHOLDER (header_leak seviyesi)
+  csp_analiz: { us: 2900, ae: 10900 }, // PLACEHOLDER (header_leak seviyesi)
 };
 
 // [packageKey][region] -> amountMinorUnit. Seed bu haritadan PackagePricing yazar.

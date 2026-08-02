@@ -23,7 +23,9 @@ export interface ScanPackageDef {
     | 'cms_cve'
     | 'pci_hazirlik'
     | 'kvkk_hazirlik'
-    | 'iso27001_hazirlik';
+    | 'iso27001_hazirlik'
+    | 'cors_cookie'
+    | 'csp_analiz';
   displayName: string;
   description: string;
   priceMinorUnit: number; // kurus
@@ -57,6 +59,8 @@ const PACKAGE_I18N: Partial<Record<ScanPackageDef['key'], { displayName: string;
   cms_cve: { displayName: 'CMS & Known-CVE Scan', description: 'CMS/framework fingerprinting, version detection and known-CVE mapping. DETECTION ONLY — no exploit is attempted.' },
   pci_hazirlik: { displayName: 'PCI-DSS Readiness Pre-Assessment', description: 'A passive readiness report mapping your external surface (TLS, headers, exposed files, known version issues, cookie/session security) to PCI-DSS requirements. NOT an official ASV/QSA test.' },
   iso27001_hazirlik: { displayName: 'ISO 27001 Readiness Checklist', description: 'A passive readiness report mapping externally observable technical controls to ISO 27001 Annex A. NOT an official certification/audit.' },
+  cors_cookie: { displayName: 'CORS & Cookie Security', description: 'Passive check of CORS headers (risky Access-Control-Allow-Origin patterns, credentials combo) and cookie flags (Secure/HttpOnly/SameSite). Fully passive.' },
+  csp_analiz: { displayName: 'CSP (Content Security Policy) Analysis', description: 'Passive analysis of the Content-Security-Policy header: presence, weakening directives (unsafe-inline/unsafe-eval), missing default-src. Fully passive.' },
 };
 
 // kvkk_hazirlik EN sozlukte YOK — global menude gosterilmez (bkz orders.ts filtresi).
@@ -370,6 +374,73 @@ ${FIX_SUGGESTIONS_STEP_EN}
 Output (Markdown table): "Annex A Clause | Observation | Status | Recommendation". End note:
 "Not an official ISO 27001 audit/certification; ISMS scope, documentation and internal
 processes are OUT OF SCOPE."
+
+Target: ${host}
+`.trim(),
+  },
+  {
+    key: 'cors_cookie',
+    displayName: 'CORS & Çerez Güvenliği',
+    description:
+      'Access-Control-Allow-Origin degeri (*/yansitilan origin gibi riskli desenler), ' +
+      'credentials ile birlikte kullanimi ve cerez bayraklari (Secure/HttpOnly/SameSite) ' +
+      'eksikligi. Tamamen pasif, saldirgan olmayan bir kontrol.',
+    priceMinorUnit: 79900, // 799,00 TRY — PLACEHOLDER (Vedat onayi bekleniyor)
+    modelProvider: PROVIDER,
+    maxToolCalls: 18,
+    available: true,
+    promptTemplate: (host) => `
+Run a PASSIVE, NARROW check of CORS and cookie security on the SINGLE target below. Use
+GET/HEAD only; do NOT use web search, do NOT browse other sites, do NOT open subtasks.
+
+Check ONLY ${host}:
+1. CORS: Send a normal GET (you may include an "Origin: https://example.org" request header
+   to probe reflection). Inspect the response headers: Is "Access-Control-Allow-Origin"
+   present? Is its value "*" or does it REFLECT the supplied Origin (risky)? Is
+   "Access-Control-Allow-Credentials: true" combined with a permissive/reflected origin
+   (HIGH risk)?
+2. Cookies: For every "Set-Cookie" response header, check the "Secure", "HttpOnly" and
+   "SameSite" attributes. List which flags are MISSING per cookie.
+
+After these checks, immediately WRITE the report and FINISH. Nothing else.
+${SAFETY_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown): CORS findings + per-cookie missing flags, each with severity and a
+concrete recommendation.
+
+Target: ${host}
+`.trim(),
+  },
+  {
+    key: 'csp_analiz',
+    displayName: 'CSP (İçerik Güvenlik Politikası) Analizi',
+    description:
+      'Content-Security-Policy basligi var mi; unsafe-inline/unsafe-eval gibi zayiflatici ' +
+      'direktifler, default-src tanimli mi, eksik/zayif yapilandirma. Tamamen pasif.',
+    priceMinorUnit: 79900, // 799,00 TRY — PLACEHOLDER (Vedat onayi bekleniyor)
+    modelProvider: PROVIDER,
+    maxToolCalls: 18,
+    available: true,
+    promptTemplate: (host) => `
+Run a PASSIVE, NARROW analysis of the Content-Security-Policy (CSP) of the SINGLE target
+below. Use GET/HEAD only; do NOT use web search, do NOT browse other sites, do NOT open subtasks.
+
+Check ONLY ${host} (homepage GET):
+1. Is a "Content-Security-Policy" response header present (also check a CSP <meta http-equiv>
+   tag in the homepage HTML)?
+2. If present: does it define "default-src"? Does it contain weakening directives such as
+   "unsafe-inline" or "unsafe-eval"? Are any sources overly broad (e.g., "*" or bare "http:")?
+3. If absent: note that no CSP is enforced (clickjacking/XSS mitigation gap).
+
+After these checks, immediately WRITE the report and FINISH. Nothing else.
+${SAFETY_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown): CSP presence, weak/missing directives, and concrete hardening
+recommendations (example CSP).
 
 Target: ${host}
 `.trim(),
