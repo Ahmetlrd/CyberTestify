@@ -7,33 +7,48 @@ import { FIX_SUGGESTIONS_DELIM } from './scanPackages.js';
 type Locale = 'tr' | 'en';
 
 /**
- * Gorev sonuclarindan "cozum onerileri" bolumunu ayirir. Ajan, bulgulari yazdiktan
- * sonra FIX_SUGGESTIONS_DELIM satirini yazip altina duzeltmeleri koyar. Delimiter'in
- * ONCESI bulgu (ana rapor), SONRASI cozum onerisi (ayri/kilitli alan).
+ * Ajanin bulgularini toplar. PentAGI iki yerde tutabilir:
+ *  (a) tamamlanan task'in `result`'i — ajan gorevi DOGAL tamamlarsa dolu;
+ *  (b) messageLogs type='report' / 'done' — tavana carpsa BILE uretilir.
+ * Onceligimiz (a); yoksa (b). Boylece tool-call tavanina carpan (task.result bos)
+ * bir tarama bile ELINDEKI bulgularla gelir — asla bos rapor teslim edilmez.
  */
-function splitFixSuggestions(tasks: pentagi.FlowLogs['tasks']): {
-  findingTasks: pentagi.FlowLogs['tasks'];
-  fixText: string;
-} {
-  let fix = '';
-  const findingTasks = tasks.map((t) => {
-    const r = t.result ?? '';
-    const idx = r.indexOf(FIX_SUGGESTIONS_DELIM);
-    if (idx === -1) return t;
-    fix += r.slice(idx + FIX_SUGGESTIONS_DELIM.length).trim() + '\n\n';
-    return { ...t, result: r.slice(0, idx).trim() };
-  });
-  return { findingTasks, fixText: fix.trim() };
+function collectFindings(logs: pentagi.FlowLogs): string {
+  const taskText = logs.tasks
+    .filter((t) => (t.result ?? '').trim().length > 0)
+    .map((t) => `### ${t.title}\n\n${(t.result ?? '').trim()}`)
+    .join('\n\n---\n\n');
+  if (taskText.trim()) return taskText;
+
+  const reportText = logs.messageLogs
+    .filter((m) => m.type === 'report')
+    .map((m) => (m.message ?? '').trim())
+    .filter(Boolean)
+    .join('\n\n');
+  if (reportText.trim()) return reportText;
+
+  return logs.messageLogs
+    .filter((m) => m.type === 'done')
+    .map((m) => (m.message ?? '').trim())
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+}
+
+/** Bulgulardan "cozum onerileri" bolumunu (delimiter sonrasi) ayirir. */
+function splitFixSuggestions(text: string): { findings: string; fixText: string } {
+  const idx = text.indexOf(FIX_SUGGESTIONS_DELIM);
+  if (idx === -1) return { findings: text.trim(), fixText: '' };
+  return {
+    findings: text.slice(0, idx).trim(),
+    fixText: text.slice(idx + FIX_SUGGESTIONS_DELIM.length).trim(),
+  };
 }
 
 /**
  * Flow tamamlandiginda cagrilir (worker.ts). Ham loglari PentAGI'den ceker,
  * okunabilir bir Markdown rapor haline getirir, musteriye ozel bir erisim
  * sifresiyle sifreler ve PentAGI tarafindaki ham veriyi siler.
- *
- * DONUS DEGERI icindeki accessSecret SADECE BURADA, bir kereligine
- * gorunur — cagiran kod (worker.ts) bunu veritabanina YAZMADAN dogrudan
- * musteriye e-posta ile gondermeli (rapor indirme linkinden ayri bir kanal).
  */
 export async function generateAndStoreReport(flowId: string) {
   const flow = await prisma.flow.findUniqueOrThrow({
@@ -45,24 +60,21 @@ export async function generateAndStoreReport(flowId: string) {
   const locale: Locale = flow.order.locale === 'en' ? 'en' : 'tr';
 
   // (3) Cozum onerilerini bulgulardan AYIR (ayni akista uretildi, ekstra maliyet yok).
-  const { findingTasks, fixText } = splitFixSuggestions(logs.tasks);
+  const { findings, fixText } = splitFixSuggestions(collectFindings(logs));
 
-  // KENDI TARAFIMIZDA veri minimizasyonu: bulgu kaniti (evidence) olarak sunulan
-  // ham veride sizmis yapisal kisisel veriyi (email/telefon/TCKN/kart/IBAN)
-  // sifreli DB'mize yazmadan ONCE maskele. Musteri "su endpoint'te veri sizintisi
-  // var" bulgusunu gorur ama sizan ham PII bizde tam haliyle SAKLANMAZ. (Ayni
-  // mantik PentAGI Go tarafinda veri Anthropic'e gitmeden de uygulanir — PATCHES.md.)
-  const markdown = redactAll(
-    renderReportMarkdown(flow.order.domain.hostname, flow.order.package.displayName, { ...logs, tasks: findingTasks }, locale),
-  );
-  // EKSIK RAPOR TESPITI: tarama erken durdurulduysa/coktuyse rapor bos/eksik olur.
-  // Sonucu (result) dolu en az bir gorev yoksa raporu "eksik" isaretle → musteriye
-  // panelde acik uyari gosterilir (kimse "raporunuz hazir" deyip bos rapor almasin).
-  const completedTasks = findingTasks.filter((t) => (t.result ?? '').trim().length > 0);
-  const incomplete = completedTasks.length === 0;
+  // EKSIK RAPOR TESPITI: hicbir kaynakta (task.result / report / done) icerik yoksa
+  // rapor gercekten bostur → "eksik" isaretle (musteriye acik uyari gosterilir).
+  const incomplete = findings.trim().length === 0;
   const incompleteReason = incomplete
     ? 'Tarama tamamlanamadan sonlandi (erken durdurma veya bir hata olabilir); rapor eksik.'
     : null;
+
+  // KENDI TARAFIMIZDA veri minimizasyonu: sizmis yapisal PII'yi (email/telefon/
+  // TCKN/kart/IBAN) sifreli DB'ye yazmadan ONCE maskele (ayni mantik PentAGI Go
+  // tarafinda Anthropic'e gitmeden de uygulanir — PATCHES.md).
+  const markdown = redactAll(
+    renderReportMarkdown(flow.order.domain.hostname, flow.order.package.displayName, findings, logs.screenshots, locale),
+  );
 
   const accessSecret = generateReportAccessSecret();
   const base = encryptReport(Buffer.from(markdown, 'utf-8'), accessSecret);
@@ -95,8 +107,7 @@ export async function generateAndStoreReport(flowId: string) {
 
   await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scan_completed' } });
 
-  // Ham veriyi PentAGI tarafinda tutmuyoruz — rapor uretildikten hemen
-  // sonra siliniyor (bkz konusmadaki "ham logu kisa surede sil" prensibi).
+  // Ham veriyi PentAGI tarafinda tutmuyoruz — rapor uretildikten hemen sonra sil.
   await pentagi.purgeFlowRawData(flow.pentagiFlowId);
   await prisma.flow.update({ where: { id: flow.id }, data: { rawDataPurgedAt: new Date() } });
 
@@ -106,8 +117,8 @@ export async function generateAndStoreReport(flowId: string) {
 const T = {
   tr: {
     title: 'Guvenlik Tarama Raporu', target: 'Hedef', pkg: 'Paket', created: 'Olusturma tarihi',
-    findings: 'Bulgular', noResult: '_(sonuc yok)_', noFindings: '_Bu taramada raporlanacak gorev bulunamadi._',
-    status: 'Durum', screenshots: 'Ekran Goruntuleri', none: '_Yok_', legalTitle: 'Yasal Uyari ve Kapsam',
+    findings: 'Bulgular', noFindings: '_Bu taramada raporlanacak bulgu uretilemedi._',
+    screenshots: 'Ekran Goruntuleri', none: '_Yok_', legalTitle: 'Yasal Uyari ve Kapsam',
     legal: [
       '**Yapay zeka uretimi:** Bu rapor yapay zeka tabanli otomatik bir ajan tarafindan uretilmistir; olgusal ifadeler bagimsiz dogrulanmadan kullanilmamalidir.',
       '**Kapsam:** Tarama YALNIZCA sahipligi dogrulanmis hedefle ve **pasif** yontemlerle sinirlidir; ic ag, kimlik dogrulamali test ve sizma testi KAPSAM DISIDIR.',
@@ -118,8 +129,8 @@ const T = {
   },
   en: {
     title: 'Security Scan Report', target: 'Target', pkg: 'Package', created: 'Generated at',
-    findings: 'Findings', noResult: '_(no result)_', noFindings: '_No reportable task was produced in this scan._',
-    status: 'Status', screenshots: 'Screenshots', none: '_None_', legalTitle: 'Legal Notice & Scope',
+    findings: 'Findings', noFindings: '_No reportable findings could be produced in this scan._',
+    screenshots: 'Screenshots', none: '_None_', legalTitle: 'Legal Notice & Scope',
     legal: [
       '**AI-generated:** This report was produced by an autonomous AI agent; factual statements must be independently verified before acting on them.',
       '**Scope:** The scan is limited to the ownership-verified target and **passive** methods only; internal network, authenticated testing and penetration testing are OUT OF SCOPE.',
@@ -130,12 +141,14 @@ const T = {
   },
 } as const;
 
-export function renderReportMarkdown(hostname: string, packageName: string, logs: pentagi.FlowLogs, locale: Locale = 'tr'): string {
+export function renderReportMarkdown(
+  hostname: string,
+  packageName: string,
+  findingsMd: string,
+  screenshots: pentagi.FlowLogs['screenshots'],
+  locale: Locale = 'tr',
+): string {
   const t = T[locale];
-  const findings = logs.tasks
-    .map((x) => `### ${x.title}\n\n**${t.status}:** ${x.status}\n\n${x.result ?? t.noResult}`)
-    .join('\n\n---\n\n');
-
   return `# ${t.title}
 
 **${t.target}:** ${hostname}
@@ -146,13 +159,13 @@ export function renderReportMarkdown(hostname: string, packageName: string, logs
 
 ## ${t.findings}
 
-${findings || t.noFindings}
+${findingsMd.trim() || t.noFindings}
 
 ---
 
 ## ${t.screenshots}
 
-${logs.screenshots.map((s) => `- ${s.name}: ${s.url}`).join('\n') || t.none}
+${screenshots.map((s) => `- ${s.name}: ${s.url}`).join('\n') || t.none}
 
 ---
 
