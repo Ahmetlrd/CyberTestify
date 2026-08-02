@@ -445,6 +445,31 @@ cap 30, hiç bulgu yazmadan kesildi). **Kök neden (iki katman):**
   (`reports.ts` içindeki `TODO(odeme)` + onay webhook'unda `fixSuggestionsUnlockedAt`)
   eklenmeli. Güvenlik: fix içeriği yalnız remediation — promptta istismar kodu YASAK.
 
+## Yasak HTTP metodu — teknik engelleme (2026-08-02)
+Tüm paketler PASİF (yalnız GET/HEAD/OPTIONS). Ajan POST/PUT/DELETE/PATCH denerse:
+- **Worker (asıl enforce):** `scope.ts findForbiddenMethods` tool-call args'ında method
+  tespit eder (curl -X/-d, "method":"POST", ham istek satırı; "post" kelimesi URL'de
+  tetiklemez). Pasif pakette tespit → **HER ZAMAN ENFORCE** (SCOPE_ENFORCEMENT'tan
+  bağımsız — method net sinyal, yanlış-pozitif yok): flow durdurulur, `scope_violation`,
+  rapor üretilmez. **Canlı doğrulandı** (ajan POST denedi → 26. çağrıda durduruldu).
+- **Egress-proxy (defense-in-depth):** düz HTTP'de GET/HEAD/OPTIONS dışı → **405**.
+  NOT: HTTPS CONNECT tünelinde method şifreli/görünmez → orada asıl enforce worker'da.
+- **Prompt:** POST yasağı SONUCUYLA güçlendirildi ("bir deneme taramayı raporsuz
+  sonlandırır") → ajan denemekten caydırılır (savunma katmanı, garanti değil).
+
+## Boş rapor + iç prompt dili (2026-08-02)
+- **Somut bütçe eşiği:** orchestrator, `pkg.maxToolCalls`'a göre "~%55'inde keşfi bırak,
+  raporu yaz" talimatı ekler ("yaklaşık yarı" göreceli ifadesi işe yaramıyordu).
+- **İç promptlar artık HER ZAMAN İngilizce** (SAFETY/BUDGET/FIX/FOCUS + 7 paket gövdesi)
+  — daha az token, daha tutarlı akıl yürütme. **İSTİSNA:** `kvkk_hazirlik` Türk hukuku
+  terminolojisi için TÜRKÇE kalır. **Çeviri:** ayrı bir çeviri adımı EKLENMEDİ — ajana
+  yanıt dili söylenir (orchestrator langLine), tr locale'de ajan çıktıyı DOĞRUDAN Türkçe
+  yazar (çok-dilli; doğrulandı fluent). Gerekçe: ayrı LLM çeviri çağrısı backend'e
+  Anthropic anahtarı + kırılgan runtime bağımlılığı eklerdi; in-flow çeviri capping
+  riski taşırdı. Doğrudan-çıktı en ucuz + en sağlam.
+- **Kalan kısıt:** iso27001 gibi paketlerde ajan bazen fix adımına ulaşamıyor
+  (bütçe) → fix üretilmeyebilir; mekanizma sağlam, ajan-üretimi tuning konusu.
+
 ## Kapsam dışı (sıradaki görevler)
 Gerçek iyzico/stripe ödeme + recurring billing + fix-önerisi ek-ödemesi, gerçek
 e-Arşiv/US/AE fatura, US/AE + GDPR/CCPA hukuki metinler/paketler + fiyat
