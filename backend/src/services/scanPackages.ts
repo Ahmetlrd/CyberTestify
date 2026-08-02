@@ -105,7 +105,16 @@ SINGLE CLEAN REPORT: Produce ONE fluent, professional, customer-facing report as
 start-to-finish in a single sitting, grouped by severity. The customer must NOT see our
 internal workflow — NEVER use process/meta language such as "Subtask"/"SubTask N",
 "TASK COMPLETED", "Next step", "verification step", "success status", or workflow step
-numbers. Write findings directly, not as a log of completed steps.`.trim();
+numbers. Write findings directly, not as a log of completed steps.
+NO COMPLIANCE CLAIMS (legal caution): This is a narrow, single-focus PASSIVE check — it CANNOT
+establish conformance to any standard or regulation. Do NOT add a "Compliance & Standards"
+conformance section, and NEVER assert the target "complies with" / "is compliant with" /
+"meets" / "conforms to" OWASP, NIST, GDPR, PCI-DSS, ISO 27001, etc., and NEVER output a
+"✓ compliant" status against a standard. Prefer to OMIT any standards-conformance section. If
+a standard is genuinely relevant, mention it ONLY with cautious wording, e.g. "these specific
+checks partially map to relevant clauses of X; a full compliance assessment requires a
+comprehensive, dedicated audit." Phrases like "industry best practices" are fine as general
+guidance, but never as a compliance verdict.`.trim();
 
 const FIX_SUGGESTIONS_STEP_EN = `
 MANDATORY FIX SUGGESTIONS (do NOT skip when there are findings): In the SAME step, right
@@ -146,7 +155,14 @@ bos/yarim birakma; bir kategori incelenmediyse "incelenmedi" not dus ama elindek
 TEK TEMIZ RAPOR: Tek, akici, profesyonel, MUSTERIYE yonelik bir rapor yaz — sanki bastan sona
 tek oturusta yazilmis gibi, siddete gore gruplu. Musteri ic is akisimizi GORMEMELI: "Alt-Gorev"/
 "Subtask N", "GOREV TAMAMLANDI", "Sonraki adim", "dogrulama adimi", "basari durumu" gibi surec/
-meta ifadeler ASLA kullanma. Bulgulari dogrudan yaz, tamamlanan adimlarin gunlugu gibi degil.`.trim();
+meta ifadeler ASLA kullanma. Bulgulari dogrudan yaz, tamamlanan adimlarin gunlugu gibi degil.
+UYUM BEYANI YOK (hukuki tedbir): Bu, dar ve tek-odakli bir PASIF kontroldur — hicbir standarda/
+mevzuata uyumlulugu KANITLAYAMAZ. Ayri bir "Uyum ve Standartlar" bolumu EKLEME; hedefin OWASP,
+NIST, KVKK/GDPR, PCI-DSS, ISO 27001 vb. ile "uyumludur"/"uyumlu"/"karsilar"/"uygundur" oldugunu
+ASLA iddia etme ve bir standarda karsi "✓ uyumlu" durumu YAZMA. Standart-uyum bolumunu tercihen
+HIC koyma. Bir standart gercekten ilgiliyse YALNIZCA temkinli dille an: "bu kontroller X'in ilgili
+maddeleriyle KISMEN ortusur; tam uyumluluk degerlendirmesi kapsamli, ayri bir denetim gerektirir."
+"Endustri en iyi uygulamalari" gibi genel ifadeler kabul edilir ama uyum HUKMU olarak degil.`.trim();
 
 const FIX_SUGGESTIONS_STEP_TR = `
 ZORUNLU COZUM ONERILERI (bulgu varsa ATLAMA): Bulgularin hemen ardindan, AYNI adimda, tam
