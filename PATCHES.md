@@ -35,3 +35,40 @@ sağlandığında hedeflenen akış:
 
 Bu, production sunucusunda Go derlemesi yapma ihtiyacını kaldırır (hazır image çekilir).
 Gerekli: DO API token (`doctl auth init`) + oluşturulmuş bir Container Registry.
+
+---
+
+## TODO — GET-only tool-level enforcement (PLAN, 2026-08-02)
+
+**Sorun:** Tüm paketler pasiftir (yalnız GET/HEAD/OPTIONS). Ancak canlı testte ajan,
+prompt yasağına + "POST → tarama iptal" uyarısına **rağmen** POST deniyor (özellikle
+iso27001/pci "API/auth testi" davranışıyla). Mevcut savunma **reaktif**:
+- worker `findForbiddenMethods` tool-call args'ında POST görürse flow'u **durdurur**
+  (her-zaman-enforce) — güvenli ama tarama raporsuz biter;
+- egress-proxy düz-HTTP'de 405 döner ama **HTTPS CONNECT tünelinde method şifreli**,
+  görünmez → oradan POST geçebilir (worker yakalar ama iş işten geçmiş olabilir).
+
+Kapsam-kilidi dersinin aynısı: **prompt garanti değil, teknik/fiziksel engel gerekir.**
+
+**Kalıcı çözüm (bu ayrı görev, PII yaması gibi ele alınacak):** ajanın POST'u
+FİZİKSEL olarak yapamaması. Değerlendirilecek yaklaşımlar:
+1. **PentAGI HTTP/terminal aracını yamala** (PII `wrapper.go.patch` şablonu):
+   PentAGI kaynağında ajanın HTTP isteği attığı aracı/çalıştırıcıyı bul; yapılandırılmış
+   bir HTTP tool ise method whitelist (GET/HEAD/OPTIONS) ekle → non-GET reddedilir.
+   `backend/pkg/tools/...` içinde HTTP/terminal tool tanımına bakılmalı.
+2. **Terminal image'ında `curl` shim** (DOCKER_DEFAULT_IMAGE_FOR_PENTEST):
+   pasif paketler için, `-X POST|PUT|DELETE|PATCH` ve `-d/--data/-F/--form`
+   bayraklarını reddeden bir curl wrapper içeren özel terminal image derle. Ajan
+   hangi komutu yazarsa yazsın write-method fiziksel olarak engellenir.
+   (Not: ajan curl yerine python/wget kullanabilir → shim tüm HTTP araçlarını
+   kapsamalı ya da (1) tercih edilmeli.)
+3. **HTTPS MITM proxy** (TLS terminasyonu ile method görünür olur) — TERCİH EDİLMEZ:
+   sertifika yönetimi + pinning kırılması + karmaşıklık.
+
+**Öneri:** (1) — PentAGI tool seviyesinde method whitelist (en temiz, tüm HTTP
+araçlarını kapsar, transport-bağımsız). Efor: PentAGI kaynağına dalış + yeni bir
+`cybertestify/pentagi:pii` benzeri katman + registry akışı.
+
+**O zamana kadar:** iso27001 & pci `available:false` (menüde YOK, API'de reddedilir).
+worker strict-halt **KALICI** (GET-only patch gelse bile defense-in-depth olarak durur).
+GET-only patch doğrulandığında (mümkünse TEK test taramasıyla) iki paket tekrar açılır.

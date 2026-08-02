@@ -72,6 +72,9 @@ schedulesRouter.post('/', requireAuth, async (req, res) => {
   if (packageDef.networkLayer && !config.hardenedNetworkIsolation) {
     return res.status(409).json({ error: 'Bu paket tipi su an devre disi (bkz HANDOFF.md).' });
   }
+  if (packageDef.available === false) {
+    return res.status(409).json({ error: 'Bu paket su an satista degil.' });
+  }
 
   const domain = await prisma.domain.findFirstOrThrow({ where: { id: domainId, customerId: req.customerId! } });
   if (!isVerificationStillValid(domain)) {

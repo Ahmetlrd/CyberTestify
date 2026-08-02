@@ -31,6 +31,11 @@ export interface ScanPackageDef {
   maxToolCalls: number; // flow bazinda yumusak tavan (worker.ts uygular)
   networkLayer?: boolean;
   fixSuggestionPriceMinorUnit?: number;
+  // false ise musteriye SATILMAZ: paket listesinden gizlenir + siparis reddedilir.
+  // iso27001/pci su an GEÇİCİ gizli — ajan yasaga ragmen POST deniyor, tarama
+  // guvenlik geregi durduruluyor (rapor cikmiyor). Kalici cozum: PentAGI tool-level
+  // GET-only patch'i (bkz PATCHES.md 'GET-only' plani). Patch dogrulaninca tekrar acilacak.
+  available?: boolean;
   promptTemplate: (targetHostname: string) => string;
 }
 
@@ -271,6 +276,8 @@ Target: ${host}
     priceMinorUnit: 249900,
     modelProvider: PROVIDER,
     maxToolCalls: 60,
+    available: false, // GEÇİCİ gizli — bkz 'available' notu + PATCHES.md GET-only plani
+
     promptTemplate: (host) => `
 Perform a PASSIVE "PCI-DSS READINESS PRE-ASSESSMENT" against the single target below.
 This is NOT an official PCI ASV scan or penetration test; the goal is to map externally
@@ -341,6 +348,8 @@ Hedef: ${host}
     priceMinorUnit: 299900,
     modelProvider: PROVIDER,
     maxToolCalls: 50,
+    available: false, // GEÇİCİ gizli — bkz 'available' notu + PATCHES.md GET-only plani
+
     promptTemplate: (host) => `
 Passively observe the single target below and produce a "READINESS CHECKLIST" mapping
 externally visible technical controls to ISO/IEC 27001 Annex A. This is NOT an official

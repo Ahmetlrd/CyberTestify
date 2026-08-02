@@ -22,6 +22,9 @@ ordersRouter.get('/packages', async (req, res) => {
       // Ham ag/port (networkLayer) paketleri, bypass-proof izolasyon aktif
       // DEGILSE musteriye HIC gosterilmez (bkz HARDENED_NETWORK_ISOLATION).
       .filter((p) => !p.networkLayer || config.hardenedNetworkIsolation)
+      // GEÇİCİ gizli paketler (available:false) — iso27001/pci, POST sorunu cozulene
+      // kadar satista degil (bkz scanPackages 'available' + PATCHES.md GET-only).
+      .filter((p) => p.available !== false)
       // (2) kvkk_hazirlik Turkiye'ye ozel mevzuattir; EN/global menude GOSTERILMEZ.
       // GDPR/CCPA esdegerleri ileride ayri paket olarak eklenecek (bkz HANDOFF).
       .filter((p) => !(locale === 'en' && p.key === 'kvkk_hazirlik'))
@@ -87,6 +90,12 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
 
   const packageDb = await prisma.scanPackage.findUniqueOrThrow({ where: { key: packageKey } });
   const packageDef = getPackageDef(packageKey);
+
+  // GEÇİCİ gizli paket (available:false) API'den de reddedilir (menude yok ama
+  // dogrudan istek gelebilir). iso27001/pci — POST sorunu (bkz PATCHES.md).
+  if (packageDef.available === false) {
+    return res.status(409).json({ error: 'Bu paket su an satista degil.' });
+  }
 
   // GATE: Ham ag/port (networkLayer) paketleri, bypass-proof izolasyon
   // (HARDENED_NETWORK_ISOLATION) tamamlanmadan ASLA calistirilamaz. Biri ileride
