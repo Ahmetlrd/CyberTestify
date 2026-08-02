@@ -80,6 +80,9 @@ export const config = {
       'github.com', 'raw.githubusercontent.com', 'pypi.org', 'files.pythonhosted.org',
       'registry.npmjs.org', 'deb.debian.org', 'archive.ubuntu.com', 'security.ubuntu.com',
       'alpinelinux.org', 'dl-cdn.alpinelinux.org', 'crt.sh', 'api.anthropic.com',
+      // Genel DNS cozumleyicileri: dns_email/dig recon'da hedefi cozmek icin mesru
+      // altyapi (hedef DEGIL). Aksi halde 'dig @8.8.8.8 hedef' kapsam-disi sayiliyordu.
+      '8.8.8.8', '8.8.4.4', '1.1.1.1', '1.0.0.1', '9.9.9.9',
     ].join(',')
   ).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
   iyzico: {
