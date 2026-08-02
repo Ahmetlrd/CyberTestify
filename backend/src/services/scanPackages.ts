@@ -377,25 +377,31 @@ Target: ${host}
     // ISTISNA: Turk hukuku terminolojisi — bu promptTemplate TURKCE kalir (Turkce
     // sabitleri kullanir). Yalniz TR bolgesinde gosterilir.
     promptTemplate: (host) => `
-Yalnizca asagidaki TEK hedefin HERKESE ACIK sayfalarini PASIF gozlemleyerek bir
-"KVKK ON UYUM KONTROLU" yap. Bu HUKUKI DANISMANLIK DEGILDIR; amac disaridan
-gorulebilen eksikleri KVKK ilkeleriyle eslestirmek.
+Asagidaki TEK hedef icin SABIT, DAR bir "KVKK ON UYUM KONTROLU" yap. Bu ac-uclu arastirma
+DEGIL, SABIT bir kontrol listesidir. KRITIK KISITLAR: YENI SUBTASK ACMA; tum siteyi TARAMA/
+crawl ETME; internette ARASTIRMA yapma. YALNIZCA ${host} ANA SAYFASINI ve — yalnizca ana
+sayfada dogrudan LINKLI ise — gizlilik/aydinlatma ve cerez politikasi sayfasini incele. TOPLAM
+BIRKAC GET yeterli (~5-8 istek); gereksiz sayfa gezme. Bu HUKUKI DANISMANLIK DEGILDIR; amac
+disaridan gorulebilen eksikleri KVKK ilkeleriyle eslestirmek.
 ${HAZIRLIK_FOCUS_TR}
 
-Sadece normal GET ile gozlemle:
-- Aydinlatma metni / Gizlilik politikasi sayfasi var mi, erisilebilir mi?
-- Cerez rizasi (consent) banner'i var mi; rizadan ONCE izleyici cerez birakiliyor mu?
-- Kisisel veri toplayan formlar (iletisim, uyelik) HTTPS uzerinde mi; acik rizaya
-  atif var mi?
-- Veri sorumlusu / iletisim / VERBIS atifi gozlemleniyor mu?
-- Ucuncu taraf izleyiciler (analytics, pixel) gozlemleniyor mu?
+Su 5 kontrolu YAP (yalnizca normal GET ile gozlem):
+1. Aydinlatma metni / Gizlilik politikasi sayfasi var mi, erisilebilir mi?
+2. Cerez rizasi (consent) banner'i var mi; ana sayfa yanitinda rizadan ONCE izleyici cerez
+   (Set-Cookie) birakiliyor mu?
+3. Kisisel veri toplayan formlar (iletisim/uyelik) HTTPS uzerinde mi; acik rizaya atif var mi?
+4. Veri sorumlusu / iletisim / VERBIS atifi gozlemleniyor mu?
+5. Ucuncu taraf izleyiciler (analytics, pixel) ana sayfa HTML'inde gozlemleniyor mu?
+
+Bu 5 kontrolden SONRA HEMEN, AYNI adimda, tek raporu VE cozum onerilerini yaz ve BITIR — ayri
+bir "rapor yazma" subtask'i ACMA, baska hicbir sey yapma.
 ${SAFETY_TR}
 ${BUDGET_GUARD_TR}
 ${FIX_SUGGESTIONS_STEP_TR}
 
 Cikti (Markdown tablo): "KVKK Ilkesi/Konu | Gozlem | Durum (Uygun/Dikkat/Eksik) |
 Oneri". Sonda: "Bu rapor hukuki gorus/uyum beyani degildir; nihai degerlendirme
-icin KVKK uzmani/avukat gerekir" notu. En fazla ~36 arac cagrisinda bitir.
+icin KVKK uzmani/avukat gerekir" notu.
 
 Hedef: ${host}
 `.trim(),
