@@ -62,17 +62,25 @@ const L = {
 } as const;
 
 // Rapor metnindeki siddet sinyallerinden GENEL RISK seviyesi turetir (ek LLM YOK).
-// "kritik" tek basina guvenilir siddet terimidir; "yuksek/orta" applicability etiketiyle
-// karismasin diye "seviye/severity/oncelik/risk" baglamı arar.
+// NEGASYON-FARKINDA: "KRITIK: Tespit edilmemistir" gibi "yok" ifadeleri sayilmaz;
+// oncelikle etiketli bulgu siddeti ("Siddet: Orta" / "Severity: High") aranir, yoksa
+// negasyonla-elenen bolum basliklari. applicability ("Uygulanabilirlik: YUKSEK") sayilmaz.
 function assessRisk(md: string, locale: 'tr' | 'en'): { level: 'high' | 'medium' | 'low'; label: string; sentence: string } {
-  const s = md.toLocaleLowerCase('tr');
-  const hasCritical = /kr[iİ]t[iİ]k|critical/.test(s);
-  const hasHigh = /(y[uü]ksek\s+(seviye|önem|öncelik|risk)|high[\s-]+(severity|risk|priority))/.test(s);
-  const hasMedium = /(orta\s+(seviye|önem|öncelik|risk)|medium[\s-]+(severity|risk))/.test(s);
   const t = L[locale];
-  if (hasCritical) return { level: 'high', label: t.riskHigh, sentence: t.assessHigh };
-  if (hasHigh) return { level: 'medium', label: t.riskMedium, sentence: t.assessMedium };
-  void hasMedium;
+  // (a) etiketli bulgu siddeti: "Siddet/Şiddet/Severity: <kw>" — en guvenilir sinyal.
+  const labeled = (kw: string) => new RegExp(`(ş|s)iddet\\s*[:：]\\s*[*_> ]*(${kw})|severity\\s*[:：]\\s*[*_> ]*(${kw})`, 'i');
+  // (b) bolum basligi "<kw> SEVIYE" / "<kw> (..)" — ama yakininda "yok/tespit edilmemis/none" varsa SAYMA.
+  const heading = (kw: string) => new RegExp(`(${kw})\\s*(seviye|severity|\\()`, 'i');
+  const negated = (kw: string) =>
+    new RegExp(`(${kw})[\\s\\S]{0,70}?(tespit\\s+edilmem|bulunmam|bulunma(dı|maz)|yok\\b|hi[çc]\\b|none|not\\s+(detected|found)|:\\s*0\\b)`, 'i');
+  const has = (kw: string) => labeled(kw).test(md) || (heading(kw).test(md) && !negated(kw).test(md));
+
+  const K = 'kr[iİ]t[iİ]k|critical';
+  const H = 'y[uüÜ]ksek|high';
+  const M = 'orta|medium';
+
+  if (has(K)) return { level: 'high', label: t.riskHigh, sentence: t.assessHigh };
+  if (has(H) || has(M)) return { level: 'medium', label: t.riskMedium, sentence: t.assessMedium };
   return { level: 'low', label: t.riskLow, sentence: t.assessLow };
 }
 
