@@ -276,7 +276,7 @@ Target: ${host}
     priceMinorUnit: 249900,
     modelProvider: PROVIDER,
     maxToolCalls: 60,
-    available: false, // GEÇİCİ gizli — bkz 'available' notu + PATCHES.md GET-only plani
+    available: true, // GET-only tool-level patch (PATCHES.md) uygulandi → tekrar acildi
 
     promptTemplate: (host) => `
 Perform a PASSIVE "PCI-DSS READINESS PRE-ASSESSMENT" against the single target below.
@@ -348,7 +348,7 @@ Hedef: ${host}
     priceMinorUnit: 299900,
     modelProvider: PROVIDER,
     maxToolCalls: 50,
-    available: false, // GEÇİCİ gizli — bkz 'available' notu + PATCHES.md GET-only plani
+    available: true, // GET-only tool-level patch (PATCHES.md) uygulandi → tekrar acildi
 
     promptTemplate: (host) => `
 Passively observe the single target below and produce a "READINESS CHECKLIST" mapping

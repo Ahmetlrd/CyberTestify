@@ -38,7 +38,29 @@ Gerekli: DO API token (`doctl auth init`) + oluşturulmuş bir Container Registr
 
 ---
 
-## TODO — GET-only tool-level enforcement (PLAN, 2026-08-02)
+## GET-only tool-level enforcement — UYGULANDI (2026-08-02)
+
+**Uygulama (PII yamasi sablonuyla):**
+- Yeni dosya: `pentagi-patch/passive_guard.go` → PentAGI kaynagi
+  `backend/pkg/tools/passive_guard.go`. `IsWriteHTTPCommand(cmd)` — shell komutunda
+  veri-degistiren HTTP metodu (curl -X/-d/-F, wget --post-data, python requests.post,
+  ham HTTP istek satiri) tespit eder. `PENTAGI_GET_ONLY=false` ile kapatilabilir (vars. acik).
+- Hook: `backend/pkg/tools/terminal.go` → `ExecCommand` GIRISINE eklendi (komut
+  docker container'da CALISMADAN ONCE). Bloklanirsa ajana hata doner, komut HIC calismaz.
+  Bu tek chokepoint TUM shell HTTP araclarini kapsar (transport-bagimsiz, HTTPS dahil).
+  Manuel uygulama: `ExecCommand(... ) (string, error) {` acilisindan hemen sonra:
+  \`\`\`go
+  if blocked, match := IsWriteHTTPCommand(command); blocked {
+      return "", fmt.Errorf("passive scan policy: data-modifying HTTP methods (POST/PUT/DELETE/PATCH) are blocked at tool level; use GET/HEAD/OPTIONS only (blocked: %q)", match)
+  }
+  \`\`\`
+- Dogrulama: `pentagi-patch/passive_guard_test.go` — izole `go test` GECTI (write-method
+  bloklandi, GET/HEAD/'posts'-URL/nmap/dig izinli; gercek tarama ACMADAN). Image derlendi.
+- **Defense-in-depth:** worker `findForbiddenMethods` strict-halt IKINCI KATMAN olarak
+  KALIR (obfuscation'a karsi). egress-proxy 405 (duz HTTP) da durur.
+- iso27001 + pci `available:true` yapildi (menuye geri dondu).
+
+### Onceki plan (arsiv)
 
 **Sorun:** Tüm paketler pasiftir (yalnız GET/HEAD/OPTIONS). Ancak canlı testte ajan,
 prompt yasağına + "POST → tarama iptal" uyarısına **rağmen** POST deniyor (özellikle
