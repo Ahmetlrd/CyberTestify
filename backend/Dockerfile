@@ -4,7 +4,14 @@ FROM node:20-alpine AS base
 WORKDIR /app
 # openssl: Prisma'nin (Alpine/musl) schema & query engine'i libssl'e ihtiyac duyar;
 # olmadan "failed to detect libssl" -> migrate/seed patlar.
-RUN apk add --no-cache wget openssl
+# chromium + fontlar: (3) rapor PDF uretimi icin (puppeteer-core headless Chromium).
+# nss/freetype/harfbuzz/ttf-* Chromium'un render bagimliliklari; font-noto-* Turkce +
+# genis Unicode (ekran goruntusu/rapor icerigi) icin. Puppeteer kendi Chromium'unu
+# INDIRMEZ (sistemdekini kullaniriz) — PUPPETEER_SKIP_DOWNLOAD + EXECUTABLE_PATH.
+RUN apk add --no-cache wget openssl \
+      chromium nss freetype harfbuzz ca-certificates ttf-freefont font-noto
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 COPY package.json package-lock.json* ./
 RUN npm ci || npm install
 COPY prisma ./prisma

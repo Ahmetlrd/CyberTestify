@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { decryptReport } from '../services/crypto.js';
+import { renderReportPdf } from '../services/pdf.js';
 import { requireAuth } from '../middleware/auth.js';
 
 export const reportsRouter = Router();
@@ -19,25 +20,57 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
 
   const report = await prisma.report.findFirstOrThrow({
     where: { orderId: req.params.orderId, order: { customerId: req.customerId! } },
+    include: { order: { include: { domain: { select: { hostname: true } }, package: { select: { displayName: true } } } } },
   });
 
+  let plaintext: Buffer;
   try {
-    const plaintext = decryptReport({
+    plaintext = decryptReport({
       encryptedBlob: report.encryptedBlob as Buffer,
       iv: report.iv as Buffer,
       authTag: report.authTag as Buffer,
       keyDerivationSalt: report.keyDerivationSalt as Buffer,
       accessSecret: parsed.data.accessSecret,
     });
-
-    await prisma.report.update({ where: { id: report.id }, data: { deliveredAt: new Date() } });
-
-    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="rapor-${report.orderId}.md"`);
-    res.send(plaintext);
   } catch {
-    res.status(403).json({ error: 'Erisim sifresi hatali.' });
+    return res.status(403).json({ error: 'Erisim sifresi hatali.' });
   }
+
+  // (3) Fix onerileri: unlock edilmisse AYNI accessSecret ile coz + PDF'e bolum olarak
+  // ekle; VAR ama kilitliyse PDF'te "kilitli" notu goster; hic yoksa hic gosterme.
+  let fixMarkdown: string | null = null;
+  const hasFix = !!(report.fixSuggestions && report.fixSuggestionsIv && report.fixSuggestionsAuthTag && report.fixSuggestionsSalt);
+  if (hasFix && report.fixSuggestionsUnlockedAt) {
+    try {
+      fixMarkdown = decryptReport({
+        encryptedBlob: report.fixSuggestions as Buffer,
+        iv: report.fixSuggestionsIv as Buffer,
+        authTag: report.fixSuggestionsAuthTag as Buffer,
+        keyDerivationSalt: report.fixSuggestionsSalt as Buffer,
+        accessSecret: parsed.data.accessSecret,
+      }).toString('utf-8');
+    } catch {
+      fixMarkdown = null; // ana rapor cozuldu ama fix cozulemezse sessizce atla
+    }
+  }
+
+  const locale: 'tr' | 'en' = report.order.locale === 'en' ? 'en' : 'tr';
+  const pdf = await renderReportPdf(
+    plaintext.toString('utf-8'),
+    {
+      hostname: report.order.domain.hostname,
+      packageName: report.order.package.displayName,
+      createdAt: report.createdAt,
+      locale,
+    },
+    { fixMarkdown, fixLocked: hasFix && !report.fixSuggestionsUnlockedAt },
+  );
+
+  await prisma.report.update({ where: { id: report.id }, data: { deliveredAt: new Date() } });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="cybertestify-rapor-${report.orderId}.pdf"`);
+  res.send(pdf);
 });
 
 // --- (3) Ucretli eklenti: AI Cozum Onerileri --------------------------------

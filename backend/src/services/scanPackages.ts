@@ -335,10 +335,10 @@ Target: ${host}
     priceMinorUnit: 199900,
     modelProvider: PROVIDER,
     maxToolCalls: 45,
-    // GECICI GIZLI (2026-08-02): canli testte collectFindings() kok hatasi bu pakette
-    // de gorundu (rapor = subtask ATAMA metni, completion DEGIL). Kok duzeltme (report.ts)
-    // dogrulanip test edilince tekrar true yapilacak (bkz HANDOFF).
-    available: false,
+    // 2026-08-02: collectFindings() kok duzeltmesi (report.ts) ssl_tls ile CANLI test
+    // edilip dogrulandiktan SONRA tekrar acildi (madde 2A). Merkezi duzeltme oldugu
+    // icin kvkk da ayni completion-toplama mantigindan yararlanir (ayri tarama testi
+    // yapilmadi; Vedat elle spot-kontrol edecek).
     // ISTISNA: Turk hukuku terminolojisi — bu promptTemplate TURKCE kalir (Turkce
     // sabitleri kullanir). Yalniz TR bolgesinde gosterilir.
     promptTemplate: (host) => `
