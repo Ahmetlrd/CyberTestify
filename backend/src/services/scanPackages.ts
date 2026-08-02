@@ -90,6 +90,8 @@ python3 stdlib). If a specialized tool is missing, do NOT install it — use a s
 already available or SKIP that specific check and note it as "not reviewed (tool
 unavailable)". Spending your tool-call budget on setup/installation is FORBIDDEN.`.trim();
 
+export const FIX_SUGGESTIONS_DELIM = '===FIX_SUGGESTIONS===';
+
 const BUDGET_GUARD_EN = `
 COMPLETION & OUTPUT RULE (HIGHEST PRIORITY): Writing the final findings report AND the
 ${FIX_SUGGESTIONS_DELIM} section is your #1 deliverable — more important than extra probing.
@@ -105,7 +107,6 @@ internal workflow — NEVER use process/meta language such as "Subtask"/"SubTask
 "TASK COMPLETED", "Next step", "verification step", "success status", or workflow step
 numbers. Write findings directly, not as a log of completed steps.`.trim();
 
-export const FIX_SUGGESTIONS_DELIM = '===FIX_SUGGESTIONS===';
 const FIX_SUGGESTIONS_STEP_EN = `
 MANDATORY FIX SUGGESTIONS (do NOT skip when there are findings): In the SAME step, right
 after the findings, output EXACTLY this line on its own:
