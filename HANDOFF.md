@@ -478,6 +478,21 @@ Tüm paketler PASİF (yalnız GET/HEAD/OPTIONS). Ajan POST/PUT/DELETE/PATCH dene
 - **Kalan kısıt:** iso27001 gibi paketlerde ajan bazen fix adımına ulaşamıyor
   (bütçe) → fix üretilmeyebilir; mekanizma sağlam, ajan-üretimi tuning konusu.
 
+
+## GET-only patch UYGULANDI ama iso27001/pci HALA gizli (2026-08-02)
+- **GET-only tool-level patch TAMAM + kanitlandi:** `passive_guard.go` + `terminal.go`
+  hook → POST/PUT/DELETE/PATCH arac seviyesinde reddedilir (izole `go test` gecti).
+  Reconciliation: worker strict-halt, guard'in blokladigi denemeleri gormezden gelir
+  (ajan GET'le devam eder); yalniz guard'i atlatan gercek POST'ta halt. Canli test:
+  iso27001 artik POST yuzunden `scope_violation` OLMUYOR → `scan_completed`.
+- 🔴 **AMA iso27001 raporu HALA BOS geliyor** (`incomplete=true`, decrypt ile teyit).
+  Ajan butceyi web aramasina (duckduckgo) + genis kesfe harciyor, HAZIRLIK_FOCUS'a
+  ragmen bulgu yazmadan cap'e (50) carpiyor. Bu POST'tan AYRI bir sorun (odak/butce),
+  GET-only ile cozulmedi. Bu yuzden iso27001+pci **`available:false` (HALA GIZLI)**.
+- **Kalan is (ayri):** iso/pci raporunu guvenilir kilmak — sec: (a) promptlari
+  header_leak gibi DAR/GET-only'ye indir (guvenilir ama daha ince rapor), (b) bu
+  paketler icin web-arama tool'larini kapat, (c) tavani cok yukselt. Karar bekleniyor.
+
 ## Kapsam dışı (sıradaki görevler)
 Gerçek iyzico/stripe ödeme + recurring billing + fix-önerisi ek-ödemesi, gerçek
 e-Arşiv/US/AE fatura, US/AE + GDPR/CCPA hukuki metinler/paketler + fiyat
