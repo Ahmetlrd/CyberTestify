@@ -139,6 +139,17 @@ Son güncelleme: 2026-07-26 · Hukuki metin sürümü: `2026-07-26`
   concurrency=1, PII redaksiyonu (yapısal PII → [X_REDACTED]), tam rapor üretim+teslim
   gerçek Anthropic anahtarıyla uçtan uca doğrulandı.
 
+## 6.3 Güncellemeler (2026-08-02) — çok-dil + AI çözüm önerileri
+
+- ✅ **[KOD/GÜVENLİK] AI Çözüm Önerileri yalnız remediation:** Eklenti içeriği promptta
+  açıkça "istismar/exploit kodu YASAK, sadece düzeltme" kısıtıyla üretilir; ana rapordan
+  ayrı, şifreli, ödeme yapılmadan API'den dönmez (kilitli).
+- 🔴 **[HUKUK/İŞ] Ek-ödeme (fix-önerisi) tüketici bilgilendirmesi:** unlock şu an mock.
+  Gerçek ek-ödeme eklendiğinde Mesafeli Satış / ön bilgilendirme akışına bu ek ürün de
+  dahil edilmeli (fiyat, dijital-anında-ifa, cayma feragati). Fiyat PLACEHOLDER (Vedat onayı).
+- 🟡 **[HUKUK] kvkk_hazirlik yalnız TR:** EN/global menüde gizli. GDPR/CCPA eşdeğer
+  paketleri ayrıca, ilgili mevzuata özel yazılmalı (KVKK metni doğrudan çevrilemez).
+
 ## 7. Kaynaklar (araştırma çıktılarından)
 
 - Anthropic AUP / Commercial Terms / CVP: anthropic.com/legal/aup · /legal/commercial-terms · support.claude.com (CVP)

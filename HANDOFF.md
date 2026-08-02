@@ -408,6 +408,44 @@ login'de ZORUNLU DEĞİL. Etkinleştirme: (1) `otplib` ekle, (2) admin başına 
 `admin.totpSecret` doluysa istekten gelen `totp` kodunu `authenticator.verify` ile
 doğrula. Kod içinde `TODO(2FA)` işaretli.
 
+## Rapor kalitesi — eksik/boş rapor kök nedeni ve çözümü (2026-08-02)
+**Belirti:** `iso27001_hazirlik` raporu boş/`incomplete` geldi (canlı: flow 31 tool-call,
+cap 30, hiç bulgu yazmadan kesildi). **Kök neden (iki katman):**
+1. `maxToolCalls` tavanı düşüktü → ajan bulguları yazmadan kesiliyordu. Düzeltme:
+   iso27001 30→**50**, kvkk 30→**45**, pci 40→**60**; tüm promptlara **BUDGET_GUARD**
+   ("bütçe azalınca yeni keşif açma, ELİNDEKİ bulguyla raporu HEMEN yaz").
+2. **Asıl derin neden:** `report.ts` yalnızca `tasks[].result`'a bakıyordu; bu alan
+   ajan görevi DOĞAL tamamlarsa dolar, tavana çarpınca BOŞ kalır. Canlı logdan
+   doğrulandı: PentAGI bulguları **`messageLogs type='report'/'done'`** mesajlarında
+   da üretiyor. Düzeltme: `collectFindings()` — task.result yoksa report/done
+   mesajlarına düşer. Böylece tavana çarpan tarama bile ELİNDEKİ bulguyla gelir;
+   `incomplete` yalnızca TÜM kaynaklar boşsa true olur. Tavana çarpıp bulgu YAZILMIŞSA
+   müşteri dashboard'da yine de tam rapor + (eksikse) şeffaf "eksik" uyarısı görür.
+
+## Çok-dilli çıktı (locale) — 2026-08-02
+- `Order.locale` (`tr`/`en`), bölgeden türetilir (tr→tr, us/ae→en). Ajana yanıt-dili
+  talimatı (orchestrator), rapor şablonu tr/en (`report.ts` T sözlüğü).
+- Paket adı/açıklaması EN i18n (`scanPackages.PACKAGE_I18N`). Fiyat/menü `?region` ile.
+- 🔴 **`kvkk_hazirlik` EN/global menüde GİZLİ** (Türkiye'ye özel mevzuat). **TODO:**
+  ileride **GDPR (AB)** ve/veya **CCPA (ABD)** için ayrı, o mevzuata özel eşdeğer
+  paketler tanımlanmalı — `kvkk_hazirlik` şablonu örnek alınabilir ama madde
+  eşlemeleri baştan yazılmalı.
+
+## Ücretli eklenti: AI Çözüm Önerileri — 2026-08-02
+- **Aynı flow'da** üretilir (ekstra LLM çağrısı/maliyet YOK): ajan bulgulardan sonra
+  `===FIX_SUGGESTIONS===` delimiter'ı + her bulgu için remediation yazar. `report.ts`
+  bunu ayırıp ANA rapordan AYRI, **aynı accessSecret ile** şifreler.
+- **Kilit:** ödeme (unlock) yapılana kadar `POST /reports/:id/fix-suggestions/download`
+  **402** döner (içerik sızmaz). `unlock` (şu an **MOCK/sandbox**) → `download` açılır.
+  Dashboard'da kilitli kart + "Satın al ve aç" + indir.
+- 🟡 **Fiyat PLACEHOLDER:** taban fiyatın **%50'si** (`fixSuggestionPrice`, paket
+  bazında `ScanPackageDef.fixSuggestionPriceMinorUnit` ile override). **Vedat'ın kesin
+  fiyatı onaylaması bekleniyor** — onaylanınca güncellenecek.
+- 🔴 **TODO — gerçek ek-ödeme:** unlock şu an mock; gerçek iyzico ek-ödeme akışı
+  (`reports.ts` içindeki `TODO(odeme)` + onay webhook'unda `fixSuggestionsUnlockedAt`)
+  eklenmeli. Güvenlik: fix içeriği yalnız remediation — promptta istismar kodu YASAK.
+
 ## Kapsam dışı (sıradaki görevler)
-Gerçek iyzico/stripe ödeme + recurring billing, gerçek e-Arşiv/US/AE fatura,
-US/AE hukuki metinler + fiyat kalibrasyonu, e-posta servisi — hepsi ayrı görevler.
+Gerçek iyzico/stripe ödeme + recurring billing + fix-önerisi ek-ödemesi, gerçek
+e-Arşiv/US/AE fatura, US/AE + GDPR/CCPA hukuki metinler/paketler + fiyat
+kalibrasyonu, e-posta servisi — hepsi ayrı görevler.
