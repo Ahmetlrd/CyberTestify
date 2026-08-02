@@ -7,32 +7,52 @@ import { FIX_SUGGESTIONS_DELIM } from './scanPackages.js';
 type Locale = 'tr' | 'en';
 
 /**
- * Ajanin bulgularini toplar. PentAGI iki yerde tutabilir:
- *  (a) tamamlanan task'in `result`'i — ajan gorevi DOGAL tamamlarsa dolu;
- *  (b) messageLogs type='report' / 'done' — tavana carpsa BILE uretilir.
- * Onceligimiz (a); yoksa (b). Boylece tool-call tavanina carpan (task.result bos)
- * bir tarama bile ELINDEKI bulgularla gelir — asla bos rapor teslim edilmez.
+ * Ajanin GERCEK bulgularini (tamamlama raporlarini) toplar.
+ *
+ * KOK DUZELTME (2026-08-02): PentAGI veri modelinde bir gorev/alt-gorev icin ATAMA
+ * (talimat) ile TAMAMLAMA (sonuc raporu) AYRI kolonlarda tutulur:
+ *   - Task.input / Subtask.description / MessageLog.message  -> ATAMA (talimat)  [KULLANMA]
+ *   - Task.result / Subtask.result / MessageLog.result       -> TAMAMLAMA (rapor) [KULLAN]
+ * Bir `report`-tipi MessageLog'ta bile `message`=atama, `result`=tamamlamadir.
+ * Eski kod tavana carpan (Task.result bos) taramalarda `messageLogs.message`'e
+ * dusuyor, yani ajanin gercek son ciktisi yerine ona verilen GOREV TALIMATINI
+ * rapora yaziyordu (iso27001/kvkk/header_leak'te ayni sistemik hata). Artik yalniz
+ * `result` (tamamlama) alanlarini okuyoruz; uzunluk/sezgi tahmini YOK, resmi alan ayrimi.
+ *
+ * Oncelik: (1) task-seviyesi sentez (Task.result) — dogal bitiste dolu; yoksa
+ * (2) TUM alt-gorev tamamlamalari (Subtask.result) birlestirilir — tavana carpsa
+ * bile dolu; yoksa (3) report-tipi MessageLog'larin `result`'i; yoksa (4) done'in
+ * `result`'i. Hicbir asamada ATAMA metni (message/description) bulgu sayilmaz.
  */
 function collectFindings(logs: pentagi.FlowLogs): string {
-  const taskText = logs.tasks
-    .filter((t) => (t.result ?? '').trim().length > 0)
-    .map((t) => `### ${t.title}\n\n${(t.result ?? '').trim()}`)
-    .join('\n\n---\n\n');
-  if (taskText.trim()) return taskText;
+  const join = (parts: string[]) => parts.filter((p) => p.trim().length > 0).join('\n\n---\n\n').trim();
 
-  const reportText = logs.messageLogs
-    .filter((m) => m.type === 'report')
-    .map((m) => (m.message ?? '').trim())
-    .filter(Boolean)
-    .join('\n\n');
-  if (reportText.trim()) return reportText;
+  // (1) Task-seviyesi tamamlama sentezi (dogal bitiste PentAGI reporter'i doldurur).
+  const taskText = join(
+    logs.tasks
+      .filter((t) => (t.result ?? '').trim().length > 0)
+      .map((t) => `### ${t.title}\n\n${(t.result ?? '').trim()}`),
+  );
+  if (taskText) return taskText;
 
-  return logs.messageLogs
-    .filter((m) => m.type === 'done')
-    .map((m) => (m.message ?? '').trim())
-    .filter(Boolean)
-    .join('\n\n')
-    .trim();
+  // (2) TUM alt-gorev TAMAMLAMALARI (Subtask.result). Tavana carpan taramada Task.result
+  //     bos olsa da alt-gorevler kendi sonuclarini yazmis olur — hepsini birlestir.
+  const subtaskText = join(
+    logs.tasks
+      .flatMap((t) => t.subtasks ?? [])
+      .filter((st) => (st.result ?? '').trim().length > 0)
+      .map((st) => `### ${st.title}\n\n${(st.result ?? '').trim()}`),
+  );
+  if (subtaskText) return subtaskText;
+
+  // (3) report-tipi MessageLog'larin TAMAMLAMASI (message DEGIL, result).
+  const reportText = join(
+    logs.messageLogs.filter((m) => m.type === 'report').map((m) => (m.result ?? '').trim()),
+  );
+  if (reportText) return reportText;
+
+  // (4) Son care: done-tipi MessageLog'un result'i (yoksa message'a dusme — atama olabilir).
+  return join(logs.messageLogs.filter((m) => m.type === 'done').map((m) => (m.result ?? '').trim()));
 }
 
 /** Bulgulardan "cozum onerileri" bolumunu (delimiter sonrasi) ayirir. */

@@ -64,6 +64,11 @@ export async function getFlowStatus(pentagiFlowId: string) {
   return data.flow;
 }
 
+// KRITIK (bkz report.ts collectFindings): PentAGI'de bir subtask TAMAMLANINCA
+// tamamlama raporu `Subtask.result` (ve task-seviyesi `Task.result`) alanina yazilir;
+// `Subtask.description` / `MessageLog.message` ise ATAMA (gorev talimati) metnidir.
+// Bir `report`-tipi MessageLog'ta bile `message`=atama, `result`=tamamlama. Bu yuzden
+// ASLA `message`'i bulgu olarak kullanmayiz — `result`'i cekeriz (subtask + msglog).
 const GET_FLOW_LOGS = gql`
   query GetFlowLogs($flowId: ID!) {
     tasks(flowId: $flowId) {
@@ -71,11 +76,20 @@ const GET_FLOW_LOGS = gql`
       title
       status
       result
+      subtasks {
+        id
+        title
+        status
+        description
+        result
+      }
     }
     messageLogs(flowId: $flowId) {
       id
       type
       message
+      result
+      resultFormat
       createdAt
     }
     screenshots(flowId: $flowId) {
@@ -86,9 +100,30 @@ const GET_FLOW_LOGS = gql`
   }
 `;
 
+export interface FlowSubtask {
+  id: string;
+  title: string;
+  status: string;
+  description: string | null; // ATAMA (gorev talimati) — bulgu DEGIL
+  result: string | null; // TAMAMLAMA raporu — bulgular burada
+}
+
 export interface FlowLogs {
-  tasks: Array<{ id: string; title: string; status: string; result: string | null }>;
-  messageLogs: Array<{ id: string; type: string; message: string; createdAt: string }>;
+  tasks: Array<{
+    id: string;
+    title: string;
+    status: string;
+    result: string | null; // task-seviyesi TAMAMLAMA sentezi
+    subtasks: FlowSubtask[] | null;
+  }>;
+  messageLogs: Array<{
+    id: string;
+    type: string;
+    message: string; // ATAMA/talimat metni (report-tipinde) — bulgu DEGIL
+    result: string | null; // TAMAMLAMA icerigi
+    resultFormat: string | null;
+    createdAt: string;
+  }>;
   screenshots: Array<{ id: string; url: string; name: string }>;
 }
 
