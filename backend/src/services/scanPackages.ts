@@ -178,7 +178,10 @@ Target: ${host}
       'eksikligi. Tamamen pasif, saldirgan olmayan bir sifreleme denetimi.',
     priceMinorUnit: 79900,
     modelProvider: PROVIDER,
-    maxToolCalls: 18,
+    // 18->25: TLS denetimi cok adimli (cert + TLS1.0/1.1/1.2/1.3 probe + cipher + HSTS +
+    // rapor yazimi). Araclar artik terminal image'inda gomulu (kurulum israfi yok) ama
+    // adim sayisi yuksek; 25 dogal tamamlanmayi (rapor yazma dahil) garantiler.
+    maxToolCalls: 25,
     promptTemplate: (host) => `
 Perform a PASSIVE SSL/TLS configuration audit against the single target below only.
 Do NOT install testssl.sh, sslyze, nmap or any other tool, and do NOT attempt any install.
