@@ -68,7 +68,15 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
     year: 'numeric', month: 'long', day: 'numeric',
   });
 
-  let bodyHtml = md.render(bodyMd);
+  // Ust banner zaten Hedef/Paket/Tarih'i gosteriyor; markdown'in kendi baslik+meta
+  // blogunu (ilk '---' cizgisine kadar) at ki tekrar olmasin. Yalniz H1 ile basliyorsa.
+  let effectiveMd = bodyMd;
+  if (effectiveMd.startsWith('# ')) {
+    const hr = effectiveMd.indexOf('\n---\n');
+    if (hr !== -1 && hr < 500) effectiveMd = effectiveMd.slice(hr + 5);
+  }
+
+  let bodyHtml = md.render(effectiveMd);
 
   // Fix onerileri bolumu (unlock ise ekle; kilitliyse kilit notu; hic yoksa ekleme).
   if (opts.fixMarkdown && opts.fixMarkdown.trim()) {
@@ -159,8 +167,10 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
       document.querySelectorAll('td').forEach(function (td) {
         var txt = (td.textContent || '').trim();
         if (txt.length > 24) return; // yalniz kisa "durum/siddet" hucreleri
+        // Turkce buyuk-I sorunu: "KRİTİK".toLowerCase() != "kritik"; tr locale ile normalize.
+        var norm = txt.toLocaleLowerCase('tr');
         for (var i = 0; i < map.length; i++) {
-          if (map[i].re.test(txt)) {
+          if (map[i].re.test(norm)) {
             td.classList.add(map[i].cls);
             td.innerHTML = '<span class="sev-badge">' + txt + '</span>';
             break;
