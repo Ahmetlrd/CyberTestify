@@ -94,3 +94,50 @@ araçlarını kapsar, transport-bağımsız). Efor: PentAGI kaynağına dalış 
 **O zamana kadar:** iso27001 & pci `available:false` (menüde YOK, API'de reddedilir).
 worker strict-halt **KALICI** (GET-only patch gelse bile defense-in-depth olarak durur).
 GET-only patch doğrulandığında (mümkünse TEK test taramasıyla) iki paket tekrar açılır.
+
+---
+
+## Forced primary image + terminal-tools image — UYGULANDI (2026-08-02)
+
+**Sorun:** PentAGI'de bir flow'un terminal (primary) container image'ini **LLM seçiyor**
+(`providers.go` → `image_chooser.tmpl`); ajan çoğunlukla çıplak public image
+(`debian:latest` / `ubuntu:latest`) seçiyor. Bu image'larda `curl/openssl/dig/wget/
+python3` **YOK**. Sonuç: `ssl_tls` (openssl s_client) ve `dns_email` (dig) gibi CLI-araç
+gerektiren pasif paketlerde ajan bütün tool-call bütçesini araç kurmaya/aramaya harcıyor,
+`incomplete=true` boş rapor çıkıyor (DOCKER_DEFAULT_IMAGE env'i sadece prompt'a *öneri*
+olarak giriyor, ZORLAMIYOR).
+
+**Çözüm (iki parça):**
+1. **`pentagi-patch/terminal-tools.Dockerfile`** → `cybertestify/pentagi-terminal:tools`
+   (debian-slim + `curl wget openssl dnsutils bind9-host python3 jq ca-certificates`).
+   Yalnız PASİF-recon araçları; saldırı aracı yok. Sunucuda `docker build` ile üretildi.
+2. **`pentagi-patch/forced_image.go`** (paket `tools`) + `pkg/tools/tools.go:494` tek-satır:
+   `Image: fte.image` → `Image: ForcedPrimaryImage()`. Bu, TÜM primary-container
+   oluşturmanın geçtiği tek chokepoint; LLM ne seçerse seçsin image sabitlenir.
+   `ForcedPrimaryImage()` env `PENTAGI_FORCED_IMAGE` ile ezilebilir, default
+   `cybertestify/pentagi-terminal:tools`. (GET-only guard ile aynı felsefe: kod-seviyesi
+   garanti, prompt değil.)
+
+**Build/deploy:** `cybertestify/pentagi:pii` image'ı `Dockerfile.cybertestify-pii` ile
+yeniden derlendi (forced_image.go + tools.go değişikliği + mevcut PII/GET-only patch'ler
+birlikte), `docker compose up -d --force-recreate pentagi`.
+
+**Kanıt (canlı ssl_tls, flow 35):** container image = `cybertestify/pentagi-terminal:tools`,
+"not found"=0, apt install=0, `incomplete=false`, rapor 10 KB, gerçek openssl s_client
+sertifika zinciri + 6 şiddet-sınıflı bulgu. Merkezi düzeltme → tüm CLI-araç paketleri
+(ssl_tls/dns_email/basit_tarama) bundan yararlanır.
+
+## collectFindings() kök düzeltmesi — UYGULANDI (2026-08-02)
+
+**Kök neden (kaynak-referanslı):** PentAGI'de ATAMA (talimat) ile TAMAMLAMA (sonuç raporu)
+AYRI kolonlarda tutulur — `Task.input`/`Subtask.description`/`MessageLog.message` = ATAMA;
+`Task.result`/`Subtask.result`/`MessageLog.result` = TAMAMLAMA. Bir `report`-tipi MessageLog'ta
+bile `message`=atama, `result`=tamamlama. Eski `collectFindings()` tavana çarpan (Task.result
+boş) taramada `messageLogs.message`'e düşüp ajanın GERÇEK çıktısı yerine ona verilen GÖREV
+TALİMATINI rapora yazıyordu (iso27001/kvkk/header_leak'te aynı sistemik hata).
+
+**Düzeltme (`report.ts` + `pentagi/client.ts`):** GraphQL sorgusu `subtasks{description,result}`
++ `messageLogs{result,resultFormat}` çeker. Yeni öncelik yalnız `*.result` (tamamlama) okur:
+Task.result → TÜM Subtask.result birleştir → report-msglog.result → done.result. Uzunluk/sezgi
+tahmini YOK, resmi alan ayrımı. Merkezi/tek — paket-bazlı özel mantık yok. Offline kanıt: flow
+31 (header_leak, capped) Task.result boş; eski=ATAMA, yeni=Subtask 261 completion.

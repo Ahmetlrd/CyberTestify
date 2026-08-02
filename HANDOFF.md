@@ -517,3 +517,46 @@ Tüm paketler PASİF (yalnız GET/HEAD/OPTIONS). Ajan POST/PUT/DELETE/PATCH dene
 Gerçek iyzico/stripe ödeme + recurring billing + fix-önerisi ek-ödemesi, gerçek
 e-Arşiv/US/AE fatura, US/AE + GDPR/CCPA hukuki metinler/paketler + fiyat
 kalibrasyonu, e-posta servisi — hepsi ayrı görevler.
+
+## Rapor kalite kök düzeltmesi + PDF + paket durumu (2026-08-02)
+
+### collectFindings() kök hatası düzeltildi (madde 1)
+Sistemik hata: tavana çarpan taramada rapora ajanın GERÇEK çıktısı değil, subtask ATAMA
+metni yazılıyordu (PentAGI'de atama=`*.description/message`, tamamlama=`*.result`; eski kod
+`message`=atamayı okuyordu). Merkezi düzeltme: yalnız `*.result` okunuyor (bkz PATCHES.md).
+Offline (flow 31) + canlı (ssl_tls flow 35) doğrulandı. TÜM paketler için tek/merkezi.
+
+### Terminal image araçsızlığı düzeltildi (madde 2B)
+PentAGI terminal container'ını LLM seçiyordu (debian/ubuntu — curl/openssl/dig YOK) → ajan
+bütçeyi kuruluma harcıyordu. Çözüm: araç-gömülü `cybertestify/pentagi-terminal:tools` +
+`forced_image.go` ile image tool-level sabitlendi (bkz PATCHES.md). ssl_tls artık 0 kurulum,
+dolu rapor. Ayrıca tüm prompt'lara merkezi NO-INSTALL bloğu (SAFETY_EN/TR), ssl_tls prompt'u
+"openssl s_client/curl kullan, kurma" olarak netleştirildi, cms_cve whatweb/wappalyzer daveti
+kaldırıldı.
+
+### kvkk_hazirlik (madde 2A)
+Bugün (2026-08-02) 1 kvkk siparişi vardı: order 9db1cd02, müşteri acavusoglu@ipekbilgisayar.com
+(DAHİLİ test hesabı), ödeme `mock-iyzico` (GERÇEK PARA DEĞİL) → **iade GEREKMEZ**. Paket kök
+fix doğrulanana kadar gizlendi, sonra (ssl_tls testi geçince) tekrar `available:true` yapıldı.
+kvkk'ya özel tarama testi yapılmadı (merkezi fix; Vedat elle spot-kontrol edecek).
+
+### ŞU AN paket durumu (available)
+- **Canlı tam-rapor testiyle TEYİTLİ:** `ssl_tls` (flow 35, 10 KB, gerçek TLS bulguları,
+  incomplete=false), `cors_cookie` (flow 28, 4 KB).
+- **Merkezi fix kapsamında AKTİF** (kök düzeltme + araçlı image hepsini onarır; Vedat elle
+  teyit edecek): `basit_tarama`, `header_leak`, `dns_email`, `cms_cve`, `csp_analiz`,
+  `kvkk_hazirlik`.
+- **HÂLÂ GİZLİ (available:false):** `iso27001_hazirlik`, `pci_hazirlik` — bu görevin
+  kapsamı dışında; ayrı bütçe/odak değerlendirmesi bekliyor (kök fix + araçlı image ile
+  tekrar denenebilir ama bu turda açılmadı).
+
+### PDF rapor (madde 3)
+`services/pdf.ts`: markdown-it + puppeteer-core (sistem Chromium, apk) ile markalı PDF.
+Teal #123F3A + amber #F5A623, kalkan logo, Hedef/Paket/Tarih banner, şiddet renk-kodlu
+tablo badge'leri (KRİTİK/YÜKSEK kırmızı, ORTA amber; TR dotted-İ için toLocaleLowerCase('tr')),
+her sayfada footer yasal uyarı + sayfa no. `reports.ts /download` artık `.md` yerine PDF
+döner; fix-önerisi: unlock ise PDF'e bölüm olarak eklenir, kilitliyse "kilitli" notu, yoksa
+gösterilmez. **SAF RENDER — ek LLM/Anthropic maliyeti YOK.** Chromium backend image'ına
+gömüldü (Dockerfile: chromium+fontlar, PUPPETEER_SKIP_DOWNLOAD). Aynı accessSecret'lı
+şifreli teslimat korundu. Örnek: gerçek ssl_tls raporundan 5 sayfalık PDF üretilip görsel
+doğrulandı.
