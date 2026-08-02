@@ -97,12 +97,9 @@ and BELOW it, for each important finding write a concrete, actionable remediatio
 ONLY; it must NEVER contain runnable exploit code, attack payloads, or attack tooling.
 If there are no findings, do not write the delimiter.`.trim();
 
-const HAZIRLIK_FOCUS_EN = `
-FOCUS RULE: You ALREADY KNOW the clauses of the relevant standard/regulation. Do NOT
-research the standard/framework/checklist on the internet; do NOT browse reference/blog/
-wiki sites (that wastes budget and is out of scope). Spend the ENTIRE budget only on
-passively inspecting the TARGET and mapping your observations to the relevant clauses.
-Do TARGET ASSESSMENT, not research.`.trim();
+// NOT: HAZIRLIK_FOCUS_EN kaldirildi — iso27001/pci promptlari artik DAR/deterministik
+// (acikca "arastirma/arama yok, yalniz bu kontroller") oldugu icin ayri odak-kisiti
+// gereksiz. kvkk (TR) hala HAZIRLIK_FOCUS_TR kullanir.
 
 // === kvkk icin TURKCE sabitler (Turk hukuku baglami) ===========================
 const SAFETY_TR = `
@@ -275,30 +272,30 @@ Target: ${host}
       'eslestiren pasif bir hazirlik raporu. RESMI ASV/QSA testi DEGILDIR.',
     priceMinorUnit: 249900,
     modelProvider: PROVIDER,
-    maxToolCalls: 60,
-    available: false, // GET-only patch tamam AMA bos-rapor sorunu surdugu icin HALA gizli (bkz HANDOFF)
+    // DAR/deterministik prompt — genis kesif YOK, dusuk tavan odaklanmayi zorlar.
+    maxToolCalls: 25,
+    available: false, // dar-prompt testi gecince true yapilacak (bkz HANDOFF)
 
     promptTemplate: (host) => `
-Perform a PASSIVE "PCI-DSS READINESS PRE-ASSESSMENT" against the single target below.
-This is NOT an official PCI ASV scan or penetration test; the goal is to map externally
-observable controls to the relevant PCI-DSS requirements.
-${HAZIRLIK_FOCUS_EN}
+Run a PASSIVE, NARROW, FIXED "PCI-DSS READINESS PRE-ASSESSMENT" on the SINGLE target
+below. This is a fixed checklist — NOT open-ended research. Do NOT use web search, do NOT
+browse any other site, do NOT open new subtasks. Inspect ONLY ${host} with GET/HEAD requests.
 
-Using normal GET requests only, check and map the following to PCI requirements:
-- TLS version/cipher/certificate -> Req 4.2.1 (strong cryptography in transit)
-- HTTP security headers -> Req 6.4 / general web protection
-- Cookie flags (Secure/HttpOnly/SameSite) -> Req 8 / session security
-- Server banner / default pages -> Req 2.2 (secure configuration)
-- Known version CVEs (from banner) -> Req 6.2/6.3
-- Exposed sensitive files (.git/.env/backup) -> Req 3 / data exposure
+Do EXACTLY these checks on ${host} and map each to a PCI-DSS requirement:
+1. TLS version/cipher/certificate -> Req 4.2.1 (strong cryptography in transit)
+2. HTTP security headers (HSTS/CSP/X-Frame-Options/X-Content-Type-Options) -> Req 6.4
+3. Cookie flags (Secure/HttpOnly/SameSite) on any Set-Cookie -> Req 8 (session security)
+4. Server banner / default pages disclosing versions -> Req 2.2 (secure configuration)
+5. Exposed sensitive files via a single GET each (/.git/config, /.env, /backup.zip) -> Req 3 (data exposure)
+
+After these 5 checks, immediately WRITE the report and FINISH. Nothing else.
 ${SAFETY_EN}
 ${BUDGET_GUARD_EN}
 ${FIX_SUGGESTIONS_STEP_EN}
 
 Output (Markdown table): "PCI Requirement | Finding | Status (Pass/Attention/Missing) | Recommendation".
-At the end add the note: "This report is not an official PCI compliance test; internal
-network/CDE, segmentation, ASV scanning and penetration testing are OUT OF SCOPE." Finish
-within about 50 tool calls.
+End note: "Not an official PCI compliance test; internal network/CDE, segmentation, ASV
+scanning and penetration testing are OUT OF SCOPE."
 
 Target: ${host}
 `.trim(),
@@ -347,27 +344,32 @@ Hedef: ${host}
       'eslestirildigi pasif hazirlik raporu. RESMI sertifikasyon/denetim DEGILDIR.',
     priceMinorUnit: 299900,
     modelProvider: PROVIDER,
-    maxToolCalls: 50,
-    available: false, // GET-only patch tamam AMA bos-rapor sorunu surdugu icin HALA gizli (bkz HANDOFF)
+    // DAR/deterministik prompt (bkz asagi) — genis kesif YOK, bu yuzden dusuk tavan
+    // yeterli ve odaklanmayi zorlar (header_leak gibi guvenilir tamamlanir).
+    maxToolCalls: 25,
+    available: false, // dar-prompt testi gecince true yapilacak (bkz HANDOFF)
 
     promptTemplate: (host) => `
-Passively observe the single target below and produce a "READINESS CHECKLIST" mapping
-externally visible technical controls to ISO/IEC 27001 Annex A. This is NOT an official
-certification audit.
-${HAZIRLIK_FOCUS_EN}
+Run a PASSIVE, NARROW, FIXED ISO/IEC 27001 Annex A readiness spot-check on the SINGLE
+target below. This is a fixed checklist — NOT open-ended research. Do NOT use web search,
+do NOT browse any other site, do NOT open new subtasks, do NOT look up the ISO standard
+online (you already know it). Inspect ONLY ${host} with GET/HEAD requests.
 
-Observations and example mappings:
-- TLS/encryption, secure transport -> A.8 (cryptography/communications security)
-- Security headers, secure configuration -> A.8 (technical measures)
-- Information leakage/exposed files -> A.5/A.8 (access, asset management)
-- Privacy/security policy page visibility -> A.5 (policies)
+Do EXACTLY these checks on ${host} and map each to an Annex A clause:
+1. TLS certificate valid + modern protocol (TLS 1.2/1.3)? -> A.8.24 (cryptography)
+2. HTTP security headers present (HSTS, CSP, X-Frame-Options, X-Content-Type-Options)? -> A.8.23/A.8.9
+3. Server/technology banner disclosing versions? -> A.8.9 (secure configuration)
+4. Obvious exposed files via a single GET each (/.git/config, /.env, /robots.txt)? -> A.8.12 (data leakage)
+5. Is a privacy/security policy page reachable? -> A.5.1 (policies)
+
+After these 5 checks, immediately WRITE the report and FINISH. Nothing else.
 ${SAFETY_EN}
 ${BUDGET_GUARD_EN}
 ${FIX_SUGGESTIONS_STEP_EN}
 
-Output (Markdown table): "Annex A Clause | Observation | Status | Recommendation". At the
-end add the note: "This report is not an official ISO 27001 audit/certification; ISMS
-scope, documentation and internal processes are OUT OF SCOPE." Finish within about 40 tool calls.
+Output (Markdown table): "Annex A Clause | Observation | Status | Recommendation". End note:
+"Not an official ISO 27001 audit/certification; ISMS scope, documentation and internal
+processes are OUT OF SCOPE."
 
 Target: ${host}
 `.trim(),
