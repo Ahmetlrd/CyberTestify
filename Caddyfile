@@ -16,19 +16,20 @@
 	}
 }
 
-# Apex (cybertestify.com) VE app.cybertestify.com — IKISI DE ayni frontend'i DOGRUDAN
-# sunar (cross-domain yonlendirme YOK; ikisi ozdes). app. yayin sonrasi gelistirme/push
-# alani olarak kullanilir. Caddy her iki site blogu icin de Let's Encrypt sertifikasi alir.
+# TEK KANONIK DOMAIN: cybertestify.com. (Kullanici karari: iki-domain karisikligini
+# bitir, yalniz cybertestify.com ile devam et.) Apex frontend'i DOGRUDAN sunar.
 cybertestify.com {
 	import sec_headers
 	encode gzip zstd
 	reverse_proxy frontend:3000
 }
 
+# app.cybertestify.com -> apex'e yonlendir (path+query korunur). TEMPORARY (302) —
+# bilerek kalici(301) DEGIL: gecmiste yon degistiren 301'ler tarayici cache'inde
+# takildigindan, geri alinabilir kalsin diye. app artik ayri bir site DEGIL.
 app.cybertestify.com {
 	import sec_headers
-	encode gzip zstd
-	reverse_proxy frontend:3000
+	redir https://cybertestify.com{uri}
 }
 
 api.cybertestify.com {
