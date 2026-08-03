@@ -48,6 +48,8 @@ enum ScanPackageKey {
   csp_analiz         // Content-Security-Policy analizi — pasif header kontrolu
   subdomain_takeover // Alt alan adi devralma (dangling CNAME) — pasif DNS/CT kesfi
   api_discovery      // API & Swagger/OpenAPI dokuman kesfi — pasif GET
+  injection_verify   // Zafiyet dogrulama — enjeksiyon (SQLi/XSS), active-light
+  idor_verify        // Zafiyet dogrulama — yetkisiz erisim/IDOR, active-light
   // --- Asagidakiler eski/pasif, sadece gecmis kayit butunlugu icin duruyor ---
   standard_web
   premium_web
@@ -77,6 +79,29 @@ model Customer {
   orders             Order[]
   scheduledScans     ScheduledScan[]
   creditTransactions CreditTransaction[]
+  activeTestConsents ActiveTestConsent[]
+}
+
+// (Faz 3) Active-light paketler icin ZORUNLU yetkilendirme/onay beyani. Bir active-light
+// siparis, gecerli bir kayit OLMADAN baslatilamaz (guard: createOrder + orchestrator).
+// Beyan = elektronik imza YERINE gecen yasal ad + risk kabul checkbox'i; kriptografik
+// e-imza DEGIL. Kabul edilen metnin VERSIYONU + IP + zaman damgasi ispat icin saklanir.
+model ActiveTestConsent {
+  id           String         @id @default(uuid())
+  customerId   String
+  customer     Customer       @relation(fields: [customerId], references: [id])
+  orderId      String         @unique
+  order        Order          @relation(fields: [orderId], references: [id])
+  packageKey   ScanPackageKey
+  legalName    String         // kullanicinin tam yasal adi (beyan)
+  companyName  String?        // varsa sirket unvani
+  riskAccepted Boolean        // risk onay checkbox'i (true olmadan siparis yok)
+  textVersion  String         // kabul edilen onay metninin versiyonu
+  consentIp    String?
+  pdfDelivered Boolean        @default(false) // onay PDF'i uretildi/gonderildi mi
+  createdAt    DateTime       @default(now())
+
+  @@index([customerId])
 }
 
 // (Is 2) Kredi hareketleri denetim defteri (ledger). Her +/- burada iz birakir;
@@ -189,6 +214,7 @@ model Order {
 
   flow   Flow?
   report Report?
+  activeTestConsent ActiveTestConsent? // (Faz 3) active-light paketlerde zorunlu
 
   // Bu siparis bir periyodik taramadan otomatik olusturulduysa, kaynak kayit.
   scheduledScanId String?

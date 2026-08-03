@@ -22,6 +22,8 @@ const ESTIMATED: Record<string, { us: number; ae: number }> = {
   csp_analiz: { us: 2900, ae: 10900 }, // PLACEHOLDER (header_leak seviyesi)
   subdomain_takeover: { us: 4900, ae: 17900 }, // PLACEHOLDER (Vedat onayi)
   api_discovery: { us: 4400, ae: 15900 }, // PLACEHOLDER (Vedat onayi)
+  injection_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER (active-light, Vedat onayi)
+  idor_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER (active-light, Vedat onayi)
 };
 
 // [packageKey][region] -> amountMinorUnit. Seed bu haritadan PackagePricing yazar.

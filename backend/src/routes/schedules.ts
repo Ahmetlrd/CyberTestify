@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { getPackageDef } from '../services/scanPackages.js';
+import { getPackageDef, securityProfileFor } from '../services/scanPackages.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -23,6 +23,8 @@ const createSchema = z.object({
     'csp_analiz',
     'subdomain_takeover',
     'api_discovery',
+    'injection_verify',
+    'idor_verify',
   ]),
   intervalDays: z.number().int(),
   runs: z.number().int().min(1).max(52), // pesin odenen tekrar sayisi (N)
@@ -78,6 +80,11 @@ schedulesRouter.post('/', requireAuth, async (req, res) => {
   }
   if (packageDef.available === false) {
     return res.status(409).json({ error: 'Bu paket su an satista degil.' });
+  }
+  // (Faz 3) active-light paketler HER tarama icin ayri yetkilendirme beyani gerektirir;
+  // zamanlanmis (tekrarlayan) taramaya UYGUN DEGIL.
+  if (securityProfileFor(packageDef) === 'active-light') {
+    return res.status(409).json({ error: 'Aktif-test paketleri zamanlanamaz; her tarama için ayrı yetkilendirme beyanı gerekir.' });
   }
 
   const domain = await prisma.domain.findFirstOrThrow({ where: { id: domainId, customerId: req.customerId! } });

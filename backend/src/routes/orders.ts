@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice } from '../services/scanPackages.js';
+import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice, securityProfileFor } from '../services/scanPackages.js';
+import { validateConsentInput, activeTestScope, ACTIVE_TEST_CONSENT_VERSION, ACTIVE_TEST_RISK_ACK, hasValidActiveTestConsent } from '../services/activeTestConsent.js';
+import { renderConsentPdf } from '../services/pdf.js';
 import { getPricing, currencyFor } from '../services/pricing.js';
 import { getPaymentProvider } from '../services/payment/index.js';
 import { getSampleReportPdf } from '../services/sampleReports.js';
@@ -34,6 +36,7 @@ ordersRouter.get('/packages', async (req, res) => {
       .map((p) => {
         const row = priceByKey.get(p.key);
         const t = localizedPackage(p, locale);
+        const profile = securityProfileFor(p);
         return {
           key: p.key,
           displayName: t.displayName,
@@ -43,6 +46,12 @@ ordersRouter.get('/packages', async (req, res) => {
           currency: row?.currency ?? currencyFor(region),
           // (3) Ucretli "AI Cozum Onerileri" eklentisi fiyati (PLACEHOLDER).
           fixSuggestionPriceMinorUnit: fixSuggestionPrice(p),
+          // (Faz 3) guvenlik profili + active-light ise ek onay bloğu bilgisi (frontend).
+          securityProfile: profile,
+          activeTest:
+            profile === 'active-light'
+              ? { scope: activeTestScope(p.key), riskText: ACTIVE_TEST_RISK_ACK, consentVersion: ACTIVE_TEST_CONSENT_VERSION }
+              : null,
         };
       }),
   );
@@ -61,6 +70,25 @@ ordersRouter.get('/sample-report/:packageKey', async (req, res) => {
   }
 });
 
+// (Faz 3) Siparise bagli Aktif Test Yetkilendirme Beyani PDF'i — kayittan re-render.
+ordersRouter.get('/:orderId/consent-pdf', requireAuth, async (req, res) => {
+  const consent = await prisma.activeTestConsent.findUnique({
+    where: { orderId: req.params.orderId },
+    include: { order: { include: { domain: { select: { hostname: true } }, package: { select: { displayName: true } } } } },
+  });
+  if (!consent || consent.customerId !== req.customerId) return res.status(404).json({ error: 'Beyan bulunamadi.' });
+  const scope = activeTestScope(consent.packageKey);
+  const pdf = await renderConsentPdf({
+    legalName: consent.legalName, companyName: consent.companyName,
+    hostname: consent.order.domain.hostname, packageName: consent.order.package.displayName,
+    does: scope.does, doesNot: scope.doesNot, riskText: ACTIVE_TEST_RISK_ACK,
+    version: consent.textVersion, createdAt: consent.createdAt, ip: consent.consentIp,
+  });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="yetkilendirme-beyani-${consent.orderId}.pdf"`);
+  res.send(pdf);
+});
+
 const createOrderSchema = z.object({
   domainId: z.string().uuid(),
   packageKey: z.enum([
@@ -76,6 +104,8 @@ const createOrderSchema = z.object({
     'csp_analiz',
     'subdomain_takeover',
     'api_discovery',
+    'injection_verify',
+    'idor_verify',
   ]),
   // Pentest yetkilendirmesi (TCK 243 hukuka uygunluk) — true olmadan siparis yok.
   ownershipConfirmed: z.literal(true, {
@@ -93,6 +123,14 @@ const createOrderSchema = z.object({
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
   // (Is 2) true ise odeme yerine hesap kredisinden dus (yeterliyse). Yoksa normal odeme.
   useCredits: z.boolean().optional().default(false),
+  // (Faz 3) active-light paketlerde ZORUNLU yetkilendirme beyani.
+  activeTestConsent: z
+    .object({
+      legalName: z.string().min(3).max(200),
+      companyName: z.string().max(200).optional(),
+      riskAccepted: z.boolean(),
+    })
+    .optional(),
 });
 
 ordersRouter.post('/', requireAuth, async (req, res) => {
@@ -117,6 +155,15 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   // dogrudan istek gelebilir). iso27001/pci — POST sorunu (bkz PATCHES.md).
   if (packageDef.available === false) {
     return res.status(409).json({ error: 'Bu paket su an satista degil.' });
+  }
+
+  // (Faz 3) ACTIVE-LIGHT GUARD: bu paketler zafiyeti DOGRULAYAN aktif test istekleri
+  // gonderir; siparis, gecerli bir yetkilendirme beyani (yasal ad + risk kabul) OLMADAN
+  // OLUSTURULAMAZ. Tamlik kontrolu OTOMATIK (Vedat'in manuel onayi gerekmez).
+  const isActiveLight = securityProfileFor(packageDef) === 'active-light';
+  if (isActiveLight) {
+    const v = validateConsentInput(parsed.data.activeTestConsent);
+    if (!v.ok) return res.status(400).json({ error: v.error });
   }
 
   // GATE: Ham ag/port (networkLayer) paketleri, bypass-proof izolasyon
@@ -153,6 +200,19 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     consentVersion: config.legalVersion,
   };
 
+  // (Faz 3) active-light: siparise ZORUNLU yetkilendirme beyanini bagla (tarama
+  // baslamadan ONCE olmali; orchestrator guard'i da ayrica dogrular).
+  const recordConsent = async (orderId: string) => {
+    const atc = parsed.data.activeTestConsent!;
+    await prisma.activeTestConsent.create({
+      data: {
+        customerId: req.customerId!, orderId, packageKey,
+        legalName: atc.legalName.trim(), companyName: atc.companyName?.trim() || null,
+        riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
+      },
+    });
+  };
+
   // (Is 2) KREDI ILE ODEME: yeterli bakiye varsa odeme adimini ATLA — krediyi dus,
   // siparisi 'paid' olustur, taramayi kuyruga al. Hepsi TEK transaction (tutarlilik).
   if (parsed.data.useCredits) {
@@ -172,6 +232,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
       await spendCredits(tx as unknown as CreditTx, req.customerId!, creditsNeeded, o.id);
       return o;
     });
+    if (isActiveLight) await recordConsent(order.id); // tarama baslamadan ONCE
     // Odeme yok — dogrudan tarama kuyruguna (concurrency=1; bkz orchestrator).
     await enqueueOrStartScan(order.id);
     return res.json({ orderId: order.id, paidWithCredits: true, creditsSpent: creditsNeeded });
@@ -189,6 +250,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
       ...consent,
     },
   });
+  if (isActiveLight) await recordConsent(order.id);
 
   // Bölgeye göre ödeme sağlayıcı (tr→iyzico, us/ae→stripe; hepsi sandbox).
   const payment = await getPaymentProvider(region).initiatePayment(order.id);

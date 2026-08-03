@@ -8,7 +8,11 @@ import { readRegionCookie } from '../../lib/region';
 import { getRegion, type RegionCode } from '../../config/regions';
 import { formatMoney } from '../../config/i18n';
 
-type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string };
+type ActiveTest = { scope: { does: string[]; doesNot: string[] }; riskText: string; consentVersion: string };
+type Pkg = {
+  key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string;
+  securityProfile?: 'passive' | 'active-light'; activeTest?: ActiveTest | null;
+};
 
 // datetime-local `min` icin yerel saatte YYYY-MM-DDTHH:mm — gecmis tarihleri
 // tarayici soluklastirir/secilemez yapar.
@@ -31,6 +35,11 @@ export default function OrderPage() {
   const [balance, setBalance] = useState(0);
   const [creditUnit, setCreditUnit] = useState(99900);
   const [useCredits, setUseCredits] = useState(false);
+
+  // (Faz 3) active-light yetkilendirme beyani alanlari.
+  const [atLegalName, setAtLegalName] = useState('');
+  const [atCompany, setAtCompany] = useState('');
+  const [atRisk, setAtRisk] = useState(false);
 
   const [authConsent, setAuthConsent] = useState(false);
   const [contractConsent, setContractConsent] = useState(false);
@@ -58,6 +67,8 @@ export default function OrderPage() {
   }, [router]);
 
   const selectedPkg = packages.find((p) => p.key === selected);
+  const isActiveLight = selectedPkg?.securityProfile === 'active-light';
+  const activeConsentOk = !isActiveLight || (atRisk && atLegalName.trim().length >= 3);
   const creditsNeeded = selectedPkg ? Math.max(1, Math.round(selectedPkg.priceMinorUnit / creditUnit)) : 0;
   // Kredi ile odeme yalnizca tek-seferlik/hemen taramada (zamanlanmis akis prepaid farkli).
   const canUseCredits = balance >= creditsNeeded && creditsNeeded > 0 && !recurring && startMode === 'now';
@@ -66,6 +77,8 @@ export default function OrderPage() {
     if (!domainId || busy) return;
     if (!selected) return setError('Lütfen bir paket seçin.');
     if (!allConsents) return setError('Devam etmek için üç onayın tümünü işaretlemelisiniz.');
+    if (isActiveLight && (recurring || startMode === 'later')) return setError('Aktif-test paketleri zamanlanamaz; tek seferlik ve hemen çalıştırılır.');
+    if (!activeConsentOk) return setError('Aktif test için yetkilendirme beyanını doldurmalı ve risk onayını işaretlemelisiniz.');
     // İleri tarih seçildiyse geçerli ve gelecekte olmalı.
     let startAtIso: string | undefined;
     if (startMode === 'later') {
@@ -103,6 +116,7 @@ export default function OrderPage() {
         },
         region,
         payWithCredits,
+        isActiveLight ? { legalName: atLegalName.trim(), companyName: atCompany.trim() || undefined, riskAccepted: atRisk } : undefined,
       );
       // Krediyle odendiyse odeme sayfasi YOK — dogrudan siparis detayina git.
       if (res.paidWithCredits) {
@@ -271,6 +285,57 @@ export default function OrderPage() {
         )}
       </div>
 
+      {/* (Faz 3) Active-light yetkilendirme beyani — pasif onaylarin USTUNE, ayri blok */}
+      {isActiveLight && selectedPkg?.activeTest && (
+        <div className="mt-6 rounded-card border-2 border-accent/60 bg-accent-soft/30 p-5">
+          <h3 className="text-base font-bold text-brand">Aktif Test Yetkilendirmesi (zorunlu)</h3>
+          <p className="mt-1 text-sm text-ink-soft">
+            Bu paket, zafiyeti <strong>doğrulamak</strong> için sınırlı aktif test istekleri gönderir. Devam etmek için
+            kapsamı okuyup beyanı doldurmalısınız.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-card bg-white/70 p-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-brand-500">Bu tarama NE YAPAR</p>
+              <ul className="mt-1 space-y-1 text-sm text-ink-soft">
+                {selectedPkg.activeTest.scope.does.map((d) => (
+                  <li key={d}>✅ {d}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-card bg-white/70 p-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-red-600">Bu tarama NE YAPMAZ</p>
+              <ul className="mt-1 space-y-1 text-sm text-ink-soft">
+                {selectedPkg.activeTest.scope.doesNot.map((d) => (
+                  <li key={d}>⛔ {d}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-ink-soft">
+            <input type="checkbox" checked={atRisk} onChange={(e) => setAtRisk(e.target.checked)} className="mt-0.5" />
+            <span>{selectedPkg.activeTest.riskText}</span>
+          </label>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <input
+              value={atLegalName}
+              onChange={(e) => setAtLegalName(e.target.value)}
+              placeholder="Tam yasal adınız (zorunlu)"
+              className="field"
+            />
+            <input
+              value={atCompany}
+              onChange={(e) => setAtCompany(e.target.value)}
+              placeholder="Şirket/unvan (varsa)"
+              className="field"
+            />
+          </div>
+          <p className="mt-2 text-xs text-ink-muted">
+            Bu beyan; adınız, zaman damgası, IP ve metin sürümü ile birlikte kayıt altına alınır ve bir yetkilendirme
+            PDF’i olarak siparişinize bağlanır (elektronik imza yerine geçen irade beyanı; kriptografik e-imza değildir).
+          </p>
+        </div>
+      )}
+
       {/* (Is 2) Kredi bakiyesi + krediyle öde */}
       {balance > 0 && (
         <div className="mt-5 rounded-card border border-brand-100 bg-brand-50/50 px-4 py-3 text-sm">
@@ -296,7 +361,7 @@ export default function OrderPage() {
 
       <button
         onClick={handleStart}
-        disabled={!domainId || busy || !selected || !allConsents}
+        disabled={!domainId || busy || !selected || !allConsents || !activeConsentOk}
         className="btn-primary mt-6 w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
       >
         {busy

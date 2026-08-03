@@ -1,6 +1,7 @@
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { getPackageDef } from './scanPackages.js';
+import { getPackageDef, securityProfileFor } from './scanPackages.js';
+import { hasValidActiveTestConsent } from './activeTestConsent.js';
 import { isVerificationStillValid } from './verification.js';
 import { checkEgressProxyHealth } from './egressHealth.js';
 import * as pentagi from '../pentagi/client.js';
@@ -83,6 +84,14 @@ export async function startScanForOrder(orderId: string) {
   }
 
   const pkg = getPackageDef(order.package.key);
+
+  // (Faz 3) GUARD (defense-in-depth): active-light paket, gecerli bir Aktif Test
+  // Yetkilendirme Beyani OLMADAN calistirilamaz. Route'ta da zorunlu; bu ikinci hat
+  // atlanamaz olsun diye (or. ileride farkli bir akistan siparis gelirse).
+  if (securityProfileFor(pkg) === 'active-light' && !(await hasValidActiveTestConsent(orderId))) {
+    await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed' } });
+    throw new Error('Active-light paket icin gecerli yetkilendirme beyani (ActiveTestConsent) yok; tarama reddedildi.');
+  }
 
   // Savunma katmani: ham ag/port paketi (networkLayer) ancak bypass-proof
   // izolasyon aktifken calisabilir (route'ta da guard var; burada ikinci hat).

@@ -27,7 +27,9 @@ export interface ScanPackageDef {
     | 'cors_cookie'
     | 'csp_analiz'
     | 'subdomain_takeover'
-    | 'api_discovery';
+    | 'api_discovery'
+    | 'injection_verify'
+    | 'idor_verify';
   displayName: string;
   description: string;
   priceMinorUnit: number; // kurus
@@ -80,6 +82,8 @@ const PACKAGE_I18N: Partial<Record<ScanPackageDef['key'], { displayName: string;
   csp_analiz: { displayName: 'CSP (Content Security Policy) Analysis', description: 'Passive analysis of the Content-Security-Policy header: presence, weakening directives (unsafe-inline/unsafe-eval), missing default-src. Fully passive.' },
   subdomain_takeover: { displayName: 'Subdomain Takeover Scan', description: 'Passively discovers subdomains (via DNS + Certificate Transparency logs, NOT brute-force) and flags dangling CNAME records pointing to de-provisioned cloud resources (Heroku/S3/Azure, etc.). Fully passive.' },
   api_discovery: { displayName: 'API & Swagger Discovery', description: 'Looks for OpenAPI/Swagger docs at common paths (/swagger-ui.html, /openapi.json, etc.), extracts the listed endpoints and flags public, potentially sensitive ones. Passive GET.' },
+  injection_verify: { displayName: 'Vulnerability Verification — Injection (SQLi/XSS)', description: 'Active-light check: sends limited, harmless proof-of-concept payloads to PROVE whether injection flaws exist. No data extraction, no data modification. Requires an authorization declaration.' },
+  idor_verify: { displayName: 'Vulnerability Verification — Broken Access (IDOR)', description: 'Active-light check: probes predictable resource IDs to verify whether unauthorized access is possible. Never reads/stores the actual data. Requires an authorization declaration.' },
 };
 
 // kvkk_hazirlik EN sozlukte YOK — global menude gosterilmez (bkz orders.ts filtresi).
@@ -144,6 +148,22 @@ SAFE config/code example when useful). This is a PAID deliverable — never omit
 leave it for a later subtask. ABSOLUTE RULE: remediation ONLY; it must NEVER contain runnable
 exploit code, attack payloads, or attack tooling. Only if there are genuinely NO findings at
 all, omit the delimiter.`.trim();
+
+// === ACTIVE-LIGHT guvenlik blogu (Faz 3) — SAFETY_EN'in aksine KANIT-amacli zararsiz
+// probe'lara IZIN verir; ama istismar/exfil/veri-degistirme/DoS/auth-bypass'i hem prompt
+// hem TOOL SEVIYESINDE (passive_guard.go active-light) yasaklar. Yalniz active-light paketler.
+const SAFETY_ACTIVE_LIGHT_EN = `
+SCOPE & SAFETY (active-light VERIFICATION — prove presence, NEVER exploit): You MAY send a FEW
+LIMITED, HARMLESS proof-of-concept probes to PROVE a vulnerability EXISTS. STRICTLY FORBIDDEN and
+technically BLOCKED at the tool level: extracting real data (DB dump/enumerate; sqlmap --dump/
+--dump-all/--os-shell/-a are blocked), modifying or deleting data (PUT/PATCH/DELETE and any write
+are blocked), authentication bypass / session theft, and load/stress/DoS (ab/wrk/hping etc. blocked).
+A single harmless POST test submission is allowed; PUT/DELETE/PATCH are NOT. Access ONLY the
+specified host; stay at the HOSTNAME/application layer; never touch any other target. When in doubt,
+SKIP. Report ONLY evidence of PRESENCE — never include any extracted/sensitive data (there must be none).
+NO INSTALLS: do NOT install or attempt to install ANY tool/package (apt/pip/npm/go install/git clone/
+curl|bash/downloading binaries). Use ONLY tools already present in the container; if a tool is missing,
+SKIP that check ("not reviewed (tool unavailable)") — never install.`.trim();
 
 // NOT: HAZIRLIK_FOCUS_EN kaldirildi — iso27001/pci promptlari artik DAR/deterministik
 // (acikca "arastirma/arama yok, yalniz bu kontroller") oldugu icin ayri odak-kisiti
@@ -624,6 +644,82 @@ ${FIX_SUGGESTIONS_STEP_EN}
 
 Output (Markdown): whether an API doc was found + where; a table "Endpoint | Method | Auth
 required? | Sensitivity | Note"; and hardening recommendations (protect docs, require auth).
+
+Target: ${host}
+`.trim(),
+  },
+  {
+    // FAZ 3 — ilk ACTIVE-LIGHT paket. Zafiyeti DOGRULAR, ISTISMAR ETMEZ. Zorunlu
+    // yetkilendirme beyani olmadan siparis olusturulamaz (bkz orders.ts + orchestrator).
+    key: 'injection_verify',
+    displayName: 'Zafiyet Doğrulama — Enjeksiyon (SQLi/XSS)',
+    description:
+      'Aktif-hafif kontrol: tespit edilen giris noktalarina ZARARSIZ kanit-amacli test ' +
+      'payload’lari gonderip enjeksiyon (SQLi/XSS) zafiyetinin VAR OLDUGUNU dogrular. Veri ' +
+      'CEKMEZ, veri SILMEZ/DEGISTIRMEZ. Yetkilendirme beyani gerektirir.',
+    priceMinorUnit: 349900, // PLACEHOLDER (Vedat onayi bekleniyor)
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    securityProfile: 'active-light',
+    available: false,
+    promptTemplate: (host) => `
+Run a NARROW, ACTIVE-LIGHT vulnerability VERIFICATION for injection flaws (SQLi/XSS) on the SINGLE
+target below. GOAL: PROVE whether a vulnerability EXISTS — NEVER exploit it. FIXED checklist.
+HARD CONSTRAINTS: do NOT open new subtasks; do NOT crawl the whole site; ~8-12 requests total.
+
+Steps:
+1. Identify a FEW public input points (URL query parameters, visible form fields) — a handful only.
+2. For each, send ONE harmless proof-of-concept probe and look for EVIDENCE of a flaw:
+   - SQLi: a database ERROR message, or a measurable timing difference from a benign time-based probe.
+   - XSS: the probe value REFLECTED UNENCODED in the HTML response.
+   (If you use sqlmap, DETECTION ONLY: --batch; NEVER --dump/--dump-all/--os-shell/-a — blocked at tool level.)
+3. Report ONLY the evidence of PRESENCE (which parameter, what evidence). There must be NO extracted data.
+
+After these checks, IMMEDIATELY and in the SAME step write the single report AND the
+${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask.
+${SAFETY_ACTIVE_LIGHT_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown table): "Input Point | Type (SQLi/XSS) | Evidence | Severity | Recommendation".
+State clearly that this confirms PRESENCE only and a full manual assessment is advised. NEVER include
+any extracted/sensitive data.
+
+Target: ${host}
+`.trim(),
+  },
+  {
+    key: 'idor_verify',
+    displayName: 'Zafiyet Doğrulama — Yetkisiz Erişim (IDOR)',
+    description:
+      'Aktif-hafif kontrol: hedefte tahmin edilebilir kaynak kimlikleri (or. /api/user/123) ' +
+      'olup olmadigini tespit eder, kimligi degistirip yetkisiz erisimin mumkun olup olmadigini ' +
+      'DOGRULAR. Erisilen gercek/hassas veriyi RAPORA YAZMAZ. Yetkilendirme beyani gerektirir.',
+    priceMinorUnit: 349900, // PLACEHOLDER (Vedat onayi bekleniyor)
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    securityProfile: 'active-light',
+    available: false,
+    promptTemplate: (host) => `
+Run a NARROW, ACTIVE-LIGHT vulnerability VERIFICATION for broken access control / IDOR on the SINGLE
+target below. GOAL: PROVE whether unauthorized access is possible — NEVER exfiltrate data. FIXED
+checklist. HARD CONSTRAINTS: do NOT open new subtasks; do NOT crawl the whole site; ~8-12 requests total.
+
+Steps:
+1. Identify a FEW endpoints that reference a predictable resource ID (e.g. /api/user/123, ?id=NNN).
+2. For a couple of them, change ONLY the ID to a neighbouring value and observe whether the ACCESS
+   BEHAVIOUR changes (e.g. another record becomes reachable without authorization). GET only.
+3. Report ONLY the OBSERVATION ("this endpoint appears exposed to unauthorized access") — do NOT show,
+   quote, or store the actual returned data. If content is sensitive, describe the TYPE only, never values.
+
+After these checks, IMMEDIATELY and in the SAME step write the single report AND the
+${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask.
+${SAFETY_ACTIVE_LIGHT_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown table): "Endpoint | ID pattern | Observation | Severity | Recommendation". NEVER include
+any real/sensitive data — only the access-control observation.
 
 Target: ${host}
 `.trim(),

@@ -291,3 +291,92 @@ export async function renderReportPdf(
     await browser.close();
   }
 }
+
+// --- (Faz 3) Aktif Test Yetkilendirme Beyanı PDF'i — SAF RENDER (ek LLM YOK) --------
+export interface ConsentPdfData {
+  legalName: string;
+  companyName?: string | null;
+  hostname: string;
+  packageName: string;
+  does: string[];
+  doesNot: string[];
+  riskText: string;
+  version: string;
+  createdAt: Date;
+  ip?: string | null;
+}
+
+function buildConsentHtml(d: ConsentPdfData): string {
+  const dateStr = d.createdAt.toLocaleString('tr-TR', { dateStyle: 'long', timeStyle: 'short' });
+  const li = (items: string[], color: string) =>
+    items.map((i) => `<li style="margin:4px 0;"><span style="color:${color};font-weight:700;">•</span> ${escapeHtml(i)}</li>`).join('');
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><style>
+  * { box-sizing: border-box; } html,body { margin:0; padding:0; }
+  body { font-family: -apple-system,"Segoe UI",Roboto,Arial,"Noto Sans",sans-serif; color:#1b2b28; font-size:12px; line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .band { background:linear-gradient(135deg,#123F3A 0%,#0A2E2A 100%); color:#EEF5F3; padding:22px 34px; display:flex; align-items:center; gap:14px; }
+  .brand { font-size:20px; font-weight:700; color:#fff; } .brand span { color:#F5A623; }
+  .tagline { font-size:11px; color:#9Fc4bc; margin-top:2px; }
+  .meta { display:flex; flex-wrap:wrap; gap:22px; padding:14px 34px; background:#EEF5F3; border-bottom:3px solid #F5A623; font-size:11px; }
+  .meta .k { color:#5FA396; text-transform:uppercase; letter-spacing:.5px; font-size:9px; font-weight:700; }
+  .meta .v { color:#123F3A; font-weight:600; font-size:12.5px; }
+  .content { padding:20px 34px 30px; }
+  h1 { color:#123F3A; font-size:19px; margin:4px 0 14px; }
+  h2 { color:#14514A; font-size:14px; margin:18px 0 6px; }
+  ul { list-style:none; padding-left:2px; margin:6px 0; }
+  .risk { background:#FDECC8; border-left:4px solid #F5A623; padding:12px 14px; border-radius:0 6px 6px 0; margin:10px 0; }
+  .decl { margin-top:18px; padding:14px 16px; background:#F6FAF8; border:1px solid #DCEAE6; border-radius:8px; }
+  .decl .row { display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px dashed #DCEAE6; }
+  .foot { margin-top:20px; font-size:10px; color:#5FA396; border-top:1px solid #DCEAE6; padding-top:10px; }
+  </style></head><body>
+  <div class="band">${LOGO_SVG}<div><div class="brand">Cyber<span>Testify</span></div><div class="tagline">Aktif Test Yetkilendirme Beyanı</div></div></div>
+  <div class="meta">
+    <div><div class="k">Hedef</div><div class="v">${escapeHtml(d.hostname)}</div></div>
+    <div><div class="k">Paket</div><div class="v">${escapeHtml(d.packageName)}</div></div>
+    <div><div class="k">Tarih</div><div class="v">${escapeHtml(dateStr)}</div></div>
+    <div><div class="k">Metin Sürümü</div><div class="v">${escapeHtml(d.version)}</div></div>
+  </div>
+  <div class="content">
+    <h1>Aktif Test Yetkilendirme Beyanı</h1>
+    <p>Bu belge, aşağıda kimliği beyan edilen kişinin, belirtilen hedef için “aktif-hafif” (active-light)
+    bir güvenlik taraması yapılmasına dair yetkilendirmesini ve risk kabulünü kayıt altına alır.</p>
+    <h2>Bu tarama NE YAPAR</h2><ul>${li(d.does, '#1C6B60')}</ul>
+    <h2>Bu tarama NE YAPMAZ</h2><ul>${li(d.doesNot, '#B3261E')}</ul>
+    <h2>Risk Kabul Beyanı</h2>
+    <div class="risk">${escapeHtml(d.riskText)}</div>
+    <h2>Beyan Eden</h2>
+    <div class="decl">
+      <div class="row"><span>Yasal Ad</span><strong>${escapeHtml(d.legalName)}</strong></div>
+      ${d.companyName ? `<div class="row"><span>Şirket/Unvan</span><strong>${escapeHtml(d.companyName)}</strong></div>` : ''}
+      <div class="row"><span>Onay Zamanı</span><strong>${escapeHtml(dateStr)}</strong></div>
+      <div class="row"><span>IP Adresi</span><strong>${escapeHtml(d.ip ?? '-')}</strong></div>
+      <div class="row"><span>Risk Kabulü</span><strong>Evet (işaretlendi)</strong></div>
+    </div>
+    <p class="foot">Bu beyan, elektronik imza yerine geçen bir irade beyanıdır (kriptografik e-imza değildir).
+    Beyan sahibi, taramaya konu alan adının/altyapının sahibi veya yetkilisi olduğunu; sorumluluğun kendisine
+    ait olduğunu kabul eder. CyberTestify, tarama sırasında oluşabilecek dolaylı zararlardan sorumlu tutulamaz.
+    Bu belge otomatik olarak üretilmiştir.</p>
+  </div>
+  </body></html>`;
+}
+
+export async function renderConsentPdf(d: ConsentPdfData): Promise<Buffer> {
+  const browser = await puppeteer.launch({
+    executablePath: CHROMIUM_PATH,
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--font-render-hinting=none'],
+  });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(buildConsentHtml(d), { waitUntil: 'load' });
+    const pdf = await page.pdf({
+      format: 'A4', printBackground: true,
+      margin: { top: '12mm', bottom: '14mm', left: '0mm', right: '0mm' },
+      displayHeaderFooter: true, headerTemplate: '<div></div>',
+      footerTemplate: `<div style="width:100%; font-size:8px; color:#5FA396; padding:0 12mm; text-align:right;">
+        CyberTestify — Aktif Test Yetkilendirme Beyanı · Sayfa <span class="pageNumber"></span>/<span class="totalPages"></span></div>`,
+    });
+    return Buffer.from(pdf);
+  } finally {
+    await browser.close();
+  }
+}
