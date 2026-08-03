@@ -28,6 +28,7 @@ export interface ReportPdfMeta {
 export interface ReportPdfOptions {
   fixMarkdown?: string | null; // unlock edilmisse fix onerileri Markdown'i
   fixLocked?: boolean; // fix onerisi VAR ama satin alinmamis (kilitli goster)
+  extrasMarkdown?: string | null; // Ek Pasif Kontroller (kod-tabanli) — ayri/renkli bolum
 }
 
 const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
@@ -124,6 +125,12 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
 
   let bodyHtml = md.render(effectiveMd);
 
+  // Ek Pasif Kontroller (kod-tabanli) — ana bulgulardan GORSEL olarak ayri, farkli renk.
+  // Markdown zaten "## Ek Pasif Kontroller" basligi + notu icerir; kutu icine sarariz.
+  if (opts.extrasMarkdown && opts.extrasMarkdown.trim()) {
+    bodyHtml += `<div class="extras-section">${md.render(opts.extrasMarkdown)}</div>`;
+  }
+
   // Fix onerileri bolumu (unlock ise ekle; kilitliyse kilit notu; hic yoksa ekleme).
   if (opts.fixMarkdown && opts.fixMarkdown.trim()) {
     bodyHtml += `<div class="fix-section"><h2>${escapeHtml(t.fixTitle)}</h2>${md.render(opts.fixMarkdown)}</div>`;
@@ -193,6 +200,12 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
   td.sev-info { border-left: 4px solid #5FA396; }
   td.sev-info .sev-badge { background: #5FA396; }
   .sev-badge { color: #fff; padding: 1px 7px; border-radius: 10px; font-size: 9.5px; font-weight: 700; white-space: nowrap; }
+  /* Ek Pasif Kontroller — kod-tabanli, ana bulgulardan ayri (mavi-gri tema) */
+  .extras-section { margin-top: 24px; padding: 4px 16px 14px; background: #F3F7FA; border: 1px solid #C9DCE8; border-left: 4px solid #2B6C9B; border-radius: 8px; }
+  .extras-section h2 { color: #2B6C9B; font-size: 15px; }
+  .extras-section blockquote { background: #E6EFF6; border-left-color: #2B6C9B; color: #274b63; }
+  .extras-section th { background: #2B6C9B; }
+  .extras-section h3 { color: #35618a; }
   .fix-section { margin-top: 22px; padding-top: 4px; border-top: 2px solid #F5A623; }
   .fix-section h2 { color: #E0940E; }
   .fix-locked { margin-top: 22px; padding: 14px; background: #EEF5F3; border: 1px dashed #5FA396; border-radius: 6px; color: #14514A; }

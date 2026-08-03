@@ -3,6 +3,7 @@ import * as pentagi from '../pentagi/client.js';
 import { encryptReport, generateReportAccessSecret } from './crypto.js';
 import { redactAll } from './piiRedaction.js';
 import { FIX_SUGGESTIONS_DELIM } from './scanPackages.js';
+import { hasPassiveExtras, runPassiveExtras, renderPassiveExtrasMarkdown, PASSIVE_EXTRAS_DELIM } from './passiveExtras.js';
 
 type Locale = 'tr' | 'en';
 
@@ -123,8 +124,23 @@ export async function generateAndStoreReport(flowId: string) {
   // KENDI TARAFIMIZDA veri minimizasyonu: sizmis yapisal PII'yi (email/telefon/
   // TCKN/kart/IBAN) sifreli DB'ye yazmadan ONCE maskele (ayni mantik PentAGI Go
   // tarafinda Anthropic'e gitmeden de uygulanir — PATCHES.md).
+  // EK PASIF KONTROLLER (deterministik, AGENT'SIZ, LLM'SIZ — sifir ek maliyet).
+  // Hedefin kendi DNS/HTTP'sine kod-tabanli sorgular; PDF'te AYRI bir bolume gider.
+  // Izole (Promise.allSettled) — hata verse bile raporu/akisi ETKILEMEZ.
+  let extrasBlock = '';
+  try {
+    if (hasPassiveExtras(flow.order.package.key)) {
+      const results = await runPassiveExtras(flow.order.domain.hostname, flow.order.package.key);
+      const extrasMd = renderPassiveExtrasMarkdown(results);
+      if (extrasMd.trim()) extrasBlock = `\n\n${PASSIVE_EXTRAS_DELIM}\n\n${extrasMd}`;
+    }
+  } catch (err) {
+    console.error('[passiveExtras] ek kontroller uretilemedi (rapor yine de olusur):', err);
+  }
+
   const markdown = redactAll(
-    renderReportMarkdown(flow.order.domain.hostname, flow.order.package.displayName, findings, logs.screenshots, locale),
+    renderReportMarkdown(flow.order.domain.hostname, flow.order.package.displayName, findings, logs.screenshots, locale) +
+      extrasBlock,
   );
 
   const accessSecret = generateReportAccessSecret();

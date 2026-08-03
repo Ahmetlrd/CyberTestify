@@ -4,6 +4,7 @@ import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { decryptReport } from '../services/crypto.js';
 import { renderReportPdf } from '../services/pdf.js';
+import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
 import { requireAuth } from '../middleware/auth.js';
 
 export const reportsRouter = Router();
@@ -54,16 +55,22 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
     }
   }
 
+  // (Ek Pasif Kontroller) ana rapordan AYIR — PDF'te ayri/renkli bir bolume gider.
+  const full = plaintext.toString('utf-8');
+  const di = full.indexOf(PASSIVE_EXTRAS_DELIM);
+  const reportMd = di === -1 ? full : full.slice(0, di).trim();
+  const extrasMarkdown = di === -1 ? null : full.slice(di + PASSIVE_EXTRAS_DELIM.length).trim();
+
   const locale: 'tr' | 'en' = report.order.locale === 'en' ? 'en' : 'tr';
   const pdf = await renderReportPdf(
-    plaintext.toString('utf-8'),
+    reportMd,
     {
       hostname: report.order.domain.hostname,
       packageName: report.order.package.displayName,
       createdAt: report.createdAt,
       locale,
     },
-    { fixMarkdown, fixLocked: hasFix && !report.fixSuggestionsUnlockedAt },
+    { fixMarkdown, fixLocked: hasFix && !report.fixSuggestionsUnlockedAt, extrasMarkdown },
   );
 
   await prisma.report.update({ where: { id: report.id }, data: { deliveredAt: new Date() } });
