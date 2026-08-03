@@ -37,6 +37,11 @@ export function Footer({ region }: { region: RegionConfig }) {
                 {region.supportEmail}
               </a>
             </p>
+            <p className="mt-2 text-sm">
+              <Link href="/iletisim" className="font-medium text-white/80 hover:text-white hover:underline">
+                İletişim &amp; Künye →
+              </Link>
+            </p>
           </div>
 
           <div>
@@ -63,13 +68,19 @@ export function Footer({ region }: { region: RegionConfig }) {
           <div className="font-semibold text-white/75">{region.companyLegalName}</div>
           {showTrImprint && (
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-              <span>MERSİS: {COMPANY.mersisNo}</span>
-              <span>
-                Vergi D./No: {COMPANY.taxOffice} / {COMPANY.taxNo}
-              </span>
               <span>{COMPANY.address}</span>
+              <span>
+                {COMPANY.taxOffice} V.D. — Vergi No: {COMPANY.taxNo}
+              </span>
+              <span>Ticaret Sicil No: {COMPANY.ticaretSicilNo}</span>
+              <span>MERSİS: {COMPANY.mersisNo}</span>
               <span>Tel: {COMPANY.phone}</span>
-              <span>KEP: {COMPANY.kep}</span>
+              <span>
+                <a href={`mailto:${COMPANY.email}`} className="hover:text-white">
+                  {COMPANY.email}
+                </a>
+              </span>
+              {COMPANY.kep && <span>KEP: {COMPANY.kep}</span>}
             </div>
           )}
           {showTrImprint && (

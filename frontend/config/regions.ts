@@ -44,8 +44,8 @@ export const REGIONS: Record<RegionCode, RegionConfig> = {
     currency: 'TRY',
     paymentProvider: 'iyzico',
     invoicingMethod: 'earsiv',
-    supportEmail: 'destek@cybertestify.com',
-    companyLegalName: '[Ticari Unvan — TR]',
+    supportEmail: 'support@cybertestify.com',
+    companyLegalName: 'Entar6 Enerji ve Tarım Sanayi ve Ticaret Limited Şirketi',
     legalReady: true,
   },
   us: {

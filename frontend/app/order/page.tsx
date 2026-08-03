@@ -7,6 +7,7 @@ import { api } from '../../lib/api';
 import { readRegionCookie } from '../../lib/region';
 import { getRegion, type RegionCode } from '../../config/regions';
 import { formatMoney } from '../../config/i18n';
+import { DynamicContract } from '../../components/DynamicContract';
 
 type ActiveTest = { scope: { does: string[]; doesNot: string[] }; riskText: string; consentVersion: string };
 type Pkg = {
@@ -42,10 +43,13 @@ export default function OrderPage() {
   const [authUser, setAuthUser] = useState('');
   const [authPass, setAuthPass] = useState('');
 
+  // Sahiplik beyani (TCK 243 — guvenlik) ayri; iyzico'nun bekledigi 2 ODEME-onay
+  // checkbox'i: (1) On Bilgilendirme+Mesafeli+Iptal/Iade, (2) KVKK/Gizlilik.
   const [authConsent, setAuthConsent] = useState(false);
-  const [contractConsent, setContractConsent] = useState(false);
-  const [withdrawalConsent, setWithdrawalConsent] = useState(false);
-  const allConsents = authConsent && contractConsent && withdrawalConsent;
+  const [contractConsent, setContractConsent] = useState(false); // On Bilgi + Mesafeli + Iptal/Iade
+  const [kvkkConsent, setKvkkConsent] = useState(false); // Gizlilik + KVKK Aydinlatma
+  const [showContract, setShowContract] = useState(false);
+  const allConsents = authConsent && contractConsent && kvkkConsent;
 
   // Düzenli (periyodik) tarama seçeneği
   const [recurring, setRecurring] = useState(false);
@@ -114,7 +118,7 @@ export default function OrderPage() {
         {
           ownershipConfirmed: authConsent,
           distanceContractAccepted: contractConsent,
-          withdrawalWaived: withdrawalConsent,
+          withdrawalWaived: contractConsent, // birlesik odeme-onay checkbox'i cayma feragatini de kapsar
         },
         region,
         payWithCredits,
@@ -149,20 +153,32 @@ export default function OrderPage() {
       <>
         <Link href="/legal/on-bilgilendirme" target="_blank" className="text-accent-600 underline">
           Ön Bilgilendirme Formu
-        </Link>{' '}
-        ve{' '}
+        </Link>
+        ,{' '}
         <Link href="/legal/mesafeli-satis" target="_blank" className="text-accent-600 underline">
           Mesafeli Satış Sözleşmesi
+        </Link>{' '}
+        ve{' '}
+        <Link href="/legal/iptal-iade" target="_blank" className="text-accent-600 underline">
+          İptal/İade Koşulları
         </Link>
-        &apos;ni okudum, onaylıyorum.
+        ’nı okudum, kabul ediyorum. Hizmetin dijital olarak <strong>anında ifa</strong> edildiğini ve
+        ifasına başlandıktan sonra <strong>cayma hakkımı kullanamayacağımı</strong> kabul ediyorum.
       </>,
     ],
     [
-      withdrawalConsent,
-      setWithdrawalConsent,
+      kvkkConsent,
+      setKvkkConsent,
       <>
-        Hizmetin dijital olarak <strong>anında ifa</strong> edildiğini; açık onayımla ifasına hemen
-        başlanacağını ve md. 15 uyarınca <strong>cayma hakkımı kullanamayacağımı</strong> kabul ediyorum.
+        Kişisel verilerimin{' '}
+        <Link href="/legal/gizlilik" target="_blank" className="text-accent-600 underline">
+          Gizlilik Politikası
+        </Link>{' '}
+        ve{' '}
+        <Link href="/legal/kvkk-aydinlatma" target="_blank" className="text-accent-600 underline">
+          KVKK Aydınlatma Metni
+        </Link>{' '}
+        kapsamında işlenmesini kabul ediyorum.
       </>,
     ],
   ];
@@ -198,7 +214,7 @@ export default function OrderPage() {
               <p className="mt-1 text-xs leading-relaxed text-ink-soft">{p.description}</p>
               <p className="mt-2 font-bold text-ink">
                 {formatMoney(p.priceMinorUnit, getRegion(region))}{' '}
-                <span className="text-xs font-normal text-ink-muted">· vergiler dahil</span>
+                <span className="text-xs font-normal text-ink-muted">· KDV Dahildir</span>
               </p>
             </button>
           );
@@ -215,6 +231,20 @@ export default function OrderPage() {
           </label>
         ))}
       </div>
+      {selectedPkg && (
+        <div className="mt-3">
+          <button type="button" onClick={() => setShowContract((v) => !v)} className="text-xs font-semibold text-accent-600 underline">
+            {showContract ? 'Bu siparişe özel sözleşmeyi gizle' : 'Bu siparişe özel Mesafeli Satış Sözleşmesi’ni görüntüle'}
+          </button>
+          {showContract && (
+            <DynamicContract
+              serviceName={selectedPkg.displayName}
+              priceLabel={formatMoney(selectedPkg.priceMinorUnit, getRegion(region))}
+              region={region}
+            />
+          )}
+        </div>
+      )}
 
       {/* Düzenli tekrar (opsiyonel) */}
       <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">3 · Tekrar</h2>
@@ -379,6 +409,26 @@ export default function OrderPage() {
           ? 'Kayıtlarınızı “Zamanlanmış taramalarım” ekranından görüntüleyip iptal edebilirsiniz.'
           : 'Ödeme onaylandığında tarama otomatik ve anında başlar.'}
       </p>
+
+      {/* Güvenli ödeme rozeti + kart markaları + fatura notu */}
+      <div className="mt-6 flex flex-wrap items-center gap-3 rounded-card border border-line bg-brand-50/40 px-4 py-3 text-xs text-ink-soft">
+        <span className="inline-flex items-center gap-1.5 font-semibold text-brand">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M12 2l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V5l7-3z" fill="#123F3A" />
+            <path d="M9 12l2 2 4-4" stroke="#F5A623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          </svg>
+          Güvenli Ödeme (256-bit SSL)
+        </span>
+        <span className="text-ink-muted">·</span>
+        <span className="font-semibold tracking-wide text-ink-soft">VISA · Mastercard · Troy</span>
+        <span className="text-ink-muted">·</span>
+        <span>Ödeme altyapısı: iyzico</span>
+      </div>
+      <p className="mt-2 text-xs text-ink-muted">
+        Tüm fiyatlar <strong>KDV dahildir</strong>. Ödemeniz onaylandığında faturanız e-posta ile iletilecektir.
+      </p>
+      {/* TODO(iyzico-logo): VISA/Mastercard/Troy ve iyzico resmi logo dosyalari, iyzico marka
+          kitinden alinip buradaki metin yerine gorsel olarak konulacak (uydurma logo kullanilmadi). */}
     </main>
   );
 }

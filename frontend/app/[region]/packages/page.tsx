@@ -84,6 +84,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                   <div className="mt-5">
                     <span className="text-3xl font-extrabold text-ink">{formatMoney(p.priceMinorUnit, region)}</span>
                     <span className="ml-1 text-xs text-ink-muted">{d.perScan}</span>
+                    <div className="mt-0.5 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahildir' : 'Taxes included'}</div>
                   </div>
                   <Link href="/register" className={`mt-6 w-full ${popular ? 'btn-primary' : 'btn-outline'}`}>
                     {d.selectCta}
