@@ -598,6 +598,10 @@ taramayla kanitlanir (prompt davranisi degistirir; eski kayitlarda icerik yok) -
 Dar kvkk-disiplinli promptlar, securityProfile passive, tum ortak kurallar (UYUM/no-install/
 BUDGET_GUARD/surec-dili). Fiyat placeholder (subdomain 1499 TL / api 1299 TL) — Vedat onaylayip true yapacak.
 Enum+migration+zod+pricing+i18n eklendi, seed rows olustu.
-- **subdomain_takeover ACMADAN ONCE (kritik):** crt.sh (CT log) HTTPS sorgusu + hedefin alt alan
-  adlari kapsam kilidinde izinli degil -> egress-proxy REDDEDER. Acmadan once SCOPE_ALLOWLIST'e
-  crt.sh eklenmeli (+ alt-alan-adi kapsam istisnasi). api_discovery'de bu sorun YOK (hedef host'ta GET).
+- **GUNCELLEME (2026-08-03): ikisi de AVAILABLE.** Vedat fiyatlari onayladi (subdomain 1.499 TL /
+  api 1.299 TL) + crt.sh allowlist. NOT: scope zaten hazirmis — `crt.sh` ONCEDEN SCOPE_ALLOWLIST'te
+  (config.ts), hedefin alt alan adlari isInScope'ta kapsam-ici (host.endsWith('.'+target)), DNS
+  resolver'lar allowlist'te. Yani ek allowlist degisikligi GEREKMEDI (onceki "eklenmeli" notu yanlisti).
+  Sinir: dangling CNAME'in ucuncu-taraf hedefine (or. *.herokuapp.com) HTTP ile ulasmak kapsam disi;
+  ama takeover sinyali DNS-seviyesi NXDOMAIN ile (in-scope, dig via allowlist resolver) tespit edilir.
+  Canli testi Vedat yapacak (gercek tarama kurali).

@@ -555,14 +555,13 @@ Target: ${host}
       'Hedefin alt alan adlarini (DNS + Sertifika Seffafligi/CT loglari uzerinden, ' +
       'brute-force DEGIL) pasif kesfeder; "bosta dusmus" (dangling) CNAME kayitlarini ' +
       '(silinmis Heroku/S3/Azure vb. kaynaga isaret eden) tespit eder. Tamamen pasif.',
-    priceMinorUnit: 149900, // PLACEHOLDER (Vedat onayi bekleniyor)
+    priceMinorUnit: 149900, // 1.499,00 TRY — Vedat ONAYLADI (2026-08-03)
     modelProvider: PROVIDER,
     maxToolCalls: 35,
     securityProfile: 'passive',
-    // available:false — ACMADAN ONCE: crt.sh (CT log) + hedefin alt alan adlari kapsam
-    // kilidinde (SCOPE_ALLOWLIST / passive-recon istisnasi) izinli olmali; aksi halde
-    // egress-proxy crt.sh HTTPS sorgusunu kapsam disi diye REDDEDER. Bkz HANDOFF.
-    available: false,
+    // Scope hazir: crt.sh zaten SCOPE_ALLOWLIST'te (config.ts) + hedefin alt alan adlari
+    // isInScope'ta kapsam-ici (host.endsWith('.'+target)) + DNS resolver'lar allowlist'te.
+    available: true,
     promptTemplate: (host) => `
 Run a PASSIVE, NARROW subdomain-takeover check for the DOMAIN of the single target below. This
 is a FIXED checklist. HARD CONSTRAINTS: do NOT open new subtasks; do NOT brute-force/wordlist
@@ -598,11 +597,11 @@ Target domain (derive the registrable domain from): ${host}
       'Yaygin yollarda (/swagger-ui.html, /api/v1/docs, /openapi.json vb.) OpenAPI/Swagger ' +
       'dokumani arar; varsa listelenen endpointleri cikarir ve kimlik dogrulamasi ' +
       'gerektirmeyen (halka acik) hassas olabilecek uclari isaretler. Pasif GET.',
-    priceMinorUnit: 129900, // PLACEHOLDER (Vedat onayi bekleniyor)
+    priceMinorUnit: 129900, // 1.299,00 TRY — Vedat ONAYLADI (2026-08-03)
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     securityProfile: 'passive',
-    available: false, // fiyat/onay bekliyor (Vedat true yapacak)
+    available: true,
     promptTemplate: (host) => `
 Run a PASSIVE, NARROW API/OpenAPI-documentation discovery on the SINGLE target below. FIXED
 checklist. HARD CONSTRAINTS: do NOT open new subtasks; do NOT brute-force/fuzz large wordlists;
