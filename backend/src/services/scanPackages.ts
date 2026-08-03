@@ -195,6 +195,28 @@ leave it for a later subtask. ABSOLUTE RULE: remediation ONLY; it must NEVER con
 exploit code, attack payloads, or attack tooling. Only if there are genuinely NO findings at
 all, omit the delimiter.`.trim();
 
+// === Hassas dosya (.git/.env/yedek) dogrulama — MERKEZI (header_leak/pci/iso kullanir).
+// GERCEK yanlis-pozitif: nomorelink.com'da ISO "/.git/config, /.env HTTP 200 -> KRITIK acik"
+// dedi; PCI ise icerigi inceleyip "hepsi ana sayfa HTML'i donuyor (catch-all), gercekte acik
+// DEGIL" dedi (dogru). ISO yalniz status koduna bakip icerige BAKMAMISTI. Bu blok o hatayi onler.
+const EXPOSED_FILE_VERIFY_EN = `
+EXPOSED-FILE VERIFICATION (MANDATORY 2-step — avoids the #1 false positive on SPA/catch-all sites):
+Many sites (especially SPAs) return HTTP 200 with the HOMEPAGE HTML for EVERY non-existent path
+(catch-all routing). HTTP 200 ALONE DOES NOT MEAN A FILE IS EXPOSED. Before you report ANY sensitive
+file (.git/config, .env, backup.zip, .DS_Store, wp-config.php, etc.) as exposed/accessible/critical,
+you MUST do BOTH:
+ (1) FETCH THE HOMEPAGE '/' first and remember its body (first few hundred chars) for comparison.
+ (2) For each candidate file: GET it, then confirm BOTH of these, else it is NOT exposed:
+     (a) CONTENT MATCHES THE FILE'S EXPECTED FORMAT — e.g. .git/config contains '[core]' or
+         'repositoryformatversion='; .env has KEY=VALUE lines (^[A-Z_]+=); backup.zip starts with the
+         ZIP magic 'PK'; .DS_Store contains 'Bud1'; wp-config.php contains "define('DB_...". If the
+         body is HTML (<!doctype/<html) while a NON-HTML file is expected, it is NOT the real file.
+     (b) CONTENT IS NOT (nearly) IDENTICAL TO THE HOMEPAGE '/'. If it equals the homepage (same first
+         ~300 chars), it is catch-all routing → the file is NOT actually exposed.
+Report a file as EXPOSED/critical ONLY when (a) format matches AND (b) it differs from the homepage.
+Otherwise state it as "NOT accessible (HTTP 200 is catch-all/SPA, not the real file)". In the report,
+say explicitly that you verified CONTENT, not just the status code.`.trim();
+
 // === ACTIVE-LIGHT guvenlik blogu (Faz 3) — SAFETY_EN'in aksine KANIT-amacli zararsiz
 // probe'lara IZIN verir; ama istismar/exfil/veri-degistirme/DoS/auth-bypass'i hem prompt
 // hem TOOL SEVIYESINDE (passive_guard.go active-light) yasaklar. Yalniz active-light paketler.
@@ -352,11 +374,13 @@ Perform a PASSIVE check against the single target below only:
    Which are missing/weak?
 2) For KNOWN standard paths only, do a single GET each (NO directory forcing/brute-force):
    /robots.txt, /.git/config, /.env, /backup.zip, /.DS_Store — are they accessible?
+   (For .git/.env/backups apply the EXPOSED-FILE VERIFICATION below — HTTP 200 is NOT enough.)
 ${SAFETY_EN}
 ${BUDGET_GUARD_EN}
+${EXPOSED_FILE_VERIFY_EN}
 ${FIX_SUGGESTIONS_STEP_EN}
 
-Output: list missing headers and any exposed files by severity with concrete advice.
+Output: list missing headers and any GENUINELY exposed files (content-verified) by severity with concrete advice.
 Finish within about 12 tool calls and COMPLETE the task.
 
 Target: ${host}
@@ -446,12 +470,14 @@ does NOT establish compliance):
 3. Cookie flags (Secure/HttpOnly/SameSite) on any Set-Cookie -> Req 8 (session security)
 4. Server banner / default pages disclosing versions -> Req 2.2 (secure configuration)
 5. Exposed sensitive files via a single GET each (/.git/config, /.env, /backup.zip) -> Req 3 (data exposure)
+   — apply the EXPOSED-FILE VERIFICATION below; a bare HTTP 200 is NOT proof of exposure.
 
 After these 5 checks, IMMEDIATELY and in the SAME step write the single report AND the
 ${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask;
 do nothing else.
 ${SAFETY_EN}
 ${BUDGET_GUARD_EN}
+${EXPOSED_FILE_VERIFY_EN}
 ${FIX_SUGGESTIONS_STEP_EN}
 
 Output (Markdown table): "PCI-DSS Requirement | Observation | Observable control (Present/Partial/Absent) |
@@ -536,6 +562,7 @@ does NOT establish conformance):
 2. HTTP security headers present (HSTS, CSP, X-Frame-Options, X-Content-Type-Options)? -> A.8.23/A.8.9
 3. Server/technology banner disclosing versions? -> A.8.9 (secure configuration)
 4. Obvious exposed files via a single GET each (/.git/config, /.env, /robots.txt)? -> A.8.12 (data leakage)
+   — apply the EXPOSED-FILE VERIFICATION below; a bare HTTP 200 is NOT proof of exposure.
 5. Is a privacy/security policy page reachable? -> A.5.1 (policies)
 
 After these 5 checks, IMMEDIATELY and in the SAME step write the single report AND the
@@ -543,6 +570,7 @@ ${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write rep
 do nothing else.
 ${SAFETY_EN}
 ${BUDGET_GUARD_EN}
+${EXPOSED_FILE_VERIFY_EN}
 ${FIX_SUGGESTIONS_STEP_EN}
 
 Output (Markdown table): "Annex A Clause | Observation | Observable control (Present/Partial/Absent) |

@@ -252,6 +252,114 @@ async function checkMixedContent(host: string): Promise<PassiveCheckResult> {
   }
 }
 
+// ---- Hassas dosya ifsasi (MERKEZI catch-all/format dogrulama) -------------
+//
+// KOK NEDEN (gercek yanlis-pozitif): nomorelink.com gibi SPA/catch-all siteler var
+// OLMAYAN her path'e ana sayfa HTML'ini HTTP 200 ile doner. "200 mu? -> acik" naif
+// mantigi .git/.env'i YANLISLIKLA "acik/kritik" isaretliyordu. Gercekten acik sayilmasi
+// icin: (1) icerik dosyanin BEKLENEN formatina uymali VE (2) ana sayfayla AYNI olmamali.
+
+export type ExposedVerdict = 'exposed' | 'not-exposed' | 'inconclusive';
+
+function normalizeBody(s: string): string {
+  return s.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/** İçerik, ana sayfanın (`/`) içeriğiyle (neredeyse) aynı mı? → catch-all/SPA. */
+function looksLikeHomepage(body: string, homepage: string): boolean {
+  if (!homepage) return false;
+  const a = normalizeBody(body);
+  const b = normalizeBody(homepage);
+  if (!a || !b) return false;
+  const HEAD = 300;
+  if (a.slice(0, HEAD) === b.slice(0, HEAD)) return true; // ayni bas -> catch-all
+  // Kisa dosyalar: biri digerini tamamen iceriyorsa (SPA shell) yine catch-all.
+  if (a.length > 40 && (b.includes(a) || a.includes(b))) return true;
+  return false;
+}
+
+// Dosya-turu "gercekten o dosya mi" imzalari (format izleri).
+const FILE_SIGNATURES: Record<string, (b: string) => boolean> = {
+  '/.git/config': (b) => /\[core\]/i.test(b) || /repositoryformatversion\s*=/i.test(b),
+  '/.git/HEAD': (b) => /^\s*ref:\s*refs\//im.test(b),
+  '/.env': (b) => /^[A-Z][A-Z0-9_]*=/m.test(b),
+  '/backup.zip': (b) => b.startsWith('PK'), // ZIP magic
+  '/backup.sql': (b) => /\b(CREATE TABLE|INSERT INTO|DROP TABLE)\b/i.test(b),
+  '/.DS_Store': (b) => b.includes('Bud1'),
+  '/wp-config.php': (b) => /define\s*\(\s*['"]DB_/i.test(b),
+};
+
+/**
+ * MERKEZI karar: bir hassas dosya GERCEKTEN acik mi? (prompt VE deterministik kontrol
+ * ayni mantigi kullanir). Sadece HTTP 200 YETMEZ — format + catch-all dogrulamasi sart.
+ */
+export function classifyExposedFile(
+  path: string,
+  fetched: FetchOut,
+  homepage: string,
+): { verdict: ExposedVerdict; reason: string } {
+  if (!fetched.ok || fetched.status !== 200 || !fetched.text.trim()) {
+    return { verdict: 'not-exposed', reason: `HTTP ${fetched.status || 'hata'} / boş gövde — erişilebilir değil` };
+  }
+  const body = fetched.text;
+  // (2) Catch-all: ana sayfayla ayni mi?
+  if (looksLikeHomepage(body, homepage)) {
+    return { verdict: 'not-exposed', reason: 'içerik ana sayfayla aynı (SPA/catch-all yönlendirme; dosya gerçekten açık değil)' };
+  }
+  const isHtml = /^\s*<(!doctype|html)\b/i.test(body.trimStart()) || fetched.contentType.includes('text/html');
+  const sig = FILE_SIGNATURES[path];
+  // (1) Beklenen format imzasi.
+  if (sig) {
+    if (sig(body)) return { verdict: 'exposed', reason: 'beklenen dosya formatı doğrulandı (catch-all değil)' };
+    return {
+      verdict: 'not-exposed',
+      reason: `HTTP 200 ama içerik beklenen dosya formatına uymuyor${isHtml ? ' (HTML döndü — muhtemelen catch-all)' : ''}`,
+    };
+  }
+  // Imza tanimli degil: HTML donduyse catch-all say; degilse kesin diyemeyiz.
+  if (isHtml) return { verdict: 'not-exposed', reason: 'HTTP 200 ama HTML döndü (muhtemelen catch-all)' };
+  return { verdict: 'inconclusive', reason: 'HTTP 200, format imzası tanımlı değil — manuel doğrulama gerekir' };
+}
+
+const SENSITIVE_PATHS = ['/.git/config', '/.git/HEAD', '/.env', '/backup.zip', '/backup.sql', '/.DS_Store', '/wp-config.php'];
+
+/** Deterministik hassas-dosya ifsasi kontrolu — classifyExposedFile ile catch-all/format ayrimi yapar. */
+async function checkExposedFiles(host: string): Promise<PassiveCheckResult> {
+  const id = 'exposed_files', title = 'Hassas Dosya İfşası (.git / .env / yedek)';
+  try {
+    const home = await safeGet(`https://${host}/`, host);
+    const homepage = home.ok ? home.text : '';
+    const exposed: string[] = [];
+    const notes: string[] = [];
+    for (const p of SENSITIVE_PATHS) {
+      const r = await safeGet(`https://${host}${p}`, host);
+      const c = classifyExposedFile(p, r, homepage);
+      if (c.verdict === 'exposed') {
+        exposed.push(p);
+        notes.push(`${p}: 🔴 AÇIK — ${c.reason}`);
+      } else if (r.status === 200) {
+        // 200 dondu ama acik degil: raporda "neden acik degil" gorunsun (seffaflik).
+        notes.push(`${p}: HTTP 200 ama ${c.verdict === 'inconclusive' ? 'belirsiz' : 'erişilebilir değil'} — ${c.reason}`);
+      }
+    }
+    if (exposed.length) {
+      return {
+        id, title, status: 'misconfigured',
+        summary: `${exposed.length} hassas dosya GERÇEKTEN erişilebilir (içerik doğrulandı, catch-all DEĞİL): ${exposed.join(', ')}.`,
+        details: { exposed },
+        evidence: notes,
+      };
+    }
+    return {
+      id, title, status: 'absent',
+      summary: 'Yaygın hassas dosyaların hiçbiri gerçekten erişilebilir değil. (HTTP 200 dönenler catch-all/SPA veya yanlış format olduğundan açık SAYILMADI.)',
+      evidence: notes.length ? notes : undefined,
+    };
+  } catch (e) {
+    return { id, title, status: 'error', summary: `Kontrol edilemedi: ${(e as Error).message}` };
+  }
+}
+
 // ---- basit_tarama ---------------------------------------------------------
 
 async function checkRobotsSitemap(host: string): Promise<PassiveCheckResult> {
@@ -356,9 +464,13 @@ type CheckFn = (host: string) => Promise<PassiveCheckResult>;
 
 const CHECKS_BY_PACKAGE: Record<string, CheckFn[]> = {
   dns_email: [checkCaa, checkBimi, checkMtaSts, checkTlsRpt],
-  header_leak: [checkSecurityTxt, checkHstsPreload, checkMixedContent],
+  header_leak: [checkSecurityTxt, checkHstsPreload, checkMixedContent, checkExposedFiles],
   basit_tarama: [checkRobotsSitemap, checkAssetLinks, checkAasa],
   subdomain_takeover: [checkCtSubdomains],
+  // (Yanlis-pozitif fix) iso/pci artik DETERMINISTIK, catch-all-farkinda hassas-dosya
+  // kontrolu de alir — ajanin yorumuna ek OTORITE zemin (ISO vs PCI celiskisi tekrarlanmasin).
+  pci_hazirlik: [checkExposedFiles],
+  iso27001_hazirlik: [checkExposedFiles],
 };
 
 export function hasPassiveExtras(packageKey: string): boolean {
