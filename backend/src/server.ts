@@ -10,6 +10,7 @@ import { domainsRouter } from './routes/domains.js';
 import { ordersRouter } from './routes/orders.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { reportsRouter } from './routes/reports.js';
+import { creditsRouter } from './routes/credits.js';
 import { internalRouter } from './routes/internal.js';
 import { schedulesRouter } from './routes/schedules.js';
 import { adminAuthRouter } from './routes/adminAuth.js';
@@ -70,6 +71,7 @@ app.use('/auth', authLimiter, authRouter);
 app.use('/domains', apiLimiter, domainsRouter);
 app.use('/orders', apiLimiter, ordersRouter);
 app.use('/reports', apiLimiter, reportsRouter);
+app.use('/credits', apiLimiter, creditsRouter);
 app.use('/schedules', apiLimiter, schedulesRouter);
 
 // --- Ic yonetim paneli (admin) — MUSTERI sisteminden TAMAMEN AYRI ---------

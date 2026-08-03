@@ -27,6 +27,11 @@ export default function OrderPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // (Is 2) Kredi bakiyesi + "krediyle öde" secenegi.
+  const [balance, setBalance] = useState(0);
+  const [creditUnit, setCreditUnit] = useState(99900);
+  const [useCredits, setUseCredits] = useState(false);
+
   const [authConsent, setAuthConsent] = useState(false);
   const [contractConsent, setContractConsent] = useState(false);
   const [withdrawalConsent, setWithdrawalConsent] = useState(false);
@@ -49,7 +54,13 @@ export default function OrderPage() {
     const rc = readRegionCookie();
     setRegion(rc);
     api.listPackages(rc).then(setPackages).catch((err) => setError(err.message));
+    api.getCredits().then((c) => { setBalance(c.balance); setCreditUnit(c.creditUnitValueMinor); }).catch(() => {});
   }, [router]);
+
+  const selectedPkg = packages.find((p) => p.key === selected);
+  const creditsNeeded = selectedPkg ? Math.max(1, Math.round(selectedPkg.priceMinorUnit / creditUnit)) : 0;
+  // Kredi ile odeme yalnizca tek-seferlik/hemen taramada (zamanlanmis akis prepaid farkli).
+  const canUseCredits = balance >= creditsNeeded && creditsNeeded > 0 && !recurring && startMode === 'now';
 
   async function handleStart() {
     if (!domainId || busy) return;
@@ -81,6 +92,7 @@ export default function OrderPage() {
         router.push('/schedules');
         return;
       }
+      const payWithCredits = useCredits && canUseCredits;
       const res = await api.createOrder(
         domainId,
         selected,
@@ -90,8 +102,14 @@ export default function OrderPage() {
           withdrawalWaived: withdrawalConsent,
         },
         region,
+        payWithCredits,
       );
-      window.location.href = res.paymentPageUrl;
+      // Krediyle odendiyse odeme sayfasi YOK — dogrudan siparis detayina git.
+      if (res.paidWithCredits) {
+        router.push(`/dashboard/${res.orderId}`);
+        return;
+      }
+      window.location.href = res.paymentPageUrl!;
     } catch (err: any) {
       setError(err.message);
       setBusy(false);
@@ -252,6 +270,27 @@ export default function OrderPage() {
           </div>
         )}
       </div>
+
+      {/* (Is 2) Kredi bakiyesi + krediyle öde */}
+      {balance > 0 && (
+        <div className="mt-5 rounded-card border border-brand-100 bg-brand-50/50 px-4 py-3 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-ink-soft">Kredi bakiyeniz</span>
+            <span className="font-bold text-brand">{balance} kredi</span>
+          </div>
+          {selected && canUseCredits && (
+            <label className="mt-2 flex cursor-pointer items-start gap-2">
+              <input type="checkbox" checked={useCredits} onChange={(e) => setUseCredits(e.target.checked)} className="mt-0.5" />
+              <span className="text-ink-soft">
+                Bu taramayı <strong>{creditsNeeded} kredi</strong> kullanarak öde (ödeme adımı atlanır).
+              </span>
+            </label>
+          )}
+          {selected && creditsNeeded > 0 && balance < creditsNeeded && !recurring && startMode === 'now' && (
+            <p className="mt-2 text-xs text-ink-muted">Bu paket {creditsNeeded} kredi gerektirir; bakiyeniz yetersiz.</p>
+          )}
+        </div>
+      )}
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 

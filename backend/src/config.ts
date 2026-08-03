@@ -19,6 +19,9 @@ export const config = {
   // siparis olusturulunca otomatik odendi sayilip tarama baslar. IYZICO_API_KEY
   // tanimlaninca otomatik olarak gercek odeme akisina gecilir.
   mockPayment: (process.env.MOCK_PAYMENT ?? 'true') === 'true' && !process.env.IYZICO_API_KEY,
+  // (Is 3) Uluslararasi (TR disi) odeme saglayici secimi: 'paddle' (onerilen, MoR) |
+  // 'stripe' | 'sandbox'. Gercek anahtar gelene kadar 'sandbox' (mockInitiate) kalir.
+  intlPaymentProvider: (process.env.INTL_PAYMENT_PROVIDER ?? 'sandbox') as 'paddle' | 'stripe' | 'sandbox',
   pentagi: {
     graphqlUrl: required('PENTAGI_GRAPHQL_URL'),
     serviceToken: required('PENTAGI_SERVICE_TOKEN'),

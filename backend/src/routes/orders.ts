@@ -6,6 +6,8 @@ import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestio
 import { getPricing, currencyFor } from '../services/pricing.js';
 import { getPaymentProvider } from '../services/payment/index.js';
 import { getSampleReportPdf } from '../services/sampleReports.js';
+import { creditsForPackagePrice, spendCredits, type CreditTx } from '../services/credits.js';
+import { enqueueOrStartScan } from '../services/orchestrator.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -89,6 +91,8 @@ const createOrderSchema = z.object({
   }),
   // Bolge (fiyat + para birimi). Yoksa tr.
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
+  // (Is 2) true ise odeme yerine hesap kredisinden dus (yeterliyse). Yoksa normal odeme.
+  useCredits: z.boolean().optional().default(false),
 });
 
 ordersRouter.post('/', requireAuth, async (req, res) => {
@@ -141,6 +145,38 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   // Bolgesel fiyat + para birimi (config-driven; bkz services/pricing.ts).
   const { amountMinorUnit, currency } = getPricing(packageKey, region);
 
+  const consent = {
+    ownershipConfirmedAt: new Date(),
+    distanceContractAcceptedAt: new Date(),
+    withdrawalWaivedAt: new Date(),
+    consentIp: req.ip ?? null,
+    consentVersion: config.legalVersion,
+  };
+
+  // (Is 2) KREDI ILE ODEME: yeterli bakiye varsa odeme adimini ATLA — krediyi dus,
+  // siparisi 'paid' olustur, taramayi kuyruga al. Hepsi TEK transaction (tutarlilik).
+  if (parsed.data.useCredits) {
+    const creditsNeeded = creditsForPackagePrice(amountMinorUnit);
+    const customer = await prisma.customer.findUniqueOrThrow({ where: { id: req.customerId! }, select: { creditBalance: true } });
+    if (customer.creditBalance < creditsNeeded) {
+      return res.status(402).json({ error: `Yetersiz kredi: bu paket ${creditsNeeded} kredi gerektirir, bakiyeniz ${customer.creditBalance}.`, creditsNeeded, balance: customer.creditBalance });
+    }
+    const order = await prisma.$transaction(async (tx) => {
+      const o = await tx.order.create({
+        data: {
+          customerId: req.customerId!, domainId: domain.id, packageId: packageDb.id,
+          amountMinorUnit, currency, status: 'paid', paymentProvider: 'credit', paidAt: new Date(),
+          locale: localeFor(region), ...consent,
+        },
+      });
+      await spendCredits(tx as unknown as CreditTx, req.customerId!, creditsNeeded, o.id);
+      return o;
+    });
+    // Odeme yok — dogrudan tarama kuyruguna (concurrency=1; bkz orchestrator).
+    await enqueueOrStartScan(order.id);
+    return res.json({ orderId: order.id, paidWithCredits: true, creditsSpent: creditsNeeded });
+  }
+
   const order = await prisma.order.create({
     data: {
       customerId: req.customerId!,
@@ -150,12 +186,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
       currency,
       status: 'awaiting_payment',
       locale: localeFor(region), // (2) cikti dili bolgeden turetilir
-      // Rizalarin zaman damgali + IP + surum ile kaydi (ispat yuku bizde).
-      ownershipConfirmedAt: new Date(),
-      distanceContractAcceptedAt: new Date(),
-      withdrawalWaivedAt: new Date(),
-      consentIp: req.ip ?? null,
-      consentVersion: config.legalVersion,
+      ...consent,
     },
   });
 

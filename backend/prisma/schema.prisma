@@ -69,9 +69,30 @@ model Customer {
   termsAcceptedAt DateTime?
   termsVersion    String?
 
-  domains        Domain[]
-  orders         Order[]
-  scheduledScans ScheduledScan[]
+  // (Is 2) Kredi/bundle: on-odenmis tarama kredisi bakiyesi. Bundle satin alinca artar,
+  // kredi ile tarama alinca azalir. Denetim izi CreditTransaction'da.
+  creditBalance Int @default(0)
+
+  domains            Domain[]
+  orders             Order[]
+  scheduledScans     ScheduledScan[]
+  creditTransactions CreditTransaction[]
+}
+
+// (Is 2) Kredi hareketleri denetim defteri (ledger). Her +/- burada iz birakir;
+// bakiye Customer.creditBalance'ta tutulur (ikisi ayni transaction'da guncellenir).
+model CreditTransaction {
+  id           String   @id @default(uuid())
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id])
+  delta        Int      // +N (bundle satin alma) | -N (tarama kullanimi) | +N (iade)
+  reason       String   // 'bundle_purchase' | 'scan_use' | 'refund' | 'adjustment'
+  bundleKey    String?  // bundle_purchase ise hangi bundle
+  orderId      String?  // scan_use/refund ise ilgili siparis
+  balanceAfter Int      // islem sonrasi bakiye (denetim kolayligi)
+  createdAt    DateTime @default(now())
+
+  @@index([customerId])
 }
 
 model Domain {
