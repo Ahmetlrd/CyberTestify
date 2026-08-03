@@ -227,3 +227,15 @@ const DELETE_FLOW = gql`
 export async function purgeFlowRawData(pentagiFlowId: string) {
   await client().request(DELETE_FLOW, { flowId: pentagiFlowId });
 }
+
+/**
+ * Flow'u PentAGI tarafinda TAMAMEN yikar (ayni DELETE_FLOW mutation'i) — flow
+ * kaydi + terminal sandbox CONTAINER'i dahil. `stopFlow` yalniz DURAKLATIR (flow
+ * 'waiting'e gecer, container AYAKTA kalir → orphan sizinti). Bu yuzden BASARISIZ/
+ * IHLAL/TIMEOUT bitis yollarinda (rapor uretilmeyen) container'in serbest kalmasi
+ * icin bunu cagiririz. Basari yolu zaten purgeFlowRawData ile yikiyor (ayni etki).
+ * Semantik olarak purge'den ayri tuttuk: burada amac ham-veri degil KAYNAK temizligi.
+ */
+export async function deleteFlow(pentagiFlowId: string) {
+  await client().request(DELETE_FLOW, { flowId: pentagiFlowId });
+}

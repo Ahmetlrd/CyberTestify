@@ -11,6 +11,7 @@ import { getPaymentProvider } from '../services/payment/index.js';
 import { getSampleReportPdf } from '../services/sampleReports.js';
 import { creditsForPackagePrice, spendCredits, type CreditTx } from '../services/credits.js';
 import { enqueueOrStartScan } from '../services/orchestrator.js';
+import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -297,6 +298,14 @@ ordersRouter.get('/', requireAuth, async (req, res) => {
   );
 });
 
+// (#4) Yeni siparis oncesi kuyruk yogunlugu — order sayfasi bunu okuyup, esik
+// asilmissa "su an yogunuz, tahmini bekleme X" nazik uyarisi gosterir (engelleme YOK).
+// NOT: '/:orderId'den ONCE tanimli olmali ki '/queue/status' o kaliba dusmasin.
+ordersRouter.get('/queue/status', requireAuth, async (_req, res) => {
+  const stats = await getQueueStats();
+  res.json({ ...stats, threshold: config.queueDepthWarnThreshold, busy: stats.queuedCount >= config.queueDepthWarnThreshold });
+});
+
 ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
   const order = await prisma.order.findFirstOrThrow({
     where: { id: req.params.orderId, customerId: req.customerId! },
@@ -327,5 +336,8 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
       }
     : null;
 
-  res.json({ ...order, package: undefined, report });
+  // (#3) Kuyrukta bekleyen siparis icin pozisyon + ETA (mimari degismez; sadece gorunurluk).
+  const queue = order.status === 'scan_queued' ? await getQueuePosition({ createdAt: order.createdAt }) : null;
+
+  res.json({ ...order, package: undefined, report, queue });
 });

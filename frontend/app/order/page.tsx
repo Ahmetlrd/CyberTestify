@@ -60,6 +60,9 @@ export default function OrderPage() {
   const [startMode, setStartMode] = useState<'now' | 'later'>('now');
   const [startAt, setStartAt] = useState(''); // datetime-local değeri
 
+  // (#4) Kuyruk yogunlugu — esik asilmissa nazik uyari (engelleme YOK).
+  const [queue, setQueue] = useState<{ busy: boolean; etaMinutes: number; queuedCount: number } | null>(null);
+
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.localStorage.getItem('token')) {
       router.push('/login');
@@ -69,6 +72,7 @@ export default function OrderPage() {
     setRegion(rc);
     api.listPackages(rc).then(setPackages).catch((err) => setError(err.message));
     api.getCredits().then((c) => { setBalance(c.balance); setCreditUnit(c.creditUnitValueMinor); }).catch(() => {});
+    api.getQueueStatus().then(setQueue).catch(() => {}); // sessiz — uyari opsiyonel
   }, [router]);
 
   const selectedPkg = packages.find((p) => p.key === selected);
@@ -388,6 +392,20 @@ export default function OrderPage() {
           {selected && creditsNeeded > 0 && balance < creditsNeeded && !recurring && startMode === 'now' && (
             <p className="mt-2 text-xs text-ink-muted">Bu paket {creditsNeeded} kredi gerektirir; bakiyeniz yetersiz.</p>
           )}
+        </div>
+      )}
+
+      {queue?.busy && !intlComingSoon && (
+        <div className="mt-6 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-ink-soft">
+          <strong>Şu an yoğunuz.</strong> Taramalar sırayla yapılıyor ve kuyrukta {queue.queuedCount} sipariş
+          bekliyor; tahmini bekleme süresi{' '}
+          <strong>
+            {queue.etaMinutes >= 60
+              ? `~${Math.round((queue.etaMinutes / 60) * 10) / 10} saat`
+              : `~${queue.etaMinutes} dakika`}
+          </strong>
+          . Yine de sipariş verebilirsiniz — sıranız gelince taramanız otomatik başlar ve durumu bu panelden
+          takip edebilirsiniz.
         </div>
       )}
 

@@ -26,6 +26,21 @@ validateScopeLockConfig();
 
 const POLL_INTERVAL_MS = 8000;
 
+/**
+ * BASARISIZ/IHLAL/TIMEOUT bitis yollarinda terminal container'i yikar. Basari yolu
+ * (rapor uretimi) zaten report.ts -> purgeFlowRawData ile deleteFlow cagirir; ama
+ * hata yollari yalniz stopFlow (duraklat) cagiriyordu → container ayakta kalip
+ * orphan olarak birikirdi. best-effort: hata olsa da bitis akisini ENGELLEMEZ
+ * (saatlik cron guvenlik agi yine de temizler). 'reserving-' rezervasyonlarda
+ * gercek PentAGI flow'u yok — deleteFlow cagirma.
+ */
+async function teardownFlowContainer(pentagiFlowId: string) {
+  if (!pentagiFlowId || pentagiFlowId.startsWith('reserving-')) return;
+  await pentagi
+    .deleteFlow(pentagiFlowId)
+    .catch((e) => console.error(`[worker] deleteFlow (terminal temizligi) hata (yine de devam): ${e?.message ?? e}`));
+}
+
 async function tick() {
   // Once takilan flow'lari basa al (slotu serbest birak) — PentAGI'ye ULASILAMASA
   // bile calisir, cunku sadece DB'deki startedAt'e bakar. Ana poll dongusunun
@@ -137,6 +152,7 @@ async function tick() {
         });
         await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scope_violation' } });
         await recordScheduleOutcome(flow.order.scheduledScanId, false);
+        await teardownFlowContainer(flow.pentagiFlowId); // orphan terminal birakma
         console.error(`[POLICY-VIOLATION] Flow ${flow.pentagiFlowId} order ${flow.orderId} — ${target} tespit edildi, tarama DURDURULDU (always-enforce).`);
         continue; // rapor URETME
       }
@@ -152,6 +168,7 @@ async function tick() {
         await prisma.flow.update({ where: { id: flow.id }, data: { status: 'finished', finishedAt: new Date() } });
         await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scope_violation' } });
         await recordScheduleOutcome(flow.order.scheduledScanId, false);
+        await teardownFlowContainer(flow.pentagiFlowId); // orphan terminal birakma
         continue; // rapor URETME — tarama kapsam ihlali nedeniyle iptal
       }
 
@@ -160,6 +177,7 @@ async function tick() {
         await prisma.flow.update({ where: { id: flow.id }, data: { status: 'failed', finishedAt: new Date() } });
         await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scan_failed' } });
         await recordScheduleOutcome(flow.order.scheduledScanId, false);
+        await teardownFlowContainer(flow.pentagiFlowId); // orphan terminal birakma
         continue;
       }
 
@@ -183,6 +201,7 @@ async function tick() {
         });
         await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scan_failed' } });
         await recordScheduleOutcome(flow.order.scheduledScanId, false);
+        await teardownFlowContainer(flow.pentagiFlowId); // orphan terminal birakma
         console.warn(`[worker] Flow ${flow.pentagiFlowId} arac cagrisi yapmadan durdu -> scan_failed.`);
         continue;
       }

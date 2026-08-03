@@ -67,6 +67,10 @@ export const config = {
   maxActiveScheduledScans: Number(process.env.MAX_ACTIVE_SCHEDULED_SCANS ?? 100),
   minScheduleIntervalDays: Number(process.env.MIN_SCHEDULE_INTERVAL_DAYS ?? 7),
   scheduledQueueWarnThreshold: Number(process.env.SCHEDULED_QUEUE_WARN_THRESHOLD ?? 20),
+  // (#4) Kuyruk derinligi bu esigi gecince YENI siparis vermeye calisan musteriye
+  // "su an yogunuz, tahmini bekleme X saat" nazik uyarisi gosterilir (ENGELLEME degil,
+  // bilgilendirme — musteri isterse yine siparis verir). Kolayca ayarlanabilir.
+  queueDepthWarnThreshold: Number(process.env.QUEUE_DEPTH_WARN_THRESHOLD ?? 15),
   // WATCHDOG (dayaniklilik): bir tarama bu sureden uzun 'running' kalirsa takilmis
   // sayilir (sunucu/PentAGI cokmesi, kredi/token bitmesi, ag kesintisi vs) → basa
   // alinir, siparis scan_failed olur, concurrency=1 slotu SERBEST kalir (kuyruk

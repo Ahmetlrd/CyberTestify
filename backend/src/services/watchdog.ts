@@ -44,7 +44,12 @@ export async function reapStuckFlows() {
 
     // PentAGI'yi durdurmayi DENE ama basarisizligi DB guncellemesini ENGELLEMESIN
     // (proxy/pentagi coktuyse stopFlow zaten patlar; onemli olan slotu serbest birakmak).
-    if (!orphanReservation) await pentagi.stopFlow(flow.pentagiFlowId).catch(() => {});
+    // deleteFlow: takilan flow'un terminal container'ini da yik (orphan birakma).
+    // 'reserving-' rezervasyonda gercek flow yok → deleteFlow cagirma.
+    if (!orphanReservation) {
+      await pentagi.stopFlow(flow.pentagiFlowId).catch(() => {});
+      await pentagi.deleteFlow(flow.pentagiFlowId).catch(() => {});
+    }
 
     await prisma.flow
       .update({ where: { id: flow.id }, data: { status: 'failed', finishedAt: new Date(), errorMessage: reason } })

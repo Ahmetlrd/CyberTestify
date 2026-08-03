@@ -83,6 +83,11 @@ export const api = {
       body: JSON.stringify({ bundleKey }),
     }),
   getOrder: (orderId: string) => request<any>(`/orders/${orderId}`),
+  // (#4) Kuyruk yogunlugu — yeni siparis oncesi "yogunuz" uyarisi icin.
+  getQueueStatus: () =>
+    request<{ queuedCount: number; running: boolean; avgScanMinutes: number; etaMinutes: number; threshold: number; busy: boolean }>(
+      '/orders/queue/status',
+    ),
   listOrders: () =>
     request<
       Array<{ id: string; hostname: string; packageName: string; status: string; createdAt: string }>
