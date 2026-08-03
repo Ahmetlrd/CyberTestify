@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Logo } from './Logo';
 import { RegionSelector } from './RegionSelector';
 import { AuthNav } from './AuthNav';
+import { MobileMenu } from './MobileMenu';
 import type { RegionConfig } from '../config/regions';
 import { getDict } from '../config/i18n';
 
@@ -35,7 +36,11 @@ export function Nav({ region }: { region: RegionConfig }) {
 
         <div className="flex items-center gap-2 sm:gap-3">
           <RegionSelector current={region.code} />
-          <AuthNav labels={{ login: d.login, cta: d.cta, panel: d.panel, logout: d.logout }} />
+          {/* Auth butonlari desktop'ta; mobilde hamburger menu icine tasinir (tasma olmasin). */}
+          <div className="hidden items-center gap-2 sm:gap-3 md:flex">
+            <AuthNav labels={{ login: d.login, cta: d.cta, panel: d.panel, logout: d.logout }} />
+          </div>
+          <MobileMenu links={links} authLabels={{ login: d.login, cta: d.cta }} />
         </div>
       </nav>
     </header>

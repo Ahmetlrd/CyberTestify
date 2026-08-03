@@ -397,7 +397,7 @@ Target: ${host}
       'Dis yuzeyinizi (TLS/sifreleme, guvenlik basliklari, acikta hassas dosyalar, ' +
       'bilinen surum zafiyetleri, cerez/oturum guvenligi) PCI-DSS maddeleriyle ' +
       'eslestiren pasif bir hazirlik raporu. RESMI ASV/QSA testi DEGILDIR.',
-    priceMinorUnit: 249900,
+    priceMinorUnit: 299900,
     modelProvider: PROVIDER,
     // DAR/deterministik + kvkk disiplini (2026-08-03): sentez adimini AC BIRAKMAMAK icin
     // biraz bol tavan (bkz kvkk kok neden).
@@ -442,7 +442,7 @@ Target: ${host}
       'Kisisel veri isleyen formlar, cerez rizasi/aydinlatma metni, veri saklama ' +
       've iletisim/veri sorumlusu bilgilerinin pasif kontrolu. Hukuki danismanlik ' +
       'DEGILDIR — farkindalik ve eksik tespiti amaclidir.',
-    priceMinorUnit: 199900,
+    priceMinorUnit: 249900,
     modelProvider: PROVIDER,
     maxToolCalls: 45,
     // 2026-08-02: collectFindings() kok duzeltmesi (report.ts) ssl_tls ile CANLI test
@@ -487,7 +487,7 @@ Hedef: ${host}
     description:
       'Disaridan gozlemlenebilen teknik kontrollerin ISO 27001 Ek-A maddeleriyle ' +
       'eslestirildigi pasif hazirlik raporu. RESMI sertifikasyon/denetim DEGILDIR.',
-    priceMinorUnit: 299900,
+    priceMinorUnit: 349900,
     modelProvider: PROVIDER,
     // DAR/deterministik + kvkk disiplini (2026-08-03): sentez adimini AC BIRAKMAMAK icin
     // biraz bol tavan (bkz kvkk kok neden — 35 dar kalirsa rapor yazilmadan bitebilir).
@@ -685,7 +685,7 @@ Target: ${host}
       'Aktif-hafif kontrol: tespit edilen giris noktalarina ZARARSIZ kanit-amacli test ' +
       'payload’lari gonderip enjeksiyon (SQLi/XSS) zafiyetinin VAR OLDUGUNU dogrular. Veri ' +
       'CEKMEZ, veri SILMEZ/DEGISTIRMEZ. Yetkilendirme beyani gerektirir.',
-    priceMinorUnit: 349900, // PLACEHOLDER (Vedat onayi bekleniyor)
+    priceMinorUnit: 399900, // PLACEHOLDER (Vedat onayi bekleniyor)
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     securityProfile: 'active-light',
@@ -723,7 +723,7 @@ Target: ${host}
       'Aktif-hafif kontrol: hedefte tahmin edilebilir kaynak kimlikleri (or. /api/user/123) ' +
       'olup olmadigini tespit eder, kimligi degistirip yetkisiz erisimin mumkun olup olmadigini ' +
       'DOGRULAR. Erisilen gercek/hassas veriyi RAPORA YAZMAZ. Yetkilendirme beyani gerektirir.',
-    priceMinorUnit: 349900, // PLACEHOLDER (Vedat onayi bekleniyor)
+    priceMinorUnit: 399900, // PLACEHOLDER (Vedat onayi bekleniyor)
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     securityProfile: 'active-light',
@@ -759,7 +759,7 @@ Target: ${host}
       'Aktif-hafif: dis istek tetikleyebilecek noktalari (URL/webhook/import) tespit eder ve ' +
       'KONTROLLU zararsiz bir kanit (DNS/timing ya da kendi callback) ile SSRF varligini dogrular. ' +
       'Ic aga gercek erisim/kesif YASAK. Yetkilendirme beyani gerektirir.',
-    priceMinorUnit: 349900,
+    priceMinorUnit: 449900,
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     securityProfile: 'active-light',
@@ -793,7 +793,7 @@ Target: ${host}
       'Aktif-hafif: dosya yukleme noktalarinda tip/boyut kontrolu var mi; ZARARSIZ, calismayan bir ' +
       'test dosyasi kabul ediliyor mu dogrular. Gercek payload/webshell YUKLEME/CALISTIRMA YASAK. ' +
       'Yetkilendirme beyani gerektirir.',
-    priceMinorUnit: 349900,
+    priceMinorUnit: 449900,
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     securityProfile: 'active-light',
@@ -826,7 +826,7 @@ Target: ${host}
     description:
       'Aktif-hafif: fiyat/miktar manipulasyonu, adim atlama gibi yaygin is-mantigi hatalarina ' +
       'KANIT-amacli tek-seferlik istekler. Gercek islem TAMAMLATMA/veri YAZMA YASAK. Yetkilendirme gerektirir.',
-    priceMinorUnit: 349900,
+    priceMinorUnit: 599900,
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     securityProfile: 'active-light',
@@ -859,7 +859,7 @@ Target: ${host}
     description:
       'Aktif-hafif: SINIRLI (2-3) paralel istekle race condition, ve request body’ye beklenmeyen bir ' +
       'alanin (or. isAdmin) kabul edilip edilmedigini gozlemler. Veri BOZMA/yetki YUKSELTME YASAK.',
-    priceMinorUnit: 349900,
+    priceMinorUnit: 599900,
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     securityProfile: 'active-light',
@@ -892,7 +892,7 @@ Target: ${host}
     description:
       'EN SIKI aktif kontrol: RCE/komut enjeksiyonunu YALNIZCA kor (zaman-tabanli sleep veya zararsiz ' +
       'canary) kanitla dogrular. Gercek komut ASLA calistirilmaz. Yetkilendirme beyani gerektirir.',
-    priceMinorUnit: 499900,
+    priceMinorUnit: 699900,
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     securityProfile: 'active-verify-only',
@@ -925,7 +925,7 @@ Target: ${host}
     description:
       'Verdiginiz bir TEST hesabinin oturumuyla aktif-hafif tarama. Kimlik bilgileri SIFRELI saklanir, ' +
       'yalniz sizin domaininize karsi kullanilir ve tarama bitince SILINIR. Yetkilendirme beyani gerektirir.',
-    priceMinorUnit: 449900,
+    priceMinorUnit: 849900,
     modelProvider: PROVIDER,
     maxToolCalls: 40,
     securityProfile: 'active-light',
@@ -958,7 +958,7 @@ Target: ${host}
       'PentAGI’nin cok-adimli, hafiza tutan, zincirleme otonom moduna en yakin paket. Zincirleme kesif ' +
       'serbest AMA istismar/exfil/DoS/auth-bypass/veri-degistirme YINE YASAK (aktif-hafif sinirlar). ' +
       'Yetkilendirme beyani gerektirir.',
-    priceMinorUnit: 899900,
+    priceMinorUnit: 1599900,
     modelProvider: PROVIDER,
     // Cok-adimli/zincirleme -> yuksek tavan (dar paketlerin aksine planlama serbest).
     maxToolCalls: 90,

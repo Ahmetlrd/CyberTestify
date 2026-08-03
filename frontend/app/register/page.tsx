@@ -1,12 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../lib/api';
 
 export default function RegisterPage() {
   const router = useRouter();
+  // Zaten giris yapmis kullaniciyi kayit ekranindan dogrulama akisina al (paket
+  // sayfasindaki "Seç ve Doğrula" logineli kullaniciyi buraya getiriyordu).
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.localStorage.getItem('token')) {
+      router.replace('/verify');
+    }
+  }, [router]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [terms, setTerms] = useState(false);

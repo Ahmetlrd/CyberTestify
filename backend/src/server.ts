@@ -30,12 +30,28 @@ app.set('trust proxy', 1);
 // Guvenlik basliklari (CSP, HSTS vb.). API oldugu icin varsayilan yeterli.
 app.use(helmet());
 
-// Izin verilen origin'ler: musteri sitesi (FRONTEND_URL) + admin paneli (ADMIN_URL,
-// ayri subdomain). ADMIN_URL virgulle birden fazla olabilir. Bos olanlar elenir.
-const corsOrigins = [config.frontendUrl, ...config.adminUrl.split(',')]
-  .map((s) => s.trim())
-  .filter(Boolean);
-app.use(cors({ origin: corsOrigins, credentials: true }));
+// Izin verilen origin'ler. ONEMLI: cybertestify.com (apex) VE app.cybertestify.com AYNI
+// uygulamayi paralel sunuyor (yonlendirme YOK) — kullanici hangi domain'den girerse girsin
+// API cagrilari CORS'a takilmamali. Bu yuzden apex + TUM alt alan adlarini (app./www./admin.)
+// tek regex ile kabul ederiz; ayrica FRONTEND_URL/ADMIN_URL ve localhost (dev) izinli.
+const staticOrigins = new Set(
+  [config.frontendUrl, ...config.adminUrl.split(',')].map((s) => s.trim()).filter(Boolean),
+);
+const CYBERTESTIFY_ORIGIN = /^https:\/\/([a-z0-9-]+\.)?cybertestify\.com$/i;
+const LOCALHOST_ORIGIN = /^http:\/\/localhost(:\d+)?$/i;
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      // Origin yoksa (ayni-origin istek, curl, server-to-server) izin ver.
+      if (!origin) return cb(null, true);
+      if (staticOrigins.has(origin) || CYBERTESTIFY_ORIGIN.test(origin) || LOCALHOST_ORIGIN.test(origin)) {
+        return cb(null, true);
+      }
+      return cb(null, false);
+    },
+    credentials: true,
+  }),
+);
 
 // Webhook route'u RAW body istiyor (imza dogrulamasi icin) — bu yuzden
 // genel json() middleware'inden ONCE, sadece bu path icin ozel isleniyor.

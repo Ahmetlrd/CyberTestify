@@ -16,9 +16,11 @@ function pickRegion(req: NextRequest): string {
   ).toLowerCase();
   if (isRegionCode(country)) return country;
 
+  // Dil sinyali: YALNIZCA Turkce tarayici -> tr; diger TUM diller -> us (EN + USD).
+  // (Geo-IP header'i bu altyapida (Caddy) gelmiyor; deterministik dil-tabanli kural.)
   const al = (req.headers.get('accept-language') ?? '').toLowerCase();
   if (al.includes('tr')) return 'tr';
-  if (al.includes('en')) return 'us';
+  if (al.trim()) return 'us'; // herhangi bir (Turkce olmayan) dil sinyali -> EN
 
   return DEFAULT_REGION;
 }

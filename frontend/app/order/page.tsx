@@ -73,6 +73,8 @@ export default function OrderPage() {
 
   const selectedPkg = packages.find((p) => p.key === selected);
   const isActiveLight = selectedPkg?.securityProfile === 'active-light';
+  // (#4) Uluslararasi odeme (Paddle) henuz canli degil — TR disi bolgede nazik "yakinda".
+  const intlComingSoon = region !== 'tr';
   const needsAuthCreds = selected === 'authenticated_scan';
   const activeConsentOk = (!isActiveLight || atRisk) && (!needsAuthCreds || (authUser.trim() && authPass));
   const creditsNeeded = selectedPkg ? Math.max(1, Math.round(selectedPkg.priceMinorUnit / creditUnit)) : 0;
@@ -389,11 +391,22 @@ export default function OrderPage() {
         </div>
       )}
 
+      {intlComingSoon && (
+        <div className="mt-6 rounded-card border border-accent/40 bg-accent-soft/40 px-4 py-3 text-sm text-ink-soft">
+          <strong>Online payment for your region is coming soon.</strong> Card payments are currently available for
+          Türkiye only. Please contact us at{' '}
+          <a href="mailto:support@cybertestify.com" className="text-accent-600 underline">
+            support@cybertestify.com
+          </a>{' '}
+          to arrange your scan in the meantime.
+        </div>
+      )}
+
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
       <button
         onClick={handleStart}
-        disabled={!domainId || busy || !selected || !allConsents || !activeConsentOk}
+        disabled={!domainId || busy || !selected || !allConsents || !activeConsentOk || intlComingSoon}
         className="btn-primary mt-6 w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
       >
         {busy
@@ -420,7 +433,7 @@ export default function OrderPage() {
           Güvenli Ödeme (256-bit SSL)
         </span>
         <img src="/iyzico/iyzico_ile_ode_colored_horizontal.svg" alt="iyzico ile Öde" className="h-6 w-auto" width={210} height={31} />
-        <img src="/iyzico/logo_band_colored.svg" alt="Visa, Mastercard, Troy" className="h-7 w-auto" width={456} height={32} />
+        <img src="/iyzico/logo_band_colored.svg" alt="Visa, Mastercard, Troy" className="h-auto w-auto max-w-full" width={456} height={32} />
       </div>
       <p className="mt-2 text-xs text-ink-muted">
         Tüm fiyatlar <strong>KDV dahildir</strong>. Ödemeniz onaylandığında faturanız e-posta ile iletilecektir.

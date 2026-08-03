@@ -8,37 +8,39 @@ import { SCAN_PACKAGES } from './scanPackages.js';
  */
 export const REGION_CURRENCY: Record<string, string> = { tr: 'TRY', us: 'USD', ae: 'AED' };
 
-// TR disi bolgeler icin tahmini tutarlar (ilgili para biriminin minor unit'i).
-const ESTIMATED: Record<string, { us: number; ae: number }> = {
-  basit_tarama: { us: 1900, ae: 6900 },
-  ssl_tls: { us: 2900, ae: 10900 },
-  header_leak: { us: 2900, ae: 10900 },
-  dns_email: { us: 3900, ae: 14900 },
-  cms_cve: { us: 5900, ae: 21900 },
-  pci_hazirlik: { us: 9900, ae: 36900 },
-  kvkk_hazirlik: { us: 7900, ae: 29900 },
-  iso27001_hazirlik: { us: 11900, ae: 43900 },
-  cors_cookie: { us: 2900, ae: 10900 }, // PLACEHOLDER (header_leak seviyesi)
-  csp_analiz: { us: 2900, ae: 10900 }, // PLACEHOLDER (header_leak seviyesi)
-  subdomain_takeover: { us: 4900, ae: 17900 }, // PLACEHOLDER (Vedat onayi)
-  api_discovery: { us: 4400, ae: 15900 }, // PLACEHOLDER (Vedat onayi)
-  injection_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER (active-light, Vedat onayi)
-  idor_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER (active-light, Vedat onayi)
-  ssrf_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER
-  file_upload_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER
-  business_logic_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER
-  race_massassign_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER
-  rce_verify: { us: 16900, ae: 59900 }, // PLACEHOLDER (en siki)
-  authenticated_scan: { us: 14900, ae: 53900 }, // PLACEHOLDER
-  autonomous_pentest: { us: 29900, ae: 107900 }, // PLACEHOLDER (en kapsamli)
+// USD fiyatlari (cent). Vedat'in onayladigi tabloya gore; kur ~47,5 TL/USD ile TL'yle
+// tutarli. Listede OLMAYAN paketler icin TL'den turetilir (round(TL-kurus / 47.5) = USD-cent).
+const USD_CENTS: Record<string, number> = {
+  basit_tarama: 1100, // $11 (mevcut TL 499 — Vedat'in "~999" varsayimi yanlisti, TL degismedi)
+  ssl_tls: 1700, // $17
+  kvkk_hazirlik: 5200, // $52
+  pci_hazirlik: 6300, // $63
+  iso27001_hazirlik: 7400, // $74
+  injection_verify: 8400, // $84
+  idor_verify: 8400, // $84
+  ssrf_verify: 9500, // $95
+  file_upload_verify: 9500, // $95
+  business_logic_verify: 12600, // $126
+  race_massassign_verify: 12600, // $126
+  rce_verify: 14700, // $147
+  authenticated_scan: 17800, // $178
+  autonomous_pentest: 33600, // $336
 };
 
+const TRY_PER_USD = 47.5; // yaklasik kur — USD turetimi icin
+const AED_PER_USD = 3.67; // sabit (BAE dirhemi USD'ye peg)
+
+function usdCentsFor(key: string, tryMinor: number): number {
+  return USD_CENTS[key] ?? Math.round(tryMinor / TRY_PER_USD);
+}
+
 // [packageKey][region] -> amountMinorUnit. Seed bu haritadan PackagePricing yazar.
+// TR authoritative (scanPackages.priceMinorUnit); US tablodan/turetilir; AE = USD * 3.67.
 export const REGIONAL_PRICING: Record<string, Record<string, number>> = Object.fromEntries(
-  SCAN_PACKAGES.map((p) => [
-    p.key,
-    { tr: p.priceMinorUnit, us: ESTIMATED[p.key]?.us ?? p.priceMinorUnit, ae: ESTIMATED[p.key]?.ae ?? p.priceMinorUnit },
-  ]),
+  SCAN_PACKAGES.map((p) => {
+    const us = usdCentsFor(p.key, p.priceMinorUnit);
+    return [p.key, { tr: p.priceMinorUnit, us, ae: Math.round(us * AED_PER_USD) }];
+  }),
 );
 
 export function currencyFor(region: string): string {

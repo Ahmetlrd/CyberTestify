@@ -8,6 +8,8 @@
   }
   body {
     @apply bg-canvas text-ink antialiased;
+    /* Mobil: hicbir tekil ogenin yatay kaydirma yaratmamasi icin guvenlik agi. */
+    overflow-x: hidden;
   }
   h1, h2, h3 {
     @apply tracking-tight;

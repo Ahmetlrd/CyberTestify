@@ -90,7 +90,7 @@ export function Footer({ region }: { region: RegionConfig }) {
           <img
             src="/iyzico/logo_band_white.svg"
             alt="iyzico ile Öde — Visa, Mastercard, Troy"
-            className="mt-4 h-8 w-auto"
+            className="mt-4 h-auto w-auto max-w-full"
             width={456}
             height={32}
           />
