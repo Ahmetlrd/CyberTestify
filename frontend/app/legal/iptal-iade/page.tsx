@@ -1,11 +1,20 @@
 import { LegalArticle } from '../../../components/LegalArticle';
 import { COMPANY } from '../../../lib/company';
 
-export const metadata = { title: 'İptal / İade & Cayma Koşulları — CyberTestify' };
+export const metadata = { title: 'Teslimat, İptal / İade & Cayma Koşulları — CyberTestify' };
 
 export default function Page() {
   return (
-    <LegalArticle title="İptal / İade ve Cayma Koşulları">
+    <LegalArticle title="Teslimat, İptal / İade ve Cayma Koşulları">
+      <h3>Teslimat (Dijital Hizmet)</h3>
+      <p>
+        Sunulan hizmet, fiziksel bir ürün değil <strong>dijital/SaaS bir güvenlik ön-değerlendirme
+        hizmetidir</strong>. Bu nedenle <strong>kargo veya fiziksel teslimat söz konusu değildir</strong>.
+        Hizmet, ödeme onayının ardından <strong>elektronik ortamda anında</strong> sunulur: tarama başlar,
+        rapor hazır olduğunda hesabınızın panelinde erişime açılır ve tek kullanımlık erişim kodu e-posta
+        ile iletilir. Bu anlamda &quot;teslimat&quot;, raporun elektronik olarak erişime açılmasıdır.
+      </p>
+
       <h3>Cayma Hakkı ve İstisnası</h3>
       <p>
         Mesafeli sözleşmelerde tüketicinin kural olarak 14 gün içinde cayma hakkı vardır. Ancak

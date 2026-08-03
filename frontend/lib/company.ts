@@ -16,7 +16,7 @@ export const COMPANY = {
   address: 'Sahabiye Mah. Prof. Fevzi Fevzioğlu Cd. No:19 Kocasinan / Kayseri',
   phone: '0352 222 22 21',
   email: 'support@cybertestify.com',
-  kep: '', // KEP adresi alininca doldurulacak (bos ise footer'da gosterilmez).
+  kep: 'entar6enerji@hs01.kep.tr',
   // ETBIS kaydindan sonra alinan dogrulama karekodu footer'a eklenecek (zorunlu).
   etbisRegistered: false,
   // Hukuki metinlerin surumu — backend config.legalVersion ile ayni tutulmali.

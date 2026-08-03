@@ -7,11 +7,11 @@ import { getDict } from '../config/i18n';
 const LEGAL_LINKS: Array<[string, string]> = [
   ['Kullanım Koşulları', '/legal/kullanim-kosullari'],
   ['KVKK Aydınlatma Metni', '/legal/kvkk-aydinlatma'],
-  ['Gizlilik Politikası', '/legal/gizlilik'],
+  ['Gizlilik Politikası ve Sözleşmesi', '/legal/gizlilik'],
   ['Çerez Politikası', '/legal/cerez'],
   ['Mesafeli Satış Sözleşmesi', '/legal/mesafeli-satis'],
   ['Ön Bilgilendirme Formu', '/legal/on-bilgilendirme'],
-  ['İptal / İade & Cayma', '/legal/iptal-iade'],
+  ['Teslimat, İptal / İade & Cayma', '/legal/iptal-iade'],
   ['Sorumluluk Reddi', '/legal/sorumluluk-reddi'],
 ];
 
@@ -37,7 +37,10 @@ export function Footer({ region }: { region: RegionConfig }) {
                 {region.supportEmail}
               </a>
             </p>
-            <p className="mt-2 text-sm">
+            <p className="mt-2 flex flex-wrap gap-x-4 text-sm">
+              <Link href="/hakkimizda" className="font-medium text-white/80 hover:text-white hover:underline">
+                Hakkımızda
+              </Link>
               <Link href="/iletisim" className="font-medium text-white/80 hover:text-white hover:underline">
                 İletişim &amp; Künye →
               </Link>
@@ -83,6 +86,14 @@ export function Footer({ region }: { region: RegionConfig }) {
               {COMPANY.kep && <span>KEP: {COMPANY.kep}</span>}
             </div>
           )}
+          {/* iyzico resmi "iyzico ile ode" bandi (Visa/Mastercard/Troy dahil) — koyu zemin icin White */}
+          <img
+            src="/iyzico/logo_band_white.svg"
+            alt="iyzico ile Öde — Visa, Mastercard, Troy"
+            className="mt-4 h-8 w-auto"
+            width={456}
+            height={32}
+          />
           <div className="mt-3 text-white/40">
             © {COMPANY.brand} — {d.disclaimer} v{COMPANY.legalVersion}
           </div>

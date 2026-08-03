@@ -1,11 +1,11 @@
 import { LegalArticle } from '../../../components/LegalArticle';
 import { COMPANY } from '../../../lib/company';
 
-export const metadata = { title: 'Gizlilik Politikası — CyberTestify' };
+export const metadata = { title: 'Gizlilik Politikası ve Sözleşmesi — CyberTestify' };
 
 export default function Page() {
   return (
-    <LegalArticle title="Gizlilik Politikası">
+    <LegalArticle title="Gizlilik Politikası ve Sözleşmesi">
       <p>
         {COMPANY.legalName} ({COMPANY.brand}) olarak gizliliğinize önem veriyoruz. Bu politika,
         hangi verileri neden işlediğimizi ve nasıl koruduğumuzu özetler. Kişisel verilere ilişkin

@@ -410,8 +410,8 @@ export default function OrderPage() {
           : 'Ödeme onaylandığında tarama otomatik ve anında başlar.'}
       </p>
 
-      {/* Güvenli ödeme rozeti + kart markaları + fatura notu */}
-      <div className="mt-6 flex flex-wrap items-center gap-3 rounded-card border border-line bg-brand-50/40 px-4 py-3 text-xs text-ink-soft">
+      {/* Güvenli ödeme rozeti + iyzico resmi logoları (Visa/Mastercard/Troy dahil) */}
+      <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-card border border-line bg-brand-50/40 px-4 py-3 text-xs text-ink-soft">
         <span className="inline-flex items-center gap-1.5 font-semibold text-brand">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
             <path d="M12 2l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V5l7-3z" fill="#123F3A" />
@@ -419,16 +419,12 @@ export default function OrderPage() {
           </svg>
           Güvenli Ödeme (256-bit SSL)
         </span>
-        <span className="text-ink-muted">·</span>
-        <span className="font-semibold tracking-wide text-ink-soft">VISA · Mastercard · Troy</span>
-        <span className="text-ink-muted">·</span>
-        <span>Ödeme altyapısı: iyzico</span>
+        <img src="/iyzico/iyzico_ile_ode_colored_horizontal.svg" alt="iyzico ile Öde" className="h-6 w-auto" width={210} height={31} />
+        <img src="/iyzico/logo_band_colored.svg" alt="Visa, Mastercard, Troy" className="h-7 w-auto" width={456} height={32} />
       </div>
       <p className="mt-2 text-xs text-ink-muted">
         Tüm fiyatlar <strong>KDV dahildir</strong>. Ödemeniz onaylandığında faturanız e-posta ile iletilecektir.
       </p>
-      {/* TODO(iyzico-logo): VISA/Mastercard/Troy ve iyzico resmi logo dosyalari, iyzico marka
-          kitinden alinip buradaki metin yerine gorsel olarak konulacak (uydurma logo kullanilmadi). */}
     </main>
   );
 }
