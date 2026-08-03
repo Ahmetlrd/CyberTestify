@@ -114,6 +114,57 @@ const GUARD_BLOCK_MARKER = /passive scan policy|blocked at tool level/i;
 // terminal'de (curl/wget) yapilir; Go tool-guard da orada. Bu yuzden yalniz terminal taranir.
 const HTTP_EXECUTOR_TOOLS = new Set(['terminal']);
 
+// Bir yolun/komuttaki script dosya adlarini yakalar (py/sh/pl/rb).
+const SCRIPT_FILE_RE = /([\w.\/-]+\.(?:py|sh|pl|rb))\b/gi;
+
+/**
+ * Ayni script'in varyasyonlarini ayni "temel ada" indirger: dizin + uzanti atilir,
+ * sondaki debug/versiyon ekleri (_v2, _fixed, _final, _2, -new ...) kaldirilir.
+ * Boylece `audit.py`, `audit_fixed.py`, `audit_v2.py` hepsi `audit` sayilir.
+ */
+function normalizeScriptName(p: string): string {
+  const file = p.split('/').pop() ?? p;
+  const noExt = file.replace(/\.(py|sh|pl|rb)$/i, '');
+  return noExt
+    .replace(/([_-]?(v?\d+|fixed|final|new|updated|corrected|revised|clean|test|tmp|copy))+$/gi, '')
+    .toLowerCase();
+}
+
+/**
+ * SCRIPT DEBUG-LOOP tespiti: ajan ayni script'i tekrar tekrar yazip/calistirip
+ * "duzeltme" dongusune girerse (canli nomorelink vakasi — string-format hatasi ~15-20
+ * kez tekrarlandi, tum butce yandi, bos rapor) bunu yakalar. YALNIZ terminal
+ * tool-call'lari sayilir; ayni tool-call icinde ayni dosya bir kez sayilir. Bir
+ * yaz→calistir dongusu dosyayi ~2 cagrida gecirdigi icin esik (varsayilan 6) ~3
+ * donguye denk gelir — normal bir "yaz+calistir+bir kez tekrar dogrula" (3) altinda kalir,
+ * yanlis-pozitif riski dusuktur. Esigi asan (en yuksek) temel adi dondurur, yoksa null.
+ */
+export function detectScriptDebugLoop(
+  items: Array<{ name?: string | null; args: string | null | undefined }>,
+  threshold: number,
+): { base: string; count: number } | null {
+  if (!threshold || threshold <= 0) return null;
+  const counts = new Map<string, number>();
+  for (const it of items) {
+    if (it.name != null && !HTTP_EXECUTOR_TOOLS.has(it.name)) continue; // yalniz terminal
+    const t = it.args;
+    if (!t) continue;
+    const seen = new Set<string>(); // ayni cagride ayni dosyayi 1 kez say
+    SCRIPT_FILE_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = SCRIPT_FILE_RE.exec(t))) {
+      const base = normalizeScriptName(m[1]);
+      if (base) seen.add(base);
+    }
+    for (const b of seen) counts.set(b, (counts.get(b) ?? 0) + 1);
+  }
+  let worst: { base: string; count: number } | null = null;
+  for (const [base, count] of counts) {
+    if (count >= threshold && (!worst || count > worst.count)) worst = { base, count };
+  }
+  return worst;
+}
+
 export function findForbiddenMethods(
   items: Array<{ name?: string | null; args: string | null | undefined; result?: string | null }>,
 ): string[] {

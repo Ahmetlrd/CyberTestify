@@ -132,6 +132,35 @@ unavailable)". Spending your tool-call budget on setup/installation is FORBIDDEN
 
 export const FIX_SUGGESTIONS_DELIM = '===FIX_SUGGESTIONS===';
 
+// === YONTEM DISIPLINI (merkezi, TUM paketlere) — orchestrator.ts her prompt'a locale'e
+// gore ekler. Sebep: bir canli taramada ajan, dogrudan curl/openssl yerine "once tarama
+// yapip raporu ureten bir Python scripti yazayim" yoluna sapip, script'teki bir string-
+// formatlama hatasini ~15-20 kez tekrar tekrar "duzeltme" dongusunde TUM butceyi yakti ve
+// bos rapor uretti (ham veri toplama dogruydu; sorun script-debug dongusuydu). Bu blok o
+// anti-kalibi hem yasaklar hem de "2 denemeden fazla duzeltme yok, script'i terk et" kuralini koyar.
+export const METHOD_GUARD_EN = `
+METHOD DISCIPLINE (collect findings DIRECTLY — do NOT get stuck writing/debugging scripts):
+Gather evidence with SIMPLE, INDIVIDUAL commands (curl, openssl, dig, nslookup, host) — one check
+per command — and WRITE THE FINDINGS YOURSELF in your final step. Do NOT write a complex, multi-line
+Python/Bash program that runs the scan and PRODUCES THE REPORT for you; the report is written by YOU
+directly, never emitted by a script. If (and only if) you truly need a small script to batch a few
+checks, keep it MINIMAL: no string formatting / f-strings / .format() / template placeholders — just
+\`print\` the RAW output; never let the script interpret results or write prose. ANTI-LOOP RULE
+(critical): do NOT try to fix the same script more than TWICE. If it still misbehaves after the 2nd
+fix, ABANDON the script completely and continue with plain one-off commands using whatever raw data
+you already have. Never burn your budget in a write→run→fix loop.`.trim();
+
+export const METHOD_GUARD_TR = `
+YONTEM DISIPLINI (bulgulari DOGRUDAN topla — script yazip debug etmede TAKILMA):
+Kanitlari BASIT, TEKIL komutlarla topla (curl, openssl, dig, nslookup, host) — komut basina tek
+kontrol — ve raporu SON adiminda KENDIN yaz. Taramayi yapip RAPORU SENIN YERINE ureten karmasik, cok
+satirli bir Python/Bash programi YAZMA; raporu bir script DEGIL, DOGRUDAN SEN yazarsin. Gercekten
+birkac kontrolu tek seferde yapmak icin kucuk bir script GEREKIYORSA en sade halde tut: string
+formatlama / f-string / .format() / yer-tutucu KULLANMA — sadece ham ciktiyi \`print\` et; script'e
+sonuc YORUMLATMA / rapor YAZDIRMA. DONGU YASAGI (kritik): ayni script'i IKIDEN fazla kez duzeltmeyi
+DENEME. 2. duzeltmeden sonra hala calismiyorsa script'i TAMAMEN TERK ET ve elindeki ham veriyle tek
+tek komutlarla devam et. Butceni yaz-calistir-duzelt dongusunde HARCAMA.`.trim();
+
 const BUDGET_GUARD_EN = `
 COMPLETION & OUTPUT RULE (HIGHEST PRIORITY): Writing the final findings report AND the
 ${FIX_SUGGESTIONS_DELIM} section is your #1 deliverable — more important than extra probing.

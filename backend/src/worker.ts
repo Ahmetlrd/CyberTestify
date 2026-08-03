@@ -3,7 +3,7 @@ import { config, validateScopeLockConfig } from './config.js';
 import * as pentagi from './pentagi/client.js';
 import { getPackageDef } from './services/scanPackages.js';
 import { generateAndStoreReport } from './services/report.js';
-import { findOutOfScope, findForbiddenMethods } from './services/scope.js';
+import { findOutOfScope, findForbiddenMethods, detectScriptDebugLoop } from './services/scope.js';
 import { buildActivityFeed } from './services/activityFeed.js';
 import { promoteQueued } from './services/orchestrator.js';
 import { checkEgressProxyHealth } from './services/egressHealth.js';
@@ -66,6 +66,8 @@ async function tick() {
       // allowlist) disinda bir hedef varsa flow'u durdur (enforce) veya logla.
       let violationTarget: string | null = flow.scopeViolationTarget;
       let forbiddenMethodHit: string | null = null;
+      // Script debug-loop (ayni script'i tekrar tekrar yazip duzeltme dongusu) tespiti.
+      let scriptLoopHit: { base: string; count: number } | null = null;
       try {
         const logs = await pentagi.getScopeLogs(flow.pentagiFlowId);
 
@@ -88,6 +90,14 @@ async function tick() {
           );
           if (methods.length) forbiddenMethodHit = methods.join(', ');
         }
+
+        // (D) SCRIPT DEBUG-LOOP — ajan ayni script'i tekrar tekrar yazip/calistirip
+        // duzeltmeye calisip butceyi yakarsa (bkz nomorelink vakasi) yakala; asagida
+        // overCap gibi ERKEN DUR + elde edilen ham veriyle rapor uret.
+        scriptLoopHit = detectScriptDebugLoop(
+          logs.toolCallLogs.map((t) => ({ name: t.name, args: t.args })),
+          config.scriptDebugLoopThreshold,
+        );
 
         // (B) SEVIYE 3 kapsam izleme — yalnızca henüz ihlal kaydı yoksa.
         // SADECE ajanin ISTEDIGI hedefi (tool cagri ARGUMANLARI) tara; yanıt
@@ -180,10 +190,16 @@ async function tick() {
       // Bitirme kosulu: dogal 'finished' | maliyet tavani asildi | idle 'waiting'.
       // ONEMLI: stopFlow flow'u 'finished' DEGIL 'waiting' durumuna alir
       // (PentAGI'de "stopped" statusu yok), bu yuzden bitirmeyi BIZ tetikliyoruz.
-      const done = remoteStatus.status === 'finished' || overCap || idleWaiting;
+      const done = remoteStatus.status === 'finished' || overCap || idleWaiting || !!scriptLoopHit;
       if (done) {
-        if (overCap && remoteStatus.status !== 'finished') {
-          console.warn(`[worker] Flow ${flow.pentagiFlowId} tavani asti (${toolCallCount}/${pkg.maxToolCalls}), durduruluyor ve rapor uretiliyor.`);
+        if ((overCap || scriptLoopHit) && remoteStatus.status !== 'finished') {
+          if (scriptLoopHit) {
+            console.warn(
+              `[worker] Flow ${flow.pentagiFlowId} SCRIPT DEBUG-LOOP tespit edildi (script "${scriptLoopHit.base}" x${scriptLoopHit.count} ≥ ${config.scriptDebugLoopThreshold}), durduruluyor ve elde edilen ham veriyle rapor uretiliyor.`,
+            );
+          } else {
+            console.warn(`[worker] Flow ${flow.pentagiFlowId} tavani asti (${toolCallCount}/${pkg.maxToolCalls}), durduruluyor ve rapor uretiliyor.`);
+          }
           await pentagi.stopFlow(flow.pentagiFlowId);
         }
 

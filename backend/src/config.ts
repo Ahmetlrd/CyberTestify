@@ -77,6 +77,11 @@ export const config = {
   // Tarama basladiktan sonra ajan hic arac cagrisi yapmadan 'waiting'e duserse (erken
   // durdurma/cokme), bu tolerans suresi gecince RAPOR URETMEDEN scan_failed yapilir.
   emptyScanGraceSeconds: Number(process.env.EMPTY_SCAN_GRACE_SECONDS ?? 60),
+  // SCRIPT DEBUG-LOOP KESME: ajan ayni Python/Bash script'ini tekrar tekrar yazip
+  // calistirip "duzeltme" dongusune girer (bkz nomorelink vakasi) → butce bosa yanar.
+  // Ayni (normalize) script adi bu kadar terminal cagrisinda gecerse dongu sayilir;
+  // overCap gibi ERKEN DUR + elde edilen ham veriyle rapor uret. 0 = kapali.
+  scriptDebugLoopThreshold: Number(process.env.SCRIPT_DEBUG_LOOP_THRESHOLD ?? 6),
   scopeAllowlist: (process.env.SCOPE_ALLOWLIST ??
     [
       'cve.mitre.org', 'cve.org', 'nvd.nist.gov', 'exploit-db.com', 'cvedetails.com',

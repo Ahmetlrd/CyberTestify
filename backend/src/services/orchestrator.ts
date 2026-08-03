@@ -1,6 +1,6 @@
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { getPackageDef, securityProfileFor } from './scanPackages.js';
+import { getPackageDef, securityProfileFor, METHOD_GUARD_EN, METHOD_GUARD_TR } from './scanPackages.js';
 import { hasValidActiveTestConsent } from './activeTestConsent.js';
 import { decryptSecret } from './crypto.js';
 import { isVerificationStillValid } from './verification.js';
@@ -150,7 +150,11 @@ export async function startScanForOrder(orderId: string) {
     await prisma.order.update({ where: { id: orderId }, data: { byokKeyEncrypted: null } });
   }
 
-  const prompt = pkg.promptTemplate(order.domain.hostname) + credLine + langLine + budgetLine;
+  // (Yontem disiplini) TUM paketlere merkezi olarak eklenir — ajanin script-yazma/
+  // debug dongusune sapmasini onler (bkz METHOD_GUARD_* ve scanPackages.ts yorumu).
+  const methodLine = '\n\n' + (order.locale === 'en' ? METHOD_GUARD_EN : METHOD_GUARD_TR);
+
+  const prompt = pkg.promptTemplate(order.domain.hostname) + credLine + langLine + budgetLine + methodLine;
   const modelProvider = pkg.modelProvider;
 
   // YARIS-GUVENLI concurrency=1: PentAGI'yi cagirmadan ONCE 'running' slotunu
