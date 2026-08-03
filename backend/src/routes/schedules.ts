@@ -25,6 +25,13 @@ const createSchema = z.object({
     'api_discovery',
     'injection_verify',
     'idor_verify',
+    'ssrf_verify',
+    'file_upload_verify',
+    'business_logic_verify',
+    'race_massassign_verify',
+    'rce_verify',
+    'authenticated_scan',
+    'autonomous_pentest',
   ]),
   intervalDays: z.number().int(),
   runs: z.number().int().min(1).max(52), // pesin odenen tekrar sayisi (N)

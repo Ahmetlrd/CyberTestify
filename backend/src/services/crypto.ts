@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { config } from '../config.js';
 
 /**
  * Rapor sifreleme yardimcilari.
@@ -12,6 +13,31 @@ import crypto from 'node:crypto';
  */
 
 const SCRYPT_KEYLEN = 32; // AES-256
+
+/**
+ * (Faz 3 — authenticated_scan) Sunucu-anahtarli gizli sifreleme: test hesabi kimlik
+ * bilgileri (kullanici/sifre) DB'de PLAINTEXT durmasin. Anahtar sunucu pepper'indan
+ * turetilir (REPORT_ENCRYPTION_PEPPER). Kullanim omru KISA: flow'a gecirilip HEMEN silinir,
+ * asla loglanmaz. base64(iv|tag|ciphertext) doner.
+ */
+function secretKey(): Buffer {
+  return crypto.scryptSync(config.reportEncryptionPepper, 'cred-enc-v1', SCRYPT_KEYLEN);
+}
+
+export function encryptSecret(plaintext: string): string {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', secretKey(), iv);
+  const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), ct]).toString('base64');
+}
+
+export function decryptSecret(blob: string): string {
+  const b = Buffer.from(blob, 'base64');
+  const iv = b.subarray(0, 12), tag = b.subarray(12, 28), ct = b.subarray(28);
+  const d = crypto.createDecipheriv('aes-256-gcm', secretKey(), iv);
+  d.setAuthTag(tag);
+  return Buffer.concat([d.update(ct), d.final()]).toString('utf8');
+}
 
 export function generateReportAccessSecret(): string {
   // Musteriye e-posta ile (rapor linkinden AYRI bir kanaldan) gonderilecek,

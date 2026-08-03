@@ -30,7 +30,13 @@ interface ActiveScope {
   ips?: string[];
   allowlist: string[];
   passiveOnly?: boolean;
-  securityProfile?: 'passive' | 'active-light';
+  securityProfile?: 'passive' | 'active-light' | 'active-verify-only';
+}
+
+// active-light ve active-verify-only: metot politikasi ayni (POST serbest, PUT/DELETE/PATCH
+// bloklu). Ekstra RCE-payload kisiti Go tool-guard'da (proxy metodu goremeyecegi HTTPS icin).
+function isActiveProfile(p?: string): boolean {
+  return p === 'active-light' || p === 'active-verify-only';
 }
 
 // Pasif paketlerde izin verilen (veri DEGISTIRMEYEN) HTTP metotlari.
@@ -47,7 +53,7 @@ const ACTIVE_LIGHT_MAX_REQ_PER_WINDOW = 240;
 const rate = new Map<string, { windowStart: number; count: number }>();
 
 // flow basina kayan pencere sayaci; profile 'active-light' ise limit asiminda false.
-function rateLimitOk(flowId: string | undefined, profile: 'passive' | 'active-light'): boolean {
+function rateLimitOk(flowId: string | undefined, profile: string): boolean {
   const key = flowId ?? '__no_flow__';
   const now = Date.now();
   const r = rate.get(key);
@@ -56,13 +62,13 @@ function rateLimitOk(flowId: string | undefined, profile: 'passive' | 'active-li
     return true;
   }
   r.count += 1;
-  if (profile === 'active-light' && r.count > ACTIVE_LIGHT_MAX_REQ_PER_WINDOW) return false;
+  if (isActiveProfile(profile) && r.count > ACTIVE_LIGHT_MAX_REQ_PER_WINDOW) return false;
   return true;
 }
 
 function allowedMethodsFor(a: ActiveScope): Set<string> {
   // Metot politikasi GUVENLIK PROFILINDEN turetilir (passiveOnly=networkLayer, ayri eksen).
-  return (a.securityProfile ?? 'passive') === 'active-light' ? ACTIVE_LIGHT_METHODS : PASSIVE_METHODS;
+  return isActiveProfile(a.securityProfile) ? ACTIVE_LIGHT_METHODS : PASSIVE_METHODS;
 }
 
 // Aktif kapsami backend'ten cek, kisa TTL ile cache'le (istek basina DB'ye gitme).

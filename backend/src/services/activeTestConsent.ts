@@ -13,13 +13,10 @@ import { prisma } from '../db.js';
 
 export const ACTIVE_TEST_CONSENT_VERSION = '2026-08-03';
 
-// Risk kabul checkbox metni (resmi/net).
+// Risk kabul checkbox metni (SADE — Faz 3 v2).
 export const ACTIVE_TEST_RISK_ACK =
-  'Bu taramanın, tespit edilen zafiyetleri doğrulamak amacıyla sınırlı AKTİF test istekleri ' +
-  'içerebileceğini; bunun hedef sistemin performansını geçici olarak etkileyebileceğini; taramayı ' +
-  'mümkünse önce bir test/staging ortamında denemenin önerildiğini anladığımı ve bu riski kabul ' +
-  'ettiğimi; taramaya konu alan adının/altyapının sahibi veya yetkilisi olduğumu ve sorumluluğun ' +
-  'tamamen bana ait olduğunu beyan ederim.';
+  'Bu paketin aktif / kanıt-amaçlı test unsurları içerdiğini okudum, anladım ve riski kabul ediyorum; ' +
+  'taramaya konu alan adının sahibi/yetkilisi olduğumu beyan ederim.';
 
 export interface ActiveTestScope {
   does: string[];
@@ -66,21 +63,20 @@ export function activeTestScope(packageKey: string): ActiveTestScope {
 }
 
 export interface ActiveTestConsentInput {
-  legalName?: string;
-  companyName?: string;
   riskAccepted?: boolean;
 }
 
-// Onay girdisinin TAMLIK kontrolu (otomatik — Vedat'in manuel onayi GEREKMEZ).
+// SADELESTIRILMIS (Faz 3 v2): tek checkbox yeterli. Ek alan (yasal ad/sirket) YOK; beyan
+// eden hesaptan (fullName/email) OTOMATIK doldurulur. Tamlik kontrolu = risk kutusu isaretli mi.
 export function validateConsentInput(input: ActiveTestConsentInput | undefined): { ok: true } | { ok: false; error: string } {
-  if (!input) return { ok: false, error: 'Bu paket için yetkilendirme beyanı zorunludur.' };
-  if (input.riskAccepted !== true) return { ok: false, error: 'Risk kabul beyanı işaretlenmelidir.' };
-  if (!input.legalName || input.legalName.trim().length < 3) return { ok: false, error: 'Tam yasal adınızı yazmalısınız.' };
+  if (!input || input.riskAccepted !== true) {
+    return { ok: false, error: 'Aktif test için risk kabul kutusunu işaretlemelisiniz.' };
+  }
   return { ok: true };
 }
 
 // active-light siparisin gecerli bir consent kaydi VAR mi? (guard — defense-in-depth)
 export async function hasValidActiveTestConsent(orderId: string): Promise<boolean> {
   const c = await prisma.activeTestConsent.findUnique({ where: { orderId } });
-  return !!c && c.riskAccepted === true && c.legalName.trim().length >= 3;
+  return !!c && c.riskAccepted === true;
 }

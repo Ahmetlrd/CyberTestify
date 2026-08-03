@@ -50,6 +50,13 @@ enum ScanPackageKey {
   api_discovery      // API & Swagger/OpenAPI dokuman kesfi — pasif GET
   injection_verify   // Zafiyet dogrulama — enjeksiyon (SQLi/XSS), active-light
   idor_verify        // Zafiyet dogrulama — yetkisiz erisim/IDOR, active-light
+  ssrf_verify        // SSRF dogrulama, active-light
+  file_upload_verify // Dosya yukleme dogrulama, active-light
+  business_logic_verify // Is mantigi dogrulama, active-light
+  race_massassign_verify // Race/mass-assignment dogrulama, active-light
+  rce_verify         // RCE/komut enjeksiyonu kanit, active-verify-only
+  authenticated_scan // Login'li tarama, active-light
+  autonomous_pentest // Tam otonom cok-adimli, active-light
   // --- Asagidakiler eski/pasif, sadece gecmis kayit butunlugu icin duruyor ---
   standard_web
   premium_web

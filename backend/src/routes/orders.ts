@@ -5,6 +5,7 @@ import { config } from '../config.js';
 import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice, securityProfileFor } from '../services/scanPackages.js';
 import { validateConsentInput, activeTestScope, ACTIVE_TEST_CONSENT_VERSION, ACTIVE_TEST_RISK_ACK, hasValidActiveTestConsent } from '../services/activeTestConsent.js';
 import { renderConsentPdf } from '../services/pdf.js';
+import { encryptSecret } from '../services/crypto.js';
 import { getPricing, currencyFor } from '../services/pricing.js';
 import { getPaymentProvider } from '../services/payment/index.js';
 import { getSampleReportPdf } from '../services/sampleReports.js';
@@ -106,6 +107,13 @@ const createOrderSchema = z.object({
     'api_discovery',
     'injection_verify',
     'idor_verify',
+    'ssrf_verify',
+    'file_upload_verify',
+    'business_logic_verify',
+    'race_massassign_verify',
+    'rce_verify',
+    'authenticated_scan',
+    'autonomous_pentest',
   ]),
   // Pentest yetkilendirmesi (TCK 243 hukuka uygunluk) — true olmadan siparis yok.
   ownershipConfirmed: z.literal(true, {
@@ -123,14 +131,11 @@ const createOrderSchema = z.object({
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
   // (Is 2) true ise odeme yerine hesap kredisinden dus (yeterliyse). Yoksa normal odeme.
   useCredits: z.boolean().optional().default(false),
-  // (Faz 3) active-light paketlerde ZORUNLU yetkilendirme beyani.
-  activeTestConsent: z
-    .object({
-      legalName: z.string().min(3).max(200),
-      companyName: z.string().max(200).optional(),
-      riskAccepted: z.boolean(),
-    })
-    .optional(),
+  // (Faz 3 v2) active-light: TEK checkbox — risk kabulu. Ek alan yok (yasal ad hesaptan otomatik).
+  activeTestConsent: z.object({ riskAccepted: z.boolean() }).optional(),
+  // (Faz 3 #5) authenticated_scan: test hesabi kimlik bilgileri. SIFRELI saklanir, flow'a
+  // gecince SILINIR, asla loglanmaz. Yalniz authenticated_scan paketinde beklenir.
+  authCredentials: z.object({ username: z.string().min(1).max(200), password: z.string().min(1).max(400) }).optional(),
 });
 
 ordersRouter.post('/', requireAuth, async (req, res) => {
@@ -160,10 +165,21 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   // (Faz 3) ACTIVE-LIGHT GUARD: bu paketler zafiyeti DOGRULAYAN aktif test istekleri
   // gonderir; siparis, gecerli bir yetkilendirme beyani (yasal ad + risk kabul) OLMADAN
   // OLUSTURULAMAZ. Tamlik kontrolu OTOMATIK (Vedat'in manuel onayi gerekmez).
-  const isActiveLight = securityProfileFor(packageDef) === 'active-light';
+  const profile = securityProfileFor(packageDef);
+  const isActiveLight = profile === 'active-light' || profile === 'active-verify-only';
   if (isActiveLight) {
     const v = validateConsentInput(parsed.data.activeTestConsent);
     if (!v.ok) return res.status(400).json({ error: v.error });
+  }
+
+  // (#5) authenticated_scan: test kimlik bilgilerini SIFRELE (byokKeyEncrypted). Orchestrator
+  // flow'a gecirir + HEMEN siler. Plaintext DB'de/logda ASLA durmaz.
+  let byokKeyEncrypted: string | null = null;
+  if (packageKey === 'authenticated_scan') {
+    if (!parsed.data.authCredentials) {
+      return res.status(400).json({ error: 'Bu paket için test hesabı kullanıcı adı ve şifresi zorunludur.' });
+    }
+    byokKeyEncrypted = encryptSecret(JSON.stringify(parsed.data.authCredentials));
   }
 
   // GATE: Ham ag/port (networkLayer) paketleri, bypass-proof izolasyon
@@ -203,11 +219,12 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   // (Faz 3) active-light: siparise ZORUNLU yetkilendirme beyanini bagla (tarama
   // baslamadan ONCE olmali; orchestrator guard'i da ayrica dogrular).
   const recordConsent = async (orderId: string) => {
-    const atc = parsed.data.activeTestConsent!;
+    // Beyan eden hesaptan OTOMATIK (kullaniciya ek alan doldurtmayiz).
+    const cust = await prisma.customer.findUniqueOrThrow({ where: { id: req.customerId! }, select: { fullName: true, email: true } });
     await prisma.activeTestConsent.create({
       data: {
         customerId: req.customerId!, orderId, packageKey,
-        legalName: atc.legalName.trim(), companyName: atc.companyName?.trim() || null,
+        legalName: cust.fullName?.trim() || cust.email, companyName: null,
         riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
       },
     });
@@ -226,7 +243,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
         data: {
           customerId: req.customerId!, domainId: domain.id, packageId: packageDb.id,
           amountMinorUnit, currency, status: 'paid', paymentProvider: 'credit', paidAt: new Date(),
-          locale: localeFor(region), ...consent,
+          locale: localeFor(region), byokKeyEncrypted, ...consent,
         },
       });
       await spendCredits(tx as unknown as CreditTx, req.customerId!, creditsNeeded, o.id);
@@ -247,6 +264,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
       currency,
       status: 'awaiting_payment',
       locale: localeFor(region), // (2) cikti dili bolgeden turetilir
+      byokKeyEncrypted,
       ...consent,
     },
   });

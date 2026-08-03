@@ -24,6 +24,13 @@ const ESTIMATED: Record<string, { us: number; ae: number }> = {
   api_discovery: { us: 4400, ae: 15900 }, // PLACEHOLDER (Vedat onayi)
   injection_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER (active-light, Vedat onayi)
   idor_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER (active-light, Vedat onayi)
+  ssrf_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER
+  file_upload_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER
+  business_logic_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER
+  race_massassign_verify: { us: 11900, ae: 42900 }, // PLACEHOLDER
+  rce_verify: { us: 16900, ae: 59900 }, // PLACEHOLDER (en siki)
+  authenticated_scan: { us: 14900, ae: 53900 }, // PLACEHOLDER
+  autonomous_pentest: { us: 29900, ae: 107900 }, // PLACEHOLDER (en kapsamli)
 };
 
 // [packageKey][region] -> amountMinorUnit. Seed bu haritadan PackagePricing yazar.

@@ -29,7 +29,14 @@ export interface ScanPackageDef {
     | 'subdomain_takeover'
     | 'api_discovery'
     | 'injection_verify'
-    | 'idor_verify';
+    | 'idor_verify'
+    | 'ssrf_verify'
+    | 'file_upload_verify'
+    | 'business_logic_verify'
+    | 'race_massassign_verify'
+    | 'rce_verify'
+    | 'authenticated_scan'
+    | 'autonomous_pentest';
   displayName: string;
   description: string;
   priceMinorUnit: number; // kurus
@@ -41,8 +48,11 @@ export interface ScanPackageDef {
   //                     (mevcut tum paketler). Go guard + worker strict-halt zorlar.
   //  - 'active-light' : zafiyeti DOGRULAMAYA yonelik kontrollu POST/form serbest AMA
   //                     DELETE/PATCH + veri-yazan PUT + toplu veri cekme (exfil) +
-  //                     DoS/flood KESINLIKLE yasak. HENUZ HICBIR PAKETE ATANMADI.
-  securityProfile?: 'passive' | 'active-light';
+  //                     DoS/flood KESINLIKLE yasak.
+  //  - 'active-verify-only' : RCE/komut-enjeksiyonu KANITI icin EN SIKI — active-light'in
+  //                     tumu + gercek komut calistirma payload'lari (ters kabuk, hassas
+  //                     dosya, fetch|sh, yikim) da bloklu; yalniz kor kanit (sleep/canary).
+  securityProfile?: 'passive' | 'active-light' | 'active-verify-only';
   networkLayer?: boolean;
   fixSuggestionPriceMinorUnit?: number;
   // false ise musteriye SATILMAZ: paket listesinden gizlenir + siparis reddedilir.
@@ -63,7 +73,7 @@ export function fixSuggestionPrice(def: ScanPackageDef): number {
   return def.fixSuggestionPriceMinorUnit ?? Math.round(def.priceMinorUnit * 0.5);
 }
 
-export type SecurityProfile = 'passive' | 'active-light';
+export type SecurityProfile = 'passive' | 'active-light' | 'active-verify-only';
 
 // Paketin guvenlik profili — belirtilmezse GUVENLI varsayilan 'passive'.
 export function securityProfileFor(def: ScanPackageDef): SecurityProfile {
@@ -84,6 +94,13 @@ const PACKAGE_I18N: Partial<Record<ScanPackageDef['key'], { displayName: string;
   api_discovery: { displayName: 'API & Swagger Discovery', description: 'Looks for OpenAPI/Swagger docs at common paths (/swagger-ui.html, /openapi.json, etc.), extracts the listed endpoints and flags public, potentially sensitive ones. Passive GET.' },
   injection_verify: { displayName: 'Vulnerability Verification — Injection (SQLi/XSS)', description: 'Active-light check: sends limited, harmless proof-of-concept payloads to PROVE whether injection flaws exist. No data extraction, no data modification. Requires an authorization declaration.' },
   idor_verify: { displayName: 'Vulnerability Verification — Broken Access (IDOR)', description: 'Active-light check: probes predictable resource IDs to verify whether unauthorized access is possible. Never reads/stores the actual data. Requires an authorization declaration.' },
+  ssrf_verify: { displayName: 'Vulnerability Verification — SSRF', description: 'Active-light check: proves whether server-side request forgery is possible via a controlled, harmless callback/DNS/timing proof. Never reaches or explores the internal network. Requires an authorization declaration.' },
+  file_upload_verify: { displayName: 'Vulnerability Verification — File Upload', description: 'Active-light check: verifies whether file-upload points enforce type/size checks by submitting a harmless, non-executable test file. Never uploads or runs a real payload/webshell. Requires an authorization declaration.' },
+  business_logic_verify: { displayName: 'Vulnerability Verification — Business Logic', description: 'Active-light check: proof-of-concept probes for common logic flaws (price/quantity tampering, step-skipping). Never completes a real transaction or writes data. Requires an authorization declaration.' },
+  race_massassign_verify: { displayName: 'Vulnerability Verification — Race / Mass Assignment', description: 'Active-light check: a few parallel requests to detect race conditions, and observation of unexpected fields (e.g. isAdmin) being accepted. Never corrupts data or completes privilege escalation. Requires an authorization declaration.' },
+  rce_verify: { displayName: 'Vulnerability Verification — RCE / Command Injection', description: 'Strictest active check: proves command injection ONLY via blind time-based or harmless canary evidence. NEVER runs a real command. Requires an authorization declaration.' },
+  authenticated_scan: { displayName: 'Authenticated Scan (logged-in)', description: 'Active-light scan performed with a test-account session you provide. Credentials are encrypted, used only against your domain, and deleted after the scan. Requires an authorization declaration.' },
+  autonomous_pentest: { displayName: 'Autonomous Multi-Step Pentest', description: 'The closest to a full autonomous, multi-step, chained-discovery engagement — within the same non-exploit limits (no exfil/DoS/auth-bypass/data change). Requires an authorization declaration.' },
 };
 
 // kvkk_hazirlik EN sozlukte YOK — global menude gosterilmez (bkz orders.ts filtresi).
@@ -164,6 +181,17 @@ SKIP. Report ONLY evidence of PRESENCE — never include any extracted/sensitive
 NO INSTALLS: do NOT install or attempt to install ANY tool/package (apt/pip/npm/go install/git clone/
 curl|bash/downloading binaries). Use ONLY tools already present in the container; if a tool is missing,
 SKIP that check ("not reviewed (tool unavailable)") — never install.`.trim();
+
+// RCE/komut-enjeksiyonu KANITI — EN SIKI. Yalniz KOR kanit; gercek komut ASLA calistirilmaz.
+const SAFETY_RCE_VERIFY_EN = `
+STRICTEST SAFETY (RCE/command-injection VERIFICATION — BLIND PROOF ONLY): You may ONLY prove a
+command-injection flaw via HARMLESS BLIND evidence: (a) TIME-BASED — inject a benign delay (e.g. a
+"sleep 5"-style payload) and infer execution from the response time; or (b) a harmless CANARY string
+echoed back. NEVER run a real command: NO file read/write, NO reading /etc/passwd or secrets, NO
+network connection/reverse shell, NO fetch|sh, NO destructive commands, NO system changes — these are
+ALSO blocked at the tool level for this package. Report ONLY: "command execution appears possible
+(blind time/canary evidence)". Access ONLY the specified host. NO data extraction, NO exploitation.
+NO INSTALLS: do NOT install any tool/package; use only what is present, else SKIP.`.trim();
 
 // NOT: HAZIRLIK_FOCUS_EN kaldirildi — iso27001/pci promptlari artik DAR/deterministik
 // (acikca "arastirma/arama yok, yalniz bu kontroller") oldugu icin ayri odak-kisiti
@@ -661,7 +689,7 @@ Target: ${host}
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     securityProfile: 'active-light',
-    available: false,
+    available: true,
     promptTemplate: (host) => `
 Run a NARROW, ACTIVE-LIGHT vulnerability VERIFICATION for injection flaws (SQLi/XSS) on the SINGLE
 target below. GOAL: PROVE whether a vulnerability EXISTS — NEVER exploit it. FIXED checklist.
@@ -699,7 +727,7 @@ Target: ${host}
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     securityProfile: 'active-light',
-    available: false,
+    available: true,
     promptTemplate: (host) => `
 Run a NARROW, ACTIVE-LIGHT vulnerability VERIFICATION for broken access control / IDOR on the SINGLE
 target below. GOAL: PROVE whether unauthorized access is possible — NEVER exfiltrate data. FIXED
@@ -721,6 +749,240 @@ ${FIX_SUGGESTIONS_STEP_EN}
 Output (Markdown table): "Endpoint | ID pattern | Observation | Severity | Recommendation". NEVER include
 any real/sensitive data — only the access-control observation.
 
+Target: ${host}
+`.trim(),
+  },
+  {
+    key: 'ssrf_verify',
+    displayName: 'Zafiyet Doğrulama — SSRF',
+    description:
+      'Aktif-hafif: dis istek tetikleyebilecek noktalari (URL/webhook/import) tespit eder ve ' +
+      'KONTROLLU zararsiz bir kanit (DNS/timing ya da kendi callback) ile SSRF varligini dogrular. ' +
+      'Ic aga gercek erisim/kesif YASAK. Yetkilendirme beyani gerektirir.',
+    priceMinorUnit: 349900,
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    securityProfile: 'active-light',
+    available: false,
+    promptTemplate: (host) => `
+Run a NARROW, ACTIVE-LIGHT SSRF VERIFICATION on the SINGLE target below. GOAL: PROVE whether the server
+can be made to issue an outbound request — NEVER reach into or explore the internal network. FIXED checklist.
+HARD CONSTRAINTS: do NOT open new subtasks; ~8-12 requests total.
+
+Steps:
+1. Identify a FEW inputs that may trigger a server-side fetch (url=, webhook, import-from-URL, image proxy).
+2. For each, provide a CONTROLLED, HARMLESS proof target and infer SSRF from EVIDENCE only:
+   - a unique DNS/HTTP callback hit you can attribute, OR a measurable timing difference. Do NOT target
+     internal/cloud-metadata addresses (169.254.169.254, localhost, RFC1918) to actually reach them.
+3. Report ONLY presence evidence. NEVER pivot, port-scan, or read internal responses.
+
+After these checks, IMMEDIATELY and in the SAME step write the single report AND the
+${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask.
+${SAFETY_ACTIVE_LIGHT_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown table): "Input | Evidence (DNS/timing) | Severity | Recommendation".
+Target: ${host}
+`.trim(),
+  },
+  {
+    key: 'file_upload_verify',
+    displayName: 'Zafiyet Doğrulama — Dosya Yükleme',
+    description:
+      'Aktif-hafif: dosya yukleme noktalarinda tip/boyut kontrolu var mi; ZARARSIZ, calismayan bir ' +
+      'test dosyasi kabul ediliyor mu dogrular. Gercek payload/webshell YUKLEME/CALISTIRMA YASAK. ' +
+      'Yetkilendirme beyani gerektirir.',
+    priceMinorUnit: 349900,
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    securityProfile: 'active-light',
+    available: false,
+    promptTemplate: (host) => `
+Run a NARROW, ACTIVE-LIGHT FILE-UPLOAD VERIFICATION on the SINGLE target below. GOAL: check whether upload
+points enforce type/size validation — NEVER upload a real payload/webshell. FIXED checklist. HARD
+CONSTRAINTS: do NOT open new subtasks; ~8-12 requests total.
+
+Steps:
+1. Identify a FEW file-upload endpoints.
+2. Submit a HARMLESS, NON-EXECUTABLE test file (e.g. an empty/inert file with a script-like extension but
+   NO code) and observe whether it is ACCEPTED and whether validation (type/size) exists. A single POST
+   upload is permitted; NEVER upload runnable code, NEVER try to execute anything.
+3. Report ONLY whether validation appears missing/weak. Do NOT access or execute any uploaded file.
+
+After these checks, IMMEDIATELY and in the SAME step write the single report AND the
+${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask.
+${SAFETY_ACTIVE_LIGHT_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown table): "Endpoint | Validation observed | Accepted test file? | Severity | Recommendation".
+Target: ${host}
+`.trim(),
+  },
+  {
+    key: 'business_logic_verify',
+    displayName: 'Zafiyet Doğrulama — İş Mantığı',
+    description:
+      'Aktif-hafif: fiyat/miktar manipulasyonu, adim atlama gibi yaygin is-mantigi hatalarina ' +
+      'KANIT-amacli tek-seferlik istekler. Gercek islem TAMAMLATMA/veri YAZMA YASAK. Yetkilendirme gerektirir.',
+    priceMinorUnit: 349900,
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    securityProfile: 'active-light',
+    available: false,
+    promptTemplate: (host) => `
+Run a NARROW, ACTIVE-LIGHT BUSINESS-LOGIC VERIFICATION on the SINGLE target below. GOAL: prove whether
+common logic flaws exist — NEVER complete a real transaction or write persistent data. FIXED checklist.
+HARD CONSTRAINTS: do NOT open new subtasks; ~8-12 requests total.
+
+Steps (proof-of-concept, single requests):
+1. Price/quantity tampering: does the server RE-VALIDATE a manipulated price/quantity, or accept it? Observe
+   the immediate response ONLY; do NOT complete checkout/payment.
+2. Step-skipping: can a later step (e.g. order confirmation) be requested WITHOUT the prerequisite step?
+   Observe whether it is ALLOWED — do NOT finalize the action.
+3. Report ONLY the observation ("this step appears skippable / value appears trusted client-side").
+
+After these checks, IMMEDIATELY and in the SAME step write the single report AND the
+${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask.
+${SAFETY_ACTIVE_LIGHT_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown table): "Scenario | Observation | Severity | Recommendation".
+Target: ${host}
+`.trim(),
+  },
+  {
+    key: 'race_massassign_verify',
+    displayName: 'Zafiyet Doğrulama — Race / Mass Assignment',
+    description:
+      'Aktif-hafif: SINIRLI (2-3) paralel istekle race condition, ve request body’ye beklenmeyen bir ' +
+      'alanin (or. isAdmin) kabul edilip edilmedigini gozlemler. Veri BOZMA/yetki YUKSELTME YASAK.',
+    priceMinorUnit: 349900,
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    securityProfile: 'active-light',
+    available: false,
+    promptTemplate: (host) => `
+Run a NARROW, ACTIVE-LIGHT RACE-CONDITION / MASS-ASSIGNMENT VERIFICATION on the SINGLE target below. GOAL:
+prove whether these flaws exist — NEVER corrupt data or actually escalate privileges. FIXED checklist. HARD
+CONSTRAINTS: do NOT open new subtasks; keep it minimal.
+
+Steps:
+1. Race: pick ONE idempotent-looking action and send a SMALL number (2-3) of parallel requests; observe
+   whether it is processed more than once / inconsistently. Do NOT loop or flood (that is blocked).
+2. Mass assignment: on ONE request, add an unexpected field (e.g. "isAdmin": true, "role":"admin") to the
+   body and observe whether it is ACCEPTED/reflected — do NOT complete a real privilege change.
+3. Report ONLY the observation.
+
+After these checks, IMMEDIATELY and in the SAME step write the single report AND the
+${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask.
+${SAFETY_ACTIVE_LIGHT_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown table): "Test (race/mass-assign) | Observation | Severity | Recommendation".
+Target: ${host}
+`.trim(),
+  },
+  {
+    key: 'rce_verify',
+    displayName: 'Zafiyet Doğrulama — RCE / Komut Enjeksiyonu',
+    description:
+      'EN SIKI aktif kontrol: RCE/komut enjeksiyonunu YALNIZCA kor (zaman-tabanli sleep veya zararsiz ' +
+      'canary) kanitla dogrular. Gercek komut ASLA calistirilmaz. Yetkilendirme beyani gerektirir.',
+    priceMinorUnit: 499900,
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    securityProfile: 'active-verify-only',
+    available: false,
+    promptTemplate: (host) => `
+Run the STRICTEST, ACTIVE-VERIFY-ONLY RCE / command-injection VERIFICATION on the SINGLE target below.
+GOAL: prove — by BLIND evidence ONLY — whether command execution is possible. NEVER run a real command.
+FIXED checklist. HARD CONSTRAINTS: do NOT open new subtasks; ~8-12 requests total.
+
+Steps (blind proof ONLY):
+1. Identify a FEW inputs that could reach a system command.
+2. For each, use ONLY a harmless BLIND probe: a time-delay payload (infer execution from response time) OR a
+   unique canary string echoed back. NEVER read files, open network connections, or run any real command —
+   such payloads are BLOCKED at the tool level for this package.
+3. Report ONLY: "command execution appears possible (blind time/canary evidence)" with the parameter.
+
+After these checks, IMMEDIATELY and in the SAME step write the single report AND the
+${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask.
+${SAFETY_RCE_VERIFY_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown table): "Input | Blind evidence (timing/canary) | Severity | Recommendation".
+Target: ${host}
+`.trim(),
+  },
+  {
+    key: 'authenticated_scan',
+    displayName: 'Kimlik Doğrulamalı (Login’li) Tarama',
+    description:
+      'Verdiginiz bir TEST hesabinin oturumuyla aktif-hafif tarama. Kimlik bilgileri SIFRELI saklanir, ' +
+      'yalniz sizin domaininize karsi kullanilir ve tarama bitince SILINIR. Yetkilendirme beyani gerektirir.',
+    priceMinorUnit: 449900,
+    modelProvider: PROVIDER,
+    maxToolCalls: 40,
+    securityProfile: 'active-light',
+    available: false,
+    promptTemplate: (host) => `
+Run an ACTIVE-LIGHT AUTHENTICATED scan on the SINGLE target below using the TEST-ACCOUNT credentials that
+will be provided in a separate login instruction appended below. HARD CONSTRAINTS: log in ONLY against
+${host}; NEVER send the credentials anywhere else; do NOT open new subtasks; keep it focused.
+
+Steps:
+1. Log in to ${host} with the provided test credentials (form/API login).
+2. With the authenticated session, perform an active-light verification of authenticated areas (broken access
+   between roles, IDOR on authenticated endpoints, sensitive functions reachable). VERIFY presence ONLY.
+3. NEVER change/delete account data, NEVER exfiltrate other users’ data, NEVER escalate for real.
+
+After these checks, IMMEDIATELY and in the SAME step write the single report AND the
+${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask.
+${SAFETY_ACTIVE_LIGHT_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown table): "Authenticated finding | Evidence | Severity | Recommendation".
+Target: ${host}
+`.trim(),
+  },
+  {
+    key: 'autonomous_pentest',
+    displayName: 'Tam Otonom, Çok Adımlı Pentest',
+    description:
+      'PentAGI’nin cok-adimli, hafiza tutan, zincirleme otonom moduna en yakin paket. Zincirleme kesif ' +
+      'serbest AMA istismar/exfil/DoS/auth-bypass/veri-degistirme YINE YASAK (aktif-hafif sinirlar). ' +
+      'Yetkilendirme beyani gerektirir.',
+    priceMinorUnit: 899900,
+    modelProvider: PROVIDER,
+    // Cok-adimli/zincirleme -> yuksek tavan (dar paketlerin aksine planlama serbest).
+    maxToolCalls: 90,
+    securityProfile: 'active-light',
+    available: false,
+    promptTemplate: (host) => `
+Run an AUTONOMOUS, MULTI-STEP, chained security assessment on the SINGLE target below. Unlike the narrow
+packages, you MAY plan across MULTIPLE steps, keep context/memory, and chain discovery → verification. BUT the
+non-exploit safety limits STILL fully apply: NEVER extract real data, NEVER modify/delete data, NEVER bypass
+auth for real, NEVER DoS. Every proof must be active-light "prove presence, don't exploit".
+
+Approach:
+1. Recon the externally reachable surface, then chain: for each promising lead, VERIFY the vulnerability with a
+   harmless proof (as in the focused packages: injection/IDOR/SSRF/logic/etc.).
+2. Prioritise breadth then depth; stay within budget; when about half the budget is used, START writing the report.
+3. Access ONLY ${host} and its in-scope subdomains.
+
+When done, write ONE consolidated, professional report grouped by severity AND the ${FIX_SUGGESTIONS_DELIM}
+section. Never expose the internal workflow or any extracted data.
+${SAFETY_ACTIVE_LIGHT_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown): an executive summary + a findings table "Finding | Type | Evidence | Severity | Recommendation".
 Target: ${host}
 `.trim(),
   },

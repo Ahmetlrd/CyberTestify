@@ -2,6 +2,7 @@ import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { getPackageDef, securityProfileFor } from './scanPackages.js';
 import { hasValidActiveTestConsent } from './activeTestConsent.js';
+import { decryptSecret } from './crypto.js';
 import { isVerificationStillValid } from './verification.js';
 import { checkEgressProxyHealth } from './egressHealth.js';
 import * as pentagi from '../pentagi/client.js';
@@ -84,11 +85,13 @@ export async function startScanForOrder(orderId: string) {
   }
 
   const pkg = getPackageDef(order.package.key);
+  const pkgProfile = securityProfileFor(pkg);
+  const isActiveProfile = pkgProfile === 'active-light' || pkgProfile === 'active-verify-only';
 
-  // (Faz 3) GUARD (defense-in-depth): active-light paket, gecerli bir Aktif Test
+  // (Faz 3) GUARD (defense-in-depth): active-light/verify-only paket, gecerli bir Aktif Test
   // Yetkilendirme Beyani OLMADAN calistirilamaz. Route'ta da zorunlu; bu ikinci hat
   // atlanamaz olsun diye (or. ileride farkli bir akistan siparis gelirse).
-  if (securityProfileFor(pkg) === 'active-light' && !(await hasValidActiveTestConsent(orderId))) {
+  if (isActiveProfile && !(await hasValidActiveTestConsent(orderId))) {
     await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed' } });
     throw new Error('Active-light paket icin gecerli yetkilendirme beyani (ActiveTestConsent) yok; tarama reddedildi.');
   }
@@ -123,7 +126,31 @@ export async function startScanForOrder(orderId: string) {
       ? `\n\nTOOL-CALL BUDGET: You have at most ${budget} tool calls. After about the ${stopAt}th call, STOP all new exploration and START writing the report (findings + '===FIX_SUGGESTIONS===' if any). Never hit the limit with an empty report.`
       : `\n\nARAC CAGRI BUTCESI: En fazla ${budget} arac cagrin var. Yaklasik ${stopAt}. cagridan sonra TUM yeni kesfi DURDUR ve raporu (bulgular + varsa '===FIX_SUGGESTIONS===') YAZMAYA BASLA. Tavana bos raporla carpma.`;
 
-  const prompt = pkg.promptTemplate(order.domain.hostname) + langLine + budgetLine;
+  // (#5) authenticated_scan: sifreli kimlik bilgisini COZ, prompt'a login talimati olarak
+  // ekle (transient — ajanin login olabilmesi icin), sonra plaintext'i DB'den HEMEN SIL.
+  // Kimlik bilgisi ASLA loglanmaz. (LLM, login yapabilmek icin bunu flow suresince gorur —
+  // authenticated tarama dogasi geregi kacinilmaz; bkz HANDOFF.)
+  let credLine = '';
+  if (order.package.key === 'authenticated_scan') {
+    if (!order.byokKeyEncrypted) {
+      await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed' } });
+      throw new Error('authenticated_scan: kimlik bilgisi yok, tarama reddedildi.');
+    }
+    let creds: { username: string; password: string };
+    try {
+      creds = JSON.parse(decryptSecret(order.byokKeyEncrypted));
+    } catch {
+      await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed', byokKeyEncrypted: null } });
+      throw new Error('authenticated_scan: kimlik bilgisi cozulemedi.');
+    }
+    credLine =
+      `\n\nLOGIN INSTRUCTION — use these TEST credentials ONLY against ${order.domain.hostname}; NEVER send them to any other host. ` +
+      `username=${JSON.stringify(creds.username)} password=${JSON.stringify(creds.password)}`;
+    // Plaintext kaynak DB'den derhal silinir (flow'a gecti).
+    await prisma.order.update({ where: { id: orderId }, data: { byokKeyEncrypted: null } });
+  }
+
+  const prompt = pkg.promptTemplate(order.domain.hostname) + credLine + langLine + budgetLine;
   const modelProvider = pkg.modelProvider;
 
   // YARIS-GUVENLI concurrency=1: PentAGI'yi cagirmadan ONCE 'running' slotunu

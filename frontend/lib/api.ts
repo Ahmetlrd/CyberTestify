@@ -62,11 +62,12 @@ export const api = {
     consents: { ownershipConfirmed: boolean; distanceContractAccepted: boolean; withdrawalWaived: boolean },
     region = 'tr',
     useCredits = false,
-    activeTestConsent?: { legalName: string; companyName?: string; riskAccepted: boolean },
+    activeTestConsent?: { riskAccepted: boolean },
+    authCredentials?: { username: string; password: string },
   ) =>
     request<{ orderId: string; paymentPageUrl?: string; paidWithCredits?: boolean; creditsSpent?: number }>('/orders', {
       method: 'POST',
-      body: JSON.stringify({ domainId, packageKey, ...consents, region, useCredits, activeTestConsent }),
+      body: JSON.stringify({ domainId, packageKey, ...consents, region, useCredits, activeTestConsent, authCredentials }),
     }),
   // (Is 2) Kredi bakiyesi + satista olan bundle'lar + son hareketler.
   getCredits: () =>

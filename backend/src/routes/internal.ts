@@ -43,7 +43,7 @@ internalRouter.get('/active-scope', async (_req, res) => {
   // (POST/PUT/DELETE/PATCH) DUZ HTTP'de reddeder (defense-in-depth; HTTPS tunelde
   // metot gorunmez, o yuzden asil enforce worker'daki tool-call tespitindedir).
   let passiveOnly = true;
-  let securityProfile: 'passive' | 'active-light' = 'passive';
+  let securityProfile: 'passive' | 'active-light' | 'active-verify-only' = 'passive';
   try {
     const def = getPackageDef(flow.order.package.key);
     passiveOnly = !def.networkLayer;

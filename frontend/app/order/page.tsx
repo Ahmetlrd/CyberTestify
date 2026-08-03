@@ -36,10 +36,11 @@ export default function OrderPage() {
   const [creditUnit, setCreditUnit] = useState(99900);
   const [useCredits, setUseCredits] = useState(false);
 
-  // (Faz 3) active-light yetkilendirme beyani alanlari.
-  const [atLegalName, setAtLegalName] = useState('');
-  const [atCompany, setAtCompany] = useState('');
+  // (Faz 3 v2) active-light — tek risk-kabul checkbox'i (ek alan yok).
   const [atRisk, setAtRisk] = useState(false);
+  // (#5) authenticated_scan — test hesabi kimlik bilgileri.
+  const [authUser, setAuthUser] = useState('');
+  const [authPass, setAuthPass] = useState('');
 
   const [authConsent, setAuthConsent] = useState(false);
   const [contractConsent, setContractConsent] = useState(false);
@@ -68,7 +69,8 @@ export default function OrderPage() {
 
   const selectedPkg = packages.find((p) => p.key === selected);
   const isActiveLight = selectedPkg?.securityProfile === 'active-light';
-  const activeConsentOk = !isActiveLight || (atRisk && atLegalName.trim().length >= 3);
+  const needsAuthCreds = selected === 'authenticated_scan';
+  const activeConsentOk = (!isActiveLight || atRisk) && (!needsAuthCreds || (authUser.trim() && authPass));
   const creditsNeeded = selectedPkg ? Math.max(1, Math.round(selectedPkg.priceMinorUnit / creditUnit)) : 0;
   // Kredi ile odeme yalnizca tek-seferlik/hemen taramada (zamanlanmis akis prepaid farkli).
   const canUseCredits = balance >= creditsNeeded && creditsNeeded > 0 && !recurring && startMode === 'now';
@@ -78,7 +80,7 @@ export default function OrderPage() {
     if (!selected) return setError('Lütfen bir paket seçin.');
     if (!allConsents) return setError('Devam etmek için üç onayın tümünü işaretlemelisiniz.');
     if (isActiveLight && (recurring || startMode === 'later')) return setError('Aktif-test paketleri zamanlanamaz; tek seferlik ve hemen çalıştırılır.');
-    if (!activeConsentOk) return setError('Aktif test için yetkilendirme beyanını doldurmalı ve risk onayını işaretlemelisiniz.');
+    if (!activeConsentOk) return setError('Aktif test için risk kabul kutusunu işaretlemelisiniz.');
     // İleri tarih seçildiyse geçerli ve gelecekte olmalı.
     let startAtIso: string | undefined;
     if (startMode === 'later') {
@@ -116,7 +118,8 @@ export default function OrderPage() {
         },
         region,
         payWithCredits,
-        isActiveLight ? { legalName: atLegalName.trim(), companyName: atCompany.trim() || undefined, riskAccepted: atRisk } : undefined,
+        isActiveLight ? { riskAccepted: atRisk } : undefined,
+        needsAuthCreds ? { username: authUser.trim(), password: authPass } : undefined,
       );
       // Krediyle odendiyse odeme sayfasi YOK — dogrudan siparis detayina git.
       if (res.paidWithCredits) {
@@ -311,28 +314,27 @@ export default function OrderPage() {
               </ul>
             </div>
           </div>
-          <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-ink-soft">
+          <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm font-medium text-ink">
             <input type="checkbox" checked={atRisk} onChange={(e) => setAtRisk(e.target.checked)} className="mt-0.5" />
             <span>{selectedPkg.activeTest.riskText}</span>
           </label>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <input
-              value={atLegalName}
-              onChange={(e) => setAtLegalName(e.target.value)}
-              placeholder="Tam yasal adınız (zorunlu)"
-              className="field"
-            />
-            <input
-              value={atCompany}
-              onChange={(e) => setAtCompany(e.target.value)}
-              placeholder="Şirket/unvan (varsa)"
-              className="field"
-            />
-          </div>
           <p className="mt-2 text-xs text-ink-muted">
-            Bu beyan; adınız, zaman damgası, IP ve metin sürümü ile birlikte kayıt altına alınır ve bir yetkilendirme
-            PDF’i olarak siparişinize bağlanır (elektronik imza yerine geçen irade beyanı; kriptografik e-imza değildir).
+            Onayınız; hesabınız, zaman damgası, IP ve metin sürümü ile birlikte otomatik olarak kayıt altına alınır
+            (ek bilgi girmenize gerek yoktur). İsterseniz bir yetkilendirme PDF’i olarak siparişinize bağlanır.
           </p>
+          {needsAuthCreds && (
+            <div className="mt-4 border-t border-accent/30 pt-4">
+              <p className="text-sm font-semibold text-brand">Test hesabı bilgileri (login’li tarama için)</p>
+              <p className="mt-1 text-xs text-ink-muted">
+                Bilgiler şifrelenerek saklanır, yalnızca <strong>{selectedPkg.displayName}</strong> için ve yalnızca
+                hedef domaininize karşı kullanılır, tarama başlayınca sistemden silinir.
+              </p>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                <input value={authUser} onChange={(e) => setAuthUser(e.target.value)} placeholder="Test kullanıcı adı" className="field" autoComplete="off" />
+                <input value={authPass} onChange={(e) => setAuthPass(e.target.value)} placeholder="Test şifresi" type="password" className="field" autoComplete="new-password" />
+              </div>
+            </div>
+          )}
         </div>
       )}
 

