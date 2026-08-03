@@ -605,3 +605,29 @@ Enum+migration+zod+pricing+i18n eklendi, seed rows olustu.
   Sinir: dangling CNAME'in ucuncu-taraf hedefine (or. *.herokuapp.com) HTTP ile ulasmak kapsam disi;
   ama takeover sinyali DNS-seviyesi NXDOMAIN ile (in-scope, dig via allowlist resolver) tespit edilir.
   Canli testi Vedat yapacak (gercek tarama kurali).
+
+## Faz 3 — Aktif Test Yetkilendirme + ilk active-light paketler (2026-08-03)
+### Onay mekanizmasi (ActiveTestConsent)
+Active-light siparis, gecerli yetkilendirme beyani (yasal ad + risk kabul + metin versiyonu +
+IP + zaman) OLMADAN olusturulamaz. Guard IKI yerde: createOrder (otomatik tamlik kontrolu,
+Vedat'in manuel onayi GEREKMEZ) + orchestrator.startScanForOrder (defense-in-depth). Schedules
+active-light'i reddeder (her tarama ayri beyan ister). Onay PDF'i renderConsentPdf ile (ek LLM
+YOK) uretilir, /orders/:id/consent-pdf ile kayittan re-render/indirilebilir. E-posta gonderimi
+TODO (rapor e-postasi gibi mock). Frontend order sayfasi active-light icin ayri blok gosterir
+(NE YAPAR/YAPMAZ + risk checkbox + yasal ad). Offline dogrulandi (tamlik + PDF + guard reddi).
+
+### Iki active-light paket (available:false)
+injection_verify (SQLi/XSS DOGRULAMA) + idor_verify (yetkisiz erisim DOGRULAMA). securityProfile
+'active-light'. SAFETY_ACTIVE_LIGHT_EN: kanit-amacli zararsiz probe SERBEST; istismar/exfil/veri-
+degistirme/DoS/auth-bypass hem prompt hem TOOL seviyesinde (passive_guard.go active-light) yasak.
+go test dogrulandi (sqlmap --dump/PUT/DELETE/PATCH/DoS bloklu, POST serbest). Fiyat placeholder
+(3499 TL) — Vedat onaylayip available:true yapacak.
+
+### 🔴 GO-LIVE ON KOSULU (available:true YAPMADAN ONCE — kritik)
+Go tool-guard su an profili PENTAGI_SECURITY_PROFILE env'inden okur (varsayilan 'passive' =
+TUM write metotlari bloklu, POST dahil). Yani active-light bir paket SIMDI calissa, POST probe'lari
+PASSIVE guard tarafindan BLOKLANIR (paket calismaz). Global env='active-light' yapmak ise PASIF
+paketlerin POST'una izin verir (yanlis). Cozum: PER-FLOW profil teslimi — Go guard'i /internal/
+active-scope'un donen `securityProfile` alanindan besle (endpoint ZATEN doner; concurrency=1).
+Bu wiring active-light acilmadan ONCE yapilmali. Ruleset DOGRU/test edildi; eksik olan yalniz
+per-flow teslim. (Egress-proxy tarafi zaten /active-scope profilini okuyor.)
