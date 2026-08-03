@@ -45,7 +45,13 @@ export function middleware(req: NextRequest) {
   // Bölgeye özel (marketing) rotaları uygun bölgeye yönlendir.
   const region = pickRegion(req);
   if (pathname === '/') {
-    return NextResponse.redirect(new URL(`/${region}`, req.url));
+    // REDIRECT DEGIL REWRITE: apex kök '/' artik 307 yerine 200 + içerik döner.
+    // Neden: iyzico gibi otomatik denetim botları 307'yi takip etmeyip "ulaşılamıyor"
+    // diyebiliyordu (boş gövde). Rewrite ile URL '/' kalır ama /{bölge} sayfası
+    // sunulur (locale tespiti + iki-domain korunur). Bölge tercihi yine cookie'ye yazılır.
+    const res = NextResponse.rewrite(new URL(`/${region}`, req.url), { request: { headers } });
+    res.cookies.set('region', region, { path: '/', maxAge: YEAR });
+    return res;
   }
   if (pathname === '/packages') {
     return NextResponse.redirect(new URL(`/${region}/packages`, req.url));

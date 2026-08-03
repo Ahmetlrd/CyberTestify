@@ -21,14 +21,24 @@ authRouter.post('/register', async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-  const customer = await prisma.customer.create({
-    data: {
-      email: parsed.data.email,
-      passwordHash,
-      termsAcceptedAt: new Date(),
-      termsVersion: config.legalVersion,
-    },
-  });
+  let customer;
+  try {
+    customer = await prisma.customer.create({
+      data: {
+        email: parsed.data.email,
+        passwordHash,
+        termsAcceptedAt: new Date(),
+        termsVersion: config.legalVersion,
+      },
+    });
+  } catch (err: any) {
+    // Prisma P2002: e-posta zaten kayitli. Bu YAKALANMAYINCA 500 "sunucu hatasi"
+    // olarak dusuyordu (musteri "zaten uye" oldugunu goremiyordu). Dostane 409 don.
+    if (err?.code === 'P2002') {
+      return res.status(409).json({ error: 'Bu e-posta ile zaten bir hesap var. Lutfen giris yapin.' });
+    }
+    throw err;
+  }
 
   const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '7d' });
   res.json({ token });

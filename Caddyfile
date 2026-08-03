@@ -4,20 +4,35 @@
 # NOT: admin.cybertestify.com BILEREK yok — PentAGI paneli disariya ACILMAZ
 # (yalniz SSH tuneli ile erisilir). Bu yuzden burada tanimlanmadi.
 
+# Guvenlik basliklari (odeme-saglayici/otomatik denetim botlari "guvensiz site" demesin;
+# gercek guvenlik durusu da iyilesir). CSP BILEREK yok — sikitespit CSP Next.js/iyzico
+# script'lerini kirabilir; once bu dort standart baslik. HSTS: tum alt-alanlar HTTPS (Caddy).
+(sec_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}
+
 # Apex (cybertestify.com) VE app.cybertestify.com — IKISI DE ayni frontend'i DOGRUDAN
 # sunar (cross-domain yonlendirme YOK; ikisi ozdes). app. yayin sonrasi gelistirme/push
 # alani olarak kullanilir. Caddy her iki site blogu icin de Let's Encrypt sertifikasi alir.
 cybertestify.com {
+	import sec_headers
 	encode gzip zstd
 	reverse_proxy frontend:3000
 }
 
 app.cybertestify.com {
+	import sec_headers
 	encode gzip zstd
 	reverse_proxy frontend:3000
 }
 
 api.cybertestify.com {
+	import sec_headers
 	encode gzip zstd
 	reverse_proxy api:4000
 }
