@@ -41,11 +41,6 @@ export function LegalArticle({ title, children }: { title: string; children: Rea
           ← Ana sayfa
         </Link>
       </p>
-      <div className="my-4 rounded-card border border-accent/40 bg-accent-soft/40 px-4 py-3 text-sm text-ink-soft">
-        <strong>Taslak metin.</strong> Bu sayfa bilgilendirme amaçlı bir şablondur ve yayına
-        alınmadan önce bir avukat/mali müşavir tarafından incelenip <em>[köşeli parantez]</em>{' '}
-        içindeki işletme bilgileriyle tamamlanmalıdır. Hukuki mütalaa değildir.
-      </div>
       <h1 className="text-2xl font-extrabold text-brand">{title}</h1>
       <p className="mt-1 text-sm text-ink-muted">
         Son güncelleme: {COMPANY.lastUpdated} · Sürüm: {COMPANY.legalVersion}

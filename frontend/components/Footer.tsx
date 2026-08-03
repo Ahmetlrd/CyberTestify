@@ -83,11 +83,6 @@ export function Footer({ region }: { region: RegionConfig }) {
               {COMPANY.kep && <span>KEP: {COMPANY.kep}</span>}
             </div>
           )}
-          {showTrImprint && (
-            <div className="mt-3 text-accent/80">
-              [ETBİS kaydı sonrası doğrulama karekodu buraya eklenecek — yayına almadan önce zorunlu.]
-            </div>
-          )}
           <div className="mt-3 text-white/40">
             © {COMPANY.brand} — {d.disclaimer} v{COMPANY.legalVersion}
           </div>

@@ -217,8 +217,8 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
 
             {order.report?.devAccessSecret && (
               <div className="mt-4 rounded-card border border-accent/40 bg-accent-soft/50 p-3 text-xs text-ink-soft">
-                <strong>Geliştirme modu:</strong> E-posta servisi henüz bağlı olmadığı için erişim
-                kodunuz burada gösterilip kutuya dolduruldu. Gerçek sistemde yalnızca e-posta ile gelir.
+                <strong>Tek kullanımlık erişim kodunuz:</strong> Bu kod ayrıca e-posta ile de tarafınıza iletilir.
+                Kolaylık olması için aşağıdaki kutuya otomatik dolduruldu.
                 <div className="mt-1 font-mono text-ink">{order.report.devAccessSecret}</div>
               </div>
             )}
