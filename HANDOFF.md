@@ -572,3 +572,32 @@ guvenlik agi. (3) ssl_tls cap 25->40 (sentez adimina alan). Canli kanit (flow 39
 rapor+FIX" calisti, incomplete=false, has_fix=TRUE, surec-dili YOK, 7 sayfa temiz PDF + 6 somut fix.
 PDF: bos "Ekran Goruntuleri" bolumu kaldirildi + "Genel Degerlendirme" ozeti (siddetten risk seviyesi;
 negasyon-farkinda: "KRITIK: yok" false-positive uretmez; ek LLM YOK). Frontend rapor indirme .md->.pdf.
+
+## Faz 0/1/2 — iso27001/pci geri acildi + active-light altyapisi + 2 yeni paket (2026-08-03)
+### Faz 0: iso27001_hazirlik + pci_hazirlik AVAILABLE (kvkk disiplini)
+Eski kok neden (offline kanit, iso flow 20): 12 subtask'in 11'i `created` (hic calismadi),
+0 icerik -> incomplete (kvkk ile AYNI). Fix: promptlar kvkk-disiplinli — YENI SUBTASK yasak,
+tum site crawl yasak, ~5-8 GET, 5 kontrolden sonra AYNI adimda rapor+FIX yaz, cap 35->40.
+Cikti dili iddiasiz: "Present/Partial/Absent" (compliant/pass DEGIL) + zorunlu "bu bir uyum
+beyani DEGIL" notu. **available:true.** OFFLINE SINIR: dolu rapor uretimi ancak GERCEK
+taramayla kanitlanir (prompt davranisi degistirir; eski kayitlarda icerik yok) -> Vedat test edecek.
+
+### Faz 1: securityProfile altyapisi (HENUZ HICBIR PAKETE ATANMADI)
+- `ScanPackageDef.securityProfile: 'passive' | 'active-light'` (varsayilan passive) + `securityProfileFor()`.
+- `/internal/active-scope` artik aktif flow'un `securityProfile`'ini doner (per-flow kanal, concurrency=1).
+- **egress-proxy**: metot politikasi profilden turer (passive=GET/HEAD/OPTIONS; active-light=+POST,
+  PUT/DELETE/PATCH bloklu) + active-light DoS/flood rate-limit (flow basina 60sn/240 istek, CONNECT dahil).
+- **passive_guard.go**: `IsBlockedHTTPCommand(command, profile)` — passive=tum write bloklu;
+  active-light=POST serbest, PUT/DELETE/PATCH+upload+exfil(sqlmap --dump/INTO OUTFILE)+DoS(ab/wrk/
+  hping/while-true) bloklu. `SecurityProfileFromEnv()` (env PENTAGI_SECURITY_PROFILE, varsayilan passive).
+  terminal.go hook: `IsBlockedHTTPCommand(command, SecurityProfileFromEnv())`. **go test 4/4 pass.**
+- Tum paketler passive -> davranis DEGISMEDI (guvenli). Boundary: active-light per-flow env teslimi,
+  active-light bir paket devreye girince /active-scope'tan beslenmeli (su an gereksiz — hicbir paket kullanmiyor).
+
+### Faz 2: subdomain_takeover + api_discovery (available:false, placeholder fiyat)
+Dar kvkk-disiplinli promptlar, securityProfile passive, tum ortak kurallar (UYUM/no-install/
+BUDGET_GUARD/surec-dili). Fiyat placeholder (subdomain 1499 TL / api 1299 TL) — Vedat onaylayip true yapacak.
+Enum+migration+zod+pricing+i18n eklendi, seed rows olustu.
+- **subdomain_takeover ACMADAN ONCE (kritik):** crt.sh (CT log) HTTPS sorgusu + hedefin alt alan
+  adlari kapsam kilidinde izinli degil -> egress-proxy REDDEDER. Acmadan once SCOPE_ALLOWLIST'e
+  crt.sh eklenmeli (+ alt-alan-adi kapsam istisnasi). api_discovery'de bu sorun YOK (hedef host'ta GET).
