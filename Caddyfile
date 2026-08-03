@@ -32,6 +32,14 @@ app.cybertestify.com {
 	redir https://cybertestify.com{uri}
 }
 
+# www.cybertestify.com -> apex'e yonlendir. DNS A kaydi (www -> 164.92.223.208) eklendi;
+# Caddy bu blokla Let's Encrypt sertifikasini otomatik alir. Kullanici www yazsa da
+# duz cybertestify.com'a duser. (302 temporary — app ile ayni gerekce.)
+www.cybertestify.com {
+	import sec_headers
+	redir https://cybertestify.com{uri}
+}
+
 api.cybertestify.com {
 	import sec_headers
 	encode gzip zstd
