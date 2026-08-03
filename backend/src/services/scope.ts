@@ -106,11 +106,21 @@ const GUARD_BLOCK_MARKER = /passive scan policy|blocked at tool level/i;
  * metot iceriyor VE result guard-imzasi ICERMIYOR VE result BOS DEGIL (yani calisti)
  * ise ihlal sayilir. result bos ise (henuz sonuc yok) su an atlanir (yaris onleme).
  */
+// KRITIK (2026-08-03 duzeltme): YALNIZCA gercek KOMUT CALISTIRAN tool'lari (terminal)
+// tara. Onceden TUM tool-call args'i taraniyordu → ajanin PLANLAMA/RAPOR tool'larinin
+// (subtask_list, coder, search, code_result) args'inda gecen dogal-dil + ORNEK curl
+// komutlari (guvenlik raporu HTTP metotlarindan/remediation'dan bahseder) YANLIS-POZITIF
+// "yasak metot" halt'i uretiyordu (ISO/PCI scope_violation). Gercek HTTP istegi yalniz
+// terminal'de (curl/wget) yapilir; Go tool-guard da orada. Bu yuzden yalniz terminal taranir.
+const HTTP_EXECUTOR_TOOLS = new Set(['terminal']);
+
 export function findForbiddenMethods(
-  items: Array<{ args: string | null | undefined; result?: string | null }>,
+  items: Array<{ name?: string | null; args: string | null | undefined; result?: string | null }>,
 ): string[] {
   const hits = new Set<string>();
   for (const it of items) {
+    // Yalnizca komut-calistiran tool (terminal). name yoksa (geriye-uyum) yine bakariz.
+    if (it.name != null && !HTTP_EXECUTOR_TOOLS.has(it.name)) continue;
     const t = it.args;
     if (!t) continue;
     // Guard bu denemeyi zaten engellemis → gormezden gel (ajan toparlanabilir).
@@ -125,8 +135,11 @@ export function findForbiddenMethods(
       // Ham HTTP istek satiri: POST /path HTTP/1.1
       if (new RegExp(`\\b${m}\\s+/\\S*\\s+HTTP/`, 'i').test(t)) hits.add(m);
     }
-    // curl'de veri gonderen bayraklar POST'u zorlar (-d/--data.../-F/--form).
-    if (/curl/i.test(t) && /(^|\s)(-d|--data(-raw|-binary|-urlencode)?|-F|--form)(\s|=)/i.test(t)) hits.add('POST');
+    // curl'de veri gonderen bayraklar POST'u zorlar. GUARD ile AYNI proximity deseni:
+    // curl ile bayrak AYNI komut parcasinda olmali (arada |;& yok). Eskiden "curl VE
+    // bayrak herhangi bir yerde" idi -> rapor script'lerindeki ORNEK komutlar (curl ...
+    // ve baska satirda -F ...) yanlis-pozitif POST uretiyordu (ISO scope_violation).
+    if (/\bcurl\b[^|;&]*?(^|\s)(-d|--data(-raw|-binary|-urlencode)?|-F|--form)(\s|=)/i.test(t)) hits.add('POST');
   }
   return [...hits];
 }

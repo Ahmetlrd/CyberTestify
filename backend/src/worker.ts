@@ -84,7 +84,7 @@ async function tick() {
         // blokladigi denemeler gormezden gelinir → ajan GET ile devam edip raporu bitirir.
         if (!pkg.networkLayer) {
           const methods = findForbiddenMethods(
-            logs.toolCallLogs.map((t) => ({ args: t.args, result: t.result })),
+            logs.toolCallLogs.map((t) => ({ name: t.name, args: t.args, result: t.result })),
           );
           if (methods.length) forbiddenMethodHit = methods.join(', ');
         }
