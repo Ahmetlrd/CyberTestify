@@ -25,12 +25,22 @@ export interface ScanPackageDef {
     | 'kvkk_hazirlik'
     | 'iso27001_hazirlik'
     | 'cors_cookie'
-    | 'csp_analiz';
+    | 'csp_analiz'
+    | 'subdomain_takeover'
+    | 'api_discovery';
   displayName: string;
   description: string;
   priceMinorUnit: number; // kurus
   modelProvider: string; // PentAGI'de tanimli provider profil adi
   maxToolCalls: number; // flow bazinda yumusak tavan (worker.ts uygular)
+  // GUVENLIK PROFILI (Faz 1 altyapisi): flow'a hangi HTTP-metot politikasinin
+  // uygulanacagini belirler. Belirtilmezse 'passive'.
+  //  - 'passive'      : YALNIZCA GET/HEAD/OPTIONS. Veri degistiren hicbir metot yok
+  //                     (mevcut tum paketler). Go guard + worker strict-halt zorlar.
+  //  - 'active-light' : zafiyeti DOGRULAMAYA yonelik kontrollu POST/form serbest AMA
+  //                     DELETE/PATCH + veri-yazan PUT + toplu veri cekme (exfil) +
+  //                     DoS/flood KESINLIKLE yasak. HENUZ HICBIR PAKETE ATANMADI.
+  securityProfile?: 'passive' | 'active-light';
   networkLayer?: boolean;
   fixSuggestionPriceMinorUnit?: number;
   // false ise musteriye SATILMAZ: paket listesinden gizlenir + siparis reddedilir.
@@ -51,6 +61,13 @@ export function fixSuggestionPrice(def: ScanPackageDef): number {
   return def.fixSuggestionPriceMinorUnit ?? Math.round(def.priceMinorUnit * 0.5);
 }
 
+export type SecurityProfile = 'passive' | 'active-light';
+
+// Paketin guvenlik profili — belirtilmezse GUVENLI varsayilan 'passive'.
+export function securityProfileFor(def: ScanPackageDef): SecurityProfile {
+  return def.securityProfile ?? 'passive';
+}
+
 const PACKAGE_I18N: Partial<Record<ScanPackageDef['key'], { displayName: string; description: string }>> = {
   basit_tarama: { displayName: 'Basic Scan', description: 'Fast passive pre-check: homepage security headers, TLS validity and server banner summary. The cheapest entry package, done in minutes.' },
   ssl_tls: { displayName: 'SSL/TLS Configuration Audit', description: 'Certificate validity/expiry, weak protocol and cipher suite usage, missing HSTS. A fully passive, non-intrusive encryption audit.' },
@@ -61,6 +78,8 @@ const PACKAGE_I18N: Partial<Record<ScanPackageDef['key'], { displayName: string;
   iso27001_hazirlik: { displayName: 'ISO 27001 Readiness Checklist', description: 'A passive readiness report mapping externally observable technical controls to ISO 27001 Annex A. NOT an official certification/audit.' },
   cors_cookie: { displayName: 'CORS & Cookie Security', description: 'Passive check of CORS headers (risky Access-Control-Allow-Origin patterns, credentials combo) and cookie flags (Secure/HttpOnly/SameSite). Fully passive.' },
   csp_analiz: { displayName: 'CSP (Content Security Policy) Analysis', description: 'Passive analysis of the Content-Security-Policy header: presence, weakening directives (unsafe-inline/unsafe-eval), missing default-src. Fully passive.' },
+  subdomain_takeover: { displayName: 'Subdomain Takeover Scan', description: 'Passively discovers subdomains (via DNS + Certificate Transparency logs, NOT brute-force) and flags dangling CNAME records pointing to de-provisioned cloud resources (Heroku/S3/Azure, etc.). Fully passive.' },
+  api_discovery: { displayName: 'API & Swagger Discovery', description: 'Looks for OpenAPI/Swagger docs at common paths (/swagger-ui.html, /openapi.json, etc.), extracts the listed endpoints and flags public, potentially sensitive ones. Passive GET.' },
 };
 
 // kvkk_hazirlik EN sozlukte YOK — global menude gosterilmez (bkz orders.ts filtresi).
@@ -332,30 +351,38 @@ Target: ${host}
       'eslestiren pasif bir hazirlik raporu. RESMI ASV/QSA testi DEGILDIR.',
     priceMinorUnit: 249900,
     modelProvider: PROVIDER,
-    // DAR/deterministik prompt — genis kesif YOK, dusuk tavan odaklanmayi zorlar.
-    maxToolCalls: 35,
-    available: false, // dar-prompt testi gecince true yapilacak (bkz HANDOFF)
+    // DAR/deterministik + kvkk disiplini (2026-08-03): sentez adimini AC BIRAKMAMAK icin
+    // biraz bol tavan (bkz kvkk kok neden).
+    maxToolCalls: 40,
+    available: true,
 
     promptTemplate: (host) => `
-Run a PASSIVE, NARROW, FIXED "PCI-DSS READINESS PRE-ASSESSMENT" on the SINGLE target
-below. This is a fixed checklist — NOT open-ended research. Do NOT use web search, do NOT
-browse any other site, do NOT open new subtasks. Inspect ONLY ${host} with GET/HEAD requests.
+Run a PASSIVE, NARROW, FIXED "PCI-DSS READINESS PRE-ASSESSMENT" on the SINGLE target below.
+This is a FIXED CHECKLIST — NOT open-ended research. HARD CONSTRAINTS: do NOT open new subtasks;
+do NOT crawl/scan the whole site; do NOT use web search. Inspect ONLY ${host} — the homepage plus
+at most the few specific paths listed below. A TOTAL of ~5-8 GET/HEAD requests is enough; do not wander.
 
-Do EXACTLY these checks on ${host} and map each to a PCI-DSS requirement:
+Do EXACTLY these checks on ${host} and map each to a PCI-DSS requirement (observation ONLY — this
+does NOT establish compliance):
 1. TLS version/cipher/certificate -> Req 4.2.1 (strong cryptography in transit)
 2. HTTP security headers (HSTS/CSP/X-Frame-Options/X-Content-Type-Options) -> Req 6.4
 3. Cookie flags (Secure/HttpOnly/SameSite) on any Set-Cookie -> Req 8 (session security)
 4. Server banner / default pages disclosing versions -> Req 2.2 (secure configuration)
 5. Exposed sensitive files via a single GET each (/.git/config, /.env, /backup.zip) -> Req 3 (data exposure)
 
-After these 5 checks, immediately WRITE the report and FINISH. Nothing else.
+After these 5 checks, IMMEDIATELY and in the SAME step write the single report AND the
+${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask;
+do nothing else.
 ${SAFETY_EN}
 ${BUDGET_GUARD_EN}
 ${FIX_SUGGESTIONS_STEP_EN}
 
-Output (Markdown table): "PCI Requirement | Finding | Status (Pass/Attention/Missing) | Recommendation".
-End note: "Not an official PCI compliance test; internal network/CDE, segmentation, ASV
-scanning and penetration testing are OUT OF SCOPE."
+Output (Markdown table): "PCI-DSS Requirement | Observation | Observable control (Present/Partial/Absent) |
+Recommendation". Use ONLY Present/Partial/Absent for what is externally observable — NEVER write
+"compliant"/"pass"/"conformant". End note (MANDATORY): "This is an externally observable READINESS
+pre-assessment — NOT an official PCI-DSS/ASV/QSA test and NOT a statement of compliance. Internal
+network/CDE, segmentation, ASV scanning and penetration testing are OUT OF SCOPE; a full compliance
+assessment requires a comprehensive, dedicated audit."
 
 Target: ${host}
 `.trim(),
@@ -414,32 +441,39 @@ Hedef: ${host}
       'eslestirildigi pasif hazirlik raporu. RESMI sertifikasyon/denetim DEGILDIR.',
     priceMinorUnit: 299900,
     modelProvider: PROVIDER,
-    // DAR/deterministik prompt (bkz asagi) — genis kesif YOK, bu yuzden dusuk tavan
-    // yeterli ve odaklanmayi zorlar (header_leak gibi guvenilir tamamlanir).
-    maxToolCalls: 35,
-    available: false, // dar-prompt testi gecince true yapilacak (bkz HANDOFF)
+    // DAR/deterministik + kvkk disiplini (2026-08-03): sentez adimini AC BIRAKMAMAK icin
+    // biraz bol tavan (bkz kvkk kok neden — 35 dar kalirsa rapor yazilmadan bitebilir).
+    maxToolCalls: 40,
+    available: true,
 
     promptTemplate: (host) => `
-Run a PASSIVE, NARROW, FIXED ISO/IEC 27001 Annex A readiness spot-check on the SINGLE
-target below. This is a fixed checklist — NOT open-ended research. Do NOT use web search,
-do NOT browse any other site, do NOT open new subtasks, do NOT look up the ISO standard
-online (you already know it). Inspect ONLY ${host} with GET/HEAD requests.
+Run a PASSIVE, NARROW, FIXED ISO/IEC 27001 Annex A readiness spot-check on the SINGLE target
+below. This is a FIXED CHECKLIST — NOT open-ended research. HARD CONSTRAINTS: do NOT open new
+subtasks; do NOT crawl/scan the whole site; do NOT use web search or look up the ISO standard
+online (you already know it). Inspect ONLY ${host} — the homepage plus at most the few specific
+paths listed below. A TOTAL of ~5-8 GET/HEAD requests is enough; do not wander.
 
-Do EXACTLY these checks on ${host} and map each to an Annex A clause:
+Do EXACTLY these checks on ${host} and map each to an Annex A clause (observation ONLY — this
+does NOT establish conformance):
 1. TLS certificate valid + modern protocol (TLS 1.2/1.3)? -> A.8.24 (cryptography)
 2. HTTP security headers present (HSTS, CSP, X-Frame-Options, X-Content-Type-Options)? -> A.8.23/A.8.9
 3. Server/technology banner disclosing versions? -> A.8.9 (secure configuration)
 4. Obvious exposed files via a single GET each (/.git/config, /.env, /robots.txt)? -> A.8.12 (data leakage)
 5. Is a privacy/security policy page reachable? -> A.5.1 (policies)
 
-After these 5 checks, immediately WRITE the report and FINISH. Nothing else.
+After these 5 checks, IMMEDIATELY and in the SAME step write the single report AND the
+${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask;
+do nothing else.
 ${SAFETY_EN}
 ${BUDGET_GUARD_EN}
 ${FIX_SUGGESTIONS_STEP_EN}
 
-Output (Markdown table): "Annex A Clause | Observation | Status | Recommendation". End note:
-"Not an official ISO 27001 audit/certification; ISMS scope, documentation and internal
-processes are OUT OF SCOPE."
+Output (Markdown table): "Annex A Clause | Observation | Observable control (Present/Partial/Absent) |
+Recommendation". Use ONLY Present/Partial/Absent for what is externally observable — NEVER write
+"compliant"/"pass"/"conformant". End note (MANDATORY): "This is an externally observable READINESS
+spot-check — NOT an ISO 27001 audit/certification and NOT a statement of compliance. ISMS scope,
+documentation, internal processes and any control not observable from outside are OUT OF SCOPE;
+a full conformance assessment requires a comprehensive, dedicated audit."
 
 Target: ${host}
 `.trim(),
@@ -509,6 +543,88 @@ ${FIX_SUGGESTIONS_STEP_EN}
 
 Output (Markdown): CSP presence, weak/missing directives, and concrete hardening
 recommendations (example CSP).
+
+Target: ${host}
+`.trim(),
+  },
+  {
+    // FAZ 2 (2026-08-03) — dusuk riskli active-light-adayligi ama PASIF yeterli.
+    key: 'subdomain_takeover',
+    displayName: 'Subdomain Takeover Taraması',
+    description:
+      'Hedefin alt alan adlarini (DNS + Sertifika Seffafligi/CT loglari uzerinden, ' +
+      'brute-force DEGIL) pasif kesfeder; "bosta dusmus" (dangling) CNAME kayitlarini ' +
+      '(silinmis Heroku/S3/Azure vb. kaynaga isaret eden) tespit eder. Tamamen pasif.',
+    priceMinorUnit: 149900, // PLACEHOLDER (Vedat onayi bekleniyor)
+    modelProvider: PROVIDER,
+    maxToolCalls: 35,
+    securityProfile: 'passive',
+    // available:false — ACMADAN ONCE: crt.sh (CT log) + hedefin alt alan adlari kapsam
+    // kilidinde (SCOPE_ALLOWLIST / passive-recon istisnasi) izinli olmali; aksi halde
+    // egress-proxy crt.sh HTTPS sorgusunu kapsam disi diye REDDEDER. Bkz HANDOFF.
+    available: false,
+    promptTemplate: (host) => `
+Run a PASSIVE, NARROW subdomain-takeover check for the DOMAIN of the single target below. This
+is a FIXED checklist. HARD CONSTRAINTS: do NOT open new subtasks; do NOT brute-force/wordlist
+subdomains; do NOT scan/crawl; use ONLY passive sources. For THIS package, querying Certificate
+Transparency logs and DNS for subdomains of ${host} is the INTENDED passive scope.
+
+Steps (passive only):
+1. Enumerate subdomains from PASSIVE sources ONLY: Certificate Transparency logs
+   (e.g. GET https://crt.sh/?q=%25.${host}&output=json) plus any DNS records you can observe.
+   Do NOT guess/brute-force names.
+2. For each discovered subdomain, resolve DNS and check for a CNAME (dig CNAME <sub>).
+3. Flag DANGLING records: a CNAME pointing to a de-provisioned/unclaimed third-party resource
+   (*.herokuapp.com, *.s3.amazonaws.com, *.github.io, *.azurewebsites.net, *.cloudfront.net,
+   Netlify, Fastly, etc.) that returns NXDOMAIN or a known "no such app/bucket" fingerprint =
+   potential subdomain takeover. DETECTION ONLY — never CLAIM/register any resource.
+
+After these checks, IMMEDIATELY and in the SAME step write the single report AND the
+${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask.
+${SAFETY_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown table): "Subdomain | CNAME target | Status (resolves/dangling/clean) | Severity |
+Recommendation".
+
+Target domain (derive the registrable domain from): ${host}
+`.trim(),
+  },
+  {
+    key: 'api_discovery',
+    displayName: 'API & Swagger Keşfi',
+    description:
+      'Yaygin yollarda (/swagger-ui.html, /api/v1/docs, /openapi.json vb.) OpenAPI/Swagger ' +
+      'dokumani arar; varsa listelenen endpointleri cikarir ve kimlik dogrulamasi ' +
+      'gerektirmeyen (halka acik) hassas olabilecek uclari isaretler. Pasif GET.',
+    priceMinorUnit: 129900, // PLACEHOLDER (Vedat onayi bekleniyor)
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    securityProfile: 'passive',
+    available: false, // fiyat/onay bekliyor (Vedat true yapacak)
+    promptTemplate: (host) => `
+Run a PASSIVE, NARROW API/OpenAPI-documentation discovery on the SINGLE target below. FIXED
+checklist. HARD CONSTRAINTS: do NOT open new subtasks; do NOT brute-force/fuzz large wordlists;
+do NOT scan/crawl the whole site; GET only. Check ONLY ${host}.
+
+Steps:
+1. With a single GET each, probe these WELL-KNOWN documentation paths (no fuzzing beyond this
+   short list): /swagger-ui.html, /swagger/index.html, /api/docs, /api/v1/docs, /openapi.json,
+   /swagger.json, /v2/api-docs, /v3/api-docs, /api-docs, /redoc, /.well-known/openapi.json.
+2. If an OpenAPI/Swagger document is found, extract the declared endpoints (path + method).
+3. Flag endpoints that appear PUBLIC (no auth/security requirement declared) AND potentially
+   sensitive (admin, user, export, internal, debug, token, upload, etc.). DETECTION ONLY — do
+   NOT call/exercise those endpoints, do NOT send POST/write requests, just report from the doc.
+
+After these checks, IMMEDIATELY and in the SAME step write the single report AND the
+${FIX_SUGGESTIONS_DELIM} section, then FINISH. Do NOT open a separate "write report" subtask.
+${SAFETY_EN}
+${BUDGET_GUARD_EN}
+${FIX_SUGGESTIONS_STEP_EN}
+
+Output (Markdown): whether an API doc was found + where; a table "Endpoint | Method | Auth
+required? | Sensitivity | Note"; and hardening recommendations (protect docs, require auth).
 
 Target: ${host}
 `.trim(),

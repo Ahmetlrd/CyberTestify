@@ -58,6 +58,8 @@ const createOrderSchema = z.object({
     'iso27001_hazirlik',
     'cors_cookie',
     'csp_analiz',
+    'subdomain_takeover',
+    'api_discovery',
   ]),
   // Pentest yetkilendirmesi (TCK 243 hukuka uygunluk) — true olmadan siparis yok.
   ownershipConfirmed: z.literal(true, {

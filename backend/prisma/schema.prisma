@@ -46,6 +46,8 @@ enum ScanPackageKey {
   iso27001_hazirlik  // ISO 27001 hazirlik kontrol listesi (resmi sertifikasyon DEGIL)
   cors_cookie        // CORS + cerez (Set-Cookie) guvenligi — pasif header kontrolu
   csp_analiz         // Content-Security-Policy analizi — pasif header kontrolu
+  subdomain_takeover // Alt alan adi devralma (dangling CNAME) — pasif DNS/CT kesfi
+  api_discovery      // API & Swagger/OpenAPI dokuman kesfi — pasif GET
   // --- Asagidakiler eski/pasif, sadece gecmis kayit butunlugu icin duruyor ---
   standard_web
   premium_web

@@ -40,3 +40,41 @@ func TestPassiveGuard_ReadOnlyAllowed(t *testing.T) {
 		}
 	}
 }
+
+// active-light: POST/form SERBEST olmali (zafiyet dogrulama), ama yikici/exfil/DoS bloklu.
+func TestActiveLight_PostAllowed(t *testing.T) {
+	allowed := []string{
+		`curl -X POST -d 'user=a&pass=b' https://target.com/login`, // kontrollu test payload'i
+		`curl -F file=@probe.txt https://target.com/upload`,        // form POST (upload degil, -T degil)
+		`curl -s https://target.com/`,
+		`curl -X GET https://target.com/`,
+		`python3 -c "import requests; requests.post('https://target.com/x', data={})"`,
+	}
+	for _, c := range allowed {
+		if ok, m := IsBlockedHTTPCommand(c, "active-light"); ok {
+			t.Errorf("active-light BEKLENEN: izin verilmeli ama bloklandi: %q (eslesme=%q)", c, m)
+		}
+	}
+}
+
+func TestActiveLight_DestructiveAndDosBlocked(t *testing.T) {
+	blocked := []string{
+		`curl -X DELETE https://target.com/api/user/1`,
+		`curl -X PUT -d '{}' https://target.com/api/user/1`,
+		`curl --request PATCH https://target.com/x`,
+		`curl -T bigfile.bin https://target.com/upload`, // dosya yukleme
+		`python3 -c "import requests; requests.delete('https://target.com/x')"`,
+		`sqlmap -u 'https://target.com/?id=1' --dump`,       // toplu veri cekme
+		`sqlmap -u 'https://target.com/?id=1' --dump-all`,
+		`ab -n 100000 -c 500 https://target.com/`,           // DoS
+		`wrk -t8 -c400 -d60s https://target.com/`,
+		`hping3 -S --flood -p 443 target.com`,
+		`while true; do curl https://target.com/; done`,     // sel dongusu
+		`mysql -e "SELECT * FROM users INTO OUTFILE '/tmp/x'"`,
+	}
+	for _, c := range blocked {
+		if ok, _ := IsBlockedHTTPCommand(c, "active-light"); !ok {
+			t.Errorf("active-light BEKLENEN: bloklanmali ama gecti: %q", c)
+		}
+	}
+}

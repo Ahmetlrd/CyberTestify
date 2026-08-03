@@ -25,14 +25,45 @@ validateScopeLockConfig();
 
 interface ActiveScope {
   active: boolean;
+  flowId?: string;
   hostname?: string;
   ips?: string[];
   allowlist: string[];
   passiveOnly?: boolean;
+  securityProfile?: 'passive' | 'active-light';
 }
 
 // Pasif paketlerde izin verilen (veri DEGISTIRMEYEN) HTTP metotlari.
 const PASSIVE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+// active-light profilinde EK olarak POST serbest (zafiyeti DOGRULAMAK icin kontrollu
+// test payload'i); DELETE/PATCH/PUT (veri silme/degistirme) HALA yasak. Asil metot
+// zorlamasi HTTPS'te Go tool-guard'da (passive_guard.go) — bu proxy DUZ HTTP icin.
+const ACTIVE_LIGHT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'POST']);
+
+// active-light DoS/flood freni: flow basina 60 sn penceresinde azami istek. Pasif
+// profil zaten GET-only + dar promptlu; sayac yine de tutulur, enforce yalniz active-light.
+const RATE_WINDOW_MS = 60_000;
+const ACTIVE_LIGHT_MAX_REQ_PER_WINDOW = 240;
+const rate = new Map<string, { windowStart: number; count: number }>();
+
+// flow basina kayan pencere sayaci; profile 'active-light' ise limit asiminda false.
+function rateLimitOk(flowId: string | undefined, profile: 'passive' | 'active-light'): boolean {
+  const key = flowId ?? '__no_flow__';
+  const now = Date.now();
+  const r = rate.get(key);
+  if (!r || now - r.windowStart >= RATE_WINDOW_MS) {
+    rate.set(key, { windowStart: now, count: 1 });
+    return true;
+  }
+  r.count += 1;
+  if (profile === 'active-light' && r.count > ACTIVE_LIGHT_MAX_REQ_PER_WINDOW) return false;
+  return true;
+}
+
+function allowedMethodsFor(a: ActiveScope): Set<string> {
+  // Metot politikasi GUVENLIK PROFILINDEN turetilir (passiveOnly=networkLayer, ayri eksen).
+  return (a.securityProfile ?? 'passive') === 'active-light' ? ACTIVE_LIGHT_METHODS : PASSIVE_METHODS;
+}
 
 // Aktif kapsami backend'ten cek, kisa TTL ile cache'le (istek basina DB'ye gitme).
 let cache: { at: number; scope: ActiveScope } | null = null;
@@ -101,16 +132,26 @@ server.on('request', async (req, res) => {
   }
   const host = target.hostname;
 
-  // METOT FILTRESI (defense-in-depth): pasif pakette veri degistiren HTTP metodu
-  // (POST/PUT/DELETE/PATCH...) DUZ HTTP'de reddedilir. NOT: HTTPS CONNECT tunelinde
-  // metot sifrelidir, gorunmez → orada asil enforce worker'daki tool-call tespitidir.
+  // METOT FILTRESI (defense-in-depth): GUVENLIK PROFILINE gore izinli metotlar.
+  // passive → GET/HEAD/OPTIONS; active-light → +POST (DELETE/PATCH/PUT hala yasak).
+  // NOT: HTTPS CONNECT tunelinde metot sifrelidir, gorunmez → orada asil enforce Go
+  // tool-guard (passive_guard.go) + worker'daki tool-call tespitidir.
   const activeScope = await getActiveScope();
+  const profile = activeScope.securityProfile ?? 'passive';
   const method = (req.method ?? 'GET').toUpperCase();
-  if (activeScope.passiveOnly !== false && !PASSIVE_METHODS.has(method)) {
+  if (!allowedMethodsFor(activeScope).has(method)) {
     auditBlock(`forbidden-method:${method} ${host}`);
-    console.warn(`[egress-proxy][BLOCK] Yasak HTTP metodu (pasif paket): ${method} ${host}`);
-    res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8', allow: 'GET, HEAD, OPTIONS' });
-    res.end('Pasif tarama: yalnizca GET/HEAD/OPTIONS izinli (egress policy).');
+    console.warn(`[egress-proxy][BLOCK] Yasak HTTP metodu (${profile}): ${method} ${host}`);
+    res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8', allow: [...allowedMethodsFor(activeScope)].join(', ') });
+    res.end('Bu tarama profili bu HTTP metoduna izin vermiyor (egress policy).');
+    return;
+  }
+  // active-light DoS/flood freni (flow basina kayan pencere).
+  if (!rateLimitOk(activeScope.flowId, profile)) {
+    auditBlock(`rate-limit:${method} ${host}`);
+    console.warn(`[egress-proxy][BLOCK] Hiz limiti (active-light): flow ${activeScope.flowId} ${host}`);
+    res.writeHead(429, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end('Hiz limiti asildi (egress policy).');
     return;
   }
 
@@ -143,6 +184,16 @@ server.on('request', async (req, res) => {
 server.on('connect', async (req, clientSocket, head) => {
   const [host, portStr] = (req.url ?? '').split(':');
   const port = Number(portStr) || 443;
+
+  // active-light DoS/flood freni: her CONNECT tuneli bir istek sayilir.
+  const active = await getActiveScope();
+  if (!rateLimitOk(active.flowId, active.securityProfile ?? 'passive')) {
+    auditBlock(`rate-limit:CONNECT ${host}`);
+    console.warn(`[egress-proxy][BLOCK] Hiz limiti (active-light) CONNECT: flow ${active.flowId} ${host}`);
+    clientSocket.write('HTTP/1.1 429 Too Many Requests\r\n\r\nHiz limiti asildi.\r\n');
+    clientSocket.destroy();
+    return;
+  }
 
   if (!host || !(await allowed(host))) {
     auditBlock(host || (req.url ?? ''));

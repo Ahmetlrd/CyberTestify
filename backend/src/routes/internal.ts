@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { getPackageDef } from '../services/scanPackages.js';
+import { getPackageDef, securityProfileFor } from '../services/scanPackages.js';
 
 /** Sabit-zamanli sir karsilastirmasi (timing attack'a karsi). */
 function secretMatches(provided: string | undefined): boolean {
@@ -43,10 +43,14 @@ internalRouter.get('/active-scope', async (_req, res) => {
   // (POST/PUT/DELETE/PATCH) DUZ HTTP'de reddeder (defense-in-depth; HTTPS tunelde
   // metot gorunmez, o yuzden asil enforce worker'daki tool-call tespitindedir).
   let passiveOnly = true;
+  let securityProfile: 'passive' | 'active-light' = 'passive';
   try {
-    passiveOnly = !getPackageDef(flow.order.package.key).networkLayer;
+    const def = getPackageDef(flow.order.package.key);
+    passiveOnly = !def.networkLayer;
+    securityProfile = securityProfileFor(def);
   } catch {
     passiveOnly = true; // bilinmeyen paket → guvenli taraf
+    securityProfile = 'passive';
   }
   res.json({
     active: true,
@@ -56,6 +60,8 @@ internalRouter.get('/active-scope', async (_req, res) => {
     ips,
     allowlist: config.scopeAllowlist,
     passiveOnly,
+    // Faz 1: aktif flow'un guvenlik profili (per-flow kanal). Su an tum paketler 'passive'.
+    securityProfile,
   });
 });
 

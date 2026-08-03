@@ -20,6 +20,8 @@ const ESTIMATED: Record<string, { us: number; ae: number }> = {
   iso27001_hazirlik: { us: 11900, ae: 43900 },
   cors_cookie: { us: 2900, ae: 10900 }, // PLACEHOLDER (header_leak seviyesi)
   csp_analiz: { us: 2900, ae: 10900 }, // PLACEHOLDER (header_leak seviyesi)
+  subdomain_takeover: { us: 4900, ae: 17900 }, // PLACEHOLDER (Vedat onayi)
+  api_discovery: { us: 4400, ae: 15900 }, // PLACEHOLDER (Vedat onayi)
 };
 
 // [packageKey][region] -> amountMinorUnit. Seed bu haritadan PackagePricing yazar.

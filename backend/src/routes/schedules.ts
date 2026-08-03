@@ -21,6 +21,8 @@ const createSchema = z.object({
     'iso27001_hazirlik',
     'cors_cookie',
     'csp_analiz',
+    'subdomain_takeover',
+    'api_discovery',
   ]),
   intervalDays: z.number().int(),
   runs: z.number().int().min(1).max(52), // pesin odenen tekrar sayisi (N)
