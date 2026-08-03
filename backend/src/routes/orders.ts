@@ -5,6 +5,7 @@ import { config } from '../config.js';
 import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice } from '../services/scanPackages.js';
 import { getPricing, currencyFor } from '../services/pricing.js';
 import { getPaymentProvider } from '../services/payment/index.js';
+import { getSampleReportPdf } from '../services/sampleReports.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -43,6 +44,19 @@ ordersRouter.get('/packages', async (req, res) => {
         };
       }),
   );
+});
+
+// (1) ORNEK RAPOR — PUBLIC (satin almadan once onizleme). Statik/anonim, cache'li PDF.
+ordersRouter.get('/sample-report/:packageKey', async (req, res) => {
+  try {
+    const pdf = await getSampleReportPdf(req.params.packageKey);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="cybertestify-ornek-rapor.pdf"');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(pdf);
+  } catch {
+    res.status(404).json({ error: 'Ornek rapor bulunamadi.' });
+  }
 });
 
 const createOrderSchema = z.object({

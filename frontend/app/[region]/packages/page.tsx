@@ -88,6 +88,14 @@ export default async function PackagesPage({ params }: { params: { region: strin
                   <Link href="/register" className={`mt-6 w-full ${popular ? 'btn-primary' : 'btn-outline'}`}>
                     {d.selectCta}
                   </Link>
+                  <a
+                    href={`${API}/orders/sample-report/${p.key}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 text-center text-xs font-semibold text-accent-600 underline underline-offset-2 hover:text-accent"
+                  >
+                    {region.code === 'tr' ? 'Örnek Raporu Gör (PDF)' : 'View Sample Report (PDF)'}
+                  </a>
                 </div>
               );
             })}
