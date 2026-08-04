@@ -27,7 +27,7 @@ export function Footer({ region }: { region: RegionConfig }) {
         <div className="grid gap-10 md:grid-cols-[1.3fr_1fr]">
           <div>
             <div className="flex items-center gap-2.5">
-              <Logo className="h-8 w-8" />
+              <Logo onDark className="h-8 w-8" />
               <span className="text-lg font-extrabold tracking-tight text-white">CyberTestify</span>
             </div>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/70">{d.tagline}</p>
