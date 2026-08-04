@@ -44,10 +44,11 @@ function Hero({ d }: { d: Dict }) {
           </div>
         </div>
 
-        <div className="mx-auto mt-14 flex max-w-2xl flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-white/70">
+        <div className="mx-auto mt-14 flex max-w-2xl flex-wrap items-center justify-center gap-3">
           {d.hero.trust.map((label, i) => (
-            <span key={label} className="flex items-center gap-2">
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-accent" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            // Yesil zemin: her rozet BEYAZ oval pill icinde -> ikon+yazi net gorunur.
+            <span key={label} className="inline-flex items-center gap-2 rounded-pill bg-white px-4 py-2 text-sm font-medium text-brand shadow-sm">
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-accent" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d={TRUST_ICONS[i]} />
               </svg>
               {label}

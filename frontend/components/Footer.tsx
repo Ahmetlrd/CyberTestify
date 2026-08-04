@@ -26,9 +26,10 @@ export function Footer({ region }: { region: RegionConfig }) {
       <div className="container-page py-14">
         <div className="grid gap-10 md:grid-cols-[1.3fr_1fr]">
           <div>
-            <div className="flex items-center gap-2.5">
-              <Logo onDark className="h-8 w-8" />
-              <span className="text-lg font-extrabold tracking-tight text-white">CyberTestify</span>
+            {/* Yesil zemin: logo (yesil kalkan) + yazi BEYAZ oval pill icinde -> net gorunur. */}
+            <div className="inline-flex items-center gap-2.5 rounded-pill bg-white px-4 py-2 shadow-sm">
+              <Logo className="h-7 w-7" />
+              <span className="text-lg font-extrabold tracking-tight text-brand">CyberTestify</span>
             </div>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/70">{d.tagline}</p>
             <p className="mt-4 text-sm">
