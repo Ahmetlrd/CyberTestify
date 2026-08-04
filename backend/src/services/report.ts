@@ -102,6 +102,32 @@ function splitFixSuggestions(text: string): { findings: string; fixText: string 
  * okunabilir bir Markdown rapor haline getirir, musteriye ozel bir erisim
  * sifresiyle sifreler ve PentAGI tarafindaki ham veriyi siler.
  */
+/**
+ * "ELINDEKI HAM VERIYLE": ajan tamamlama yazamadiginda (butce/erken durus), taramada
+ * calisan terminal komutlarini + ciktilarini getScopeLogs'tan cekip bir "ham kanit"
+ * bolumu olusturur. Ciktilar sonradan redactAll ile maskelenir (PII). Bos donebilir.
+ */
+async function buildRawEvidenceFallback(pentagiFlowId: string, locale: Locale): Promise<string> {
+  try {
+    const scope = await pentagi.getScopeLogs(pentagiFlowId);
+    const terminals = (scope.toolCallLogs ?? []).filter((t) => t.name == null || t.name === 'terminal');
+    if (!terminals.length) return '';
+    const items = terminals.slice(0, 40).map((t, i) => {
+      const cmd = (t.args ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+      const out = (t.result ?? '').trim().slice(0, 600);
+      return `**${i + 1}.** \`${cmd || '(komut)'}\`\n\n\`\`\`\n${out || '(çıktı yok)'}\n\`\`\``;
+    });
+    const header =
+      locale === 'en'
+        ? '## Automatically Compiled Raw Evidence\n\n> The scan did not reach the final report-writing step (budget/early stop). Below is the raw evidence (commands and outputs) collected during the scan, for your reference. This is not a polished report.'
+        : '## Otomatik Derlenmiş Ham Kanıtlar\n\n> Tarama, nihai rapor-yazma adımına ulaşamadı (bütçe/erken duruş). Aşağıda tarama sırasında toplanan ham kanıtlar (komutlar ve çıktılar) referans için verilmiştir. Bu, düzenlenmiş bir rapor değildir.';
+    return `${header}\n\n${items.join('\n\n')}`;
+  } catch (err) {
+    console.error('[report] ham kanit fallback uretilemedi:', err);
+    return '';
+  }
+}
+
 export async function generateAndStoreReport(flowId: string) {
   const flow = await prisma.flow.findUniqueOrThrow({
     where: { id: flowId },
@@ -112,14 +138,25 @@ export async function generateAndStoreReport(flowId: string) {
   const locale: Locale = flow.order.locale === 'en' ? 'en' : 'tr';
 
   // (3) Cozum onerilerini bulgulardan AYIR (ayni akista uretildi, ekstra maliyet yok).
-  const { findings, fixText } = splitFixSuggestions(collectFindings(logs));
+  const split = splitFixSuggestions(collectFindings(logs));
+  let findings = split.findings;
+  const fixText = split.fixText;
 
-  // EKSIK RAPOR TESPITI: hicbir kaynakta (task.result / report / done) icerik yoksa
-  // rapor gercekten bostur → "eksik" isaretle (musteriye acik uyari gosterilir).
+  // EKSIK RAPOR TESPITI: ajan hicbir kaynakta (task/subtask/report result) TAMAMLAMA
+  // yazmamissa (ör. injection_verify: tavana carparak yazma adimina ulasamadi) findings
+  // BOS kalir. Boyle bir durumda BOS/ise-yaramaz rapor vermek yerine "ELINDEKI HAM VERIYLE":
+  // taramada calisan terminal komutlarini + ciktilarini (redakte) rapora KANIT olarak koy.
+  // Rapor yine 'incomplete' isaretlenir (musteri ajanin tam anlatiyi yazamadigini bilsin)
+  // ama artik bos degil — toplanan ham kanitlar gorunur.
   const incomplete = findings.trim().length === 0;
-  const incompleteReason = incomplete
-    ? 'Tarama tamamlanamadan sonlandi (erken durdurma veya bir hata olabilir); rapor eksik.'
-    : null;
+  let incompleteReason: string | null = null;
+  if (incomplete) {
+    const rawEvidence = await buildRawEvidenceFallback(flow.pentagiFlowId, locale);
+    if (rawEvidence.trim()) findings = rawEvidence;
+    incompleteReason =
+      'Tarama, tam anlatısal raporu yazma adımına ulaşamadan sonlandı (bütçe/erken duruş). ' +
+      'Aşağıda tarama sırasında toplanan ham kanıtlar otomatik derlenmiştir.';
+  }
 
   // KENDI TARAFIMIZDA veri minimizasyonu: sizmis yapisal PII'yi (email/telefon/
   // TCKN/kart/IBAN) sifreli DB'ye yazmadan ONCE maskele (ayni mantik PentAGI Go

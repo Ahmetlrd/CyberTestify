@@ -5,7 +5,7 @@ import { config } from '../config.js';
 import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice, securityProfileFor } from '../services/scanPackages.js';
 import { validateConsentInput, activeTestScope, ACTIVE_TEST_CONSENT_VERSION, ACTIVE_TEST_RISK_ACK, hasValidActiveTestConsent } from '../services/activeTestConsent.js';
 import { renderConsentPdf } from '../services/pdf.js';
-import { encryptSecret } from '../services/crypto.js';
+import { encryptSecret, decryptSecret } from '../services/crypto.js';
 import { getPricing, currencyFor } from '../services/pricing.js';
 import { getPaymentProvider } from '../services/payment/index.js';
 import { getSampleReportPdf } from '../services/sampleReports.js';
@@ -397,10 +397,22 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
   });
 
   // (3) Rapor cikisini guvenli sekilde donustur: icerik degil, DURUM bilgisi.
+  // devAccessSecret DB'de PEPPER'li sifreli tutulur; burada SAHIP musteriye (requireAuth +
+  // customerId eslesmesi zaten dogrulandi) COZULMUS erisim sifresi verilir — dashboard bunu
+  // otomatik doldurur, musteri ekstra kod GIRMEDEN kendi raporunu acar. (Eski duz-metin
+  // kalintilari da tolere edilir: cozulemezse ham degeri don.)
   const r = order.report;
+  let ownerAccessSecret: string | null = null;
+  if (r?.devAccessSecret) {
+    try {
+      ownerAccessSecret = decryptSecret(r.devAccessSecret);
+    } catch {
+      ownerAccessSecret = r.devAccessSecret; // eski duz-metin kaydi (varsa)
+    }
+  }
   const report = r
     ? {
-        id: r.id, createdAt: r.createdAt, deliveredAt: r.deliveredAt, devAccessSecret: r.devAccessSecret,
+        id: r.id, createdAt: r.createdAt, deliveredAt: r.deliveredAt, devAccessSecret: ownerAccessSecret,
         incomplete: r.incomplete, incompleteReason: r.incompleteReason,
         hasFixSuggestions: r.fixSuggestionsIv != null,
         fixSuggestionsUnlocked: r.fixSuggestionsUnlockedAt != null,

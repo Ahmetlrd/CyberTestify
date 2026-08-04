@@ -744,7 +744,7 @@ Target: ${host}
       'CEKMEZ, veri SILMEZ/DEGISTIRMEZ. Yetkilendirme beyani gerektirir.',
     priceMinorUnit: 399900, // PLACEHOLDER (Vedat onayi bekleniyor)
     modelProvider: PROVIDER,
-    maxToolCalls: 30,
+    maxToolCalls: 45,
     securityProfile: 'active-light',
     available: true,
     promptTemplate: (host) => `
@@ -782,7 +782,7 @@ Target: ${host}
       'DOGRULAR. Erisilen gercek/hassas veriyi RAPORA YAZMAZ. Yetkilendirme beyani gerektirir.',
     priceMinorUnit: 399900, // PLACEHOLDER (Vedat onayi bekleniyor)
     modelProvider: PROVIDER,
-    maxToolCalls: 30,
+    maxToolCalls: 45,
     securityProfile: 'active-light',
     available: true,
     promptTemplate: (host) => `

@@ -4,6 +4,7 @@ import * as pentagi from './pentagi/client.js';
 import { getPackageDef } from './services/scanPackages.js';
 import { generateAndStoreReport } from './services/report.js';
 import { findOutOfScope, findForbiddenMethods, detectScriptDebugLoop } from './services/scope.js';
+import { encryptSecret } from './services/crypto.js';
 import { buildActivityFeed } from './services/activityFeed.js';
 import { promoteQueued } from './services/orchestrator.js';
 import { checkEgressProxyHealth } from './services/egressHealth.js';
@@ -228,14 +229,17 @@ async function tick() {
         // yapiyoruz ki bir sonraki tick'te tekrar islenmesin.
         await prisma.flow.update({ where: { id: flow.id }, data: { status: 'finished', finishedAt: new Date() } });
 
-        // DEV/MOCK modu: e-posta servisi henuz yok — erisim sifresini panelde
-        // gosterebilmek icin sakla. Gercek odeme modunda ASLA saklanmaz.
-        if (config.mockPayment) {
-          await prisma.report.update({
-            where: { orderId: flow.orderId },
-            data: { devAccessSecret: accessSecret },
-          });
-        }
+        // ERISIM SIFRESINI HER ZAMAN sakla — ama PEPPER ile SIFRELI (encryptSecret).
+        // Neden: e-posta servisi henuz yok; giris yapmis SAHIP musteri kendi raporunu
+        // acabilmeli (order detail endpoint pepper'i cozup sahibe verir, dashboard otomatik
+        // doldurur). Duz saklamak yerine pepper'li: ham DB dump'i REPORT_ENCRYPTION_PEPPER
+        // olmadan raporu cozemez (savunma derinligi). (Onceden yalniz mockPayment'ta duz
+        // saklaniyordu -> NODE_ENV=production ile mockPayment=false olunca rapor ERISILEMEZ
+        // hale gelmisti; bu o regresyonu kapatir.)
+        await prisma.report.update({
+          where: { orderId: flow.orderId },
+          data: { devAccessSecret: encryptSecret(accessSecret) },
+        });
 
         // TODO: e-posta gonderim servisine baglan — accessSecret'i rapor indirme
         // linkinden AYRI bir e-postada musteriye ilet.
