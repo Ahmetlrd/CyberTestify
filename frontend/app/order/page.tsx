@@ -8,6 +8,7 @@ import { readRegionCookie } from '../../lib/region';
 import { getRegion, type RegionCode } from '../../config/regions';
 import { formatMoney } from '../../config/i18n';
 import { DynamicContract } from '../../components/DynamicContract';
+import { PACKAGE_CATEGORIES } from '../../components/CategoryAccordions';
 
 type ActiveTest = { scope: { does: string[]; doesNot: string[] }; riskText: string; consentVersion: string };
 type Pkg = {
@@ -32,6 +33,8 @@ export default function OrderPage() {
   const [bundles, setBundles] = useState<any[]>([]);
   const [selectedBundle, setSelectedBundle] = useState<any | null>(null);
   const [bundleModules, setBundleModules] = useState<string[]>([]);
+  // Tekil paket kategori akordeonlari (paketler sayfasiyla ayni duzen) — varsayilan KAPALI.
+  const [openCats, setOpenCats] = useState<Record<string, boolean>>({});
   const [region, setRegion] = useState<RegionCode>('tr');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -338,26 +341,59 @@ export default function OrderPage() {
       <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">
         {bundles.length > 0 ? 'veya tek paket seçin' : '1 · Paket seçin'}
       </h2>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        {packages.map((p) => {
-          const on = selected === p.key;
+      <div className="mt-3 space-y-3">
+        {PACKAGE_CATEGORIES.map((cat) => {
+          const items = cat.keys.map((k) => packages.find((p) => p.key === k)).filter(Boolean) as Pkg[];
+          if (items.length === 0) return null;
+          // Secili paket bu kategorideyse acik tut; aksi halde kullanici tercihine gore.
+          const hasSelected = items.some((p) => p.key === selected);
+          const isOpen = !!openCats[cat.id] || hasSelected;
           return (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => { setSelected(p.key); setSelectedBundle(null); }}
-              className={`card p-4 text-left transition ${on ? 'ring-2 ring-accent' : 'hover:border-brand-300'}`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="font-bold text-brand">{p.displayName}</span>
-                <span className={`mt-0.5 h-4 w-4 shrink-0 rounded-full border ${on ? 'border-accent bg-accent' : 'border-line'}`} />
-              </div>
-              <p className="mt-1 text-xs leading-relaxed text-ink-soft">{p.description}</p>
-              <p className="mt-2 font-bold text-ink">
-                {formatMoney(p.priceMinorUnit, getRegion(region))}{' '}
-                <span className="text-xs font-normal text-ink-muted">· KDV Dahildir</span>
-              </p>
-            </button>
+            <div key={cat.id} className="overflow-hidden rounded-card border border-line bg-white">
+              <button
+                type="button"
+                onClick={() => setOpenCats((o) => ({ ...o, [cat.id]: !o[cat.id] }))}
+                aria-expanded={isOpen}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-brand-50/40"
+              >
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-bold text-brand">{cat.tr}</span>
+                  <span className="text-xs text-ink-muted">· {items.length} kontrol içerir</span>
+                  {cat.auth && (
+                    <span className="rounded-pill bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">⚠ Yetkilendirme Beyanı Gerekir</span>
+                  )}
+                  {hasSelected && <span className="rounded-pill bg-accent px-2 py-0.5 text-[10px] font-bold text-ink">seçili</span>}
+                </span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className={`shrink-0 text-ink-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden>
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {isOpen && (
+                <div className="grid gap-3 border-t border-line p-4 sm:grid-cols-2">
+                  {items.map((p) => {
+                    const on = selected === p.key;
+                    return (
+                      <button
+                        key={p.key}
+                        type="button"
+                        onClick={() => { setSelected(p.key); setSelectedBundle(null); }}
+                        className={`card p-4 text-left transition ${on ? 'ring-2 ring-accent' : 'hover:border-brand-300'}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-bold text-brand">{p.displayName}</span>
+                          <span className={`mt-0.5 h-4 w-4 shrink-0 rounded-full border ${on ? 'border-accent bg-accent' : 'border-line'}`} />
+                        </div>
+                        <p className="mt-1 text-xs leading-relaxed text-ink-soft">{p.description}</p>
+                        <p className="mt-2 font-bold text-ink">
+                          {formatMoney(p.priceMinorUnit, getRegion(region))}{' '}
+                          <span className="text-xs font-normal text-ink-muted">· KDV Dahildir</span>
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>

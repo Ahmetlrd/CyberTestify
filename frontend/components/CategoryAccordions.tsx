@@ -8,7 +8,8 @@ import { formatMoney } from '../config/i18n';
 type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string };
 
 // Satis-odakli kategori sirasi (teknik degil). keys: o kategoriye ait paket key'leri.
-const CATEGORIES: Array<{ id: string; tr: string; en: string; keys: string[]; auth: boolean }> = [
+// TEK KAYNAK — hem paketler sayfasi (bu bilesen) hem /order sayfasi kullanir.
+export const PACKAGE_CATEGORIES: Array<{ id: string; tr: string; en: string; keys: string[]; auth: boolean }> = [
   {
     id: 'passive',
     tr: 'Pasif Taramalar',
@@ -63,7 +64,7 @@ export function CategoryAccordions({
 
   return (
     <div className="space-y-3">
-      {CATEGORIES.map((cat) => {
+      {PACKAGE_CATEGORIES.map((cat) => {
         // Yalnizca bu bolgede/satista MEVCUT paketler (ör. KVKK TR-dışı listede yok).
         const items = cat.keys.map((k) => byKey.get(k)).filter(Boolean) as Pkg[];
         if (items.length === 0) return null;
