@@ -32,9 +32,17 @@ authRouter.post('/register', async (req, res) => {
       },
     });
   } catch (err: any) {
-    // Prisma P2002: e-posta zaten kayitli. Bu YAKALANMAYINCA 500 "sunucu hatasi"
-    // olarak dusuyordu (musteri "zaten uye" oldugunu goremiyordu). Dostane 409 don.
+    // Prisma P2002: e-posta ZATEN kayitli.
     if (err?.code === 'P2002') {
+      // UX: girilen sifre o hesabin GERCEK sifresiyle eslesiyorsa, kullaniciyi
+      // surtunmeden DOGRUDAN giris yaptir (login akisiyla ayni token). Bu yol da
+      // /auth authLimiter'i altinda (login ile ayni) -> enumeration/brute-force korumasi geçerli.
+      const existing = await prisma.customer.findUnique({ where: { email: parsed.data.email } });
+      if (existing && (await bcrypt.compare(parsed.data.password, existing.passwordHash))) {
+        const token = jwt.sign({ sub: existing.id }, config.jwtSecret, { expiresIn: '7d' });
+        return res.json({ token, autoLogin: true });
+      }
+      // Sifre yanlis -> mevcut dostane mesaj (degistirilmedi).
       return res.status(409).json({ error: 'Bu e-posta ile zaten bir hesap var. Lutfen giris yapin.' });
     }
     throw err;

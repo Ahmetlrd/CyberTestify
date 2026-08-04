@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../lib/api';
+import { PasswordInput } from '../../components/PasswordInput';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function RegisterPage() {
   }, [router, next]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [terms, setTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,6 +25,11 @@ export default function RegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    // Sifre tekrari client-side dogrulama — eslesmiyorsa gonderme.
+    if (password !== confirm) {
+      setError('Şifreler eşleşmiyor — lütfen iki alana da aynı şifreyi girin.');
+      return;
+    }
     if (!terms) {
       setError('Devam etmek için Kullanım Koşulları ve KVKK Aydınlatma Metni onayı gereklidir.');
       return;
@@ -50,14 +57,20 @@ export default function RegisterPage() {
           </div>
           <div>
             <label className="label">Şifre (en az 8 karakter)</label>
-            <input
-              type="password"
+            <PasswordInput required minLength={8} autoComplete="new-password" value={password} onChange={setPassword} />
+          </div>
+          <div>
+            <label className="label">Şifre (Tekrar)</label>
+            <PasswordInput
               required
               minLength={8}
-              className="field"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              value={confirm}
+              onChange={setConfirm}
             />
+            {confirm.length > 0 && confirm !== password && (
+              <p className="mt-1 text-xs text-red-600">Şifreler eşleşmiyor.</p>
+            )}
           </div>
 
           <label className="flex items-start gap-2.5 text-sm text-ink-soft">

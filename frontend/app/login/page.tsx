@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../lib/api';
+import { PasswordInput } from '../../components/PasswordInput';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -45,7 +46,7 @@ export default function LoginPage() {
           </div>
           <div>
             <label className="label">Şifre</label>
-            <input type="password" required className="field" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <PasswordInput required autoComplete="current-password" value={password} onChange={setPassword} />
           </div>
           {error && <p className="form-error">{error}</p>}
           <button type="submit" disabled={busy} className="btn-primary w-full disabled:opacity-60">
