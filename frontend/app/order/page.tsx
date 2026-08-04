@@ -308,6 +308,7 @@ export default function OrderPage() {
                     <span className="font-bold">{formatMoney(b.amountMinorUnit, getRegion(region))}</span>{' '}
                     <span className="text-[11px] text-ink-muted">· fiyat onay bekliyor</span>
                   </p>
+                  <p className="mt-1 text-[11px] text-ink-muted">Tahmini süre: içeriğe göre değişir (üyeler sırayla)</p>
                 </button>
               );
             })}
@@ -377,7 +378,7 @@ export default function OrderPage() {
               >
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-bold text-brand">{cat.tr}</span>
-                  <span className="text-xs text-ink-muted">· {items.length} kontrol içerir</span>
+                  <span className="text-xs text-ink-muted">· {items.length} kontrol içerir · Tahmini süre {cat.estTr}</span>
                   {cat.auth && (
                     <span className="rounded-pill bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">⚠ Yetkilendirme Beyanı Gerekir</span>
                   )}
@@ -407,6 +408,7 @@ export default function OrderPage() {
                           {formatMoney(p.priceMinorUnit, getRegion(region))}{' '}
                           <span className="text-xs font-normal text-ink-muted">· KDV Dahildir</span>
                         </p>
+                        <p className="mt-1 text-[11px] text-ink-muted">Tahmini süre: {cat.estTr}</p>
                       </button>
                     );
                   })}

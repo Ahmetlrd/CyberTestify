@@ -61,8 +61,8 @@ const tr: Dict = {
   hero: {
     badge: 'Tamamen otonom AI · İnsan pentester beklemeyin',
     titleA: 'Sitenizin güvenliğini,',
-    titleHi: '5 dakikada',
-    titleB: 'otonom yapay zeka ile test edin',
+    titleHi: 'dakikalar içinde',
+    titleB: 'otonom yapay zeka ile başlatın',
     subtitle:
       'Karmaşık demo görüşmesi yok, satış ekibi beklemek yok. Alan adınızı doğrulayın, paketinizi seçin, şifreli raporunuzu alın.',
     ctaPrimary: 'Ücretsiz Doğrula ve Başla',
@@ -147,7 +147,7 @@ const en: Dict = {
     badge: 'Fully autonomous AI · No waiting for a human pentester',
     titleA: 'Test your website’s security with',
     titleHi: 'autonomous AI',
-    titleB: 'in 5 minutes',
+    titleB: 'starting in minutes',
     subtitle:
       'No sales calls, no demo scheduling. Verify your domain, pick a package, get your encrypted report.',
     ctaPrimary: 'Verify Free & Start',

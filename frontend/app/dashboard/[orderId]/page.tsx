@@ -146,22 +146,33 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
 
       {status === 'scan_queued' && order?.queue && (
         <div className="mt-4 rounded-card border border-accent/40 bg-accent-soft/40 px-4 py-3 text-sm text-ink-soft">
-          {order.queue.peopleAhead > 0 ? (
-            <>
-              <strong>Sıradasınız.</strong> Önünüzde <strong>{order.queue.peopleAhead}</strong> tarama var; tahmini
-              bekleme{' '}
-              <strong>
-                {order.queue.etaMinutes >= 60
-                  ? `~${Math.round((order.queue.etaMinutes / 60) * 10) / 10} saat`
-                  : `~${order.queue.etaMinutes} dakika`}
-              </strong>
-              . Taramalar tek tek yapıldığı için sıranız gelince otomatik başlar.
-            </>
-          ) : (
-            <>
-              <strong>Sıra sizde.</strong> Taramanız birazdan başlıyor — bu sayfa otomatik güncelleniyor.
-            </>
-          )}
+          {(() => {
+            const ahead = order.queue.peopleAhead ?? 0;
+            const eta = order.queue.etaMinutes;
+            const hasEta = typeof eta === 'number' && eta > 0;
+            const etaLabel = hasEta
+              ? eta >= 60
+                ? `yaklaşık ${Math.round((eta / 60) * 10) / 10} saat`
+                : `yaklaşık ${eta} dakika`
+              : null;
+            if (ahead > 0) {
+              return (
+                <>
+                  <strong>Şu an önünüzde {ahead} tarama var.</strong>{' '}
+                  {etaLabel
+                    ? <>Tahminen <strong>{etaLabel}</strong> sonra taramanız başlayacak. </>
+                    : <>Taramanız kısa süre içinde başlayacak. </>}
+                  Taramalar tek tek yapıldığı için sıra size gelince otomatik başlar; bu sayfa güncel kalır,
+                  kapatsanız bile durumu buradan takip edebilirsiniz.
+                </>
+              );
+            }
+            return (
+              <>
+                <strong>Sıra sizde — taramanız birazdan başlıyor.</strong> Bu sayfa otomatik güncelleniyor.
+              </>
+            );
+          })()}
         </div>
       )}
 

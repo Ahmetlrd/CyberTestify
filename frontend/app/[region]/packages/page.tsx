@@ -139,6 +139,11 @@ export default async function PackagesPage({ params }: { params: { region: strin
                       <div className="mt-0.5 text-[11px] text-ink-muted">
                         {region.code === 'tr' ? 'Fiyat onay bekliyor (placeholder)' : 'Price pending approval (placeholder)'}
                       </div>
+                      <div className="mt-1 text-[11px] text-ink-soft">
+                        {region.code === 'tr'
+                          ? 'Tahmini süre: içeriğe göre değişir (üye taramalar sırayla çalışır)'
+                          : 'Est. time: varies by content (member scans run sequentially)'}
+                      </div>
                     </div>
                     <Link href={`/verify?bundle=${b.key}`} className="btn-primary mt-6 w-full">
                       {region.code === 'tr' ? 'Satın Al' : 'Buy Now'}

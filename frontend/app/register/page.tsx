@@ -42,7 +42,7 @@ export default function RegisterPage() {
     <main className="container-page max-w-md py-16">
       <div className="card p-8">
         <h1 className="text-2xl font-extrabold text-brand">Hesap Oluştur</h1>
-        <p className="mt-1 text-sm text-ink-muted">Doğrulama ücretsiz — 5 dakikada başlayın.</p>
+        <p className="mt-1 text-sm text-ink-muted">Doğrulama ücretsiz — dakikalar içinde başlayın.</p>
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
             <label className="label">E-posta</label>

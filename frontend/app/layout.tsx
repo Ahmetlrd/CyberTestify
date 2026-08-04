@@ -13,9 +13,9 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata = {
-  title: 'CyberTestify — 5 Dakikada Otonom Güvenlik Taraması',
+  title: 'CyberTestify — Dakikalar İçinde Başlayan Otonom Güvenlik Taraması',
   description:
-    'Sitenizin güvenliğini, tamamen otonom yapay zeka ile 5 dakikada test edin. KVKK uyumlu, şifreli raporlama, yalnızca doğrulanmış alan adları.',
+    'Sitenizin güvenliğini tamamen otonom yapay zeka ile dakikalar içinde başlatın; süre pakete/kapsama göre değişir. KVKK uyumlu, şifreli raporlama, yalnızca doğrulanmış alan adları.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

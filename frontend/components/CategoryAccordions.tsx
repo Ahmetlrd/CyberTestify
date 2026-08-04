@@ -9,13 +9,17 @@ type Pkg = { key: string; displayName: string; description: string; priceMinorUn
 
 // Satis-odakli kategori sirasi (teknik degil). keys: o kategoriye ait paket key'leri.
 // TEK KAYNAK — hem paketler sayfasi (bu bilesen) hem /order sayfasi kullanir.
-export const PACKAGE_CATEGORIES: Array<{ id: string; tr: string; en: string; keys: string[]; auth: boolean }> = [
+// est: kategoriye gore GERCEKCI tahmini tarama SURESI araligi (gecmis flow'lardan gozlemlenen
+// mertebe; kesin taahhut DEGIL). Her pakette bir sure beklentisi bulunsun diye.
+export const PACKAGE_CATEGORIES: Array<{ id: string; tr: string; en: string; keys: string[]; auth: boolean; estTr: string; estEn: string }> = [
   {
     id: 'passive',
     tr: 'Pasif Taramalar',
     en: 'Passive Scans',
     keys: ['basit_tarama', 'ssl_tls', 'header_leak', 'dns_email', 'cms_cve', 'cors_cookie', 'csp_analiz', 'subdomain_takeover', 'api_discovery'],
     auth: false,
+    estTr: '~3-8 dakika',
+    estEn: '~3-8 min',
   },
   {
     id: 'compliance',
@@ -23,6 +27,8 @@ export const PACKAGE_CATEGORIES: Array<{ id: string; tr: string; en: string; key
     en: 'Compliance Checks',
     keys: ['kvkk_hazirlik', 'pci_hazirlik', 'iso27001_hazirlik'],
     auth: false,
+    estTr: '~5-15 dakika',
+    estEn: '~5-15 min',
   },
   {
     id: 'active',
@@ -30,6 +36,8 @@ export const PACKAGE_CATEGORIES: Array<{ id: string; tr: string; en: string; key
     en: 'Active Verification',
     keys: ['injection_verify', 'idor_verify', 'ssrf_verify', 'file_upload_verify', 'business_logic_verify', 'race_massassign_verify', 'rce_verify'],
     auth: true,
+    estTr: '~10-25 dakika',
+    estEn: '~10-25 min',
   },
   {
     id: 'advanced',
@@ -37,6 +45,8 @@ export const PACKAGE_CATEGORIES: Array<{ id: string; tr: string; en: string; key
     en: 'Advanced / Autonomous',
     keys: ['authenticated_scan', 'autonomous_pentest'],
     auth: true,
+    estTr: '~30-60 dakika',
+    estEn: '~30-60 min',
   },
 ];
 
@@ -80,7 +90,7 @@ export function CategoryAccordions({
               <span className="flex flex-wrap items-center gap-2">
                 <span className="text-base font-bold text-brand">{tr ? cat.tr : cat.en}</span>
                 <span className="text-xs text-ink-muted">
-                  · {items.length} {tr ? 'kontrol içerir' : 'checks'}
+                  · {items.length} {tr ? 'kontrol içerir' : 'checks'} · {tr ? 'Tahmini süre' : 'Est.'} {tr ? cat.estTr : cat.estEn}
                 </span>
                 {cat.auth && authBadge}
               </span>
@@ -105,6 +115,12 @@ export function CategoryAccordions({
                     <div className="mt-4">
                       <span className="text-2xl font-extrabold text-ink">{formatMoney(p.priceMinorUnit, region)}</span>
                       <div className="mt-0.5 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahildir' : 'Taxes included'}</div>
+                      <div className="mt-1 inline-flex items-center gap-1 text-xs text-ink-soft">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                          <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" strokeLinecap="round" />
+                        </svg>
+                        {tr ? 'Tahmini süre:' : 'Est. time:'} {tr ? cat.estTr : cat.estEn}
+                      </div>
                     </div>
                     <Link href={`/verify?package=${p.key}`} className="btn-outline mt-4 w-full">
                       {tr ? 'Satın Al' : 'Buy Now'}
