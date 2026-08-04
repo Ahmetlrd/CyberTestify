@@ -48,11 +48,14 @@ export const iyzicoProvider: PaymentProvider = {
       include: { customer: true, package: true, domain: true },
     });
     if (config.mockPayment) return mockInitiate(orderId, 'iyzico');
-    // Gercek anahtar yoksa: mock'a DUSME (produksiyonda odeme almadan tarama baslamamali).
-    // Temiz, musteriye donuk hata — createOrder bunu yakalayip siparisi awaiting_payment
-    // birakir (tarama BASLAMAZ).
+    // Gercek anahtar YOKSA: mock'a DUSME (odeme almadan tarama baslamamali). Bunun yerine
+    // kendi GORSEL odeme sayfamiza (/pay/<orderId>) yonlendir — gercek gorunumlu iyzico
+    // CheckoutForm placeholder'i. O sayfa siparisi ASLA otomatik 'paid' yapmaz (form submit
+    // yalniz "altyapi yapilandirma asamasinda" mesaji gosterir). Anahtar gelince bu dal
+    // otomatik devre disi kalir (asagidaki gercek CheckoutForm'a gecer) — TEK route.
     if (!config.iyzico.apiKey || !config.iyzico.secretKey) {
-      throw new Error('Ödeme sistemi şu an aktif değil. Lütfen daha sonra tekrar deneyin.');
+      await prisma.order.update({ where: { id: orderId }, data: { paymentProvider: 'placeholder' } });
+      return { paymentPageUrl: `${config.frontendUrl}/pay/${orderId}`, conversationId: orderId };
     }
 
     const conversationId = order.id;
