@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '../../../lib/api';
 
 /**
@@ -15,7 +15,13 @@ import { api } from '../../../lib/api';
  */
 export default function PayPage({ params }: { params: { orderId: string } }) {
   const router = useRouter();
+  // Kombine paket (bundle) satin alinca birden fazla siparis olusur; bundle sipariş
+  // id'leri ?bundle=id1,id2,... ile gelir -> hepsini cekip TOPLAM tutari gosteririz.
+  const bundleParam = useSearchParams().get('bundle');
+  const bundleIds = bundleParam ? bundleParam.split(',').filter(Boolean) : null;
+
   const [order, setOrder] = useState<any>(null);
+  const [orders, setOrders] = useState<any[] | null>(null); // bundle: tüm üye siparişler
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
@@ -29,12 +35,22 @@ export default function PayPage({ params }: { params: { orderId: string } }) {
       router.push('/login');
       return;
     }
-    api.getOrder(params.orderId).then(setOrder).catch((e) => setError(e.message));
-  }, [params.orderId, router]);
+    if (bundleIds && bundleIds.length > 0) {
+      Promise.all(bundleIds.map((id) => api.getOrder(id)))
+        .then((list) => { setOrders(list); setOrder(list[0]); })
+        .catch((e) => setError(e.message));
+    } else {
+      api.getOrder(params.orderId).then(setOrder).catch((e) => setError(e.message));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.orderId, router, bundleParam]);
 
+  const currency = order?.currency ?? 'TRY';
+  const totalMinor = orders ? orders.reduce((s, o) => s + (o.amountMinorUnit ?? 0), 0) : order?.amountMinorUnit ?? 0;
   const amountLabel = order
-    ? `${(order.amountMinorUnit / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${order.currency === 'TRY' ? 'TL' : order.currency}`
+    ? `${(totalMinor / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${currency === 'TRY' ? 'TL' : currency}`
     : '…';
+  const isBundle = !!orders && orders.length > 1;
 
   function fmtCard(v: string) {
     return v.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
@@ -84,7 +100,14 @@ export default function PayPage({ params }: { params: { orderId: string } }) {
         <div className="flex items-baseline justify-between border-b border-line px-5 py-4">
           <div>
             <div className="text-xs text-ink-muted">Ödenecek tutar</div>
-            {order?.domain?.hostname && <div className="text-sm text-ink-soft">{order.domain.hostname} taraması</div>}
+            {isBundle ? (
+              <div className="text-sm text-ink-soft">
+                Kombine paket — <strong>{orders!.length} tarama</strong>
+                {order?.domain?.hostname && <> · {order.domain.hostname}</>}
+              </div>
+            ) : (
+              order?.domain?.hostname && <div className="text-sm text-ink-soft">{order.domain.hostname} taraması</div>
+            )}
           </div>
           <div className="text-right">
             <div className="text-2xl font-extrabold text-brand">{amountLabel}</div>

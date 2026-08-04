@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 import { getDict, formatMoney } from '../../../config/i18n';
+import { CategoryAccordions } from '../../../components/CategoryAccordions';
 
 type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string };
 type Bundle = {
@@ -92,33 +93,68 @@ export default async function PackagesPage({ params }: { params: { region: strin
               </p>
             </div>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {bundles.map((b) => (
-                <div key={b.key} className="card relative flex flex-col border-2 border-accent/40 p-6">
-                  <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
-                    %{b.discountPct} {region.code === 'tr' ? 'indirim' : 'off'}
-                  </span>
-                  <h3 className="text-lg font-bold text-brand">{b.displayName}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-ink-soft">{b.description}</p>
-                  <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
-                    <span className="font-semibold">{region.code === 'tr' ? 'İçindekiler' : 'Includes'}:</span>{' '}
-                    {(b.selectable ? b.selectableModules ?? [] : b.members).map((m) => m.displayName).join(' · ')}
-                    {b.selectable && (region.code === 'tr' ? ' (seçmeli)' : ' (pick modules)')}
-                  </div>
-                  <div className="mt-4 flex-1">
-                    <span className="text-sm text-ink-muted line-through">{formatMoney(b.originalMinorUnit, region)}</span>
-                    <div>
-                      <span className="text-3xl font-extrabold text-ink">{formatMoney(b.amountMinorUnit, region)}</span>
-                      <span className="ml-1 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahil' : 'incl. tax'}</span>
+              {bundles.map((b) => {
+                // X/Y/Z otomatik: tekil toplam (X), paket (Y), avantaj yuzdesi/tutari (Z).
+                const savedMinor = b.originalMinorUnit - b.amountMinorUnit;
+                const savedPct = b.originalMinorUnit > 0 ? Math.round((savedMinor / b.originalMinorUnit) * 100) : 0;
+                return (
+                  <div key={b.key} className="card relative flex flex-col border-2 border-accent/40 p-6">
+                    <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
+                      %{savedPct} {region.code === 'tr' ? 'avantaj' : 'off'}
+                    </span>
+                    <h3 className="text-lg font-bold text-brand">{b.displayName}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-ink-soft">{b.description}</p>
+                    {b.selectable ? (
+                      <div className="mt-3 rounded-card border border-accent/40 bg-accent-soft/30 px-3 py-2 text-xs text-ink-soft">
+                        <span className="font-semibold">{region.code === 'tr' ? 'İçerik seçilebilir' : 'Content is selectable'}</span>{' '}
+                        — {region.code === 'tr'
+                          ? `${(b.selectableModules ?? []).map((m) => m.displayName).join(' / ')}'den istediğinizi seçin`
+                          : `pick any of ${(b.selectableModules ?? []).map((m) => m.displayName).join(' / ')}`}
+                      </div>
+                    ) : (
+                      <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
+                        <span className="font-semibold">{region.code === 'tr' ? 'İçindekiler' : 'Includes'}:</span>{' '}
+                        {b.members.map((m) => m.displayName).join(' · ')}
+                      </div>
+                    )}
+                    <div className="mt-4 flex-1">
+                      <div>
+                        <span className="text-3xl font-extrabold text-ink">{formatMoney(b.amountMinorUnit, region)}</span>
+                        <span className="ml-1 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahil' : 'incl. tax'}</span>
+                      </div>
+                      {/* Otomatik indirim satiri: Tek tek alinsaydi X -> Paket Y (%Z avantaj) */}
+                      <div className="mt-1.5 text-xs text-emerald-700">
+                        {region.code === 'tr' ? (
+                          <>
+                            Tek tek alınsaydı <span className="line-through">{formatMoney(b.originalMinorUnit, region)}</span> →{' '}
+                            <strong>{formatMoney(b.amountMinorUnit, region)}</strong> ({formatMoney(savedMinor, region)} / %{savedPct} avantaj)
+                          </>
+                        ) : (
+                          <>
+                            Separately <span className="line-through">{formatMoney(b.originalMinorUnit, region)}</span> →{' '}
+                            <strong>{formatMoney(b.amountMinorUnit, region)}</strong> (save {formatMoney(savedMinor, region)} / {savedPct}%)
+                          </>
+                        )}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-ink-muted">
+                        {region.code === 'tr' ? 'Fiyat onay bekliyor (placeholder)' : 'Price pending approval (placeholder)'}
+                      </div>
                     </div>
-                    <div className="mt-0.5 text-[11px] text-ink-muted">
-                      {region.code === 'tr' ? 'Fiyat onay bekliyor (placeholder)' : 'Price pending approval (placeholder)'}
-                    </div>
+                    <Link href="/register" className="btn-primary mt-6 w-full">
+                      {region.code === 'tr' ? 'Satın Al' : 'Buy Now'}
+                    </Link>
                   </div>
-                  <Link href="/register" className="btn-primary mt-6 w-full">
-                    {region.code === 'tr' ? 'Satın Al' : 'Buy Now'}
-                  </Link>
-                </div>
-              ))}
+                );
+              })}
+            </div>
+
+            {/* Bundle -> tekil gecis metni + ok */}
+            <div className="mt-10 text-center">
+              <p className="text-sm font-medium text-ink-soft">
+                {region.code === 'tr'
+                  ? 'Sadece tek bir kontrol mü istiyorsunuz? Aşağıdaki kategorilerden seçebilirsiniz ↓'
+                  : 'Just want a single check? Pick from the categories below ↓'}
+              </p>
             </div>
           </div>
         )}
@@ -131,45 +167,18 @@ export default async function PackagesPage({ params }: { params: { region: strin
             </Link>
           </p>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {packages.map((p) => {
-              const popular = p.key === POPULAR_KEY;
-              return (
-                <div key={p.key} className={`card relative flex flex-col p-6 ${popular ? 'ring-2 ring-accent' : ''}`}>
-                  {popular && (
-                    <span className="absolute -top-3 left-6 rounded-pill bg-accent px-3 py-1 text-xs font-bold text-ink">
-                      {d.popular}
-                    </span>
-                  )}
-                  <h2 className="text-lg font-bold text-brand">{p.displayName}</h2>
-                  <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-soft">{p.description}</p>
-                  <div className="mt-5">
-                    <span className="text-3xl font-extrabold text-ink">{formatMoney(p.priceMinorUnit, region)}</span>
-                    <span className="ml-1 text-xs text-ink-muted">{d.perScan}</span>
-                    <div className="mt-0.5 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahildir' : 'Taxes included'}</div>
-                  </div>
-                  <Link href="/register" className={`mt-6 w-full ${popular ? 'btn-primary' : 'btn-outline'}`}>
-                    {d.selectCta}
-                  </Link>
-                  <a
-                    href={`${API}/orders/sample-report/${p.key}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 text-center text-xs font-semibold text-accent-600 underline underline-offset-2 hover:text-accent"
-                  >
-                    {region.code === 'tr' ? 'Örnek Raporu Gör (PDF)' : 'View Sample Report (PDF)'}
-                  </a>
-                </div>
-              );
-            })}
+          <>
+            {/* Tekil kontroller — kategori akordeonlari (varsayilan KAPALI) */}
+            <CategoryAccordions packages={packages} regionCode={region.code} apiUrl={API} />
 
-            <div className="card flex flex-col border-dashed p-6">
+            {/* BYOK (yakinda) — kategorilerin altinda ayri kart */}
+            <div className="card mt-6 flex flex-col border-dashed p-6 md:max-w-md">
               <span className="badge w-fit">{d.byokBadge}</span>
               <h2 className="mt-3 text-lg font-bold text-brand">{d.byokTitle}</h2>
               <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-soft">{d.byokDesc}</p>
               <span className="btn-ghost mt-6 w-full cursor-default">{d.soon}</span>
             </div>
-          </div>
+          </>
         )}
 
         <div className="mt-14 rounded-[20px] bg-brand-deep px-8 py-12 text-center text-white">

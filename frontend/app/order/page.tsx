@@ -189,8 +189,13 @@ export default function OrderPage() {
         authCredentials: needsAuth ? { username: authUser.trim(), password: authPass } : undefined,
         promoCode: promo?.valid ? promo.code : undefined,
       });
-      // %100 promo -> ilk siparisin paneline; aksi halde (placeholder odeme) yine panele git.
-      router.push(`/dashboard/${res.orderIds[0]}`);
+      // %100 promo -> odeme YOK, dogrudan siparis paneli. Aksi halde ODEME EKRANINA
+      // (/pay) git — tum uye siparisleri ?bundle= ile toplam tutarla gosterilir.
+      if (res.paidWithPromo) {
+        router.push(`/dashboard/${res.orderIds[0]}`);
+      } else {
+        router.push(`/pay/${res.orderIds[0]}?bundle=${res.orderIds.join(',')}`);
+      }
     } catch (err: any) {
       setError(err.message);
       setBusy(false);
