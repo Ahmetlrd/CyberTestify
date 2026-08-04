@@ -28,6 +28,10 @@ export default function OrderPage() {
   const domainId = useSearchParams().get('domainId');
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  // Kombine paket (bundle) modu — bir bundle secilince tekil akis (recurring/kredi/promo) gizlenir.
+  const [bundles, setBundles] = useState<any[]>([]);
+  const [selectedBundle, setSelectedBundle] = useState<any | null>(null);
+  const [bundleModules, setBundleModules] = useState<string[]>([]);
   const [region, setRegion] = useState<RegionCode>('tr');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -75,6 +79,7 @@ export default function OrderPage() {
     const rc = readRegionCookie();
     setRegion(rc);
     api.listPackages(rc).then(setPackages).catch((err) => setError(err.message));
+    api.listBundles(rc).then(setBundles).catch(() => {});
     api.getCredits().then((c) => { setBalance(c.balance); setCreditUnit(c.creditUnitValueMinor); }).catch(() => {});
     api.getQueueStatus().then(setQueue).catch(() => {}); // sessiz — uyari opsiyonel
   }, [router]);
@@ -161,6 +166,37 @@ export default function OrderPage() {
     }
   }
 
+  async function handleBundleStart() {
+    if (!domainId || busy || !selectedBundle) return;
+    if (!allConsents) return setError('Devam etmek için üç onayın tümünü işaretlemelisiniz.');
+    const isAL = selectedBundle.category === 'active-light';
+    if (isAL && !atRisk) return setError('Aktif test için risk kabul kutusunu işaretlemelisiniz.');
+    const needsAuth = selectedBundle.members?.some((m: any) => m.key === 'authenticated_scan');
+    if (needsAuth && (!authUser.trim() || !authPass)) return setError('Bu paket için test hesabı bilgileri gerekli.');
+    if (selectedBundle.selectable && bundleModules.length === 0) return setError('En az bir modül seçin.');
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.createBundleOrder({
+        domainId,
+        bundleKey: selectedBundle.key,
+        selectedModules: selectedBundle.selectable ? bundleModules : undefined,
+        ownershipConfirmed: authConsent,
+        distanceContractAccepted: contractConsent,
+        withdrawalWaived: contractConsent,
+        region,
+        activeTestConsent: isAL ? { riskAccepted: atRisk } : undefined,
+        authCredentials: needsAuth ? { username: authUser.trim(), password: authPass } : undefined,
+        promoCode: promo?.valid ? promo.code : undefined,
+      });
+      // %100 promo -> ilk siparisin paneline; aksi halde (placeholder odeme) yine panele git.
+      router.push(`/dashboard/${res.orderIds[0]}`);
+    } catch (err: any) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
   const consents: Array<[boolean, (v: boolean) => void, React.ReactNode]> = [
     [
       authConsent,
@@ -219,8 +255,84 @@ export default function OrderPage() {
         </p>
       )}
 
+      {/* Kombine paketler (opsiyonel) — birden fazla kontrolü indirimli birlikte al */}
+      {bundles.length > 0 && (
+        <>
+          <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">
+            Kombine Paketler <span className="font-normal normal-case text-ink-muted">(opsiyonel — indirimli)</span>
+          </h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {bundles.map((b) => {
+              const on = selectedBundle?.key === b.key;
+              return (
+                <button
+                  key={b.key}
+                  type="button"
+                  onClick={() => { setSelectedBundle(on ? null : b); setSelected(null); setBundleModules([]); }}
+                  className={`card p-4 text-left transition ${on ? 'ring-2 ring-brand' : 'hover:border-brand-300'}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-bold text-brand">{b.displayName}</span>
+                    <span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold text-white">%{b.discountPct}</span>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
+                  <p className="mt-2 text-ink">
+                    <span className="text-xs text-ink-muted line-through">{formatMoney(b.originalMinorUnit, getRegion(region))}</span>{' '}
+                    <span className="font-bold">{formatMoney(b.amountMinorUnit, getRegion(region))}</span>{' '}
+                    <span className="text-[11px] text-ink-muted">· fiyat onay bekliyor</span>
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+          {selectedBundle && selectedBundle.selectable && selectedBundle.selectableModules && (
+            <div className="mt-3 rounded-card border border-line bg-white p-4">
+              <p className="text-sm font-semibold text-ink">Modülleri seçin (en az 1):</p>
+              <div className="mt-2 space-y-2">
+                {selectedBundle.selectableModules.map((m: any) => (
+                  <label key={m.key} className="flex items-center gap-2 text-sm text-ink-soft">
+                    <input
+                      type="checkbox"
+                      checked={bundleModules.includes(m.key)}
+                      onChange={(e) =>
+                        setBundleModules((prev) => (e.target.checked ? [...prev, m.key] : prev.filter((k) => k !== m.key)))
+                      }
+                    />
+                    {m.displayName}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+          {selectedBundle && !selectedBundle.selectable && (
+            <p className="mt-2 text-xs text-ink-muted">
+              İçindekiler: {selectedBundle.members.map((m: any) => m.displayName).join(' · ')}
+            </p>
+          )}
+          {selectedBundle && selectedBundle.category === 'active-light' && (
+            <div className="mt-3 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm">
+              <label className="flex items-start gap-2">
+                <input type="checkbox" checked={atRisk} onChange={(e) => setAtRisk(e.target.checked)} className="mt-0.5" />
+                <span>
+                  Bu paket aktif-hafif doğrulama kontrolleri içerir; yalnızca sahibi/yetkilisi olduğum hedefe karşı
+                  çalıştırılmasına ve ilgili riskleri kabul ettiğime dair beyanı onaylıyorum. (Tüm modüller için tek beyan.)
+                </span>
+              </label>
+              {selectedBundle.members.some((m: any) => m.key === 'authenticated_scan') && (
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <input placeholder="Test hesabı kullanıcı adı" value={authUser} onChange={(e) => setAuthUser(e.target.value)} className="field" />
+                  <input type="password" placeholder="Test hesabı şifresi" value={authPass} onChange={(e) => setAuthPass(e.target.value)} className="field" />
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
       {/* Paket seçimi */}
-      <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">1 · Paket seçin</h2>
+      <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">
+        {bundles.length > 0 ? 'veya tek paket seçin' : '1 · Paket seçin'}
+      </h2>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         {packages.map((p) => {
           const on = selected === p.key;
@@ -228,7 +340,7 @@ export default function OrderPage() {
             <button
               key={p.key}
               type="button"
-              onClick={() => setSelected(p.key)}
+              onClick={() => { setSelected(p.key); setSelectedBundle(null); }}
               className={`card p-4 text-left transition ${on ? 'ring-2 ring-accent' : 'hover:border-brand-300'}`}
             >
               <div className="flex items-start justify-between gap-2">
@@ -471,17 +583,25 @@ export default function OrderPage() {
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
       <button
-        onClick={handleStart}
-        disabled={!domainId || busy || !selected || !allConsents || !activeConsentOk || intlComingSoon}
+        onClick={selectedBundle ? handleBundleStart : handleStart}
+        disabled={
+          selectedBundle
+            ? !domainId || busy || !allConsents || intlComingSoon ||
+              (selectedBundle.category === 'active-light' && !atRisk) ||
+              (selectedBundle.selectable && bundleModules.length === 0)
+            : !domainId || busy || !selected || !allConsents || !activeConsentOk || intlComingSoon
+        }
         className="btn-primary mt-6 w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
       >
         {busy
           ? 'Başlatılıyor…'
-          : recurring
-            ? 'Düzenli Taramayı Kur'
-            : startMode === 'later'
-              ? 'Taramayı Zamanla'
-              : 'Taramayı Başlat'}
+          : selectedBundle
+            ? 'Paketi Satın Al'
+            : recurring
+              ? 'Düzenli Taramayı Kur'
+              : startMode === 'later'
+                ? 'Taramayı Zamanla'
+                : 'Taramayı Başlat'}
       </button>
       <p className="mt-3 text-xs text-ink-muted">
         {recurring || startMode === 'later'

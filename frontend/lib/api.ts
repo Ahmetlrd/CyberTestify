@@ -70,6 +70,26 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ domainId, packageKey, ...consents, region, useCredits, activeTestConsent, authCredentials, promoCode }),
     }),
+  // Kombine paketler (bundle) — bolgesel fiyat + uye listesi.
+  listBundles: (region = 'tr') =>
+    request<
+      Array<{
+        key: string; displayName: string; description: string; discountPct: number;
+        selectable: boolean; selectableModules: Array<{ key: string; displayName: string }> | null;
+        members: Array<{ key: string; displayName: string }>;
+        originalMinorUnit: number; amountMinorUnit: number; currency: string;
+      }>
+    >(`/orders/bundles?region=${region}`),
+  createBundleOrder: (body: {
+    domainId: string; bundleKey: string; selectedModules?: string[];
+    ownershipConfirmed: boolean; distanceContractAccepted: boolean; withdrawalWaived: boolean;
+    region?: string; activeTestConsent?: { riskAccepted: boolean };
+    authCredentials?: { username: string; password: string }; promoCode?: string;
+  }) =>
+    request<{ bundleKey: string; orderIds: string[]; paidWithPromo?: boolean; paymentPending?: boolean; bundleTotalMinorUnit?: number; currency?: string }>(
+      '/orders/bundle',
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
   // Promo kodu onizleme — indirimli fiyati checkout'ta gostermek icin (satin almaz).
   previewPromo: (code: string, packageKey: string, region = 'tr') =>
     request<{

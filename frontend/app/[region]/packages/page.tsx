@@ -4,6 +4,12 @@ import { REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 import { getDict, formatMoney } from '../../../config/i18n';
 
 type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string };
+type Bundle = {
+  key: string; displayName: string; description: string; discountPct: number;
+  members: Array<{ key: string; displayName: string }>;
+  selectable: boolean; selectableModules: Array<{ key: string; displayName: string }> | null;
+  originalMinorUnit: number; amountMinorUnit: number; currency: string;
+};
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const POPULAR_KEY = 'pci_hazirlik';
@@ -28,11 +34,22 @@ async function getPackages(region: string): Promise<Pkg[]> {
   }
 }
 
+async function getBundles(region: string): Promise<Bundle[]> {
+  try {
+    const r = await fetch(`${API}/orders/bundles?region=${region}`, { cache: 'no-store' });
+    if (!r.ok) return [];
+    return (await r.json()) as Bundle[];
+  } catch {
+    return [];
+  }
+}
+
 export default async function PackagesPage({ params }: { params: { region: string } }) {
   if (!isRegionCode(params.region)) notFound();
   const region = getRegion(params.region);
   const d = getDict(region).pkg;
   const packages = await getPackages(region.code);
+  const bundles = await getBundles(region.code);
   // Faz 5b'ye kadar fiyatlar yalnızca TRY tabanlı; TR dışı bölgelerde gösterge
   // niteliğinde (PackagePricing tablosu + bölgesel kalibrasyon gelecek).
   const indicative = region.currency !== 'TRY';
@@ -59,6 +76,51 @@ export default async function PackagesPage({ params }: { params: { region: strin
           <p className="mb-8 rounded-card border border-accent/40 bg-accent-soft/40 px-4 py-3 text-center text-sm text-ink-soft">
             Prices are indicative and will be regionally calibrated before launch in this region.
           </p>
+        )}
+
+        {bundles.length > 0 && (
+          <div className="mb-14">
+            <div className="mb-6 text-center">
+              <p className="eyebrow">{region.code === 'tr' ? 'Kombine Paketler' : 'Combined Bundles'}</p>
+              <h2 className="mt-2 text-2xl font-extrabold text-brand sm:text-3xl">
+                {region.code === 'tr' ? 'Birden fazla kontrolü birlikte alın, indirim kazanın' : 'Bundle multiple checks and save'}
+              </h2>
+              <p className="mx-auto mt-2 max-w-xl text-sm text-ink-soft">
+                {region.code === 'tr'
+                  ? 'Tekil paketler aynen alınabilir; kombine paketler birden fazlasını daha uygun fiyata sunar.'
+                  : 'Single packages remain available; bundles offer several together at a lower price.'}
+              </p>
+            </div>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {bundles.map((b) => (
+                <div key={b.key} className="card relative flex flex-col border-2 border-accent/40 p-6">
+                  <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
+                    %{b.discountPct} {region.code === 'tr' ? 'indirim' : 'off'}
+                  </span>
+                  <h3 className="text-lg font-bold text-brand">{b.displayName}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-ink-soft">{b.description}</p>
+                  <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
+                    <span className="font-semibold">{region.code === 'tr' ? 'İçindekiler' : 'Includes'}:</span>{' '}
+                    {(b.selectable ? b.selectableModules ?? [] : b.members).map((m) => m.displayName).join(' · ')}
+                    {b.selectable && (region.code === 'tr' ? ' (seçmeli)' : ' (pick modules)')}
+                  </div>
+                  <div className="mt-4 flex-1">
+                    <span className="text-sm text-ink-muted line-through">{formatMoney(b.originalMinorUnit, region)}</span>
+                    <div>
+                      <span className="text-3xl font-extrabold text-ink">{formatMoney(b.amountMinorUnit, region)}</span>
+                      <span className="ml-1 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahil' : 'incl. tax'}</span>
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-ink-muted">
+                      {region.code === 'tr' ? 'Fiyat onay bekliyor (placeholder)' : 'Price pending approval (placeholder)'}
+                    </div>
+                  </div>
+                  <Link href="/register" className="btn-primary mt-6 w-full">
+                    {region.code === 'tr' ? 'Satın Al' : 'Buy Now'}
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {packages.length === 0 ? (

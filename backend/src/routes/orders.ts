@@ -13,6 +13,7 @@ import { creditsForPackagePrice, spendCredits, type CreditTx } from '../services
 import { enqueueOrStartScan } from '../services/orchestrator.js';
 import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
+import { COMBO_BUNDLES, getBundle, bundlePrice, resolveMembers } from '../services/bundles.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -57,6 +58,40 @@ ordersRouter.get('/packages', async (req, res) => {
               : null,
         };
       }),
+  );
+});
+
+// KOMBINE PAKETLER (bundle) — mevcut tekil paketleri SILMEZ; birden fazlasini birlikte
+// isteyene indirimli EK secenek. ?region ile bolgesel fiyat + para birimi.
+ordersRouter.get('/bundles', async (req, res) => {
+  const region = typeof req.query.region === 'string' ? req.query.region : 'tr';
+  const locale = localeFor(region);
+  res.json(
+    COMBO_BUNDLES.map((b) => {
+      const price = bundlePrice(b, region);
+      const memberInfo = (keys: string[]) =>
+        keys.map((k) => {
+          const def = SCAN_PACKAGES.find((p) => p.key === k);
+          return { key: k, displayName: def ? localizedPackage(def, locale).displayName : k };
+        });
+      return {
+        key: b.key,
+        displayName: locale === 'en' ? b.displayNameEn : b.displayName,
+        description: locale === 'en' ? b.descriptionEn : b.description,
+        category: b.category,
+        discountPct: b.discountPct,
+        selectable: !!b.selectable,
+        // selectable ise musteri secer; TR disi bolgede trOnly (KVKK) havuzdan ELENIR.
+        selectableModules: b.selectable
+          ? memberInfo((b.selectableKeys ?? []).filter((k) => region === 'tr' || !b.trOnlyKeys?.includes(k)))
+          : null,
+        members: memberInfo(price.memberKeys),
+        originalMinorUnit: price.originalMinorUnit,
+        amountMinorUnit: price.amountMinorUnit,
+        currency: price.currency,
+        pricePlaceholder: true, // fiyatlar onay bekliyor (tekil fiyatlardan turetilmis)
+      };
+    }),
   );
 });
 
@@ -332,6 +367,129 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   }
 
   res.json({ orderId: order.id, ...payment });
+});
+
+// KOMBINE PAKET (bundle) SATIN ALMA — tekil paketleri SILMEDEN, uye paketlerin her biri
+// icin ayri bir siparis olusturur (her uye kendi MEVCUT promptu/guard'iyla calisir; prompt
+// TEKRARI YOK). Tek yetkilendirme beyani tum active-light uyeleri kapsar (ekstra onay YOK).
+const bundleOrderSchema = z.object({
+  domainId: z.string(),
+  bundleKey: z.string(),
+  selectedModules: z.array(z.string()).optional(), // Uyum paketi: secilen moduller
+  ownershipConfirmed: z.literal(true),
+  distanceContractAccepted: z.literal(true),
+  withdrawalWaived: z.literal(true),
+  region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
+  activeTestConsent: z.object({ riskAccepted: z.boolean() }).optional(),
+  authCredentials: z.object({ username: z.string().min(1).max(200), password: z.string().min(1).max(400) }).optional(),
+  promoCode: z.string().trim().max(64).optional(),
+});
+ordersRouter.post('/bundle', requireAuth, async (req, res) => {
+  const parsed = bundleOrderSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { domainId, bundleKey, region } = parsed.data;
+
+  const domain = await prisma.domain.findFirstOrThrow({ where: { id: domainId, customerId: req.customerId! } });
+  if (!isVerificationStillValid(domain)) {
+    return res.status(403).json({ error: 'Domain dogrulanmamis veya dogrulama suresi dolmus.' });
+  }
+
+  const bundle = getBundle(bundleKey);
+  if (!bundle) return res.status(404).json({ error: 'Paket bulunamadi.' });
+  const memberKeys = resolveMembers(bundle, region, parsed.data.selectedModules);
+  if (!memberKeys.length) return res.status(400).json({ error: 'Bu paket icin gecerli modul secilmedi.' });
+
+  const memberDefs = memberKeys.map((k) => ({ key: k, def: getPackageDef(k), profile: securityProfileFor(getPackageDef(k)) }));
+  const anyActiveLight = memberDefs.some((m) => m.profile === 'active-light' || m.profile === 'active-verify-only');
+  const hasAuthScan = memberKeys.includes('authenticated_scan');
+
+  // Tek yetkilendirme beyani TUM active-light uyeleri kapsar (ekstra adim YOK).
+  if (anyActiveLight) {
+    const v = validateConsentInput(parsed.data.activeTestConsent);
+    if (!v.ok) return res.status(400).json({ error: v.error });
+  }
+  if (hasAuthScan && !parsed.data.authCredentials) {
+    return res.status(400).json({ error: 'Kimlik Dogrulamali Tarama iceren pakette test hesabi kullanici adi ve sifresi zorunludur.' });
+  }
+
+  const price = bundlePrice(bundle, region, parsed.data.selectedModules);
+  // Uye basi indirimli pay (toplam ~ bundle fiyati; yuvarlama farki onemsiz).
+  const perMemberAmount = (k: string) =>
+    Math.round(getPricing(k, region).amountMinorUnit * (1 - bundle.discountPct / 100));
+
+  // Promo: bundle TOPLAMINA uygulanir. %100 -> tum uye siparisleri paid + kuyruk (odeme yok).
+  let promoFree = false;
+  let promoApplied: Awaited<ReturnType<typeof evaluatePromo>> | null = null;
+  if (parsed.data.promoCode) {
+    const p = await evaluatePromo(parsed.data.promoCode, price.amountMinorUnit);
+    if (!p.valid) return res.status(400).json({ error: p.error ?? 'Promosyon kodu geçersiz.' });
+    promoApplied = p;
+    promoFree = p.finalAmountMinorUnit === 0;
+  }
+
+  const consent = {
+    ownershipConfirmedAt: new Date(),
+    distanceContractAcceptedAt: new Date(),
+    withdrawalWaivedAt: new Date(),
+    consentIp: req.ip ?? null,
+    consentVersion: config.legalVersion,
+  };
+  const cust = await prisma.customer.findUniqueOrThrow({ where: { id: req.customerId! }, select: { fullName: true, email: true } });
+  const packageDbs = await prisma.scanPackage.findMany({ where: { key: { in: memberKeys as any } } });
+  const dbByKey = new Map(packageDbs.map((p) => [p.key, p]));
+
+  const createdOrderIds: string[] = [];
+  for (const { key, profile } of memberDefs) {
+    const packageDb = dbByKey.get(key as any);
+    if (!packageDb) continue;
+    const isAL = profile === 'active-light' || profile === 'active-verify-only';
+    const { currency } = getPricing(key, region);
+    const order = await prisma.order.create({
+      data: {
+        customerId: req.customerId!,
+        domainId: domain.id,
+        packageId: packageDb.id,
+        amountMinorUnit: perMemberAmount(key),
+        currency,
+        status: promoFree ? 'paid' : 'awaiting_payment',
+        paymentProvider: promoFree ? 'promo' : 'bundle-placeholder',
+        paidAt: promoFree ? new Date() : null,
+        locale: localeFor(region),
+        byokKeyEncrypted: key === 'authenticated_scan' ? encryptSecret(JSON.stringify(parsed.data.authCredentials)) : null,
+        ...consent,
+      },
+    });
+    createdOrderIds.push(order.id);
+    if (isAL) {
+      await prisma.activeTestConsent.create({
+        data: {
+          customerId: req.customerId!, orderId: order.id, packageKey: key as any,
+          legalName: cust.fullName?.trim() || cust.email, companyName: null,
+          riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
+        },
+      });
+    }
+    if (promoFree) await enqueueOrStartScan(order.id); // %100 promo: hemen kuyruga (concurrency=1 sirayla)
+  }
+
+  if (promoFree && promoApplied) {
+    // Bundle icin TEK kullanim kaydi (ilk uye siparisine bagli).
+    await recordPromoUsage(prisma, {
+      code: promoApplied.code!, orderId: createdOrderIds[0], customerId: req.customerId!,
+      original: price.amountMinorUnit, discount: promoApplied.discountMinorUnit!, final: 0,
+    });
+    return res.json({ bundleKey, orderIds: createdOrderIds, paidWithPromo: true });
+  }
+
+  // Odeme placeholder (gercek iyzico anahtari yok): uye siparisleri awaiting_payment.
+  // Tarama BASLAMAZ (mevcut mock-kapali garantisi korunur); odeme canliya gecince tahsil.
+  return res.json({
+    bundleKey,
+    orderIds: createdOrderIds,
+    bundleTotalMinorUnit: price.amountMinorUnit,
+    currency: price.currency,
+    paymentPending: true,
+  });
 });
 
 // Musterinin tum taramalari (panelde listelemek icin — sekme kapatilsa da erisilir).
