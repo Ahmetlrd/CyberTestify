@@ -1,19 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../lib/api';
 
 export default function RegisterPage() {
   const router = useRouter();
-  // Zaten giris yapmis kullaniciyi kayit ekranindan dogrulama akisina al (paket
-  // sayfasindaki "Seç ve Doğrula" logineli kullaniciyi buraya getiriyordu).
+  // ?next: satın-alma akışında paket niyeti kayıt sonrası da korunsun (yoksa /verify).
+  const next = useSearchParams().get('next') || '/verify';
   useEffect(() => {
     if (typeof window !== 'undefined' && window.localStorage.getItem('token')) {
-      router.replace('/verify');
+      router.replace(next);
     }
-  }, [router]);
+  }, [router, next]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [terms, setTerms] = useState(false);
@@ -31,7 +31,7 @@ export default function RegisterPage() {
     try {
       const { token } = await api.register(email, password, terms);
       window.localStorage.setItem('token', token);
-      router.push('/verify');
+      router.push(next);
     } catch (err: any) {
       setError(err.message);
       setBusy(false);
@@ -82,7 +82,7 @@ export default function RegisterPage() {
       </div>
       <p className="mt-5 text-center text-sm text-ink-soft">
         Zaten hesabınız var mı?{' '}
-        <Link href="/login" className="font-semibold text-accent-600 hover:underline">
+        <Link href={`/login?next=${encodeURIComponent(next)}`} className="font-semibold text-accent-600 hover:underline">
           Giriş yapın
         </Link>
       </p>

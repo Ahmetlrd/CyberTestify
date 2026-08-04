@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '../../lib/api';
 
 type Domain = {
@@ -19,6 +19,7 @@ type Order = {
   packageName: string;
   status: string;
   createdAt: string;
+  archived: boolean;
 };
 
 const ORDER_STATUS_LABEL: Record<string, string> = {
@@ -34,10 +35,22 @@ const ORDER_STATUS_LABEL: Record<string, string> = {
   refunded: 'İade edildi',
 };
 
+const HISTORY_PREVIEW = 3;
+
 export default function VerifyHub() {
   const router = useRouter();
+  // Satın-alma akışı: paketler sayfasından "Satın Al" ile gelindiyse paket/bundle taşınır.
+  const params = useSearchParams();
+  const packageParam = params.get('package');
+  const bundleParam = params.get('bundle');
+  const purchaseMode = !!(packageParam || bundleParam);
+  const purchaseQuery = packageParam ? `&package=${packageParam}` : bundleParam ? `&bundle=${bundleParam}` : '';
+
   const [domains, setDomains] = useState<Domain[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [archivedOrders, setArchivedOrders] = useState<Order[] | null>(null);
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newHostname, setNewHostname] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -46,21 +59,26 @@ export default function VerifyHub() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [list, ord] = await Promise.all([api.listDomains(), api.listOrders()]);
+    const [list, ord] = await Promise.all([api.listDomains(), api.listOrders(false)]);
     setDomains(list);
-    setOrders(ord);
+    setOrders(ord as Order[]);
+    if (showArchived) setArchivedOrders((await api.listOrders(true)) as Order[]);
     return list;
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.localStorage.getItem('token')) {
-      router.push('/login');
+      // Satın-alma niyeti korunsun: login sonrası aynı URL'e dön.
+      const next = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/verify';
+      router.push(`/login?next=${encodeURIComponent(next)}`);
       return;
     }
     refresh()
       .catch((e: any) => setError(e.message))
       .finally(() => setLoading(false));
   }, [router, refresh]);
+
+  const goToOrder = (domainId: string) => router.push(`/order?domainId=${domainId}${purchaseQuery}`);
 
   async function addDomain(e: React.FormEvent) {
     e.preventDefault();
@@ -86,7 +104,7 @@ export default function VerifyHub() {
     try {
       const { verified } = await api.verifyDomain(id);
       await refresh();
-      if (verified) router.push(`/order?domainId=${id}`);
+      if (verified) goToOrder(id);
       else setError('Kayıt henüz görünmüyor. DNS yayılımı biraz sürebilir; birazdan tekrar deneyin.');
     } catch (e: any) {
       setError(e.message);
@@ -96,6 +114,7 @@ export default function VerifyHub() {
   }
 
   async function del(id: string) {
+    if (!window.confirm('Bu alan adını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return;
     setError(null);
     try {
       await api.deleteDomain(id);
@@ -117,6 +136,39 @@ export default function VerifyHub() {
     }
   }
 
+  async function archiveOrder(id: string, archived: boolean) {
+    setError(null);
+    try {
+      await api.archiveOrder(id, archived);
+      await refresh();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  async function deleteOrder(id: string) {
+    if (!window.confirm('Bu raporu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return;
+    setError(null);
+    try {
+      await api.deleteOrder(id);
+      await refresh();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  async function toggleArchived() {
+    const next = !showArchived;
+    setShowArchived(next);
+    if (next && archivedOrders === null) {
+      try {
+        setArchivedOrders((await api.listOrders(true)) as Order[]);
+      } catch (e: any) {
+        setError(e.message);
+      }
+    }
+  }
+
   function logout() {
     window.localStorage.removeItem('token');
     router.push('/');
@@ -124,13 +176,164 @@ export default function VerifyHub() {
 
   const validDomains = domains.filter((d) => d.valid);
   const pendingDomains = domains.filter((d) => !d.valid);
+  const shownHistory = showAllHistory ? orders : orders.slice(0, HISTORY_PREVIEW);
+
+  // --- Alan adı seçim/ekleme bölümü (hem normal hem satın-alma modunda kullanılır) ---
+  const domainSection = (
+    <>
+      {validDomains.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">Doğrulanmış alan adların</h2>
+          <div className="mt-3 space-y-2.5">
+            {validDomains.map((d) => (
+              <div key={d.id} className="card flex items-center justify-between gap-3 p-4">
+                <div>
+                  <div className="font-semibold text-ink">{d.hostname}</div>
+                  <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Doğrulandı · geçerli
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button onClick={() => goToOrder(d.id)} className="btn-primary">
+                    {purchaseMode ? 'Bu alan adı ile devam et' : 'Taramayı Başlat'}
+                  </button>
+                  {!purchaseMode && (
+                    <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
+                      Sil
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {pendingDomains.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">Doğrulama bekleyen</h2>
+          <div className="mt-3 space-y-2.5">
+            {pendingDomains.map((d) => {
+              const expired = d.status === 'verified' && !d.valid;
+              const open = openId === d.id;
+              return (
+                <div key={d.id} className="card p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-ink">{d.hostname}</div>
+                      <span className={`mt-0.5 text-xs font-medium ${expired ? 'text-red-600' : 'text-amber-600'}`}>
+                        {expired ? 'Süresi doldu — yeniden doğrula' : 'Henüz doğrulanmadı'}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button onClick={() => setOpenId(open ? null : d.id)} className="btn-outline text-sm">
+                        {open ? 'Gizle' : 'Doğrula'}
+                      </button>
+                      <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
+                        Sil
+                      </button>
+                    </div>
+                  </div>
+                  {open && (
+                    <div className="mt-4 border-t border-line pt-4">
+                      <p className="text-sm text-ink-soft">DNS panelinize aşağıdaki <strong>TXT</strong> kaydını ekleyin:</p>
+                      <div className="mt-2 space-y-2 rounded-card bg-brand-deep p-3.5 font-mono text-xs text-white/90">
+                        <div>
+                          <span className="text-white/45">Ad:</span>{' '}
+                          <span className="break-all text-emerald-300">{d.instructions.recordName}</span>
+                        </div>
+                        <div>
+                          <span className="text-white/45">Değer:</span>{' '}
+                          <span className="break-all text-accent">{d.instructions.recordValue}</span>
+                        </div>
+                      </div>
+                      <button onClick={() => check(d.id)} disabled={busy} className="btn-primary mt-3 disabled:opacity-60">
+                        {busy ? 'Kontrol ediliyor…' : 'Doğrulamayı kontrol et'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <section className="mt-8">
+        {!showAdd ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <button onClick={() => setShowAdd(true)} className="btn-outline">
+              + Yeni alan adı ekle
+            </button>
+            {!purchaseMode && domains.length > 0 && (
+              <button onClick={delAll} className="btn-ghost text-sm text-red-600">
+                Tümünü sil
+              </button>
+            )}
+          </div>
+        ) : (
+          <form onSubmit={addDomain} className="card p-5">
+            <label className="label">Yeni alan adı</label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                required
+                placeholder="ornek.com"
+                className="field flex-1"
+                value={newHostname}
+                onChange={(e) => setNewHostname(e.target.value)}
+              />
+              <button type="submit" disabled={busy} className="btn-primary disabled:opacity-60">
+                {busy ? 'Ekleniyor…' : 'Ekle ve doğrula'}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+
+      {domains.length === 0 && !showAdd && (
+        <p className="mt-4 text-sm text-ink-muted">
+          Henüz alan adın yok. Başlamak için bir alan adı ekleyip doğrula.
+        </p>
+      )}
+    </>
+  );
+
+  const orderCard = (o: Order, isArchived: boolean) => (
+    <div key={o.id} className="card flex items-center justify-between gap-3 p-4">
+      <button onClick={() => router.push(`/dashboard/${o.id}`)} className="min-w-0 flex-1 text-left">
+        <div className="truncate font-semibold text-ink">{o.hostname}</div>
+        <div className="mt-0.5 text-xs text-ink-muted">
+          {o.packageName} · {new Date(o.createdAt).toLocaleDateString('tr-TR')}
+        </div>
+      </button>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="badge">{ORDER_STATUS_LABEL[o.status] ?? o.status}</span>
+        {isArchived ? (
+          <button onClick={() => archiveOrder(o.id, false)} className="btn-ghost text-xs">
+            Arşivden çıkar
+          </button>
+        ) : (
+          <>
+            <button onClick={() => archiveOrder(o.id, true)} className="btn-ghost text-xs">
+              Arşivle
+            </button>
+            <button onClick={() => deleteOrder(o.id)} className="btn-ghost text-xs text-red-600">
+              Sil
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <main className="container-page max-w-2xl py-14">
       <div className="flex items-center justify-between">
         <div>
           <p className="eyebrow">Panelim</p>
-          <h1 className="mt-1 text-2xl font-extrabold text-brand">Taramaya Başla</h1>
+          <h1 className="mt-1 text-2xl font-extrabold text-brand">
+            {purchaseMode ? 'Alan adı seçin' : 'Taramaya Başla'}
+          </h1>
         </div>
         <div className="flex items-center gap-3">
           <a href="/schedules" className="text-sm font-medium text-accent-600 hover:underline">
@@ -144,152 +347,51 @@ export default function VerifyHub() {
 
       {loading ? (
         <div className="mt-8 h-32 animate-pulse rounded-card bg-brand-50" />
+      ) : purchaseMode ? (
+        <>
+          {/* SATIN-ALMA MODU: yalnız alan adı seçimi (rapor geçmişi YOK). Paket sonraki adımda hazır gelir. */}
+          <div className="mt-6 rounded-card border border-accent/40 bg-accent-soft/40 px-4 py-3 text-sm text-ink-soft">
+            Seçtiğiniz paket için bir <strong>alan adı</strong> seçin. Doğrulanmış bir alan adınız varsa tek tıkla
+            devam edin; yoksa yeni bir alan adı ekleyip doğrulayın. Sonraki adımda <strong>paketiniz hazır gelecek</strong>.
+          </div>
+          {domainSection}
+        </>
       ) : (
         <>
-          {/* Taramalarım — sekme kapatılsa da buradan rapora/duruma dönülür */}
+          {/* Katman 1 — DOMAIN seçimi/ekleme (üstte) */}
+          {domainSection}
+
+          {/* Katman 2 — GEÇMİŞ TARAMALARIM (altta, önizleme + tümünü gör) */}
           {orders.length > 0 && (
-            <section className="mt-8">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">
-                Taramalarım
-              </h2>
-              <div className="mt-3 space-y-2.5">
-                {orders.map((o) => (
-                  <button
-                    key={o.id}
-                    onClick={() => router.push(`/dashboard/${o.id}`)}
-                    className="card flex w-full items-center justify-between gap-3 p-4 text-left transition hover:border-brand-300"
-                  >
-                    <div>
-                      <div className="font-semibold text-ink">{o.hostname}</div>
-                      <div className="mt-0.5 text-xs text-ink-muted">
-                        {o.packageName} · {new Date(o.createdAt).toLocaleDateString('tr-TR')}
-                      </div>
-                    </div>
-                    <span className="badge shrink-0">{ORDER_STATUS_LABEL[o.status] ?? o.status}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Geçerli (doğrulanmış) domainler → doğrudan tarama */}
-          {validDomains.length > 0 && (
-            <section className="mt-8">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">
-                Doğrulanmış alan adların
-              </h2>
-              <div className="mt-3 space-y-2.5">
-                {validDomains.map((d) => (
-                  <div key={d.id} className="card flex items-center justify-between gap-3 p-4">
-                    <div>
-                      <div className="font-semibold text-ink">{d.hostname}</div>
-                      <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Doğrulandı · geçerli
-                      </span>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <button onClick={() => router.push(`/order?domainId=${d.id}`)} className="btn-primary">
-                        Taramayı Başlat
-                      </button>
-                      <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
-                        Sil
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Doğrulama bekleyen / süresi dolan */}
-          {pendingDomains.length > 0 && (
-            <section className="mt-8">
-              <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">
-                Doğrulama bekleyen
-              </h2>
-              <div className="mt-3 space-y-2.5">
-                {pendingDomains.map((d) => {
-                  const expired = d.status === 'verified' && !d.valid;
-                  const open = openId === d.id;
-                  return (
-                    <div key={d.id} className="card p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="font-semibold text-ink">{d.hostname}</div>
-                          <span className={`mt-0.5 text-xs font-medium ${expired ? 'text-red-600' : 'text-amber-600'}`}>
-                            {expired ? 'Süresi doldu — yeniden doğrula' : 'Henüz doğrulanmadı'}
-                          </span>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <button onClick={() => setOpenId(open ? null : d.id)} className="btn-outline text-sm">
-                            {open ? 'Gizle' : 'Doğrula'}
-                          </button>
-                          <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
-                            Sil
-                          </button>
-                        </div>
-                      </div>
-                      {open && (
-                        <div className="mt-4 border-t border-line pt-4">
-                          <p className="text-sm text-ink-soft">DNS panelinize aşağıdaki <strong>TXT</strong> kaydını ekleyin:</p>
-                          <div className="mt-2 space-y-2 rounded-card bg-brand-deep p-3.5 font-mono text-xs text-white/90">
-                            <div>
-                              <span className="text-white/45">Ad:</span>{' '}
-                              <span className="break-all text-emerald-300">{d.instructions.recordName}</span>
-                            </div>
-                            <div>
-                              <span className="text-white/45">Değer:</span>{' '}
-                              <span className="break-all text-accent">{d.instructions.recordValue}</span>
-                            </div>
-                          </div>
-                          <button onClick={() => check(d.id)} disabled={busy} className="btn-primary mt-3 disabled:opacity-60">
-                            {busy ? 'Kontrol ediliyor…' : 'Doğrulamayı kontrol et'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* Yeni alan adı ekle */}
-          <section className="mt-8">
-            {!showAdd ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <button onClick={() => setShowAdd(true)} className="btn-outline">
-                  + Yeni alan adı ekle
+            <section className="mt-12 border-t border-line pt-8">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">Geçmiş Taramalarım</h2>
+                <button onClick={toggleArchived} className="text-xs font-medium text-accent-600 hover:underline">
+                  {showArchived ? 'Arşivlenenleri gizle' : 'Arşivlenenler'}
+                  {archivedOrders && archivedOrders.length > 0 ? ` (${archivedOrders.length})` : ''}
                 </button>
-                {domains.length > 0 && (
-                  <button onClick={delAll} className="btn-ghost text-sm text-red-600">
-                    Tümünü sil
-                  </button>
-                )}
               </div>
-            ) : (
-              <form onSubmit={addDomain} className="card p-5">
-                <label className="label">Yeni alan adı</label>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input
-                    required
-                    placeholder="ornek.com"
-                    className="field flex-1"
-                    value={newHostname}
-                    onChange={(e) => setNewHostname(e.target.value)}
-                  />
-                  <button type="submit" disabled={busy} className="btn-primary disabled:opacity-60">
-                    {busy ? 'Ekleniyor…' : 'Ekle ve doğrula'}
-                  </button>
-                </div>
-              </form>
-            )}
-          </section>
+              <div className="mt-3 space-y-2.5">{shownHistory.map((o) => orderCard(o, false))}</div>
+              {orders.length > HISTORY_PREVIEW && (
+                <button
+                  onClick={() => setShowAllHistory((v) => !v)}
+                  className="mt-3 text-sm font-medium text-accent-600 hover:underline"
+                >
+                  {showAllHistory ? 'Daha az göster' : `Tümünü gör (${orders.length})`}
+                </button>
+              )}
 
-          {domains.length === 0 && !showAdd && (
-            <p className="mt-4 text-sm text-ink-muted">
-              Henüz alan adın yok. Başlamak için bir alan adı ekleyip doğrula.
-            </p>
+              {showArchived && (
+                <div className="mt-6">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-ink-muted">Arşivlenenler</h3>
+                  {archivedOrders && archivedOrders.length > 0 ? (
+                    <div className="mt-2 space-y-2.5">{archivedOrders.map((o) => orderCard(o, true))}</div>
+                  ) : (
+                    <p className="mt-2 text-sm text-ink-muted">Arşivlenmiş tarama yok.</p>
+                  )}
+                </div>
+              )}
+            </section>
           )}
         </>
       )}

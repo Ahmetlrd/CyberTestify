@@ -140,7 +140,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         {region.code === 'tr' ? 'Fiyat onay bekliyor (placeholder)' : 'Price pending approval (placeholder)'}
                       </div>
                     </div>
-                    <Link href="/register" className="btn-primary mt-6 w-full">
+                    <Link href={`/verify?bundle=${b.key}`} className="btn-primary mt-6 w-full">
                       {region.code === 'tr' ? 'Satın Al' : 'Buy Now'}
                     </Link>
                   </div>

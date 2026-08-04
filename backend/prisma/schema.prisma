@@ -194,6 +194,10 @@ model Order {
   amountMinorUnit Int
   currency        String       @default("TRY")
 
+  // (UX) Musteri raporu/siparisi ARSIVLEYEBILIR — veri SILINMEZ, sadece ana listede
+  // gizlenir (geri alinabilir). Silme (hard delete) ayri; bu yalniz gorunurluk.
+  archived        Boolean      @default(false)
+
   paymentProvider String?      // "iyzico"
   paymentRef      String?      // saglayicidaki islem id'si
   paidAt          DateTime?

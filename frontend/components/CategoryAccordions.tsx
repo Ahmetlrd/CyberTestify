@@ -106,7 +106,7 @@ export function CategoryAccordions({
                       <span className="text-2xl font-extrabold text-ink">{formatMoney(p.priceMinorUnit, region)}</span>
                       <div className="mt-0.5 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahildir' : 'Taxes included'}</div>
                     </div>
-                    <Link href="/register" className="btn-outline mt-4 w-full">
+                    <Link href={`/verify?package=${p.key}`} className="btn-outline mt-4 w-full">
                       {tr ? 'Satın Al' : 'Buy Now'}
                     </Link>
                     <a

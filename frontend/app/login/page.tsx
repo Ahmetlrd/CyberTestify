@@ -1,17 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
+  // Satın-alma akışı vb. için: ?next varsa login sonrası oraya dön (yoksa /verify).
+  const next = useSearchParams().get('next') || '/verify';
   useEffect(() => {
     if (typeof window !== 'undefined' && window.localStorage.getItem('token')) {
-      router.replace('/verify');
+      router.replace(next);
     }
-  }, [router]);
+  }, [router, next]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +26,7 @@ export default function LoginPage() {
     try {
       const { token } = await api.login(email, password);
       window.localStorage.setItem('token', token);
-      router.push('/verify');
+      router.push(next);
     } catch (err: any) {
       setError(err.message);
       setBusy(false);
@@ -53,7 +55,7 @@ export default function LoginPage() {
       </div>
       <p className="mt-5 text-center text-sm text-ink-soft">
         Hesabınız yok mu?{' '}
-        <Link href="/register" className="font-semibold text-accent-600 hover:underline">
+        <Link href={`/register?next=${encodeURIComponent(next)}`} className="font-semibold text-accent-600 hover:underline">
           Ücretsiz kayıt olun
         </Link>
       </p>

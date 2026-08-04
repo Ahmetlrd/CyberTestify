@@ -26,7 +26,11 @@ function minDateTimeLocal(): string {
 
 export default function OrderPage() {
   const router = useRouter();
-  const domainId = useSearchParams().get('domainId');
+  const sp = useSearchParams();
+  const domainId = sp.get('domainId');
+  // Paketler sayfasindan "Satin Al" ile tasinan on-secim (paket veya bundle).
+  const preselectPackage = sp.get('package');
+  const preselectBundle = sp.get('bundle');
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   // Kombine paket (bundle) modu — bir bundle secilince tekil akis (recurring/kredi/promo) gizlenir.
@@ -81,10 +85,25 @@ export default function OrderPage() {
     }
     const rc = readRegionCookie();
     setRegion(rc);
-    api.listPackages(rc).then(setPackages).catch((err) => setError(err.message));
-    api.listBundles(rc).then(setBundles).catch(() => {});
+    api.listPackages(rc).then((pk) => {
+      setPackages(pk);
+      // "Satin Al" ile gelen tekil paketi ON-SEC (kullanici tekrar secmesin).
+      if (preselectPackage && pk.some((p) => p.key === preselectPackage)) {
+        setSelected(preselectPackage);
+        setSelectedBundle(null);
+      }
+    }).catch((err) => setError(err.message));
+    api.listBundles(rc).then((bs) => {
+      setBundles(bs);
+      // "Satin Al" ile gelen bundle'i ON-SEC.
+      if (preselectBundle) {
+        const b = bs.find((x: any) => x.key === preselectBundle);
+        if (b) { setSelectedBundle(b); setSelected(null); }
+      }
+    }).catch(() => {});
     api.getCredits().then((c) => { setBalance(c.balance); setCreditUnit(c.creditUnitValueMinor); }).catch(() => {});
     api.getQueueStatus().then(setQueue).catch(() => {}); // sessiz — uyari opsiyonel
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   const selectedPkg = packages.find((p) => p.key === selected);

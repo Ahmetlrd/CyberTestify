@@ -116,10 +116,16 @@ export const api = {
     request<{ queuedCount: number; running: boolean; avgScanMinutes: number; etaMinutes: number; threshold: number; busy: boolean }>(
       '/orders/queue/status',
     ),
-  listOrders: () =>
+  listOrders: (archived = false) =>
     request<
-      Array<{ id: string; hostname: string; packageName: string; status: string; createdAt: string }>
-    >('/orders'),
+      Array<{ id: string; hostname: string; packageName: string; status: string; createdAt: string; archived: boolean }>
+    >(`/orders${archived ? '?archived=true' : ''}`),
+  archiveOrder: (orderId: string, archived: boolean) =>
+    request<{ ok: boolean; archived: boolean }>(`/orders/${orderId}/archive`, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived }),
+    }),
+  deleteOrder: (orderId: string) => request<{ ok: boolean }>(`/orders/${orderId}`, { method: 'DELETE' }),
   listSchedules: () =>
     request<
       Array<{

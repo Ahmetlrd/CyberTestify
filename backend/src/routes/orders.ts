@@ -494,8 +494,10 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
 
 // Musterinin tum taramalari (panelde listelemek icin — sekme kapatilsa da erisilir).
 ordersRouter.get('/', requireAuth, async (req, res) => {
+  // ?archived=true -> yalniz arsivlenenler; varsayilan yalniz aktif (arsivlenmemis) liste.
+  const archived = req.query.archived === 'true';
   const orders = await prisma.order.findMany({
-    where: { customerId: req.customerId! },
+    where: { customerId: req.customerId!, archived },
     orderBy: { createdAt: 'desc' },
     include: {
       domain: { select: { hostname: true } },
@@ -509,8 +511,36 @@ ordersRouter.get('/', requireAuth, async (req, res) => {
       packageName: o.package.displayName,
       status: o.status,
       createdAt: o.createdAt,
+      archived: o.archived,
     })),
   );
+});
+
+// ARSIVLE / ARSIVDEN CIKAR — veri SILINMEZ, yalniz gorunurluk (geri alinabilir).
+ordersRouter.patch('/:orderId/archive', requireAuth, async (req, res) => {
+  const archived = req.body?.archived !== false; // gövde yoksa arşivle (true)
+  const order = await prisma.order.findFirst({ where: { id: req.params.orderId, customerId: req.customerId! } });
+  if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı.' });
+  await prisma.order.update({ where: { id: order.id }, data: { archived } });
+  res.json({ ok: true, archived });
+});
+
+// KALICI SIL — siparis + rapor + flow + rizalar tamamen silinir (geri ALINAMAZ).
+// Aktif/islenen tarama silinmez (once bitmesi beklenir).
+ordersRouter.delete('/:orderId', requireAuth, async (req, res) => {
+  const order = await prisma.order.findFirst({ where: { id: req.params.orderId, customerId: req.customerId! } });
+  if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı.' });
+  if (['paid', 'scan_queued', 'scan_running'].includes(order.status)) {
+    return res.status(409).json({ error: 'İşlenen/aktif bir tarama silinemez; önce tamamlanmasını bekleyin.' });
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.promoCodeUsage.deleteMany({ where: { orderId: order.id } });
+    await tx.report.deleteMany({ where: { orderId: order.id } });
+    await tx.flow.deleteMany({ where: { orderId: order.id } });
+    await tx.activeTestConsent.deleteMany({ where: { orderId: order.id } });
+    await tx.order.delete({ where: { id: order.id } });
+  });
+  res.json({ ok: true });
 });
 
 // (#4) Yeni siparis oncesi kuyruk yogunlugu — order sayfasi bunu okuyup, esik
