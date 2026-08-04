@@ -84,8 +84,11 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
 // Icerik tarama sirasinda uretilip AYRI/sifreli saklanir; ODEME (unlock) yapilana
 // kadar asagidaki download DONMEZ (kilitli).
 
-// Satin al (unlock). Su an MOCK/sandbox — gercek iyzico ek-odeme akisi TODO
-// (bkz HANDOFF). Odeme onaylaninca fixSuggestionsUnlockedAt damgalanir.
+// Satin al (unlock). Odeme "canli" ise (gercek iyzico anahtari var) gercek ek-odeme
+// akisi gerekir (TODO). Anahtar YOKSA sistem yayin-oncesi SANDBOX/placeholder modundadir
+// (ana checkout da /pay placeholder'ina duser) — bu modda test/demo icin unlock'a izin
+// verilir. Anahtar girilince otomatik olarak gercek-odeme dalina gecer (TEK kontrol, ana
+// odeme akisiyla ayni "anahtar var mi" sinyali).
 reportsRouter.post('/:orderId/fix-suggestions/unlock', requireAuth, async (req, res) => {
   const report = await prisma.report.findFirstOrThrow({
     where: { orderId: req.params.orderId, order: { customerId: req.customerId! } },
@@ -93,11 +96,13 @@ reportsRouter.post('/:orderId/fix-suggestions/unlock', requireAuth, async (req, 
   if (!report.fixSuggestions) {
     return res.status(404).json({ error: 'Bu rapor icin cozum onerisi uretilmedi.' });
   }
-  if (!config.mockPayment) {
-    // TODO(odeme): gercek iyzico ek-odeme akisi burada baslatilmali; onay
-    // webhook'unda fixSuggestionsUnlockedAt set edilmeli. Su an yalniz mock.
-    return res.status(501).json({ error: 'Ek-odeme entegrasyonu henuz aktif degil (mock kapali).' });
+  const paymentLive = !!config.iyzico.apiKey && !!config.iyzico.secretKey;
+  if (paymentLive) {
+    // TODO(odeme): gercek iyzico ek-odeme akisi burada baslatilmali; onay webhook'unda
+    // fixSuggestionsUnlockedAt set edilmeli. Anahtar var ama ek-odeme akisi henuz baglanmadi.
+    return res.status(501).json({ error: 'Ek-ödeme entegrasyonu henüz aktif değil.' });
   }
+  // SANDBOX/placeholder modu (gercek anahtar yok): odeme ALMADAN unlock'a izin ver (test/demo).
   const updated = await prisma.report.update({
     where: { id: report.id },
     data: { fixSuggestionsUnlockedAt: report.fixSuggestionsUnlockedAt ?? new Date() },
