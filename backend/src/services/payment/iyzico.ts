@@ -48,6 +48,12 @@ export const iyzicoProvider: PaymentProvider = {
       include: { customer: true, package: true, domain: true },
     });
     if (config.mockPayment) return mockInitiate(orderId, 'iyzico');
+    // Gercek anahtar yoksa: mock'a DUSME (produksiyonda odeme almadan tarama baslamamali).
+    // Temiz, musteriye donuk hata — createOrder bunu yakalayip siparisi awaiting_payment
+    // birakir (tarama BASLAMAZ).
+    if (!config.iyzico.apiKey || !config.iyzico.secretKey) {
+      throw new Error('Ödeme sistemi şu an aktif değil. Lütfen daha sonra tekrar deneyin.');
+    }
 
     const conversationId = order.id;
     const price = (order.amountMinorUnit / 100).toFixed(2); // TL, 2 ondalik (iyzico string bekler)

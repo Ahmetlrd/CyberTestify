@@ -315,8 +315,21 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     });
   }
 
-  // Bölgeye göre ödeme sağlayıcı (tr→iyzico, us/ae→stripe; hepsi sandbox).
-  const payment = await getPaymentProvider(region).initiatePayment(order.id);
+  // Bölgeye göre ödeme sağlayıcı (tr→iyzico, us/ae→stripe). Odeme baslatilamazsa
+  // (anahtar yok / saglayici hatasi) siparis awaiting_payment KALIR — tarama BASLAMAZ.
+  // Musteriye net hata don (500 degil), sistem butunlugu korunur.
+  let payment;
+  try {
+    payment = await getPaymentProvider(region).initiatePayment(order.id);
+  } catch (err: any) {
+    console.error(`[order] odeme baslatilamadi (order ${order.id}):`, err?.message ?? err);
+    return res.status(503).json({
+      error: err?.message?.startsWith('Ödeme')
+        ? err.message
+        : 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin veya destek ile iletişime geçin.',
+      orderId: order.id,
+    });
+  }
 
   res.json({ orderId: order.id, ...payment });
 });

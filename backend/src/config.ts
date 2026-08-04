@@ -18,7 +18,14 @@ export const config = {
   // Gercek iyzico kimlik bilgisi girilene kadar odeme "mock" modda calisir:
   // siparis olusturulunca otomatik odendi sayilip tarama baslar. IYZICO_API_KEY
   // tanimlaninca otomatik olarak gercek odeme akisina gecilir.
-  mockPayment: (process.env.MOCK_PAYMENT ?? 'true') === 'true' && !process.env.IYZICO_API_KEY,
+  // Mock otomatik-odeme (siparisi odeme ALMADAN 'paid' sayar) YALNIZ dev/sandbox icindir.
+  // PRODUKSIYONDA ASLA aktif olamaz (NODE_ENV=production) — aksi halde odeme almadan tarama
+  // baslar = acik gelir/guvenlik acigi. Uretimde siparis ancak GERCEK odeme/promo/kredi ile
+  // 'paid' olur. (Kod seviyesinde ek kilit: mockInitiate production'da throw eder.)
+  mockPayment:
+    (process.env.MOCK_PAYMENT ?? 'true') === 'true' &&
+    !process.env.IYZICO_API_KEY &&
+    process.env.NODE_ENV !== 'production',
   // (Is 3) Uluslararasi (TR disi) odeme saglayici secimi: 'paddle' (onerilen, MoR) |
   // 'stripe' | 'sandbox'. Gercek anahtar gelene kadar 'sandbox' (mockInitiate) kalir.
   intlPaymentProvider: (process.env.INTL_PAYMENT_PROVIDER ?? 'sandbox') as 'paddle' | 'stripe' | 'sandbox',

@@ -21,6 +21,13 @@ export interface PaymentProvider {
  * kullanır; gerçek entegrasyon (iyzico/stripe) ayrı görevlerde eklenecek.
  */
 export async function mockInitiate(orderId: string, providerName: string): Promise<CreatePaymentResult> {
+  // GUVENLIK KILIDI (defense-in-depth): mock otomatik-odeme siparisi GERCEK odeme
+  // olmadan 'paid' yapar. Bu YALNIZ dev/sandbox icindir; produksiyonda calisirsa odeme
+  // almadan tarama baslar (gelir/guvenlik acigi). config.mockPayment zaten NODE_ENV
+  // kontrol eder; burada ek olarak KOD seviyesinde de kesin engelliyoruz.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Odeme sistemi yapilandirilmadi: mock odeme produksiyonda devre disidir.');
+  }
   const conversationId = crypto.randomUUID();
   await prisma.order.update({
     where: { id: orderId },
