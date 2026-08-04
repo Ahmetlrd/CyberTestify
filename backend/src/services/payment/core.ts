@@ -35,9 +35,23 @@ export async function mockInitiate(orderId: string, providerName: string): Promi
   return { paymentPageUrl: `${config.frontendUrl}/dashboard/${orderId}`, conversationId };
 }
 
-/** Ödeme onaylanınca: paid + (bölgesel) fatura + tarama başlat. */
+/** Ödeme onaylanınca (conversationId=paymentRef ile bul): paid + fatura + tarama. */
 export async function handlePaymentSucceeded(conversationId: string) {
   const order = await prisma.order.findFirstOrThrow({ where: { paymentRef: conversationId } });
+  await finalizePaidOrder(order.id);
+}
+
+/**
+ * Bir siparisi 'paid' yapip fatura + taramayi baslatir. Odeme onayinin TUM yollari
+ * (mock, iyzico callback, %100 promo, kredi) buraya dusler — tek dogruluk noktasi.
+ * Idempotent: zaten paid/ilerlemis sipariste tekrar tarama baslatmaz.
+ */
+export async function finalizePaidOrder(orderId: string) {
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+  if (order.status !== 'awaiting_payment') {
+    // Zaten islenmis (double callback / tekrar cagri) — sessizce gec.
+    return;
+  }
   await prisma.order.update({ where: { id: order.id }, data: { status: 'paid', paidAt: new Date() } });
 
   // Faturalandırma bölgesel (para birimine göre) — şu an hepsi iskelet.

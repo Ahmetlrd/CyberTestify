@@ -8,6 +8,7 @@ import { checkEgressProxyHealth } from './services/egressHealth.js';
 import { authRouter } from './routes/auth.js';
 import { domainsRouter } from './routes/domains.js';
 import { ordersRouter } from './routes/orders.js';
+import { paymentsRouter } from './routes/payments.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { reportsRouter } from './routes/reports.js';
 import { creditsRouter } from './routes/credits.js';
@@ -86,6 +87,7 @@ const apiLimiter = rateLimit({
 app.use('/auth', authLimiter, authRouter);
 app.use('/domains', apiLimiter, domainsRouter);
 app.use('/orders', apiLimiter, ordersRouter);
+app.use('/payments', paymentsRouter);
 app.use('/reports', apiLimiter, reportsRouter);
 app.use('/credits', apiLimiter, creditsRouter);
 app.use('/schedules', apiLimiter, schedulesRouter);

@@ -102,6 +102,9 @@ export const config = {
     secretKey: process.env.IYZICO_SECRET_KEY ?? '',
     baseUrl: process.env.IYZICO_BASE_URL ?? 'https://sandbox-api.iyzipay.com',
   },
+  // iyzico CheckoutForm callback'inin (odeme sonrasi iyzico -> bize POST) gidecegi
+  // PUBLIC API URL'i. Prod'da https://api.cybertestify.com. Callback bu adres + /payments/...
+  publicApiUrl: process.env.PUBLIC_API_URL ?? 'http://localhost:4000',
 };
 
 /**

@@ -36,6 +36,10 @@ export default function OrderPage() {
   const [balance, setBalance] = useState(0);
   const [creditUnit, setCreditUnit] = useState(99900);
   const [useCredits, setUseCredits] = useState(false);
+  // Promosyon kodu (checkout onizleme + siparise gecirme).
+  const [promoInput, setPromoInput] = useState('');
+  const [promo, setPromo] = useState<{ valid: boolean; error?: string; code?: string; discountMinorUnit?: number; finalAmountMinorUnit?: number } | null>(null);
+  const [promoBusy, setPromoBusy] = useState(false);
 
   // (Faz 3 v2) active-light — tek risk-kabul checkbox'i (ek alan yok).
   const [atRisk, setAtRisk] = useState(false);
@@ -85,6 +89,19 @@ export default function OrderPage() {
   // Kredi ile odeme yalnizca tek-seferlik/hemen taramada (zamanlanmis akis prepaid farkli).
   const canUseCredits = balance >= creditsNeeded && creditsNeeded > 0 && !recurring && startMode === 'now';
 
+  async function applyPromo() {
+    if (!promoInput.trim() || !selected) return;
+    setPromoBusy(true);
+    try {
+      const r = await api.previewPromo(promoInput.trim(), selected, region);
+      setPromo(r);
+    } catch {
+      setPromo({ valid: false, error: 'Kod kontrol edilemedi.' });
+    } finally {
+      setPromoBusy(false);
+    }
+  }
+
   async function handleStart() {
     if (!domainId || busy) return;
     if (!selected) return setError('Lütfen bir paket seçin.');
@@ -130,9 +147,10 @@ export default function OrderPage() {
         payWithCredits,
         isActiveLight ? { riskAccepted: atRisk } : undefined,
         needsAuthCreds ? { username: authUser.trim(), password: authPass } : undefined,
+        promo?.valid ? promo.code : undefined,
       );
-      // Krediyle odendiyse odeme sayfasi YOK — dogrudan siparis detayina git.
-      if (res.paidWithCredits) {
+      // Krediyle VEYA %100 promo ile odendiyse odeme sayfasi YOK — dogrudan siparis detayina git.
+      if (res.paidWithCredits || res.paidWithPromo) {
         router.push(`/dashboard/${res.orderId}`);
         return;
       }
@@ -391,6 +409,36 @@ export default function OrderPage() {
           )}
           {selected && creditsNeeded > 0 && balance < creditsNeeded && !recurring && startMode === 'now' && (
             <p className="mt-2 text-xs text-ink-muted">Bu paket {creditsNeeded} kredi gerektirir; bakiyeniz yetersiz.</p>
+          )}
+        </div>
+      )}
+
+      {selected && !intlComingSoon && (
+        <div className="mt-5 rounded-card border border-brand-100 bg-white px-4 py-3 text-sm">
+          <label className="label">Promosyon kodu (opsiyonel)</label>
+          <div className="mt-1 flex gap-2">
+            <input
+              value={promoInput}
+              onChange={(e) => { setPromoInput(e.target.value); setPromo(null); }}
+              placeholder="Kodunuz"
+              className="field flex-1 uppercase"
+            />
+            <button
+              type="button"
+              onClick={applyPromo}
+              disabled={promoBusy || !promoInput.trim()}
+              className="btn-dark disabled:opacity-50"
+            >
+              {promoBusy ? '…' : 'Uygula'}
+            </button>
+          </div>
+          {promo && !promo.valid && <p className="mt-2 text-xs text-red-600">{promo.error}</p>}
+          {promo && promo.valid && (
+            <p className="mt-2 text-xs text-emerald-700">
+              Kod uygulandı — indirim {formatMoney(promo.discountMinorUnit ?? 0, getRegion(region))}. Yeni tutar:{' '}
+              <strong>{formatMoney(promo.finalAmountMinorUnit ?? 0, getRegion(region))}</strong>
+              {promo.finalAmountMinorUnit === 0 && ' — ödeme adımı atlanır, tarama hemen kuyruğa alınır.'}
+            </p>
           )}
         </div>
       )}

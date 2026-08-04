@@ -324,3 +324,34 @@ model AdminUser {
   createdAt    DateTime  @default(now())
   lastLoginAt  DateTime?
 }
+
+// --- Promosyon/indirim kodu sistemi (genel, yeniden kullanilabilir) -----------
+// Checkout'ta kod girilince fiyat yeniden hesaplanir. %100 indirimde toplam 0 TL →
+// odeme adimi ATLANIR (krediyle-ode mantigina benzer kisayol; gercek iyzico cagrisi YOK).
+model PromoCode {
+  id            String    @id @default(uuid())
+  code          String    @unique   // kullanici girdisi (case-insensitive: hep UPPER saklanir)
+  discountType  String    // "percentage" (0-100) | "fixed" (kurus)
+  discountValue Int
+  active        Boolean   @default(true)
+  maxUses       Int?      // null = sinirsiz
+  usedCount     Int       @default(0)
+  expiresAt     DateTime? // null = suresiz
+  createdAt     DateTime  @default(now())
+
+  usages PromoCodeUsage[]
+}
+
+// Kod kullanim gecmisi (kotuye kullanim/analiz icin). orderId benzersiz (bir siparis tek kod).
+model PromoCodeUsage {
+  id                      String    @id @default(uuid())
+  promoCodeId             String
+  promoCode               PromoCode @relation(fields: [promoCodeId], references: [id])
+  orderId                 String    @unique
+  customerId              String
+  code                    String    // o anki kod (kod silinse de iz kalsin)
+  originalAmountMinorUnit Int
+  discountMinorUnit       Int
+  finalAmountMinorUnit    Int
+  createdAt               DateTime  @default(now())
+}

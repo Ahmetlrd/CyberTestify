@@ -64,11 +64,19 @@ export const api = {
     useCredits = false,
     activeTestConsent?: { riskAccepted: boolean },
     authCredentials?: { username: string; password: string },
+    promoCode?: string,
   ) =>
-    request<{ orderId: string; paymentPageUrl?: string; paidWithCredits?: boolean; creditsSpent?: number }>('/orders', {
+    request<{ orderId: string; paymentPageUrl?: string; paidWithCredits?: boolean; creditsSpent?: number; paidWithPromo?: boolean }>('/orders', {
       method: 'POST',
-      body: JSON.stringify({ domainId, packageKey, ...consents, region, useCredits, activeTestConsent, authCredentials }),
+      body: JSON.stringify({ domainId, packageKey, ...consents, region, useCredits, activeTestConsent, authCredentials, promoCode }),
     }),
+  // Promo kodu onizleme — indirimli fiyati checkout'ta gostermek icin (satin almaz).
+  previewPromo: (code: string, packageKey: string, region = 'tr') =>
+    request<{
+      valid: boolean; error?: string; code?: string;
+      discountType?: 'percentage' | 'fixed'; discountValue?: number;
+      originalAmountMinorUnit?: number; discountMinorUnit?: number; finalAmountMinorUnit?: number; currency?: string;
+    }>('/orders/promo/preview', { method: 'POST', body: JSON.stringify({ code, packageKey, region }) }),
   // (Is 2) Kredi bakiyesi + satista olan bundle'lar + son hareketler.
   getCredits: () =>
     request<{

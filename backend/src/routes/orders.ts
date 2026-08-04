@@ -12,6 +12,7 @@ import { getSampleReportPdf } from '../services/sampleReports.js';
 import { creditsForPackagePrice, spendCredits, type CreditTx } from '../services/credits.js';
 import { enqueueOrStartScan } from '../services/orchestrator.js';
 import { getQueueStats, getQueuePosition } from '../services/queue.js';
+import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -132,6 +133,8 @@ const createOrderSchema = z.object({
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
   // (Is 2) true ise odeme yerine hesap kredisinden dus (yeterliyse). Yoksa normal odeme.
   useCredits: z.boolean().optional().default(false),
+  // Promosyon/indirim kodu (opsiyonel). Gecerliyse fiyat dusurulur; %100 -> odeme atlanir.
+  promoCode: z.string().trim().max(64).optional(),
   // (Faz 3 v2) active-light: TEK checkbox — risk kabulu. Ek alan yok (yasal ad hesaptan otomatik).
   activeTestConsent: z.object({ riskAccepted: z.boolean() }).optional(),
   // (Faz 3 #5) authenticated_scan: test hesabi kimlik bilgileri. SIFRELI saklanir, flow'a
@@ -209,6 +212,17 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   // Bolgesel fiyat + para birimi (config-driven; bkz services/pricing.ts).
   const { amountMinorUnit, currency } = getPricing(packageKey, region);
 
+  // Promosyon kodu (opsiyonel). Gecerliyse fiyati dusurur; %100 -> effective 0 (odeme atlanir).
+  // Kredi ile birlikte KULLANILMAZ (promo verildiyse promo yolu kazanir).
+  let effectiveAmount = amountMinorUnit;
+  let promoApplied: Awaited<ReturnType<typeof evaluatePromo>> | null = null;
+  if (parsed.data.promoCode) {
+    const p = await evaluatePromo(parsed.data.promoCode, amountMinorUnit);
+    if (!p.valid) return res.status(400).json({ error: p.error ?? 'Promosyon kodu geçersiz.' });
+    promoApplied = p;
+    effectiveAmount = p.finalAmountMinorUnit!;
+  }
+
   const consent = {
     ownershipConfirmedAt: new Date(),
     distanceContractAcceptedAt: new Date(),
@@ -231,9 +245,32 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     });
   };
 
+  // PROMO %100 (effective 0): odeme adimini ATLA — siparisi 'paid' olustur, kullanim
+  // kaydini yaz, taramayi kuyruga al. GERCEK iyzico cagrisi YAPILMAZ (krediyle-ode benzeri).
+  if (promoApplied && effectiveAmount === 0) {
+    const order = await prisma.$transaction(async (tx) => {
+      const o = await tx.order.create({
+        data: {
+          customerId: req.customerId!, domainId: domain.id, packageId: packageDb.id,
+          amountMinorUnit: 0, currency, status: 'paid', paymentProvider: 'promo', paidAt: new Date(),
+          locale: localeFor(region), byokKeyEncrypted, ...consent,
+        },
+      });
+      await recordPromoUsage(tx, {
+        code: promoApplied!.code!, orderId: o.id, customerId: req.customerId!,
+        original: amountMinorUnit, discount: promoApplied!.discountMinorUnit!, final: 0,
+      });
+      return o;
+    });
+    if (isActiveLight) await recordConsent(order.id); // tarama baslamadan ONCE
+    await enqueueOrStartScan(order.id);
+    return res.json({ orderId: order.id, paidWithPromo: true, code: promoApplied.code });
+  }
+
   // (Is 2) KREDI ILE ODEME: yeterli bakiye varsa odeme adimini ATLA — krediyi dus,
   // siparisi 'paid' olustur, taramayi kuyruga al. Hepsi TEK transaction (tutarlilik).
-  if (parsed.data.useCredits) {
+  // Promo verildiyse kredi yolu KULLANILMAZ (cift indirim olmasin).
+  if (parsed.data.useCredits && !promoApplied) {
     const creditsNeeded = creditsForPackagePrice(amountMinorUnit);
     const customer = await prisma.customer.findUniqueOrThrow({ where: { id: req.customerId! }, select: { creditBalance: true } });
     if (customer.creditBalance < creditsNeeded) {
@@ -256,12 +293,13 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     return res.json({ orderId: order.id, paidWithCredits: true, creditsSpent: creditsNeeded });
   }
 
+  // Kismi promo indirimi: siparis effectiveAmount ile olusur, kalan tutar iyzico'da odenir.
   const order = await prisma.order.create({
     data: {
       customerId: req.customerId!,
       domainId: domain.id,
       packageId: packageDb.id,
-      amountMinorUnit,
+      amountMinorUnit: effectiveAmount,
       currency,
       status: 'awaiting_payment',
       locale: localeFor(region), // (2) cikti dili bolgeden turetilir
@@ -270,6 +308,12 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     },
   });
   if (isActiveLight) await recordConsent(order.id);
+  if (promoApplied) {
+    await recordPromoUsage(prisma, {
+      code: promoApplied.code!, orderId: order.id, customerId: req.customerId!,
+      original: amountMinorUnit, discount: promoApplied.discountMinorUnit!, final: effectiveAmount,
+    });
+  }
 
   // Bölgeye göre ödeme sağlayıcı (tr→iyzico, us/ae→stripe; hepsi sandbox).
   const payment = await getPaymentProvider(region).initiatePayment(order.id);
@@ -304,6 +348,21 @@ ordersRouter.get('/', requireAuth, async (req, res) => {
 ordersRouter.get('/queue/status', requireAuth, async (_req, res) => {
   const stats = await getQueueStats();
   res.json({ ...stats, threshold: config.queueDepthWarnThreshold, busy: stats.queuedCount >= config.queueDepthWarnThreshold });
+});
+
+// Promo kodu ONIZLEME — checkout'ta kod girilince indirimli fiyati gostermek icin.
+// Satin alma YAPMAZ; yalniz hesaplar (siparis aninda ayni mantik tekrar dogrulanir).
+const promoPreviewSchema = z.object({
+  code: z.string().trim().min(1).max(64),
+  packageKey: z.enum(SCAN_PACKAGES.map((p) => p.key) as [string, ...string[]]),
+  region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
+});
+ordersRouter.post('/promo/preview', requireAuth, async (req, res) => {
+  const parsed = promoPreviewSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ valid: false, error: 'Geçersiz istek.' });
+  const { amountMinorUnit, currency } = getPricing(parsed.data.packageKey, parsed.data.region);
+  const result = await evaluatePromo(parsed.data.code, amountMinorUnit);
+  res.json({ ...result, currency });
 });
 
 ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
