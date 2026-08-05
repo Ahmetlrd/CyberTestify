@@ -21,6 +21,7 @@ const md = new MarkdownIt({
 export interface ReportPdfMeta {
   hostname: string;
   packageName: string;
+  packageKey?: string; // (KVKK pilotu) pakete-ozel render dallanmasi icin
   createdAt: Date;
   locale: 'tr' | 'en';
 }
@@ -85,6 +86,40 @@ function assessRisk(md: string, locale: 'tr' | 'en'): { level: 'high' | 'medium'
   return { level: 'low', label: t.riskLow, sentence: t.assessLow };
 }
 
+// (KVKK PILOTU) Durum sutununu (Uygun/Dikkat/Eksik) SAYARAK deterministik risk + kontrol
+// ozeti uretir — LLM'in tutarsiz etiketine GUVENME. Severity-tabanli assessRisk KVKK'da
+// calismiyordu (KVKK "Uygun/Dikkat/Eksik" kullanir, "kritik/yuksek" degil) — bu onu duzeltir.
+export function assessKvkk(md: string, t: { riskHigh: string; riskMedium: string; riskLow: string }): {
+  level: 'high' | 'medium' | 'low';
+  label: string;
+  sentence: string;
+  eksik: number;
+  dikkat: number;
+  uygun: number;
+  total: number;
+} {
+  // Yalniz TABLO HUCRESI olarak gecen Durum degerlerini say ("| Eksik |" gibi).
+  const count = (kw: RegExp) => (md.match(kw) ?? []).length;
+  const eksik = count(/\|\s*eksik\s*\|/gi);
+  const dikkat = count(/\|\s*dikkat\s*\|/gi);
+  const uygun = count(/\|\s*uygun\s*\|/gi);
+  const total = eksik + dikkat + uygun;
+  // Kritik/Yuksek -> riza mekanizmasi tamamen yok + izleyiciler rizasiz (cok Eksik).
+  // Orta -> bazi eksikler ama temel mekanizmalar var. Dusuk -> sadece kucuk firsatlar.
+  let level: 'high' | 'medium' | 'low';
+  if (eksik >= 3) level = 'high';
+  else if (eksik >= 1 || dikkat >= 2) level = 'medium';
+  else level = 'low';
+  const label = level === 'high' ? t.riskHigh : level === 'medium' ? t.riskMedium : t.riskLow;
+  const sentence =
+    level === 'high'
+      ? 'KVKK açısından öncelikli ele alınması gereken önemli hazırlık eksiklikleri tespit edildi (rıza mekanizması ve/veya temel bilgilendirme/veri sorumlusu yükümlülükleri).'
+      : level === 'medium'
+        ? 'Bazı KVKK hazırlık eksiklikleri tespit edildi; kısa vadede iyileştirilmesi önerilir. Temel mekanizmaların bir kısmı mevcut.'
+        : 'Belirgin bir KVKK hazırlık eksikliği öne çıkmadı; rapor yalnızca küçük iyileştirme fırsatlarını listeler.';
+  return { level, label, sentence, eksik, dikkat, uygun, total };
+}
+
 // CyberTestify kalkan logosu (inline SVG — dis kaynak yok).
 const LOGO_SVG = `
 <svg width="34" height="34" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -116,12 +151,32 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
     '',
   );
 
-  // Genel Degerlendirme (banner altina) — siddet dagilimindan risk seviyesi (ek LLM YOK).
-  const risk = assessRisk(effectiveMd, meta.locale);
-  const assessBox = `<div class="assess assess-${risk.level}">
+  // Genel Degerlendirme (banner altina) — risk seviyesi (ek LLM YOK).
+  const isKvkk = meta.packageKey === 'kvkk_hazirlik';
+  let assessBox: string;
+  if (isKvkk) {
+    // (KVKK PILOTU) Durum sayimindan DETERMINISTIK risk + notr "Kontrol Ozeti" kutusu.
+    const k = assessKvkk(effectiveMd, t);
+    const needImprove = k.eksik + k.dikkat;
+    // NOTR ifade — "uyum skoru/uyumlu/uyumsuz" YOK (UYUM BEYANI YOK kurali).
+    const summaryLine =
+      k.total > 0
+        ? `${needImprove}/${k.total} kontrol alanı iyileştirme gerektiriyor (Eksik: ${k.eksik} · Dikkat: ${k.dikkat} · Uygun: ${k.uygun}).`
+        : 'Kontrol alanları tablodan otomatik özetlenemedi.';
+    assessBox = `<div class="assess assess-${k.level}">
+    <div class="assess-head"><span class="assess-title">${escapeHtml(t.assessTitle)}</span>
+      <span class="risk-badge risk-${k.level}">${escapeHtml(k.label)}</span></div>
+    <p class="assess-body">${escapeHtml(k.sentence)}</p></div>
+    <div class="ctrl-summary"><span class="ctrl-title">Hazırlık Durumu Özeti</span>
+      <span class="ctrl-line">${escapeHtml(summaryLine)}</span></div>`;
+  } else {
+    const risk = assessRisk(effectiveMd, meta.locale);
+    assessBox = `<div class="assess assess-${risk.level}">
     <div class="assess-head"><span class="assess-title">${escapeHtml(t.assessTitle)}</span>
       <span class="risk-badge risk-${risk.level}">${escapeHtml(risk.label)}</span></div>
     <p class="assess-body">${escapeHtml(risk.sentence)}</p></div>`;
+  }
+  const fixTitle = isKvkk ? 'Önerilen Aksiyonlar' : t.fixTitle;
 
   let bodyHtml = md.render(effectiveMd);
 
@@ -133,9 +188,9 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
 
   // Fix onerileri bolumu (unlock ise ekle; kilitliyse kilit notu; hic yoksa ekleme).
   if (opts.fixMarkdown && opts.fixMarkdown.trim()) {
-    bodyHtml += `<div class="fix-section"><h2>${escapeHtml(t.fixTitle)}</h2>${md.render(opts.fixMarkdown)}</div>`;
+    bodyHtml += `<div class="fix-section"><h2>${escapeHtml(fixTitle)}</h2>${md.render(opts.fixMarkdown)}</div>`;
   } else if (opts.fixLocked) {
-    bodyHtml += `<div class="fix-locked"><h2>🔒 ${escapeHtml(t.fixTitle)}</h2><p>${escapeHtml(t.fixLocked)}</p></div>`;
+    bodyHtml += `<div class="fix-locked"><h2>🔒 ${escapeHtml(fixTitle)}</h2><p>${escapeHtml(t.fixLocked)}</p></div>`;
   }
 
   return `<!doctype html><html lang="${meta.locale}"><head><meta charset="utf-8">
@@ -172,6 +227,15 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
   .risk-high { background: #B3261E; }
   .risk-medium { background: #E0940E; }
   .risk-low { background: #1C6B60; }
+  /* (KVKK) Notr "Hazirlik Durumu Ozeti" kutusu — uyum skoru DEGIL */
+  .ctrl-summary { display: flex; align-items: baseline; gap: 10px; margin: -8px 0 20px; padding: 10px 14px;
+    background: #EEF5F3; border: 1px solid #CFE5DF; border-radius: 8px; }
+  .ctrl-title { font-size: 11px; font-weight: 700; color: #14514A; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+  .ctrl-line { font-size: 12px; color: #1b2b28; }
+  /* (KVKK) Durum hucresi renk + ikon (Uygun=yesil, Dikkat=turuncu, Eksik=kirmizi) */
+  td.st-eksik { border-left: 4px solid #B3261E; } td.st-eksik .sev-badge { background: #B3261E; }
+  td.st-dikkat { border-left: 4px solid #E0940E; } td.st-dikkat .sev-badge { background: #E0940E; }
+  td.st-uygun { border-left: 4px solid #1C6B60; } td.st-uygun .sev-badge { background: #1C6B60; }
   h1 { color: #123F3A; font-size: 20px; margin: 6px 0 14px; border-bottom: 2px solid #DCEAE6; padding-bottom: 8px; }
   h2 { color: #14514A; font-size: 15px; margin: 20px 0 8px; }
   h3 { color: #1C6B60; font-size: 13px; margin: 14px 0 6px; }
@@ -229,6 +293,10 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
     // Siddet kelimelerine gore tablo hucrelerini renklendir (TR+EN, buyuk/kucuk duyarsiz).
     (function () {
       var map = [
+        // (KVKK) Durum degerleri — TAM eslesme + ikon (yesil/turuncu/kirmizi).
+        { cls: 'st-uygun', re: /^uygun$/i, icon: '🟢 ' },
+        { cls: 'st-dikkat', re: /^dikkat$/i, icon: '🟠 ' },
+        { cls: 'st-eksik', re: /^eksik$/i, icon: '🔴 ' },
         { cls: 'sev-critical', re: /\\b(kritik|critical)\\b/i },
         { cls: 'sev-high', re: /\\b(y[uü]ksek|high)\\b/i },
         { cls: 'sev-medium', re: /\\b(orta|medium)\\b/i },
@@ -243,7 +311,7 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
         for (var i = 0; i < map.length; i++) {
           if (map[i].re.test(norm)) {
             td.classList.add(map[i].cls);
-            td.innerHTML = '<span class="sev-badge">' + txt + '</span>';
+            td.innerHTML = '<span class="sev-badge">' + (map[i].icon || '') + txt + '</span>';
             break;
           }
         }

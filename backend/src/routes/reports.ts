@@ -21,7 +21,7 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
 
   const report = await prisma.report.findFirstOrThrow({
     where: { orderId: req.params.orderId, order: { customerId: req.customerId! } },
-    include: { order: { include: { domain: { select: { hostname: true } }, package: { select: { displayName: true } } } } },
+    include: { order: { include: { domain: { select: { hostname: true } }, package: { select: { displayName: true, key: true } } } } },
   });
 
   let plaintext: Buffer;
@@ -67,6 +67,7 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
     {
       hostname: report.order.domain.hostname,
       packageName: report.order.package.displayName,
+      packageKey: report.order.package.key,
       createdAt: report.createdAt,
       locale,
     },

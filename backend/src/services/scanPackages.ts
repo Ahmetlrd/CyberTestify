@@ -512,9 +512,10 @@ Target: ${host}
     promptTemplate: (host) => `
 Asagidaki TEK hedef icin SABIT, DAR bir "KVKK ON UYUM KONTROLU" yap. Bu ac-uclu arastirma
 DEGIL, SABIT bir kontrol listesidir. KRITIK KISITLAR: YENI SUBTASK ACMA; tum siteyi TARAMA/
-crawl ETME; internette ARASTIRMA yapma. YALNIZCA ${host} ANA SAYFASINI ve — yalnizca ana
-sayfada dogrudan LINKLI ise — gizlilik/aydinlatma ve cerez politikasi sayfasini incele. TOPLAM
-BIRKAC GET yeterli (~5-8 istek); gereksiz sayfa gezme. Bu HUKUKI DANISMANLIK DEGILDIR; amac
+crawl ETME; internette ARASTIRMA yapma. ${host} ANA SAYFASINI incele; ayrica gizlilik/aydinlatma
+ve cerez politikasi sayfalarini (ana sayfada linkliyse) ve asagida (madde 4) belirtilen SABIT
+iletisim/hakkimizda yollarini TEK GET ile kontrol et. TOPLAM ~8-12 GET yeterli; wordlist/brute
+ve gereksiz sayfa gezme YOK. Bu HUKUKI DANISMANLIK DEGILDIR; amac
 disaridan gorulebilen eksikleri KVKK ilkeleriyle eslestirmek.
 ${HAZIRLIK_FOCUS_TR}
 
@@ -523,18 +524,49 @@ Su 5 kontrolu YAP (yalnizca normal GET ile gozlem):
 2. Cerez rizasi (consent) banner'i var mi; ana sayfa yanitinda rizadan ONCE izleyici cerez
    (Set-Cookie) birakiliyor mu?
 3. Kisisel veri toplayan formlar (iletisim/uyelik) HTTPS uzerinde mi; acik rizaya atif var mi?
-4. Veri sorumlusu / iletisim / VERBIS atifi gozlemleniyor mu?
-5. Ucuncu taraf izleyiciler (analytics, pixel) ana sayfa HTML'inde gozlemleniyor mu?
+4. Veri sorumlusu / iletisim / VERBIS atifi gozlemleniyor mu? KAPSAM: ana sayfaya EK OLARAK
+   su yaygin yollari da TEK GET ile dene ve icerikte sirket adi / e-posta / telefon / adres
+   ara: /iletisim, /contact, /hakkimizda, /about, /kvkk. Bir alt sayfada bulursan "Uygun" say.
+5. Ucuncu taraf izleyiciler (analytics, pixel, GTM) ana sayfa HTML'inde gozlemleniyor mu?
 
-Bu 5 kontrolden SONRA HEMEN, AYNI adimda, tek raporu VE cozum onerilerini yaz ve BITIR — ayri
+DURUSTLUK KURALI (KRITIK): Kontrol ettigin yerlerde bir sey GORMEDIYSEN, "yoktur/bulunmamaktadir"
+gibi KESIN bir YOKLUK iddiasi ETME. Bunun yerine kontrolun KAPSAMINI durustce belirt:
+"Kontrol edilen sayfalarda (ana sayfa + /iletisim, /hakkimizda) gozlemlenmedi; baska bir sayfada
+mevcutsa bu kontrol kapsami disinda kalmis olabilir." Yalnizca gercekten bakip bulamadigin seyler
+icin bunu yaz; buldugun seyleri net "Uygun" isaretle.
+
+Bu kontrollerden SONRA HEMEN, AYNI adimda, tek raporu VE cozum onerilerini yaz ve BITIR — ayri
 bir "rapor yazma" subtask'i ACMA, baska hicbir sey yapma.
 ${SAFETY_TR}
 ${BUDGET_GUARD_TR}
 ${FIX_SUGGESTIONS_STEP_TR}
 
-Cikti (Markdown tablo): "KVKK Ilkesi/Konu | Gozlem | Durum (Uygun/Dikkat/Eksik) |
-Oneri". Sonda: "Bu rapor hukuki gorus/uyum beyani degildir; nihai degerlendirme
-icin KVKK uzmani/avukat gerekir" notu.
+CIKTI YAPISI (bu SIRAYLA, TAM TURKCE karakterlerle — İ/ı/ş/ç/ğ/ü/ö dogru kullan):
+
+## Yönetici Özeti
+En kritik 3-4 bulguyu TEK SATIRLIK madde olarak yaz (kisa, teknik olmayan, is diliyle), sonra:
+**Öncelikli Aksiyon:** [tek cümlede en acil yapilmasi gereken]
+
+## Bulgular
+Markdown tablo — sutunlar TAM olarak: "KVKK İlkesi/Konu | Gözlem | Durum | Öneri".
+Durum sutunu SADECE su üç degerden biri olsun (baska kelime yok): "Uygun", "Dikkat", "Eksik".
+(Not: risk seviyesi ve kontrol özeti kutusu OTOMATIK/kod tarafindan eklenir — SEN "uyum skoru",
+"uyumludur/uyumsuzdur" GIBI ifadeler YAZMA; yalnizca gözlem + Durum + öneri.)
+
+Sonra cozum onerileri bolumu (delimiterden sonra) SU YAPIDA:
+
+## Önerilen Aksiyonlar
+Öncelik sirali, İŞ DİLİYLE, her biri 1-2 cümle (kod YOK). Ornek bicim:
+"**Çerez Rızası Banner'ı (Yüksek Öncelik):** Sayfa yüklenir yüklenmez rıza banner'ı gösterilmeli;
+rıza alınana kadar üçüncü taraf izleyiciler yüklenmemeli. Teknik detay için Ek-A'ya bakınız."
+
+## Ek-A: Teknik Uygulama Detayları
+Yalnizca GEREKLI oldugunda KISA, GENERIK kod snippet'leri koy. Hedefe özel GERÇEK kimlikleri
+(GTM/Pixel/Analytics ID'leri gibi) KULLANMA — placeholder yaz (ör. GTM-XXXXXXX, PIXEL_ID).
+Tam production kod DEGIL, öz/kisa örnek yeterli.
+
+Rapor sonunda: "Bu rapor hukuki görüş/uyum beyanı değildir; nihai değerlendirme için KVKK
+uzmanı/avukat gerekir." notu.
 
 Hedef: ${host}
 `.trim(),

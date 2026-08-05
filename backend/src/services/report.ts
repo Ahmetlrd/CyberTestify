@@ -176,7 +176,7 @@ export async function generateAndStoreReport(flowId: string) {
   }
 
   const markdown = redactAll(
-    renderReportMarkdown(flow.order.domain.hostname, flow.order.package.displayName, findings, logs.screenshots, locale) +
+    renderReportMarkdown(flow.order.domain.hostname, flow.order.package.displayName, findings, logs.screenshots, locale, flow.order.package.key) +
       extrasBlock,
   );
 
@@ -186,7 +186,7 @@ export async function generateAndStoreReport(flowId: string) {
   // (3) Cozum onerileri varsa AYNI accessSecret ile AYRI sifrele (kilitli alan).
   let fixFields: Record<string, Buffer> = {};
   if (fixText.trim().length > 0) {
-    const fixMd = redactAll(renderFixSuggestionsMarkdown(flow.order.domain.hostname, fixText, locale));
+    const fixMd = redactAll(renderFixSuggestionsMarkdown(flow.order.domain.hostname, fixText, locale, flow.order.package.key));
     const enc = encryptReport(Buffer.from(fixMd, 'utf-8'), accessSecret);
     fixFields = {
       fixSuggestions: enc.encryptedBlob,
@@ -245,20 +245,37 @@ const T = {
   },
 } as const;
 
+// (KVKK PILOTU) KVKK raporunda ajan KENDI yapisini uretir (## Yönetici Özeti + ## Bulgular)
+// ve TAM Turkce kullanir; bu yuzden fazladan "## Bulgular" wrapper'i EKLEMEYIZ ve legal
+// metni duzeltilmis-Turkce + KISA tutariz (detay son bolumde). Diger paketler DEGISMEDEN kalir.
+const KVKK_LEGAL = [
+  '**Yapay zeka üretimi:** Bu rapor otonom bir yapay zeka ajanı tarafından üretilmiştir; olgusal ifadeler bağımsız doğrulanmadan kullanılmamalıdır.',
+  '**Kapsam:** Kontrol yalnızca dışarıdan gözlemlenebilir, pasif yöntemlerle ve sınırlı sayıda sayfayla yapılmıştır; kapsam dışı sayfalarda farklı bulgular olabilir.',
+  '**Resmi değildir:** Bu rapor bir uyum beyanı/denetimi değildir; nihai değerlendirme için KVKK uzmanı/avukat gereklidir.',
+];
+
 export function renderReportMarkdown(
   hostname: string,
   packageName: string,
   findingsMd: string,
   screenshots: pentagi.FlowLogs['screenshots'],
   locale: Locale = 'tr',
+  packageKey?: string,
 ): string {
   const t = T[locale];
+  const isKvkk = packageKey === 'kvkk_hazirlik';
   // Ekran goruntusu bolumu YALNIZCA icerik varsa gosterilir — bos "Yok" bolumu koymayiz.
   const screenshotsBlock =
     screenshots.length > 0
       ? `\n\n---\n\n## ${t.screenshots}\n\n${screenshots.map((s) => `- ${s.name}: ${s.url}`).join('\n')}`
       : '';
-  return `# ${t.title}
+  // KVKK: ajanin kendi bolum yapisi (Yönetici Özeti + Bulgular) oldugu gibi; wrapper YOK.
+  const bodyBlock = isKvkk
+    ? `${findingsMd.trim() || t.noFindings}`
+    : `## ${t.findings}\n\n${findingsMd.trim() || t.noFindings}`;
+  const legalTitle = isKvkk ? 'Yasal Uyarı ve Kapsam' : t.legalTitle;
+  const legal = isKvkk ? KVKK_LEGAL : t.legal;
+  return `# ${isKvkk ? 'KVKK Ön Uyum Kontrol Raporu' : t.title}
 
 **${t.target}:** ${hostname}
 **${t.pkg}:** ${packageName}
@@ -266,20 +283,23 @@ export function renderReportMarkdown(
 
 ---
 
-## ${t.findings}
-
-${findingsMd.trim() || t.noFindings}${screenshotsBlock}
+${bodyBlock}${screenshotsBlock}
 
 ---
 
-## ${t.legalTitle}
+## ${legalTitle}
 
-${t.legal.map((l) => `- ${l}`).join('\n')}
+${legal.map((l) => `- ${l}`).join('\n')}
 `;
 }
 
 // (3) Cozum onerileri bolumu — ayri/kilitli alanda saklanir, odeme sonrasi acilir.
-export function renderFixSuggestionsMarkdown(hostname: string, fixText: string, locale: Locale = 'tr'): string {
+export function renderFixSuggestionsMarkdown(hostname: string, fixText: string, locale: Locale = 'tr', packageKey?: string): string {
   const t = T[locale];
+  // KVKK: baslik PDF tarafinda ("Önerilen Aksiyonlar") eklenir + ajan kendi alt-basliklarini
+  // (Önerilen Aksiyonlar / Ek-A) yazar; bu yuzden ASCII "# AI Cozum Onerileri" H1'i EKLEMEYIZ.
+  if (packageKey === 'kvkk_hazirlik') {
+    return `> Bu bölüm düzeltme (remediation) önerileri içindir; istismar/exploit kodu içermez.\n\n${fixText}\n`;
+  }
   return `# ${t.fixTitle} — ${hostname}\n\n> ${t.fixNote}\n\n${fixText}\n`;
 }
