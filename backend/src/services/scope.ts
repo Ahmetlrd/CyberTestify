@@ -114,8 +114,10 @@ const GUARD_BLOCK_MARKER = /passive scan policy|blocked at tool level/i;
 // terminal'de (curl/wget) yapilir; Go tool-guard da orada. Bu yuzden yalniz terminal taranir.
 const HTTP_EXECUTOR_TOOLS = new Set(['terminal']);
 
-// Bir yolun/komuttaki script dosya adlarini yakalar (py/sh/pl/rb).
-const SCRIPT_FILE_RE = /([\w.\/-]+\.(?:py|sh|pl|rb))\b/gi;
+// Bir yolun/komuttaki script dosya adlarini yakalar (py/sh/pl/rb/js/bash). Referans veren
+// HER terminal cagrisi sayilir (yazma + chmod + cat + calistirma + test) — sadece "yeniden
+// yazma" degil (bkz detectScriptDebugLoop; nomorelink KVKK vakasinin kapatilmasi).
+const SCRIPT_FILE_RE = /([\w.\/-]+\.(?:py|sh|pl|rb|js|bash))\b/gi;
 
 /**
  * Ayni script'in varyasyonlarini ayni "temel ada" indirger: dizin + uzanti atilir,
@@ -124,7 +126,7 @@ const SCRIPT_FILE_RE = /([\w.\/-]+\.(?:py|sh|pl|rb))\b/gi;
  */
 function normalizeScriptName(p: string): string {
   const file = p.split('/').pop() ?? p;
-  const noExt = file.replace(/\.(py|sh|pl|rb)$/i, '');
+  const noExt = file.replace(/\.(py|sh|pl|rb|js|bash)$/i, '');
   return noExt
     .replace(/([_-]?(v?\d+|fixed|final|new|updated|corrected|revised|clean|test|tmp|copy))+$/gi, '')
     .toLowerCase();

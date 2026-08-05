@@ -1,6 +1,6 @@
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { getPackageDef, securityProfileFor, METHOD_GUARD_EN, METHOD_GUARD_TR } from './scanPackages.js';
+import { getPackageDef, securityProfileFor, METHOD_GUARD_EN, METHOD_GUARD_TR, NO_SCRIPT_HARD_EN, NO_SCRIPT_HARD_TR } from './scanPackages.js';
 import { hasValidActiveTestConsent } from './activeTestConsent.js';
 import { decryptSecret } from './crypto.js';
 import { isVerificationStillValid } from './verification.js';
@@ -153,8 +153,12 @@ export async function startScanForOrder(orderId: string) {
   // (Yontem disiplini) TUM paketlere merkezi olarak eklenir — ajanin script-yazma/
   // debug dongusune sapmasini onler (bkz METHOD_GUARD_* ve scanPackages.ts yorumu).
   const methodLine = '\n\n' + (order.locale === 'en' ? METHOD_GUARD_EN : METHOD_GUARD_TR);
+  // (A) SABIT/DAR checklist (pasif) paketlerde KESIN script yasagi — active-light DAHIL DEGIL.
+  const noScriptLine =
+    pkgProfile === 'passive' ? '\n\n' + (order.locale === 'en' ? NO_SCRIPT_HARD_EN : NO_SCRIPT_HARD_TR) : '';
 
-  const prompt = pkg.promptTemplate(order.domain.hostname) + credLine + langLine + budgetLine + methodLine;
+  const prompt =
+    pkg.promptTemplate(order.domain.hostname) + credLine + langLine + budgetLine + methodLine + noScriptLine;
   const modelProvider = pkg.modelProvider;
 
   // YARIS-GUVENLI concurrency=1: PentAGI'yi cagirmadan ONCE 'running' slotunu

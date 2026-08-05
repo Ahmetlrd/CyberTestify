@@ -1,7 +1,7 @@
 import { prisma } from './db.js';
 import { config, validateScopeLockConfig } from './config.js';
 import * as pentagi from './pentagi/client.js';
-import { getPackageDef } from './services/scanPackages.js';
+import { getPackageDef, securityProfileFor } from './services/scanPackages.js';
 import { generateAndStoreReport } from './services/report.js';
 import { findOutOfScope, findForbiddenMethods, detectScriptDebugLoop } from './services/scope.js';
 import { encryptSecret } from './services/crypto.js';
@@ -107,12 +107,18 @@ async function tick() {
           if (methods.length) forbiddenMethodHit = methods.join(', ');
         }
 
-        // (D) SCRIPT DEBUG-LOOP — ajan ayni script'i tekrar tekrar yazip/calistirip
-        // duzeltmeye calisip butceyi yakarsa (bkz nomorelink vakasi) yakala; asagida
-        // overCap gibi ERKEN DUR + elde edilen ham veriyle rapor uret.
+        // (D) SCRIPT DEBUG-LOOP / SCRIPT-ETRAFINDA-DONME — ajan bir script yazip etrafinda
+        // (yazma/chmod/cat/calistirma) verimsiz cagrilar yaparsa (bkz nomorelink KVKK vakasi:
+        // 14 cagri, rapor eksik) yakala; asagida overCap gibi ERKEN DUR + ham veriyle rapor uret.
+        // SABIT/DAR checklist (pasif) paketlerde script ZATEN YASAK -> cok daha DUSUK esik (3),
+        // boylece etrafinda donme < 6 referansta bile erken kesilir. Active-light: normal esik.
+        const loopThreshold =
+          securityProfileFor(pkg) === 'passive'
+            ? Math.min(3, config.scriptDebugLoopThreshold)
+            : config.scriptDebugLoopThreshold;
         scriptLoopHit = detectScriptDebugLoop(
           logs.toolCallLogs.map((t) => ({ name: t.name, args: t.args })),
-          config.scriptDebugLoopThreshold,
+          loopThreshold,
         );
 
         // (B) SEVIYE 3 kapsam izleme — yalnızca henüz ihlal kaydı yoksa.

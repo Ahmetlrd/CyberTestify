@@ -164,6 +164,30 @@ sonuc YORUMLATMA / rapor YAZDIRMA. DONGU YASAGI (kritik): ayni script'i IKIDEN f
 DENEME. 2. duzeltmeden sonra hala calismiyorsa script'i TAMAMEN TERK ET ve elindeki ham veriyle tek
 tek komutlarla devam et. Butceni yaz-calistir-duzelt dongusunde HARCAMA.`.trim();
 
+// SABIT/DAR checklist paketlerinde (pasif) KESIN script YASAGI — gevsek "sade tut" degil,
+// TAM yasak. nomorelink KVKK vakasi: ajan kvkk_audit.sh yazip etrafinda 14 verimsiz cagri
+// yapip raporu yazamadan bitti. Bu blok orchestrator'da yalniz securityProfile='passive'
+// paketlere eklenir (active-light DAHIL DEGIL — onlar script gerektirebilir).
+export const NO_SCRIPT_HARD_EN = `
+HARD RULE — NO SCRIPTS FOR THIS PACKAGE: This is a SMALL, FIXED checklist (~8-12 GET requests).
+Do NOT write, create, or save ANY script file (.sh / .py / .js / .bash) — not for analysis, not
+as a helper, not to "run all checks at once". Do NOT use cat>/heredoc to a script, chmod +x, or
+run bash/sh/./<file>. Use ONLY direct, INDIVIDUAL commands (curl / openssl / dig / nslookup / host),
+ONE command per check, and read each output directly. Writing a script here is FORBIDDEN and
+UNNECESSARY — the checks are few and finish faster and more reliably with direct commands. If you
+notice yourself writing/chmod'ing/running a script, STOP immediately and switch to direct one-off
+commands.`.trim();
+
+export const NO_SCRIPT_HARD_TR = `
+KESIN KURAL — BU PAKETTE SCRIPT YASAK: Bu, KUCUK ve SABIT bir kontrol listesidir (~8-12 GET).
+HICBIR script dosyasi (.sh / .py / .js / .bash) YAZMA, olusturma veya kaydetme — ne analiz icin,
+ne yardimci arac olarak, ne de "tum kontrolleri tek seferde yapmak" icin. cat>/heredoc ile script
+yazma, chmod +x, bash/sh/./<dosya> ile CALISTIRMA da YASAK. SADECE dogrudan TEKIL komutlar kullan
+(curl / openssl / dig / nslookup / host), komut basina TEK kontrol, ciktisini dogrudan gor. Bu pakette
+script yazmak KESINLIKLE YASAKTIR ve GEREKSIZDIR — kontrol sayisi azdir, dogrudan komutlarla cok daha
+hizli ve guvenilir biter. Kendini script yazarken/chmod'larken/calistirirken yakalarsan DERHAL DUR ve
+dogrudan tekil komutlara gec.`.trim();
+
 const BUDGET_GUARD_EN = `
 COMPLETION & OUTPUT RULE (HIGHEST PRIORITY): Writing the final findings report AND the
 ${FIX_SUGGESTIONS_DELIM} section is your #1 deliverable — more important than extra probing.
