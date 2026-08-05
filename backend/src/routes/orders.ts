@@ -50,6 +50,8 @@ ordersRouter.get('/packages', async (req, res) => {
           currency: row?.currency ?? currencyFor(region),
           // (3) Ucretli "AI Cozum Onerileri" eklentisi fiyati (PLACEHOLDER).
           fixSuggestionPriceMinorUnit: fixSuggestionPrice(p),
+          // "Yakında": listelenir ama satin ALINAMAZ (frontend CTA pasif + rozet).
+          comingSoon: p.comingSoon ?? false,
           // (Faz 3) guvenlik profili + active-light ise ek onay bloğu bilgisi (frontend).
           securityProfile: profile,
           activeTest:
@@ -80,6 +82,7 @@ ordersRouter.get('/bundles', async (req, res) => {
         description: locale === 'en' ? b.descriptionEn : b.description,
         category: b.category,
         discountPct: b.discountPct,
+        comingSoon: b.comingSoon ?? false,
         selectable: !!b.selectable,
         // selectable ise musteri secer; TR disi bolgede trOnly (KVKK) havuzdan ELENIR.
         selectableModules: b.selectable
@@ -89,7 +92,7 @@ ordersRouter.get('/bundles', async (req, res) => {
         originalMinorUnit: price.originalMinorUnit,
         amountMinorUnit: price.amountMinorUnit,
         currency: price.currency,
-        pricePlaceholder: true, // fiyatlar onay bekliyor (tekil fiyatlardan turetilmis)
+        pricePlaceholder: false, // fiyatlar NIHAI kabul edildi (canlida "onay bekliyor" gosterilmez)
       };
     }),
   );
@@ -199,6 +202,10 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   // dogrudan istek gelebilir). iso27001/pci — POST sorunu (bkz PATCHES.md).
   if (packageDef.available === false) {
     return res.status(409).json({ error: 'Bu paket su an satista degil.' });
+  }
+  // "Yakında" paket: listelenir ama satin ALINAMAZ (defense-in-depth; frontend de kapatir).
+  if (packageDef.comingSoon) {
+    return res.status(409).json({ error: 'Bu paket yakında açılacak; şu an satın alınamıyor.' });
   }
 
   // (Faz 3) ACTIVE-LIGHT GUARD: bu paketler zafiyeti DOGRULAYAN aktif test istekleri
@@ -396,6 +403,9 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
 
   const bundle = getBundle(bundleKey);
   if (!bundle) return res.status(404).json({ error: 'Paket bulunamadi.' });
+  if (bundle.comingSoon) {
+    return res.status(409).json({ error: 'Bu paket yakında açılacak; şu an satın alınamıyor.' });
+  }
   const memberKeys = resolveMembers(bundle, region, parsed.data.selectedModules);
   if (!memberKeys.length) return res.status(400).json({ error: 'Bu paket icin gecerli modul secilmedi.' });
 

@@ -4,12 +4,12 @@ import { REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 import { getDict, formatMoney } from '../../../config/i18n';
 import { CategoryAccordions } from '../../../components/CategoryAccordions';
 
-type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string };
+type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean };
 type Bundle = {
   key: string; displayName: string; description: string; discountPct: number;
   members: Array<{ key: string; displayName: string }>;
   selectable: boolean; selectableModules: Array<{ key: string; displayName: string }> | null;
-  originalMinorUnit: number; amountMinorUnit: number; currency: string;
+  originalMinorUnit: number; amountMinorUnit: number; currency: string; comingSoon?: boolean;
 };
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -98,10 +98,16 @@ export default async function PackagesPage({ params }: { params: { region: strin
                 const savedMinor = b.originalMinorUnit - b.amountMinorUnit;
                 const savedPct = b.originalMinorUnit > 0 ? Math.round((savedMinor / b.originalMinorUnit) * 100) : 0;
                 return (
-                  <div key={b.key} className="card relative flex flex-col border-2 border-accent/40 p-6">
-                    <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
-                      %{savedPct} {region.code === 'tr' ? 'avantaj' : 'off'}
-                    </span>
+                  <div key={b.key} className={`card relative flex flex-col border-2 border-accent/40 p-6 ${b.comingSoon ? 'opacity-90' : ''}`}>
+                    {b.comingSoon ? (
+                      <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
+                        {region.code === 'tr' ? 'Yakında' : 'Soon'}
+                      </span>
+                    ) : (
+                      <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
+                        %{savedPct} {region.code === 'tr' ? 'avantaj' : 'off'}
+                      </span>
+                    )}
                     <h3 className="text-lg font-bold text-brand">{b.displayName}</h3>
                     <p className="mt-2 text-sm leading-relaxed text-ink-soft">{b.description}</p>
                     {b.selectable ? (
@@ -118,36 +124,47 @@ export default async function PackagesPage({ params }: { params: { region: strin
                       </div>
                     )}
                     <div className="mt-4 flex-1">
-                      <div>
-                        <span className="text-3xl font-extrabold text-ink">{formatMoney(b.amountMinorUnit, region)}</span>
-                        <span className="ml-1 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahil' : 'incl. tax'}</span>
-                      </div>
-                      {/* Otomatik indirim satiri: Tek tek alinsaydi X -> Paket Y (%Z avantaj) */}
-                      <div className="mt-1.5 text-xs text-emerald-700">
-                        {region.code === 'tr' ? (
-                          <>
-                            Tek tek alınsaydı <span className="line-through">{formatMoney(b.originalMinorUnit, region)}</span> →{' '}
-                            <strong>{formatMoney(b.amountMinorUnit, region)}</strong> ({formatMoney(savedMinor, region)} / %{savedPct} avantaj)
-                          </>
-                        ) : (
-                          <>
-                            Separately <span className="line-through">{formatMoney(b.originalMinorUnit, region)}</span> →{' '}
-                            <strong>{formatMoney(b.amountMinorUnit, region)}</strong> (save {formatMoney(savedMinor, region)} / {savedPct}%)
-                          </>
-                        )}
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-ink-muted">
-                        {region.code === 'tr' ? 'Fiyat onay bekliyor (placeholder)' : 'Price pending approval (placeholder)'}
-                      </div>
-                      <div className="mt-1 text-[11px] text-ink-soft">
-                        {region.code === 'tr'
-                          ? 'Tahmini süre: içeriğe göre değişir (üye taramalar sırayla çalışır)'
-                          : 'Est. time: varies by content (member scans run sequentially)'}
-                      </div>
+                      {b.comingSoon ? (
+                        <p className="text-sm text-ink-soft">
+                          {region.code === 'tr'
+                            ? 'Bu kombine paket yakında açılacak; içindeki kontroller olgunlaştıkça sunulacak.'
+                            : 'This bundle is coming soon; offered as its checks mature.'}
+                        </p>
+                      ) : (
+                        <>
+                          <div>
+                            <span className="text-3xl font-extrabold text-ink">{formatMoney(b.amountMinorUnit, region)}</span>
+                            <span className="ml-1 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahil' : 'incl. tax'}</span>
+                          </div>
+                          {/* Otomatik indirim satiri: Tek tek alinsaydi X -> Paket Y (%Z avantaj) */}
+                          <div className="mt-1.5 text-xs text-emerald-700">
+                            {region.code === 'tr' ? (
+                              <>
+                                Tek tek alınsaydı <span className="line-through">{formatMoney(b.originalMinorUnit, region)}</span> →{' '}
+                                <strong>{formatMoney(b.amountMinorUnit, region)}</strong> ({formatMoney(savedMinor, region)} / %{savedPct} avantaj)
+                              </>
+                            ) : (
+                              <>
+                                Separately <span className="line-through">{formatMoney(b.originalMinorUnit, region)}</span> →{' '}
+                                <strong>{formatMoney(b.amountMinorUnit, region)}</strong> (save {formatMoney(savedMinor, region)} / {savedPct}%)
+                              </>
+                            )}
+                          </div>
+                          <div className="mt-1 text-[11px] text-ink-soft">
+                            {region.code === 'tr'
+                              ? 'Tahmini süre: içeriğe göre değişir (üye taramalar sırayla çalışır)'
+                              : 'Est. time: varies by content (member scans run sequentially)'}
+                          </div>
+                        </>
+                      )}
                     </div>
-                    <Link href={`/verify?bundle=${b.key}`} className="btn-primary mt-6 w-full">
-                      {region.code === 'tr' ? 'Satın Al' : 'Buy Now'}
-                    </Link>
+                    {b.comingSoon ? (
+                      <span className="btn-ghost mt-6 w-full cursor-default">{region.code === 'tr' ? 'Yakında' : 'Coming soon'}</span>
+                    ) : (
+                      <Link href={`/verify?bundle=${b.key}`} className="btn-primary mt-6 w-full">
+                        {region.code === 'tr' ? 'Satın Al' : 'Buy Now'}
+                      </Link>
+                    )}
                   </div>
                 );
               })}

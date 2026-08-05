@@ -53,7 +53,7 @@ export const api = {
       }>
     >('/domains'),
   listPackages: (region = 'tr') =>
-    request<Array<{ key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string }>>(
+    request<Array<{ key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean }>>(
       `/orders/packages?region=${region}`,
     ),
   createOrder: (
@@ -77,7 +77,7 @@ export const api = {
         key: string; displayName: string; description: string; discountPct: number;
         selectable: boolean; selectableModules: Array<{ key: string; displayName: string }> | null;
         members: Array<{ key: string; displayName: string }>;
-        originalMinorUnit: number; amountMinorUnit: number; currency: string;
+        originalMinorUnit: number; amountMinorUnit: number; currency: string; comingSoon?: boolean;
       }>
     >(`/orders/bundles?region=${region}`),
   createBundleOrder: (body: {

@@ -5,13 +5,13 @@ import Link from 'next/link';
 import { getRegion } from '../config/regions';
 import { formatMoney } from '../config/i18n';
 
-type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string };
+type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean };
 
 // Satis-odakli kategori sirasi (teknik degil). keys: o kategoriye ait paket key'leri.
 // TEK KAYNAK — hem paketler sayfasi (bu bilesen) hem /order sayfasi kullanir.
 // est: kategoriye gore GERCEKCI tahmini tarama SURESI araligi (gecmis flow'lardan gozlemlenen
 // mertebe; kesin taahhut DEGIL). Her pakette bir sure beklentisi bulunsun diye.
-export const PACKAGE_CATEGORIES: Array<{ id: string; tr: string; en: string; keys: string[]; auth: boolean; estTr: string; estEn: string }> = [
+export const PACKAGE_CATEGORIES: Array<{ id: string; tr: string; en: string; keys: string[]; auth: boolean; estTr: string; estEn: string; descTr: string; descEn: string }> = [
   {
     id: 'passive',
     tr: 'Pasif Taramalar',
@@ -20,6 +20,8 @@ export const PACKAGE_CATEGORIES: Array<{ id: string; tr: string; en: string; key
     auth: false,
     estTr: '~3-8 dakika',
     estEn: '~3-8 min',
+    descTr: 'Hızlı görünürlük ve yapılandırma kontrolü.',
+    descEn: 'Fast visibility and configuration checks.',
   },
   {
     id: 'compliance',
@@ -29,6 +31,8 @@ export const PACKAGE_CATEGORIES: Array<{ id: string; tr: string; en: string; key
     auth: false,
     estTr: '~5-15 dakika',
     estEn: '~5-15 min',
+    descTr: 'Hızlı görünürlük ve yapılandırmanın uyum çerçeveleriyle (KVKK/PCI/ISO) eşlenmesi. Resmi denetim değildir.',
+    descEn: 'Fast visibility mapped to compliance frameworks. Not a formal audit.',
   },
   {
     id: 'active',
@@ -38,6 +42,8 @@ export const PACKAGE_CATEGORIES: Array<{ id: string; tr: string; en: string; key
     auth: true,
     estTr: '~10-25 dakika',
     estEn: '~10-25 min',
+    descTr: 'Zafiyetin gerçekten var olup olmadığını zararsız şekilde doğruluyoruz (istismar etmiyoruz).',
+    descEn: 'We safely verify whether a vulnerability actually exists — we do not exploit it.',
   },
   {
     id: 'advanced',
@@ -47,6 +53,8 @@ export const PACKAGE_CATEGORIES: Array<{ id: string; tr: string; en: string; key
     auth: true,
     estTr: '~30-60 dakika',
     estEn: '~30-60 min',
+    descTr: 'Daha derin, login’li ve çok adımlı ön değerlendirme yakında. Yine istismar ve veri sızdırma içermeyecek.',
+    descEn: 'Deeper, authenticated and multi-step pre-assessment coming soon. Still no exploitation or data exfiltration.',
   },
 ];
 
@@ -104,37 +112,55 @@ export function CategoryAccordions({
             </button>
 
             {isOpen && (
-              <div className="grid gap-4 border-t border-line px-5 py-5 md:grid-cols-2 lg:grid-cols-3">
+              <div className="border-t border-line px-5 py-5">
+                <p className="mb-4 text-sm text-ink-soft">
+                  {tr ? cat.descTr : cat.descEn}
+                  {cat.auth && <span className="ml-2 align-middle">{authBadge}</span>}
+                </p>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {items.map((p) => (
-                  <div key={p.key} className="card flex flex-col p-5">
+                  <div key={p.key} className={`card flex flex-col p-5 ${p.comingSoon ? 'opacity-90' : ''}`}>
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="text-base font-bold text-brand">{p.displayName}</h3>
+                      {p.comingSoon && (
+                        <span className="shrink-0 rounded-pill bg-brand px-2.5 py-0.5 text-[10px] font-bold text-white">
+                          {tr ? 'Yakında' : 'Soon'}
+                        </span>
+                      )}
                     </div>
                     {cat.auth && <div className="mt-1.5">{authBadge}</div>}
                     <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-soft">{p.description}</p>
-                    <div className="mt-4">
-                      <span className="text-2xl font-extrabold text-ink">{formatMoney(p.priceMinorUnit, region)}</span>
-                      <div className="mt-0.5 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahildir' : 'Taxes included'}</div>
-                      <div className="mt-1 inline-flex items-center gap-1 text-xs text-ink-soft">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                          <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" strokeLinecap="round" />
-                        </svg>
-                        {tr ? 'Tahmini süre:' : 'Est. time:'} {tr ? cat.estTr : cat.estEn}
-                      </div>
-                    </div>
-                    <Link href={`/verify?package=${p.key}`} className="btn-outline mt-4 w-full">
-                      {tr ? 'Satın Al' : 'Buy Now'}
-                    </Link>
-                    <a
-                      href={`${apiUrl}/orders/sample-report/${p.key}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2.5 text-center text-xs font-semibold text-accent-600 underline underline-offset-2 hover:text-accent"
-                    >
-                      {tr ? 'Örnek Raporu Gör (PDF)' : 'View Sample Report (PDF)'}
-                    </a>
+                    {p.comingSoon ? (
+                      // "Yakında": fiyat gosterilmez, CTA pasif (BYOK ile ayni desen).
+                      <span className="btn-ghost mt-4 w-full cursor-default">{tr ? 'Yakında' : 'Coming soon'}</span>
+                    ) : (
+                      <>
+                        <div className="mt-4">
+                          <span className="text-2xl font-extrabold text-ink">{formatMoney(p.priceMinorUnit, region)}</span>
+                          <div className="mt-0.5 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahildir' : 'Taxes included'}</div>
+                          <div className="mt-1 inline-flex items-center gap-1 text-xs text-ink-soft">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                              <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" strokeLinecap="round" />
+                            </svg>
+                            {tr ? 'Tahmini süre:' : 'Est. time:'} {tr ? cat.estTr : cat.estEn}
+                          </div>
+                        </div>
+                        <Link href={`/verify?package=${p.key}`} className="btn-outline mt-4 w-full">
+                          {tr ? 'Satın Al' : 'Buy Now'}
+                        </Link>
+                        <a
+                          href={`${apiUrl}/orders/sample-report/${p.key}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2.5 text-center text-xs font-semibold text-accent-600 underline underline-offset-2 hover:text-accent"
+                        >
+                          {tr ? 'Örnek Raporu Gör (PDF)' : 'View Sample Report (PDF)'}
+                        </a>
+                      </>
+                    )}
                   </div>
                 ))}
+                </div>
               </div>
             )}
           </div>

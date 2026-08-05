@@ -60,6 +60,9 @@ export interface ScanPackageDef {
   // guvenlik geregi durduruluyor (rapor cikmiyor). Kalici cozum: PentAGI tool-level
   // GET-only patch'i (bkz PATCHES.md 'GET-only' plani). Patch dogrulaninca tekrar acilacak.
   available?: boolean;
+  // true ise paket LISTELENIR ama "Yakında" olarak gosterilir: satin ALINAMAZ (createOrder
+  // reddeder), CTA pasif. Kod/prompt SILINMEZ — Vedat ilk-launch olgunlugu icin sonra acacak.
+  comingSoon?: boolean;
   promptTemplate: (targetHostname: string) => string;
 }
 
@@ -821,6 +824,7 @@ Target: ${host}
     maxToolCalls: 30,
     securityProfile: 'active-light',
     available: true,
+    comingSoon: true,
     promptTemplate: (host) => `
 Run a NARROW, ACTIVE-LIGHT SSRF VERIFICATION on the SINGLE target below. GOAL: PROVE whether the server
 can be made to issue an outbound request — NEVER reach into or explore the internal network. FIXED checklist.
@@ -855,6 +859,7 @@ Target: ${host}
     maxToolCalls: 30,
     securityProfile: 'active-light',
     available: true,
+    comingSoon: true,
     promptTemplate: (host) => `
 Run a NARROW, ACTIVE-LIGHT FILE-UPLOAD VERIFICATION on the SINGLE target below. GOAL: check whether upload
 points enforce type/size validation — NEVER upload a real payload/webshell. FIXED checklist. HARD
@@ -888,6 +893,7 @@ Target: ${host}
     maxToolCalls: 30,
     securityProfile: 'active-light',
     available: true,
+    comingSoon: true,
     promptTemplate: (host) => `
 Run a NARROW, ACTIVE-LIGHT BUSINESS-LOGIC VERIFICATION on the SINGLE target below. GOAL: prove whether
 common logic flaws exist — NEVER complete a real transaction or write persistent data. FIXED checklist.
@@ -921,6 +927,7 @@ Target: ${host}
     maxToolCalls: 30,
     securityProfile: 'active-light',
     available: true,
+    comingSoon: true,
     promptTemplate: (host) => `
 Run a NARROW, ACTIVE-LIGHT RACE-CONDITION / MASS-ASSIGNMENT VERIFICATION on the SINGLE target below. GOAL:
 prove whether these flaws exist — NEVER corrupt data or actually escalate privileges. FIXED checklist. HARD
@@ -954,6 +961,7 @@ Target: ${host}
     maxToolCalls: 30,
     securityProfile: 'active-verify-only',
     available: true,
+    comingSoon: true,
     promptTemplate: (host) => `
 Run the STRICTEST, ACTIVE-VERIFY-ONLY RCE / command-injection VERIFICATION on the SINGLE target below.
 GOAL: prove — by BLIND evidence ONLY — whether command execution is possible. NEVER run a real command.
@@ -987,6 +995,7 @@ Target: ${host}
     maxToolCalls: 40,
     securityProfile: 'active-light',
     available: true,
+    comingSoon: true,
     promptTemplate: (host) => `
 Run an ACTIVE-LIGHT AUTHENTICATED scan on the SINGLE target below using the TEST-ACCOUNT credentials that
 will be provided in a separate login instruction appended below. HARD CONSTRAINTS: log in ONLY against
@@ -1021,6 +1030,7 @@ Target: ${host}
     maxToolCalls: 90,
     securityProfile: 'active-light',
     available: true,
+    comingSoon: true,
     promptTemplate: (host) => `
 Run an AUTONOMOUS, MULTI-STEP, chained security assessment on the SINGLE target below. Unlike the narrow
 packages, you MAY plan across MULTIPLE steps, keep context/memory, and chain discovery → verification. BUT the

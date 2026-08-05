@@ -64,7 +64,7 @@ const tr: Dict = {
     titleHi: 'dakikalar içinde',
     titleB: 'otonom yapay zeka ile başlatın',
     subtitle:
-      'Karmaşık demo görüşmesi yok, satış ekibi beklemek yok. Alan adınızı doğrulayın, paketinizi seçin, şifreli raporunuzu alın.',
+      'Web siteniz için yapay zeka destekli, hızlı ve uygun fiyatlı güvenlik ön değerlendirmesi. Resmi pentest/denetim yerine geçmez; dakikalar içinde aksiyon alınabilir bir rapor üretir. Alan adınızı doğrulayın, paketinizi seçin, şifreli raporunuzu alın.',
     ctaPrimary: 'Ücretsiz Doğrula ve Başla',
     ctaSecondary: 'Nasıl Çalışır?',
     trust: ['KVKK Uyumlu', 'Uçtan Uca Şifreli Rapor', 'Sadece Doğrulanmış Alan Adları'],
@@ -149,7 +149,7 @@ const en: Dict = {
     titleHi: 'autonomous AI',
     titleB: 'starting in minutes',
     subtitle:
-      'No sales calls, no demo scheduling. Verify your domain, pick a package, get your encrypted report.',
+      'AI-powered, fast and affordable security pre-assessment for your website. Not a substitute for a formal pentest/audit; it produces an actionable report in minutes. Verify your domain, pick a package, get your encrypted report.',
     ctaPrimary: 'Verify Free & Start',
     ctaSecondary: 'How It Works?',
     trust: ['Privacy-First', 'End-to-End Encrypted Report', 'Verified Domains Only'],

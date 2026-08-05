@@ -18,6 +18,8 @@ export interface ComboBundle {
   descriptionEn: string;
   category: 'passive' | 'active-light' | 'compliance';
   discountPct: number;
+  /** true ise "Yakında" — listelenir ama satin ALINAMAZ (createBundleOrder reddeder). */
+  comingSoon?: boolean;
   /** Sabit uyeler (Uyum paketi haric). */
   memberKeys: string[];
   /** true ise musteri checkout'ta uyeleri SECER (Uyum paketi: 1/2/3 modul). */
@@ -78,6 +80,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
       'All seven active-light verification checks in one bundle: Injection, IDOR, SSRF, File Upload, Business Logic, Race/Mass-Assignment and RCE. Proves presence, never exploits; a single authorization declaration covers all. Strongly discounted vs buying separately.',
     category: 'active-light',
     discountPct: 25,
+    comingSoon: true,
     memberKeys: [
       'injection_verify',
       'idor_verify',
@@ -98,6 +101,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
       'Authenticated (logged-in) scan + fully autonomous multi-step pentest together. Active-light limits preserved (no exploit/exfil/DoS); authorization declaration required. Discounted vs buying separately.',
     category: 'active-light',
     discountPct: 20,
+    comingSoon: true,
     memberKeys: ['authenticated_scan', 'autonomous_pentest'],
   },
 ];

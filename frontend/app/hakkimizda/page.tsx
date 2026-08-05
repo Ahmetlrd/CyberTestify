@@ -32,6 +32,33 @@ export default function Page() {
         kullanılmamalıdır.
       </p>
 
+      <h2 className="mt-8 text-lg font-bold text-brand">Biz buyuz / Biz bu değiliz</h2>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <div className="rounded-card border border-emerald-300/50 bg-emerald-50/40 p-4 text-sm text-ink-soft">
+          <div className="font-semibold text-emerald-700">Biziz</div>
+          <ul className="mt-2 list-disc space-y-1.5 pl-5">
+            <li>Hızlı, uygun fiyatlı güvenlik <strong>ön değerlendirmesi</strong>.</li>
+            <li>Yapay zeka ile <strong>otomatik</strong> tarama ve raporlama.</li>
+            <li>KOBİ, ajans ve yazılım ekipleri için pratik bir ilk katman.</li>
+          </ul>
+        </div>
+        <div className="rounded-card border border-line bg-brand-50/40 p-4 text-sm text-ink-soft">
+          <div className="font-semibold text-ink">Biz bu değiliz</div>
+          <ul className="mt-2 list-disc space-y-1.5 pl-5">
+            <li>Resmi / mahkemede geçerli <strong>pentest veya denetim</strong> değiliz.</li>
+            <li>Banka/holding <strong>red-team</strong> alternatifi değiliz.</li>
+            <li>Kurumsal yıllık sözleşmeli bir ürün değiliz.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2 className="mt-8 text-lg font-bold text-brand">Neden CyberTestify?</h2>
+      <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
+        <li><strong>Tek seferlik, sürpriz maliyeti olmayan sabit fiyat.</strong></li>
+        <li><strong>Türkçe rapor + KVKK odaklı kontroller.</strong></li>
+        <li><strong>Alan adı sahipliği doğrulanmadan tarama yapılmıyor</strong> (güvenlik öncelikli).</li>
+      </ul>
+
       <h2 className="mt-8 text-lg font-bold text-brand">İşletme Bilgileri</h2>
       <div className="mt-3 rounded-card border border-line bg-brand-50/40 p-5 text-sm leading-relaxed text-ink-soft">
         <div className="font-semibold text-brand">{COMPANY.legalName}</div>

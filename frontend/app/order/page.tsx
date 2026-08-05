@@ -13,7 +13,7 @@ import { PACKAGE_CATEGORIES } from '../../components/CategoryAccordions';
 type ActiveTest = { scope: { does: string[]; doesNot: string[] }; riskText: string; consentVersion: string };
 type Pkg = {
   key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string;
-  securityProfile?: 'passive' | 'active-light'; activeTest?: ActiveTest | null;
+  securityProfile?: 'passive' | 'active-light'; activeTest?: ActiveTest | null; comingSoon?: boolean;
 };
 
 // datetime-local `min` icin yerel saatte YYYY-MM-DDTHH:mm — gecmis tarihleri
@@ -87,18 +87,19 @@ export default function OrderPage() {
     setRegion(rc);
     api.listPackages(rc).then((pk) => {
       setPackages(pk);
-      // "Satin Al" ile gelen tekil paketi ON-SEC (kullanici tekrar secmesin).
-      if (preselectPackage && pk.some((p) => p.key === preselectPackage)) {
+      // "Satin Al" ile gelen tekil paketi ON-SEC (kullanici tekrar secmesin). "Yakında" ise ETME.
+      const pre = pk.find((p) => p.key === preselectPackage);
+      if (pre && !pre.comingSoon) {
         setSelected(preselectPackage);
         setSelectedBundle(null);
       }
     }).catch((err) => setError(err.message));
     api.listBundles(rc).then((bs) => {
       setBundles(bs);
-      // "Satin Al" ile gelen bundle'i ON-SEC.
+      // "Satin Al" ile gelen bundle'i ON-SEC. "Yakında" ise ETME.
       if (preselectBundle) {
         const b = bs.find((x: any) => x.key === preselectBundle);
-        if (b) { setSelectedBundle(b); setSelected(null); }
+        if (b && !b.comingSoon) { setSelectedBundle(b); setSelected(null); }
       }
     }).catch(() => {});
     api.getCredits().then((c) => { setBalance(c.balance); setCreditUnit(c.creditUnitValueMinor); }).catch(() => {});
@@ -291,6 +292,18 @@ export default function OrderPage() {
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {bundles.map((b) => {
               const on = selectedBundle?.key === b.key;
+              if (b.comingSoon) {
+                return (
+                  <div key={b.key} className="card cursor-default p-4 text-left opacity-80">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-brand">{b.displayName}</span>
+                      <span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold text-white">Yakında</span>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
+                    <p className="mt-2 text-xs font-semibold text-ink-muted">Yakında açılacak</p>
+                  </div>
+                );
+              }
               return (
                 <button
                   key={b.key}
@@ -305,8 +318,7 @@ export default function OrderPage() {
                   <p className="mt-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
                   <p className="mt-2 text-ink">
                     <span className="text-xs text-ink-muted line-through">{formatMoney(b.originalMinorUnit, getRegion(region))}</span>{' '}
-                    <span className="font-bold">{formatMoney(b.amountMinorUnit, getRegion(region))}</span>{' '}
-                    <span className="text-[11px] text-ink-muted">· fiyat onay bekliyor</span>
+                    <span className="font-bold">{formatMoney(b.amountMinorUnit, getRegion(region))}</span>
                   </p>
                   <p className="mt-1 text-[11px] text-ink-muted">Tahmini süre: içeriğe göre değişir (üyeler sırayla)</p>
                 </button>
@@ -389,9 +401,24 @@ export default function OrderPage() {
                 </svg>
               </button>
               {isOpen && (
-                <div className="grid gap-3 border-t border-line p-4 sm:grid-cols-2">
+                <div className="border-t border-line p-4">
+                  <p className="mb-3 text-xs text-ink-soft">{cat.descTr}</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
                   {items.map((p) => {
                     const on = selected === p.key;
+                    if (p.comingSoon) {
+                      // "Yakında": secilemez, fiyat gosterilmez.
+                      return (
+                        <div key={p.key} className="card cursor-default p-4 text-left opacity-80">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-bold text-brand">{p.displayName}</span>
+                            <span className="shrink-0 rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold text-white">Yakında</span>
+                          </div>
+                          <p className="mt-1 text-xs leading-relaxed text-ink-soft">{p.description}</p>
+                          <p className="mt-2 text-xs font-semibold text-ink-muted">Yakında açılacak</p>
+                        </div>
+                      );
+                    }
                     return (
                       <button
                         key={p.key}
@@ -412,6 +439,7 @@ export default function OrderPage() {
                       </button>
                     );
                   })}
+                  </div>
                 </div>
               )}
             </div>
