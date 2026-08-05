@@ -175,8 +175,8 @@ async function buildRawEvidenceFallback(pentagiFlowId: string, locale: Locale): 
     });
     const header =
       locale === 'en'
-        ? '## Automatically Compiled Raw Evidence\n\n> The scan did not reach the final report-writing step (budget/early stop). Below is the raw evidence (commands and outputs) collected during the scan, for your reference. This is not a polished report.'
-        : '## Otomatik Derlenmiş Ham Kanıtlar\n\n> Tarama, nihai rapor-yazma adımına ulaşamadı (bütçe/erken duruş). Aşağıda tarama sırasında toplanan ham kanıtlar (komutlar ve çıktılar) referans için verilmiştir. Bu, düzenlenmiş bir rapor değildir.';
+        ? '## Automatically Compiled Raw Evidence\n\n> The scan did not reach the final report-writing step (budget/early stop). Below is the raw evidence (commands and outputs) collected during the scan, for your reference. This is not a polished report; it may contain technical/English fragments.'
+        : '## Otomatik Derlenmiş Ham Kanıtlar\n\n> Tarama, nihai rapor-yazma adımına ulaşamadı (bütçe/erken duruş). Aşağıda tarama sırasında toplanan ham kanıtlar (komutlar ve çıktılar) referans için verilmiştir. **Bu, düzenlenmiş bir müşteri raporu değildir**; ham teknik veri olduğu için İngilizce başlıklar/parçalar (ör. HTTP çıktıları, aracın kendi iç notları) içerebilir. Nihai değerlendirme için taramanın yeniden çalıştırılması veya bu verinin bir uzmanca yorumlanması önerilir.';
     return `${header}\n\n${items.join('\n\n')}`;
   } catch (err) {
     console.error('[report] ham kanit fallback uretilemedi:', err);

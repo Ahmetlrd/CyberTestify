@@ -3,7 +3,7 @@ import { config, validateScopeLockConfig } from './config.js';
 import * as pentagi from './pentagi/client.js';
 import { getPackageDef, securityProfileFor } from './services/scanPackages.js';
 import { generateAndStoreReport } from './services/report.js';
-import { findOutOfScope, findForbiddenMethods, detectScriptDebugLoop } from './services/scope.js';
+import { findOutOfScope, findForbiddenMethods, detectScriptDebugLoop, detectRepeatedFetch } from './services/scope.js';
 import { encryptSecret } from './services/crypto.js';
 import { buildActivityFeed } from './services/activityFeed.js';
 import { promoteQueued } from './services/orchestrator.js';
@@ -84,6 +84,8 @@ async function tick() {
       let forbiddenMethodHit: string | null = null;
       // Script debug-loop (ayni script'i tekrar tekrar yazip duzeltme dongusu) tespiti.
       let scriptLoopHit: { base: string; count: number } | null = null;
+      // Tekrar-fetch (ayni URL/path'i defalarca cekme) tespiti — yalniz pasif paketlerde.
+      let repeatFetchHit: { url: string; count: number } | null = null;
       try {
         const logs = await pentagi.getScopeLogs(flow.pentagiFlowId);
 
@@ -120,6 +122,16 @@ async function tick() {
           logs.toolCallLogs.map((t) => ({ name: t.name, args: t.args })),
           loopThreshold,
         );
+
+        // (E) TEKRAR-FETCH — ayni URL/path'i defalarca cekme (canli nomorelink: anasayfa
+        // 5 kez). YALNIZ pasif (sabit/dar checklist) paketlerde; active-light HARIC (onlar
+        // mesru sekilde ayni endpoint'e farkli acilardan istek atabilir). Esik config'ten.
+        if (securityProfileFor(pkg) === 'passive' && config.urlRepeatThreshold > 0) {
+          repeatFetchHit = detectRepeatedFetch(
+            logs.toolCallLogs.map((t) => ({ name: t.name, args: t.args })),
+            config.urlRepeatThreshold,
+          );
+        }
 
         // (B) SEVIYE 3 kapsam izleme — yalnızca henüz ihlal kaydı yoksa.
         // SADECE ajanin ISTEDIGI hedefi (tool cagri ARGUMANLARI) tara; yanıt
@@ -216,12 +228,16 @@ async function tick() {
       // Bitirme kosulu: dogal 'finished' | maliyet tavani asildi | idle 'waiting'.
       // ONEMLI: stopFlow flow'u 'finished' DEGIL 'waiting' durumuna alir
       // (PentAGI'de "stopped" statusu yok), bu yuzden bitirmeyi BIZ tetikliyoruz.
-      const done = remoteStatus.status === 'finished' || overCap || idleWaiting || !!scriptLoopHit;
+      const done = remoteStatus.status === 'finished' || overCap || idleWaiting || !!scriptLoopHit || !!repeatFetchHit;
       if (done) {
-        if ((overCap || scriptLoopHit) && remoteStatus.status !== 'finished') {
+        if ((overCap || scriptLoopHit || repeatFetchHit) && remoteStatus.status !== 'finished') {
           if (scriptLoopHit) {
             console.warn(
               `[worker] Flow ${flow.pentagiFlowId} SCRIPT DEBUG-LOOP tespit edildi (script "${scriptLoopHit.base}" x${scriptLoopHit.count} ≥ ${config.scriptDebugLoopThreshold}), durduruluyor ve elde edilen ham veriyle rapor uretiliyor.`,
+            );
+          } else if (repeatFetchHit) {
+            console.warn(
+              `[worker] Flow ${flow.pentagiFlowId} TEKRAR-FETCH tespit edildi (URL "${repeatFetchHit.url}" x${repeatFetchHit.count} ≥ ${config.urlRepeatThreshold}), durduruluyor ve elde edilen ham veriyle rapor uretiliyor.`,
             );
           } else {
             console.warn(`[worker] Flow ${flow.pentagiFlowId} tavani asti (${toolCallCount}/${pkg.maxToolCalls}), durduruluyor ve rapor uretiliyor.`);

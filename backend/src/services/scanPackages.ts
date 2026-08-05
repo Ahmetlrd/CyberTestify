@@ -176,7 +176,16 @@ run bash/sh/./<file>. Use ONLY direct, INDIVIDUAL commands (curl / openssl / dig
 ONE command per check, and read each output directly. Writing a script here is FORBIDDEN and
 UNNECESSARY — the checks are few and finish faster and more reliably with direct commands. If you
 notice yourself writing/chmod'ing/running a script, STOP immediately and switch to direct one-off
-commands.`.trim();
+commands.
+NO REPEATED FETCH: Once you have GET a path (including the homepage), its output is ALREADY in your
+context — do NOT fetch the same URL/path again. Never request the same path more than twice, even for
+"just headers" or "just a grep": reuse the earlier output instead. If you truly need two different
+views (e.g. body once, headers once), plan them from the start as ONE checklist — repeating the same
+path 3+ times is FORBIDDEN and wastes the budget.
+NO INTERMEDIATE/DRAFT FILES: Do NOT build the report (or any "findings table", "summary", ASCII-table,
+or draft) via 'cat > file << EOF ... EOF' heredoc or any file write. That is the SAME escape pattern as
+writing a script. The report is written DIRECTLY as your own final text output in the last step — never
+assembled in a file, never "built" with a terminal command.`.trim();
 
 export const NO_SCRIPT_HARD_TR = `
 KESIN KURAL — BU PAKETTE SCRIPT YASAK: Bu, KUCUK ve SABIT bir kontrol listesidir (~8-12 GET).
@@ -186,7 +195,16 @@ yazma, chmod +x, bash/sh/./<dosya> ile CALISTIRMA da YASAK. SADECE dogrudan TEKI
 (curl / openssl / dig / nslookup / host), komut basina TEK kontrol, ciktisini dogrudan gor. Bu pakette
 script yazmak KESINLIKLE YASAKTIR ve GEREKSIZDIR — kontrol sayisi azdir, dogrudan komutlarla cok daha
 hizli ve guvenilir biter. Kendini script yazarken/chmod'larken/calistirirken yakalarsan DERHAL DUR ve
-dogrudan tekil komutlara gec.`.trim();
+dogrudan tekil komutlara gec.
+AYNI URL'YE TEKRAR ISTEK YOK: Bir path'i (anasayfa dahil) BIR KEZ GET ettiysen ciktisi ZATEN
+elinde/baglamindadir — AYNI URL/path'i TEKRAR CEKME. Ayni path'e IKIDEN fazla istek atma; "sadece
+header" veya "sadece bir grep" icin bile onceki ciktiyi tekrar kullan. Gercekten iki farkli gorunum
+gerekiyorsa (ör. bir kez govde, bir kez header) bunu en BASTAN TEK kontrol listesinde planla — ayni
+path'i 3+ kez cekmek YASAKTIR ve butceyi bosa harcar.
+ARA/TASLAK DOSYA YOK: Raporu (veya "bulgu tablosu", "ozet", ASCII-tablo, taslak gibi herhangi bir ara
+urunu) 'cat > dosya << EOF ... EOF' heredoc'u ya da herhangi bir dosya yazimi ile INSA ETME. Bu, script
+yazmakla AYNI kacis desenidir. Rapor, son adimda DOGRUDAN senin kendi metin ciktinla yazilir — asla bir
+dosyada toplanmaz, asla bir terminal komutuyla "insa edilmez".`.trim();
 
 const BUDGET_GUARD_EN = `
 COMPLETION & OUTPUT RULE (HIGHEST PRIORITY): Writing the final findings report AND the

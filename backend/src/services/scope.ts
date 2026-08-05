@@ -167,6 +167,54 @@ export function detectScriptDebugLoop(
   return worst;
 }
 
+// Bir komuttan HEDEF URL/path'i normalize eder: scheme + query + fragment atilir,
+// host kucuk harfe iner, sondaki '/' (root haric) kaldirilir. Boylece
+// `https://x.com/`, `http://X.com`, `https://x.com/?a=1` hepsi `x.com` sayilir;
+// `https://x.com/kvkk/` -> `x.com/kvkk`. Yalniz TEKRAR-FETCH sayimi icin kullanilir.
+export function normalizeUrlPath(u: string): string {
+  let s = u.trim().replace(/^https?:\/\//i, '');
+  s = s.split(/[?#]/)[0]; // query/fragment at
+  s = s.replace(/["'`)\]}<>]+$/, ''); // sondaki cop
+  const slash = s.indexOf('/');
+  let host = slash === -1 ? s : s.slice(0, slash);
+  let path = slash === -1 ? '' : s.slice(slash);
+  host = host.toLowerCase().replace(/:\d+$/, ''); // portu yok say
+  path = path.replace(/\/+$/, ''); // sondaki slash(lar)
+  return host + path;
+}
+
+// TEKRAR-FETCH tespiti: SABIT/DAR (pasif) paketlerde ajan AYNI URL/path'i (ör. anasayfa)
+// tekrar tekrar cekerse (canli nomorelink vakasi — anasayfa 5 kez) yeni bilgi olmadan
+// butce yanar. detectScriptDebugLoop ile AYNI kaliba gore: yalniz terminal cagrilari,
+// ayni cagride ayni path bir kez sayilir, esigi (>=threshold) asan path'i dondurur.
+// Bir komut icindeki TUM URL'ler cikarilir (curl/wget/openssl/heredoc referanslari dahil).
+export function detectRepeatedFetch(
+  items: Array<{ name?: string | null; args: string | null | undefined }>,
+  threshold: number,
+): { url: string; count: number } | null {
+  if (!threshold || threshold <= 0) return null;
+  const urlRe = /\bhttps?:\/\/[^\s'"`)\]}<>]+/gi;
+  const counts = new Map<string, number>();
+  for (const it of items) {
+    if (it.name != null && !HTTP_EXECUTOR_TOOLS.has(it.name)) continue; // yalniz terminal
+    const t = it.args;
+    if (!t) continue;
+    const seen = new Set<string>();
+    urlRe.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = urlRe.exec(t))) {
+      const key = normalizeUrlPath(m[0]);
+      if (key) seen.add(key);
+    }
+    for (const k of seen) counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  let worst: { url: string; count: number } | null = null;
+  for (const [url, count] of counts) {
+    if (count >= threshold && (!worst || count > worst.count)) worst = { url, count };
+  }
+  return worst;
+}
+
 export function findForbiddenMethods(
   items: Array<{ name?: string | null; args: string | null | undefined; result?: string | null }>,
 ): string[] {

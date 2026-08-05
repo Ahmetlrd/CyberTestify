@@ -93,6 +93,10 @@ export const config = {
   // Ayni (normalize) script adi bu kadar terminal cagrisinda gecerse dongu sayilir;
   // overCap gibi ERKEN DUR + elde edilen ham veriyle rapor uret. 0 = kapali.
   scriptDebugLoopThreshold: Number(process.env.SCRIPT_DEBUG_LOOP_THRESHOLD ?? 6),
+  // SABIT/DAR (pasif) paketlerde ayni normalize URL/path bu kadar terminal cagrisinda
+  // cekilirse tekrar-fetch dongusu sayilir → overCap gibi ERKEN DUR (bkz nomorelink:
+  // anasayfa 5 kez). 4 = 4. tekrarda kesilir (yaz+dogrula degil, bariz israf). 0 = kapali.
+  urlRepeatThreshold: Number(process.env.URL_REPEAT_THRESHOLD ?? 4),
   scopeAllowlist: (process.env.SCOPE_ALLOWLIST ??
     [
       'cve.mitre.org', 'cve.org', 'nvd.nist.gov', 'exploit-db.com', 'cvedetails.com',
