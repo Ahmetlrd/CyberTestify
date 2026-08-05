@@ -573,9 +573,23 @@ En kritik 3-4 bulguyu TEK SATIRLIK madde olarak yaz (kisa, teknik olmayan, is di
 
 ## Bulgular
 Markdown tablo — sutunlar TAM olarak: "KVKK İlkesi/Konu | Gözlem | Durum | Öneri".
-Durum sutunu SADECE su üç degerden biri olsun (baska kelime yok): "Uygun", "Dikkat", "Eksik".
-(Not: risk seviyesi ve kontrol özeti kutusu OTOMATIK/kod tarafindan eklenir — SEN "uyum skoru",
-"uyumludur/uyumsuzdur" GIBI ifadeler YAZMA; yalnizca gözlem + Durum + öneri.)
+Durum sutunu SADECE su üç degerden biri olsun (baska kelime YOK, ikon/emoji YOK, ✓/❌/🚨 YOK):
+"Uygun", "Dikkat", "Eksik". Durum hucresine SADECE bu tek kelimeyi yaz (ör. "Eksik"), "❌ UYUMSUZ"
+veya "✓ UYGUN" GIBI yazma.
+
+KESIN DIL YASAKLARI (UYUM BEYANI YOK — hukuki risk):
+- "uyumlu / uyumludur / uyumsuz / uyumsuzdur / compliant / non-compliant" gibi KESIN UYUM HUKMU
+  veren kelimeleri raporun HICBIR yerinde KULLANMA. Durum icin yalniz Uygun/Dikkat/Eksik.
+- "İHLAL" kelimesini ve "KVKK İhlali" gibi baslik/ibareleri KULLANMA. Bunun yerine notr "Gözlemlenen
+  Eksiklikler" de. "Art. 5 ihlal edildi" GIBI kesin hukum CUMLESI KURMA.
+- KVKK madde numarasina atif SERBEST ama SADECE TEMKINLI dille: "Bu gözlem, KVKK m.5 ile kısmen
+  örtüşüyor olabilir" gibi; asla "bu madde ihlal edilmiştir" deme.
+- IC-SUREC ifadeleri (Subtask 417, Alt-Görev N, "araç sınırları ... bekliyor", "sonraki adımlar")
+  MUSTERI RAPORUNA YAZILMAZ. Statik GET ile gorulemeyen icerik varsa surec-DISI, anlamli bir dille
+  yaz: "SPA/JavaScript ile yuklenen icerikler pasif GET ile gozlemlenemedi" gibi ("Subtask" kelimesi
+  GECMESIN).
+(Not: risk seviyesi ve kontrol özeti kutusu OTOMATIK/kod tarafindan eklenir — SEN "uyum skoru"
+GIBI bir ozet CUMLESI/hata notu YAZMA; yalnizca gözlem + Durum + öneri.)
 
 Sonra cozum onerileri bolumu (delimiterden sonra) SU YAPIDA:
 

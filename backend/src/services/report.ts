@@ -87,6 +87,62 @@ export function stripProcessLanguage(md: string): string {
     .trim();
 }
 
+// (KVKK GUVENLIK AGI — "UYUM BEYANI YOK" kurali) Asil cozum PROMPTTA (ajan bunlari hic
+// yazmamali); bu, ajanin YINE DE urettigi kalintilar icin rapor-finalize SON-KONTROLUdur.
+// Kesin uyum hukmu ("uyumlu/uyumsuz/compliant"), "ihlal" iddiasi, durum-ikonu (✓/❌) ve
+// ic-surec (Subtask N) ifadelerini NOTR karsiliklariyla degistirir + kaldirir; kalinti
+// kalirsa LOGLAR (fark edelim). YALNIZ kvkk_hazirlik'te cagrilir. (Not: madde numaralarina
+// "Art. 5" atif SERBEST — yalniz "ihlal edildi" gibi KESIN hukum cumlesi notrlenir.)
+const KVKK_FORBIDDEN_SCAN = /\b(uyumlu|uyumsuz|uyumluluk|ihlal|ihlâl|compliant|non-?compliant)\b/i;
+
+export function sanitizeKvkkReport(md: string): string {
+  let out = md;
+  // 1) Kesin uyum durum degeri -> notr 3-deger. "Uygun" ZATEN notr (uyum kokenli degil), dokunma.
+  out = out
+    .replace(/uyumsuz(?:luk|dur)?/gi, 'Eksik')
+    .replace(/uyumlu(?:luk|dur)?/gi, 'Uygun')
+    .replace(/non-?compliant/gi, 'Eksik')
+    .replace(/\bcompliant\b/gi, 'Uygun')
+    // Buyuk-harf durum degerlerini (ör. ikon-yaninda "✓ UYGUN") Title-case'e normalize et.
+    .replace(/\bUYGUN\b/g, 'Uygun')
+    .replace(/\bD[İI]KKAT\b/g, 'Dikkat')
+    .replace(/\bEKS[İI]K\b/g, 'Eksik');
+  // 2) "ihlal" -> notr. Once baslik/kalip ("KVKK İhlali (Listeleri)"), sonra fiil, sonra isim.
+  out = out
+    .replace(/(?:🚨\s*)?KVKK\s*İhlal(?:i|leri|ler)?(?:\s*Listeler?i)?/gi, 'Gözlemlenen Eksiklikler')
+    .replace(/İhlal\s*Listeler?i/gi, 'Gözlemlenen Eksiklikler')
+    .replace(/ihlal\s+edil(?:di|iyor|mi[sş]tir|mektedir|ebilir)/gi, 'ile tam örtüşmüyor olabilir')
+    .replace(/ihl[aâ]l(?:i|leri|ler|ini|inin)?/gi, 'eksiklik');
+  // 3) Durum-ikonlari: tablo hucresi basindaki uyum-ikonunu (✓/✔/❌/✗/🚨) ve prose'daki
+  //    "❌ Eksik" gibi kalintilari at ki notr 3-deger + renk-scripti (^eksik$) calissin.
+  out = out
+    .replace(/\|\s*[✓✔✗✘×❌🚨🔴🟠🟢]\s*/g, '| ')
+    .replace(/[✓✔✗✘×❌🚨]\s*(?=(?:Eksik|Dikkat|Uygun)\b)/g, '');
+  // 4) IC-SUREC sizintisi: "Subtask 417" / "Alt-Görev 417" iceren satir (Turkce ek dahil:
+  //    417'ye/417'nin) + surec basligi/kalinti-cumlesi ("Sonraki Adımlar", "Rapor yazımı
+  //    tamamlandı") TAMAMEN atilir — musteri ic gorev/surec referanslarini gormemeli.
+  const dropProcessLine = [
+    /\b(subtask|alt[-\s]?g[oö]rev)\s*\d+/i,
+    /^#{0,6}\s*[*_-]*\s*(sonraki\s*ad[ıi]m|next\s*steps?|sıradaki\s*ad[ıi]m)/i,
+    /^\s*[*_>-]*\s*rapor(un)?\s+(yaz[ıi]m[ıi]\s+)?tamamland/i,
+  ];
+  out = out
+    .split('\n')
+    .filter((ln) => !dropProcessLine.some((re) => re.test(ln.trim())))
+    .join('\n')
+    .replace(/\b(subtask|alt[-\s]?g[oö]rev)\s*\d+['’]?\w*/gi, '') // satir-ici kalinti token
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (KVKK_FORBIDDEN_SCAN.test(out)) {
+    const hit = out.match(KVKK_FORBIDDEN_SCAN)?.[0];
+    console.warn(
+      `[report][KVKK-GUARD] Yasakli uyum-dili kalintisi finalize sonrasi HALA mevcut: "${hit}" — elle gozden gecir.`,
+    );
+  }
+  return out;
+}
+
 /** Bulgulardan "cozum onerileri" bolumunu (delimiter sonrasi) ayirir. */
 function splitFixSuggestions(text: string): { findings: string; fixText: string } {
   const idx = text.indexOf(FIX_SUGGESTIONS_DELIM);
@@ -158,6 +214,11 @@ export async function generateAndStoreReport(flowId: string) {
       'Aşağıda tarama sırasında toplanan ham kanıtlar otomatik derlenmiştir.';
   }
 
+  // (KVKK GUVENLIK AGI) yalniz kvkk_hazirlik: uyum-dili / ihlal iddiasi / Subtask sizintisi /
+  // durum-ikonu son-kontrolu (bkz sanitizeKvkkReport). Diger paketler DEGISMEZ.
+  const isKvkkPkg = flow.order.package.key === 'kvkk_hazirlik';
+  if (isKvkkPkg) findings = sanitizeKvkkReport(findings);
+
   // KENDI TARAFIMIZDA veri minimizasyonu: sizmis yapisal PII'yi (email/telefon/
   // TCKN/kart/IBAN) sifreli DB'ye yazmadan ONCE maskele (ayni mantik PentAGI Go
   // tarafinda Anthropic'e gitmeden de uygulanir — PATCHES.md).
@@ -186,7 +247,8 @@ export async function generateAndStoreReport(flowId: string) {
   // (3) Cozum onerileri varsa AYNI accessSecret ile AYRI sifrele (kilitli alan).
   let fixFields: Record<string, Buffer> = {};
   if (fixText.trim().length > 0) {
-    const fixMd = redactAll(renderFixSuggestionsMarkdown(flow.order.domain.hostname, fixText, locale, flow.order.package.key));
+    const cleanFix = isKvkkPkg ? sanitizeKvkkReport(fixText) : fixText;
+    const fixMd = redactAll(renderFixSuggestionsMarkdown(flow.order.domain.hostname, cleanFix, locale, flow.order.package.key));
     const enc = encryptReport(Buffer.from(fixMd, 'utf-8'), accessSecret);
     fixFields = {
       fixSuggestions: enc.encryptedBlob,
@@ -265,8 +327,10 @@ export function renderReportMarkdown(
   const t = T[locale];
   const isKvkk = packageKey === 'kvkk_hazirlik';
   // Ekran goruntusu bolumu YALNIZCA icerik varsa gosterilir — bos "Yok" bolumu koymayiz.
+  // KVKK: gercek gorsel gomulmuyor; salt "screenshot-xxxx.png: https://..." dosya-adi
+  // listesi musteri icin ANLAMSIZ → kvkk_hazirlik'te bu bolumu TAMAMEN kaldir (sorun 4).
   const screenshotsBlock =
-    screenshots.length > 0
+    !isKvkk && screenshots.length > 0
       ? `\n\n---\n\n## ${t.screenshots}\n\n${screenshots.map((s) => `- ${s.name}: ${s.url}`).join('\n')}`
       : '';
   // KVKK: ajanin kendi bolum yapisi (Yönetici Özeti + Bulgular) oldugu gibi; wrapper YOK.

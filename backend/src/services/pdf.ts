@@ -98,12 +98,25 @@ export function assessKvkk(md: string, t: { riskHigh: string; riskMedium: string
   uygun: number;
   total: number;
 } {
-  // Yalniz TABLO HUCRESI olarak gecen Durum degerlerini say ("| Eksik |" gibi).
+  // TABLO HUCRESI olarak gecen Durum degerlerini say. TOLERANSLI: hucre basinda kalan
+  // ikon/isaret (🔴 ❌ ✓ vb.) VEYA bosluk olabilir → `[^\w|]*` ile yut. Boylece hem notr
+  // "| Eksik |" hem de sanitize sonrasi "| 🔴 Eksik |" / "| ❌ Eksik |" sayilir.
   const count = (kw: RegExp) => (md.match(kw) ?? []).length;
-  const eksik = count(/\|\s*eksik\s*\|/gi);
-  const dikkat = count(/\|\s*dikkat\s*\|/gi);
-  const uygun = count(/\|\s*uygun\s*\|/gi);
-  const total = eksik + dikkat + uygun;
+  const cell = (w: string) => new RegExp(`\\|\\s*(?:[^\\w|]*\\s*)?${w}\\s*\\|`, 'giu');
+  let eksik = count(cell('eksik'));
+  let dikkat = count(cell('dikkat'));
+  let uygun = count(cell('uygun'));
+  let total = eksik + dikkat + uygun;
+  // Geri-donus: tablo yoksa "Durum: Eksik" gibi satir-ici durum ifadelerini say (prose'da
+  // gecen kelimeyi degil, yalniz "Durum/Sonuc: <deger>" kalibini) — total 0 kalmasin.
+  if (total === 0) {
+    const inline = (w: string) =>
+      count(new RegExp(`(?:durum|sonu[cç]|de[gğ]erlendirme)\\s*[:：]\\s*[^\\n|]{0,4}?${w}\\b`, 'gi'));
+    eksik = inline('eksik');
+    dikkat = inline('dikkat');
+    uygun = inline('uygun');
+    total = eksik + dikkat + uygun;
+  }
   // Kritik/Yuksek -> riza mekanizmasi tamamen yok + izleyiciler rizasiz (cok Eksik).
   // Orta -> bazi eksikler ama temel mekanizmalar var. Dusuk -> sadece kucuk firsatlar.
   let level: 'high' | 'medium' | 'low';
@@ -159,10 +172,13 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
     const k = assessKvkk(effectiveMd, t);
     const needImprove = k.eksik + k.dikkat;
     // NOTR ifade — "uyum skoru/uyumlu/uyumsuz" YOK (UYUM BEYANI YOK kurali).
+    // NOT: total===0 durumunda ASLA hata/teknik metin gosterme (musteriye sizmasin) —
+    // sessiz, notr ve makul bir yonlendirme cumlesine dus (kok cozum: sanitize + toleransli
+    // sayim zaten total'i doldurur; bu yalniz gercekten tablosuz/bozuk cikti icin son care).
     const summaryLine =
       k.total > 0
         ? `${needImprove}/${k.total} kontrol alanı iyileştirme gerektiriyor (Eksik: ${k.eksik} · Dikkat: ${k.dikkat} · Uygun: ${k.uygun}).`
-        : 'Kontrol alanları tablodan otomatik özetlenemedi.';
+        : 'Öne çıkan hazırlık eksiklikleri için aşağıdaki bulgular ve "Önerilen Aksiyonlar" bölümüne bakınız.';
     assessBox = `<div class="assess assess-${k.level}">
     <div class="assess-head"><span class="assess-title">${escapeHtml(t.assessTitle)}</span>
       <span class="risk-badge risk-${k.level}">${escapeHtml(k.label)}</span></div>
