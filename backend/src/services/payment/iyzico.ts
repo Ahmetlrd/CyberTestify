@@ -136,9 +136,23 @@ export async function handleIyzicoCallback(token: string): Promise<{ ok: boolean
   // Tutar dogrulama: iyzico'nun paidPrice'i siparis tutariyla eslesmeli (oynanma korumasi).
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) return { ok: false, error: 'siparis bulunamadi' };
-  const expected = (order.amountMinorUnit / 100).toFixed(2);
-  if (String(result.paidPrice) !== expected && String(result.price) !== expected) {
-    console.error(`[iyzico] tutar uyusmazligi order ${orderId}: beklenen ${expected}, gelen ${result.paidPrice}`);
+  // Tutar dogrulama SAYISAL yapilir (string DEGIL): iyzico tam-TL tutari "1" olarak dondurur
+  // ("1.00" DEGIL). Eski `String(paidPrice) !== "1.00"` karsilastirmasi tum tam-TL fiyatlari
+  // ("499.00" vs "499" ...) yanlis "tutar uyusmazligi" ile REDDEDIYORDU → odeme cekiliyor ama
+  // siparis awaiting_payment kaliyor, tarama baslamiyordu (canli 1 TL testinde yakalandi).
+  // paidPrice VEYA price minor-unit'e cevrilip beklenenle ~1 kurus tolerans ile karsilastirilir;
+  // anti-tamper korunur (gercek dusuk tutar hala yakalanir).
+  const expectedMinor = order.amountMinorUnit;
+  const toMinor = (v: unknown) => Math.round(Number(v) * 100);
+  const paidMinor = toMinor(result.paidPrice);
+  const priceMinor = toMinor(result.price);
+  const amountOk =
+    (Number.isFinite(paidMinor) && Math.abs(paidMinor - expectedMinor) <= 1) ||
+    (Number.isFinite(priceMinor) && Math.abs(priceMinor - expectedMinor) <= 1);
+  if (!amountOk) {
+    console.error(
+      `[iyzico] tutar uyusmazligi order ${orderId}: beklenen ${expectedMinor} kurus, gelen paidPrice=${result.paidPrice} price=${result.price}`,
+    );
     return { ok: false, orderId, error: 'tutar uyusmazligi' };
   }
 
