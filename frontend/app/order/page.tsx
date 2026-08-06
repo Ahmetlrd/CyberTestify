@@ -233,28 +233,19 @@ export default function OrderPage() {
       authConsent,
       setAuthConsent,
       <>
-        Bu alan adının <strong>ve bağlı altyapısının</strong> münhasır sahibi olduğumu veya adına
-        işlem yapmaya yasal olarak yetkili olduğumu; yalnızca bu alan adı kapsamında saldırgan olmayan
-        pasif bir tarama yapılmasına rıza gösterdiğimi beyan ederim.
+        Bu alan adının <strong>ve altyapısının</strong> sahibi veya yetkilisiyim; yalnızca bu hedefe
+        <strong> pasif</strong> tarama yapılmasına rıza gösteriyorum.
       </>,
     ],
     [
       contractConsent,
       setContractConsent,
       <>
-        <Link href="/legal/on-bilgilendirme" target="_blank" className="text-accent-600 underline">
-          Ön Bilgilendirme Formu
-        </Link>
-        ,{' '}
-        <Link href="/legal/mesafeli-satis" target="_blank" className="text-accent-600 underline">
-          Mesafeli Satış Sözleşmesi
-        </Link>{' '}
-        ve{' '}
-        <Link href="/legal/iptal-iade" target="_blank" className="text-accent-600 underline">
-          İptal/İade Koşulları
-        </Link>
-        ’nı okudum, kabul ediyorum. Hizmetin dijital olarak <strong>anında ifa</strong> edildiğini ve
-        ifasına başlandıktan sonra <strong>cayma hakkımı kullanamayacağımı</strong> kabul ediyorum.
+        <Link href="/legal/on-bilgilendirme" target="_blank" className="font-semibold text-accent-600 underline">Ön Bilgilendirme</Link>,{' '}
+        <Link href="/legal/mesafeli-satis" target="_blank" className="font-semibold text-accent-600 underline">Mesafeli Satış</Link> ve{' '}
+        <Link href="/legal/iptal-iade" target="_blank" className="font-semibold text-accent-600 underline">İptal/İade</Link>{' '}
+        koşullarını kabul ediyorum; hizmet <strong>anında ifa</strong> edildiğinden{' '}
+        <strong>cayma hakkımdan feragat</strong> ediyorum.
       </>,
     ],
     [
@@ -274,11 +265,85 @@ export default function OrderPage() {
     ],
   ];
 
+  // --- Ozet/CTA (sabit kenar karti + mobil alt cubuk) icin turetilmis degerler ---
+  const activeBundles = bundles.filter((b) => !b.comingSoon);
+  const soonBundles = bundles.filter((b) => b.comingSoon);
+  const selName = selectedBundle ? selectedBundle.displayName : selectedPkg ? selectedPkg.displayName : null;
+  const intervalLabel = intervalDays === 7 ? 'Haftalık' : intervalDays === 14 ? 'İki haftada bir' : 'Aylık';
+  const freqLabel = selectedBundle || !recurring ? 'Tek seferlik' : `${intervalLabel} · ${runs} tarama`;
+  const startLabel =
+    !selectedBundle && startMode === 'later' && startAt
+      ? new Date(startAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
+      : 'Hemen';
+  const payWithCreditsNow = !selectedBundle && useCredits && canUseCredits;
+  const unitAmountMinor = selectedBundle
+    ? selectedBundle.amountMinorUnit
+    : selectedPkg
+      ? promo?.valid && promo.finalAmountMinorUnit != null
+        ? promo.finalAmountMinorUnit
+        : selectedPkg.priceMinorUnit
+      : 0;
+  const totalMinor = !selectedBundle && recurring ? unitAmountMinor * runs : unitAmountMinor;
+  const ctaDisabled = selectedBundle
+    ? !domainId || busy || !allConsents || intlComingSoon ||
+      (selectedBundle.category === 'active-light' && !atRisk) ||
+      (selectedBundle.selectable && bundleModules.length === 0)
+    : !domainId || busy || !selected || !allConsents || !activeConsentOk || intlComingSoon;
+  const ctaLabel = busy
+    ? 'Başlatılıyor…'
+    : selectedBundle
+      ? 'Paketi Satın Al'
+      : recurring
+        ? 'Düzenli Taramayı Kur'
+        : startMode === 'later'
+          ? 'Taramayı Zamanla'
+          : 'Taramayı Başlat';
+  const onCta = () => (selectedBundle ? handleBundleStart() : handleStart());
+
+  // Tek paket kart bileseni (basit + aktif bundle'lar ortak gorunum)
+  const bundleCard = (b: any) => {
+    const on = selectedBundle?.key === b.key;
+    return (
+      <button
+        key={b.key}
+        type="button"
+        onClick={() => { setSelectedBundle(on ? null : b); setSelected(null); setBundleModules([]); }}
+        className={`card flex flex-col p-4 text-left transition ${
+          on ? 'ring-2 ring-brand' : b.popular ? 'border-accent hover:border-accent' : 'hover:border-brand-300'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <span className="font-bold text-brand">{b.displayName}</span>
+          {b.popular ? (
+            <span className="rounded-pill bg-accent px-2 py-0.5 text-[10px] font-bold text-white">★ Popüler</span>
+          ) : b.discountPct > 0 ? (
+            <span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold text-white">%{b.discountPct}</span>
+          ) : null}
+        </div>
+        <p className="mt-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
+        <p className="mt-1.5 flex-1 text-[11px] text-ink-muted">
+          İçindekiler: {b.members.map((m: any) => m.displayName).join(' · ')}
+        </p>
+        <p className="mt-2 text-ink">
+          {b.discountPct > 0 && (
+            <span className="text-xs text-ink-muted line-through">{formatMoney(b.originalMinorUnit, getRegion(region))}</span>
+          )}{' '}
+          <span className="font-bold">{formatMoney(b.amountMinorUnit, getRegion(region))}</span>
+          <span className="text-xs font-normal text-ink-muted"> · KDV Dahil</span>
+        </p>
+      </button>
+    );
+  };
+
   return (
-    <main className="container-page max-w-3xl py-14">
-      <h1 className="text-3xl font-extrabold text-brand">Taramanızı Başlatın</h1>
+    <main className="container-page max-w-6xl py-10 pb-28 lg:py-14 lg:pb-14">
+      <div>
+        <h1 className="text-2xl font-extrabold text-brand sm:text-3xl">Taramanızı Başlatın</h1>
+        <p className="mt-1 text-sm text-ink-soft">Paketi seçin, onayları işaretleyin ve güvenli ödemeye geçin.</p>
+      </div>
+
       {!domainId && (
-        <p className="mt-3 rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <p className="mt-4 rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           Önce site sahipliğinizi doğrulamalısınız.{' '}
           <Link href="/verify" className="font-semibold underline">
             Doğrulamaya git →
@@ -286,8 +351,11 @@ export default function OrderPage() {
         </p>
       )}
 
+      <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10">
+        {/* ================= SOL: form adimlari ================= */}
+        <div className="min-w-0">
       {/* Paket seçimi — SADECE paketler: Basit Tarama (giriş) + kombine paketler. Tekil kontrol satışı YOK. */}
-      <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">1 · Paket seçin</h2>
+      <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">1 · Paket seçin</h2>
       <div className="mt-3 grid items-stretch gap-3 sm:grid-cols-2">
         {/* Basit Tarama — giriş seviyesi paket (tek "tekil" paket) */}
         {basitPkg && !basitPkg.comingSoon && (
@@ -305,54 +373,34 @@ export default function OrderPage() {
             </p>
             <p className="mt-2 font-bold text-ink">
               {formatMoney(basitPkg.priceMinorUnit, getRegion(region))}{' '}
-              <span className="text-xs font-normal text-ink-muted">· KDV Dahildir</span>
+              <span className="text-xs font-normal text-ink-muted">· KDV Dahil</span>
             </p>
           </button>
         )}
-        {bundles.map((b) => {
-          const on = selectedBundle?.key === b.key;
-          if (b.comingSoon) {
-            return (
-              <div key={b.key} className="card flex cursor-default flex-col p-4 text-left opacity-80">
-                <div className="flex items-start justify-between gap-2">
-                  <span className="font-bold text-brand">{b.displayName}</span>
-                  <span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold text-white">Yakında</span>
-                </div>
-                <p className="mt-1 flex-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
-                <p className="mt-2 text-xs font-semibold text-ink-muted">Yakında açılacak</p>
-              </div>
-            );
-          }
-          return (
-            <button
-              key={b.key}
-              type="button"
-              onClick={() => { setSelectedBundle(on ? null : b); setSelected(null); setBundleModules([]); }}
-              className={`card flex flex-col p-4 text-left transition ${on ? 'ring-2 ring-brand' : b.popular ? 'border-accent hover:border-accent' : 'hover:border-brand-300'}`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="font-bold text-brand">{b.displayName}</span>
-                {b.popular ? (
-                  <span className="rounded-pill bg-accent px-2 py-0.5 text-[10px] font-bold text-white">★ Popüler</span>
-                ) : b.discountPct > 0 ? (
-                  <span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold text-white">%{b.discountPct}</span>
-                ) : null}
-              </div>
-              <p className="mt-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
-              <p className="mt-1.5 flex-1 text-[11px] text-ink-muted">
-                İçindekiler: {b.members.map((m: any) => m.displayName).join(' · ')}
-              </p>
-              <p className="mt-2 text-ink">
-                {b.discountPct > 0 && (
-                  <span className="text-xs text-ink-muted line-through">{formatMoney(b.originalMinorUnit, getRegion(region))}</span>
-                )}{' '}
-                <span className="font-bold">{formatMoney(b.amountMinorUnit, getRegion(region))}</span>
-                <span className="text-xs font-normal text-ink-muted"> · KDV Dahildir</span>
-              </p>
-            </button>
-          );
-        })}
+        {activeBundles.map((b) => bundleCard(b))}
       </div>
+      {/* "Yakında" paketler — devre disi, gri, SONA alindi (secilemez). */}
+      {soonBundles.length > 0 && (
+        <div className="mt-5">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">Yakında</p>
+          <div className="mt-2 grid items-stretch gap-3 sm:grid-cols-2">
+            {soonBundles.map((b) => (
+              <div
+                key={b.key}
+                aria-disabled="true"
+                className="card flex cursor-not-allowed flex-col border-dashed bg-brand-50/30 p-4 text-left opacity-60"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-bold text-ink-soft">{b.displayName}</span>
+                  <span className="rounded-pill bg-ink-muted px-2 py-0.5 text-[10px] font-bold text-white">Yakında</span>
+                </div>
+                <p className="mt-1 flex-1 text-xs leading-relaxed text-ink-muted">{b.description}</p>
+                <p className="mt-2 text-xs font-semibold text-ink-muted">Şu an satışa kapalı</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {selectedBundle && selectedBundle.category === 'active-light' && (
         <div className="mt-3 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm">
           <label className="flex items-start gap-2">
@@ -396,6 +444,9 @@ export default function OrderPage() {
         </div>
       )}
 
+      {/* Tekrar + Başlangıç YALNIZ tekil paket için (bundle'lar hemen çalışır, zamanlanamaz). */}
+      {!selectedBundle && (
+      <>
       {/* Düzenli tekrar (opsiyonel) */}
       <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">3 · Tekrar</h2>
       <div className="mt-3 space-y-2.5">
@@ -467,6 +518,8 @@ export default function OrderPage() {
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* (Faz 3) Active-light yetkilendirme beyani — pasif onaylarin USTUNE, ayri blok */}
       {isActiveLight && selectedPkg?.activeTest && (
@@ -596,48 +649,100 @@ export default function OrderPage() {
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
-      <button
-        onClick={selectedBundle ? handleBundleStart : handleStart}
-        disabled={
-          selectedBundle
-            ? !domainId || busy || !allConsents || intlComingSoon ||
-              (selectedBundle.category === 'active-light' && !atRisk) ||
-              (selectedBundle.selectable && bundleModules.length === 0)
-            : !domainId || busy || !selected || !allConsents || !activeConsentOk || intlComingSoon
-        }
-        className="btn-primary mt-6 w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-      >
-        {busy
-          ? 'Başlatılıyor…'
-          : selectedBundle
-            ? 'Paketi Satın Al'
-            : recurring
-              ? 'Düzenli Taramayı Kur'
-              : startMode === 'later'
-                ? 'Taramayı Zamanla'
-                : 'Taramayı Başlat'}
-      </button>
-      <p className="mt-3 text-xs text-ink-muted">
-        {recurring || startMode === 'later'
-          ? 'Kayıtlarınızı “Zamanlanmış taramalarım” ekranından görüntüleyip iptal edebilirsiniz.'
-          : 'Ödeme onaylandığında tarama otomatik ve anında başlar.'}
-      </p>
+        </div>{/* ===== SOL kolon sonu ===== */}
 
-      {/* Güvenli ödeme rozeti + iyzico resmi logoları (Visa/Mastercard/Troy dahil) */}
-      <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-card border border-line bg-brand-50/40 px-4 py-3 text-xs text-ink-soft">
-        <span className="inline-flex items-center gap-1.5 font-semibold text-brand">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M12 2l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V5l7-3z" fill="#123F3A" />
-            <path d="M9 12l2 2 4-4" stroke="#F5A623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-          </svg>
-          Güvenli Ödeme (256-bit SSL)
-        </span>
-        <img src="/iyzico/iyzico_ile_ode_colored_horizontal.svg" alt="iyzico ile Öde" className="h-6 w-auto" width={210} height={31} />
-        <img src="/iyzico/logo_band_colored.svg" alt="Visa, Mastercard, Troy" className="h-auto w-auto max-w-full" width={456} height={32} />
+        {/* ================= SAĞ: kaydırmada sabit özet (masaüstü) ================= */}
+        <aside className="hidden lg:block">
+          <div className="sticky top-6 space-y-3">
+            <div className="rounded-card border border-line bg-white p-5 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">Sipariş Özeti</p>
+              {selName ? (
+                <>
+                  <p className="mt-2 text-base font-bold text-brand">{selName}</p>
+                  <dl className="mt-3 space-y-1.5 text-sm">
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-ink-muted">Sıklık</dt>
+                      <dd className="text-right font-medium text-ink">{freqLabel}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-ink-muted">Başlangıç</dt>
+                      <dd className="text-right font-medium text-ink">{startLabel}</dd>
+                    </div>
+                    {selectedBundle && (
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-ink-muted">İçerik</dt>
+                        <dd className="text-right font-medium text-ink">{selectedBundle.members.length} tarama</dd>
+                      </div>
+                    )}
+                  </dl>
+                  <div className="mt-3 border-t border-line pt-3">
+                    {payWithCreditsNow ? (
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-sm text-ink-muted">Ödeme</span>
+                        <span className="text-lg font-extrabold text-brand">{creditsNeeded} kredi</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-sm text-ink-muted">{recurring ? `Toplam · ${runs} tarama` : 'Toplam'}</span>
+                        <span className="text-2xl font-extrabold text-brand">{formatMoney(totalMinor, getRegion(region))}</span>
+                      </div>
+                    )}
+                    <p className="mt-0.5 text-right text-[11px] text-ink-muted">KDV dahildir</p>
+                  </div>
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-ink-soft">Devam etmek için bir paket seçin.</p>
+              )}
+              <button onClick={onCta} disabled={ctaDisabled} className="btn-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-50">
+                {ctaLabel}
+              </button>
+              <p className="mt-2 text-center text-[11px] text-ink-muted">
+                {recurring || startMode === 'later'
+                  ? 'Zamanlanmış taramalarım ekranından yönetebilirsiniz.'
+                  : 'Ödeme onaylanınca tarama otomatik başlar.'}
+              </p>
+            </div>
+
+            {/* Güven şeridi — DÜRÜST sinyaller (uydurma istatistik/puan YOK) */}
+            <div className="rounded-card border border-line bg-brand-50/40 p-4 text-xs text-ink-soft">
+              <ul className="space-y-1.5">
+                <li className="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0" aria-hidden><path d="M12 2l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V5l7-3z" fill="#123F3A"/><path d="M9 12l2 2 4-4" stroke="#F5A623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                  256-bit SSL · iyzico güvenli ödeme
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#123F3A" strokeWidth="2" className="shrink-0" aria-hidden><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                  Kart bilgileri iyzico’da işlenir, bizde saklanmaz
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1C6B60" strokeWidth="2" className="shrink-0" aria-hidden><circle cx="12" cy="12" r="9"/><path d="M8 12l2.5 2.5L16 9" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  KVKK uyumlu · veriler şifreli saklanır
+                </li>
+              </ul>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <img src="/iyzico/iyzico_ile_ode_colored_horizontal.svg" alt="iyzico ile Öde" className="h-5 w-auto" width={175} height={26} />
+                <img src="/iyzico/logo_band_colored.svg" alt="Visa, Mastercard, Troy" className="h-4 w-auto max-w-full" width={228} height={16} />
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>{/* ===== grid sonu ===== */}
+
+      {/* ================= MOBİL: kaydırmada sabit alt çubuk (özet + CTA) ================= */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 px-4 py-2.5 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-brand">{selName ?? 'Paket seçilmedi'}</p>
+            <p className="text-sm font-extrabold text-ink">
+              {payWithCreditsNow ? `${creditsNeeded} kredi` : formatMoney(totalMinor, getRegion(region))}
+              <span className="ml-1 text-[10px] font-normal text-ink-muted">KDV dahil</span>
+            </p>
+          </div>
+          <button onClick={onCta} disabled={ctaDisabled} className="btn-primary shrink-0 px-5 disabled:cursor-not-allowed disabled:opacity-50">
+            {ctaLabel}
+          </button>
+        </div>
       </div>
-      <p className="mt-2 text-xs text-ink-muted">
-        Tüm fiyatlar <strong>KDV dahildir</strong>. Ödemeniz onaylandığında faturanız e-posta ile iletilecektir.
-      </p>
     </main>
   );
 }
