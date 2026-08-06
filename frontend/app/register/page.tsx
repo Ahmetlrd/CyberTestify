@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../lib/api';
 import { PasswordInput } from '../../components/PasswordInput';
+import { GoogleButton } from '../../components/GoogleButton';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -52,7 +53,13 @@ export default function RegisterPage() {
       <div className="card p-8">
         <h1 className="text-2xl font-extrabold text-brand">Hesap Oluştur</h1>
         <p className="mt-1 text-sm text-ink-muted">Doğrulama ücretsiz — dakikalar içinde başlayın.</p>
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <div className="mt-6">
+          <GoogleButton next={next} label="Google ile kaydol" />
+        </div>
+        <div className="my-5 flex items-center gap-3 text-xs text-ink-muted">
+          <span className="h-px flex-1 bg-line" /> veya <span className="h-px flex-1 bg-line" />
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="label">E-posta</label>
             <input type="email" required className="field" value={email} onChange={(e) => setEmail(e.target.value)} />

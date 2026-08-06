@@ -94,6 +94,10 @@ model Customer {
   emailVerifyCodeHash    String?
   emailVerifyCodeExpiry  DateTime?
 
+  // Google OAuth ile baglanti (Google 'sub'). Ayni e-posta hesabi hem sifre hem Google
+  // ile girebilir. Google ile gelen hesaplar emailVerified=true'dur (Google dogrulamis).
+  googleId String? @unique
+
   domains            Domain[]
   orders             Order[]
   scheduledScans     ScheduledScan[]

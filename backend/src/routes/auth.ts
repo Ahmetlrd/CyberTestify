@@ -163,3 +163,101 @@ authRouter.post('/resend-verification', requireAuth, async (req, res) => {
   await issueEmailVerification(c.id, c.email);
   res.json({ ok: true });
 });
+
+// --- Google OAuth ("Google ile devam et") — Authorization Code akisi -----------
+// /google/start → Google consent → /google/callback (backend, secret ile code exchange)
+// → hesap eslestir/olustur → bizim JWT'yi frontend'e FRAGMENT ile ilet (log/referrer'a sizmaz).
+// GOOGLE_CLIENT_ID yoksa akis kapalidir (frontend butonu da gizli).
+
+authRouter.get('/google/start', (req, res) => {
+  if (!config.google.clientId) return res.status(503).send('Google girişi yapılandırılmadı.');
+  const next = typeof req.query.next === 'string' ? req.query.next : '/verify';
+  // state: imzali + kisa omurlu (CSRF); 'next' hedefini de tasir (stateless).
+  const state = jwt.sign({ next, n: crypto.randomBytes(8).toString('hex') }, config.jwtSecret, { expiresIn: '10m' });
+  const params = new URLSearchParams({
+    client_id: config.google.clientId,
+    redirect_uri: config.google.redirectUri,
+    response_type: 'code',
+    scope: 'openid email profile',
+    state,
+    prompt: 'select_account',
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+authRouter.get('/google/callback', async (req, res) => {
+  const fail = () => res.redirect(`${config.frontendUrl}/login?error=google`);
+  try {
+    const code = typeof req.query.code === 'string' ? req.query.code : '';
+    const stateRaw = typeof req.query.state === 'string' ? req.query.state : '';
+    if (!code || !stateRaw) return fail();
+    let next = '/verify';
+    try {
+      const s = jwt.verify(stateRaw, config.jwtSecret) as { next?: string };
+      if (typeof s.next === 'string' && s.next.startsWith('/')) next = s.next; // yalniz ic yol
+    } catch {
+      return fail();
+    }
+
+    // code → token exchange (client_secret sunucuda; asla frontend'e/log'a gitmez).
+    const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: config.google.clientId,
+        client_secret: config.google.clientSecret,
+        redirect_uri: config.google.redirectUri,
+        grant_type: 'authorization_code',
+      }).toString(),
+    });
+    if (!tokenResp.ok) {
+      console.error('[google] token exchange basarisiz:', tokenResp.status);
+      return fail();
+    }
+    const tok = (await tokenResp.json()) as { access_token?: string };
+    if (!tok.access_token) return fail();
+
+    const uiResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { authorization: `Bearer ${tok.access_token}` },
+    });
+    if (!uiResp.ok) return fail();
+    const ui = (await uiResp.json()) as { sub?: string; email?: string; email_verified?: boolean; name?: string };
+    const email = (ui.email ?? '').trim().toLowerCase();
+    if (!email || !ui.sub) return fail();
+
+    // HESAP ESLESTIRME: e-posta zaten varsa BAGLA (sifre korunur); yoksa YENI hesap.
+    let customer = await prisma.customer.findUnique({ where: { email } });
+    if (customer) {
+      const data: Record<string, unknown> = {};
+      if (!customer.googleId) data.googleId = ui.sub; // bu hesaba Google ile de giris baglanti
+      if (!customer.emailVerified) data.emailVerified = true; // Google e-postayi dogruladi
+      if (!customer.fullName && ui.name) data.fullName = ui.name;
+      if (Object.keys(data).length) customer = await prisma.customer.update({ where: { id: customer.id }, data });
+    } else {
+      // Sifresiz (Google-only) hesap: kullanicinin bilmedigi rastgele hash (sifreyle giris yapamaz;
+      // isterse ileride "sifremi unuttum" ile belirleyebilir). Google giris => emailVerified true,
+      // dogrulama-kodu akisina HIC girmez. Google girisi Kullanim Kosullari kabulu sayilir.
+      const randomHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 12);
+      customer = await prisma.customer.create({
+        data: {
+          email,
+          passwordHash: randomHash,
+          googleId: ui.sub,
+          emailVerified: ui.email_verified !== false,
+          fullName: ui.name ?? null,
+          termsAcceptedAt: new Date(),
+          termsVersion: config.legalVersion,
+        },
+      });
+    }
+
+    const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '7d' });
+    // Token'i FRAGMENT ile frontend origin'ine tasi (localStorage orada). Query DEGIL → sunucu
+    // loglarina / Referer'a sizmaz. Kucuk bir sayfa token'i saklayip 'next'e yonlendirir.
+    return res.redirect(`${config.frontendUrl}/auth/google/done#token=${token}&next=${encodeURIComponent(next)}`);
+  } catch (err) {
+    console.error('[google] callback hata:', err);
+    return fail();
+  }
+});
