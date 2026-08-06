@@ -25,6 +25,13 @@ export interface ComboBundle {
    * discountPct'e dusulur.
    */
   finalPriceMinorUnitTr?: number;
+  /**
+   * "Ustu cizili" referans (anchor) fiyat (TR, kurus) — PAZARLAMA. Verilmisse UI'da orijinal
+   * olarak BU gosterilir (uye tekil toplami DEGIL) ve indirim % = round((1 - final/anchor)*100)
+   * yuvarlak cikacak sekilde secilir (ör. 5699 -> 3999 = %30). Uye order tutarlarinin
+   * dagitimi bundan ETKILENMEZ (gercek uye tekil fiyatlarina gore bolunur; bkz bundleMemberAmounts).
+   */
+  anchorOriginalMinorUnitTr?: number;
   /** UI'da "Popüler" cercevesi/rozeti (pazarlama vurgusu). */
   popular?: boolean;
   /** true ise "Yakında" — listelenir ama satin ALINAMAZ (createBundleOrder reddeder). */
@@ -50,6 +57,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     category: 'passive',
     discountPct: 22,
     finalPriceMinorUnitTr: 399900, // 3.999 TL (Vedat — nihai indirimli, yuvarlak)
+    anchorOriginalMinorUnitTr: 569900, // 5.699 → 3.999 = %30 (pazarlama anchor)
     popular: true, // en genis giris paketi → "Popüler"
     memberKeys: ['ssl_tls', 'header_leak', 'dns_email', 'cors_cookie', 'csp_analiz'],
   },
@@ -64,6 +72,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     category: 'passive',
     discountPct: 20,
     finalPriceMinorUnitTr: 449900, // 4.499 TL (Vedat — nihai, yuvarlak)
+    anchorOriginalMinorUnitTr: 529900, // 5.299 → 4.499 = %15 (pazarlama anchor)
     memberKeys: ['subdomain_takeover', 'api_discovery', 'cms_cve'],
   },
   {
@@ -77,6 +86,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     category: 'compliance',
     discountPct: 20,
     finalPriceMinorUnitTr: 799900, // 7.999 TL (Vedat — nihai, yuvarlak; TR = 3 modul dahil)
+    anchorOriginalMinorUnitTr: 999900, // 9.999 → 7.999 = %20 (pazarlama anchor)
     // Modul secimi KALDIRILDI — uyeler SABIT (uyum kontrolleri hep birlikte). KVKK yalniz TR.
     memberKeys: ['kvkk_hazirlik', 'pci_hazirlik', 'iso27001_hazirlik'],
     trOnlyKeys: ['kvkk_hazirlik'],
@@ -153,12 +163,15 @@ export function bundlePrice(
 ): { memberKeys: string[]; originalMinorUnit: number; amountMinorUnit: number; currency: string; discountPct: number } {
   const memberKeys = resolveMembers(bundle, region, selectedKeys);
   const prices = memberKeys.map((k) => getPricing(k, region));
-  const originalMinorUnit = prices.reduce((sum, p) => sum + p.amountMinorUnit, 0);
+  const singlesSum = prices.reduce((sum, p) => sum + p.amountMinorUnit, 0);
   const currency = prices[0]?.currency ?? getPricing('basit_tarama', region).currency;
   const amountMinorUnit =
     region === 'tr' && bundle.finalPriceMinorUnitTr != null
       ? bundle.finalPriceMinorUnitTr
-      : Math.round(originalMinorUnit * (1 - bundle.discountPct / 100));
+      : Math.round(singlesSum * (1 - bundle.discountPct / 100));
+  // GOSTERILEN "orijinal" (ustu cizili): pazarlama anchor'i varsa O; yoksa uye tekil toplami.
+  const originalMinorUnit =
+    region === 'tr' && bundle.anchorOriginalMinorUnitTr != null ? bundle.anchorOriginalMinorUnitTr : singlesSum;
   const effectiveDiscountPct =
     originalMinorUnit > 0 ? Math.max(0, Math.round((1 - amountMinorUnit / originalMinorUnit) * 100)) : 0;
   return { memberKeys, originalMinorUnit, amountMinorUnit, currency, discountPct: effectiveDiscountPct };
@@ -175,8 +188,11 @@ export function bundleMemberAmounts(
   region: string,
   selectedKeys?: string[],
 ): Array<{ key: string; amountMinorUnit: number }> {
-  const { memberKeys, originalMinorUnit, amountMinorUnit } = bundlePrice(bundle, region, selectedKeys);
+  const { memberKeys, amountMinorUnit } = bundlePrice(bundle, region, selectedKeys);
   const singles = memberKeys.map((k) => getPricing(k, region).amountMinorUnit);
+  // Dagitim tabani GERCEK uye tekil fiyatlari toplamidir (gosterim anchor'i DEGIL) — boylece
+  // pazarlama anchor'i degisse bile uye tutarlari makul kalir; toplam nihai fiyata TAM boluner.
+  const singlesSum = singles.reduce((s, x) => s + x, 0);
   const out: Array<{ key: string; amountMinorUnit: number }> = [];
   let assigned = 0;
   for (let i = 0; i < memberKeys.length; i++) {
@@ -184,8 +200,8 @@ export function bundleMemberAmounts(
     if (i === memberKeys.length - 1) {
       share = amountMinorUnit - assigned; // son uye kalani alir → toplam TAM eslesir
     } else {
-      share = originalMinorUnit > 0
-        ? Math.round((amountMinorUnit * singles[i]) / originalMinorUnit)
+      share = singlesSum > 0
+        ? Math.round((amountMinorUnit * singles[i]) / singlesSum)
         : Math.round(amountMinorUnit / memberKeys.length);
       assigned += share;
     }

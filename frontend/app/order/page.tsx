@@ -8,7 +8,6 @@ import { readRegionCookie } from '../../lib/region';
 import { getRegion, type RegionCode } from '../../config/regions';
 import { formatMoney } from '../../config/i18n';
 import { DynamicContract } from '../../components/DynamicContract';
-import { PACKAGE_CATEGORIES } from '../../components/CategoryAccordions';
 
 type ActiveTest = { scope: { does: string[]; doesNot: string[] }; riskText: string; consentVersion: string };
 type Pkg = {
@@ -38,7 +37,6 @@ export default function OrderPage() {
   const [selectedBundle, setSelectedBundle] = useState<any | null>(null);
   const [bundleModules, setBundleModules] = useState<string[]>([]);
   // Tekil paket kategori akordeonlari (paketler sayfasiyla ayni duzen) — varsayilan KAPALI.
-  const [openCats, setOpenCats] = useState<Record<string, boolean>>({});
   const [region, setRegion] = useState<RegionCode>('tr');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -108,6 +106,8 @@ export default function OrderPage() {
   }, [router]);
 
   const selectedPkg = packages.find((p) => p.key === selected);
+  // SATIS MODELI: tekil kontrol satisi YOK — secilebilir TEK "tekil" paket basit_tarama (giris).
+  const basitPkg = packages.find((p) => p.key === 'basit_tarama');
   const isActiveLight = selectedPkg?.securityProfile === 'active-light';
   // (#4) Uluslararasi odeme (Paddle) henuz canli degil — TR disi bolgede nazik "yakinda".
   const intlComingSoon = region !== 'tr';
@@ -286,169 +286,90 @@ export default function OrderPage() {
         </p>
       )}
 
-      {/* Kombine paketler (opsiyonel) — birden fazla kontrolü indirimli birlikte al */}
-      {bundles.length > 0 && (
-        <>
-          <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">
-            Kombine Paketler <span className="font-normal normal-case text-ink-muted">(opsiyonel — indirimli)</span>
-          </h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {bundles.map((b) => {
-              const on = selectedBundle?.key === b.key;
-              if (b.comingSoon) {
-                return (
-                  <div key={b.key} className="card cursor-default p-4 text-left opacity-80">
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="font-bold text-brand">{b.displayName}</span>
-                      <span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold text-white">Yakında</span>
-                    </div>
-                    <p className="mt-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
-                    <p className="mt-2 text-xs font-semibold text-ink-muted">Yakında açılacak</p>
-                  </div>
-                );
-              }
-              return (
-                <button
-                  key={b.key}
-                  type="button"
-                  onClick={() => { setSelectedBundle(on ? null : b); setSelected(null); setBundleModules([]); }}
-                  className={`card p-4 text-left transition ${on ? 'ring-2 ring-brand' : 'hover:border-brand-300'}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-bold text-brand">{b.displayName}</span>
-                    <span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold text-white">%{b.discountPct}</span>
-                  </div>
-                  <p className="mt-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
-                  <p className="mt-2 text-ink">
-                    <span className="text-xs text-ink-muted line-through">{formatMoney(b.originalMinorUnit, getRegion(region))}</span>{' '}
-                    <span className="font-bold">{formatMoney(b.amountMinorUnit, getRegion(region))}</span>
-                  </p>
-                  <p className="mt-1 text-[11px] text-ink-muted">Tahmini süre: içeriğe göre değişir (üyeler sırayla)</p>
-                </button>
-              );
-            })}
-          </div>
-          {selectedBundle && selectedBundle.selectable && selectedBundle.selectableModules && (
-            <div className="mt-3 rounded-card border border-line bg-white p-4">
-              <p className="text-sm font-semibold text-ink">Modülleri seçin (en az 1):</p>
-              <div className="mt-2 space-y-2">
-                {selectedBundle.selectableModules.map((m: any) => (
-                  <label key={m.key} className="flex items-center gap-2 text-sm text-ink-soft">
-                    <input
-                      type="checkbox"
-                      checked={bundleModules.includes(m.key)}
-                      onChange={(e) =>
-                        setBundleModules((prev) => (e.target.checked ? [...prev, m.key] : prev.filter((k) => k !== m.key)))
-                      }
-                    />
-                    {m.displayName}
-                  </label>
-                ))}
-              </div>
+      {/* Paket seçimi — SADECE paketler: Basit Tarama (giriş) + kombine paketler. Tekil kontrol satışı YOK. */}
+      <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">1 · Paket seçin</h2>
+      <div className="mt-3 grid items-stretch gap-3 sm:grid-cols-2">
+        {/* Basit Tarama — giriş seviyesi paket (tek "tekil" paket) */}
+        {basitPkg && !basitPkg.comingSoon && (
+          <button
+            type="button"
+            onClick={() => { setSelected(basitPkg.key); setSelectedBundle(null); setBundleModules([]); }}
+            className={`card flex flex-col p-4 text-left transition ${selected === basitPkg.key ? 'ring-2 ring-accent' : 'hover:border-brand-300'}`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <span className="font-bold text-brand">{basitPkg.displayName}</span>
+              <span className="rounded-pill bg-ink-soft px-2 py-0.5 text-[10px] font-bold text-white">Giriş</span>
             </div>
-          )}
-          {selectedBundle && !selectedBundle.selectable && (
-            <p className="mt-2 text-xs text-ink-muted">
-              İçindekiler: {selectedBundle.members.map((m: any) => m.displayName).join(' · ')}
+            <p className="mt-1 flex-1 text-xs leading-relaxed text-ink-soft">
+              Hızlı, ucuz deneme taraması — ön izleme niteliğindedir (kapsamlı denetim değildir).
             </p>
-          )}
-          {selectedBundle && selectedBundle.category === 'active-light' && (
-            <div className="mt-3 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm">
-              <label className="flex items-start gap-2">
-                <input type="checkbox" checked={atRisk} onChange={(e) => setAtRisk(e.target.checked)} className="mt-0.5" />
-                <span>
-                  Bu paket aktif-hafif doğrulama kontrolleri içerir; yalnızca sahibi/yetkilisi olduğum hedefe karşı
-                  çalıştırılmasına ve ilgili riskleri kabul ettiğime dair beyanı onaylıyorum. (Tüm modüller için tek beyan.)
-                </span>
-              </label>
-              {selectedBundle.members.some((m: any) => m.key === 'authenticated_scan') && (
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <input placeholder="Test hesabı kullanıcı adı" value={authUser} onChange={(e) => setAuthUser(e.target.value)} className="field" />
-                  <input type="password" placeholder="Test hesabı şifresi" value={authPass} onChange={(e) => setAuthPass(e.target.value)} className="field" />
+            <p className="mt-2 font-bold text-ink">
+              {formatMoney(basitPkg.priceMinorUnit, getRegion(region))}{' '}
+              <span className="text-xs font-normal text-ink-muted">· KDV Dahildir</span>
+            </p>
+          </button>
+        )}
+        {bundles.map((b) => {
+          const on = selectedBundle?.key === b.key;
+          if (b.comingSoon) {
+            return (
+              <div key={b.key} className="card flex cursor-default flex-col p-4 text-left opacity-80">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-bold text-brand">{b.displayName}</span>
+                  <span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold text-white">Yakında</span>
                 </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Paket seçimi */}
-      <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">
-        {bundles.length > 0 ? 'veya tek paket seçin' : '1 · Paket seçin'}
-      </h2>
-      <div className="mt-3 space-y-3">
-        {PACKAGE_CATEGORIES.map((cat) => {
-          const items = cat.keys.map((k) => packages.find((p) => p.key === k)).filter(Boolean) as Pkg[];
-          if (items.length === 0) return null;
-          // Secili paket bu kategorideyse acik tut; aksi halde kullanici tercihine gore.
-          const hasSelected = items.some((p) => p.key === selected);
-          const isOpen = !!openCats[cat.id] || hasSelected;
+                <p className="mt-1 flex-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
+                <p className="mt-2 text-xs font-semibold text-ink-muted">Yakında açılacak</p>
+              </div>
+            );
+          }
           return (
-            <div key={cat.id} className="overflow-hidden rounded-card border border-line bg-white">
-              <button
-                type="button"
-                onClick={() => setOpenCats((o) => ({ ...o, [cat.id]: !o[cat.id] }))}
-                aria-expanded={isOpen}
-                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-brand-50/40"
-              >
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-bold text-brand">{cat.tr}</span>
-                  <span className="text-xs text-ink-muted">· {items.length} kontrol içerir · Tahmini süre {cat.estTr}</span>
-                  {cat.auth && (
-                    <span className="rounded-pill bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">⚠ Yetkilendirme Beyanı Gerekir</span>
-                  )}
-                  {hasSelected && <span className="rounded-pill bg-accent px-2 py-0.5 text-[10px] font-bold text-ink">seçili</span>}
-                </span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className={`shrink-0 text-ink-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden>
-                  <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-              {isOpen && (
-                <div className="border-t border-line p-4">
-                  <p className="mb-3 text-xs text-ink-soft">{cat.descTr}</p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                  {items.map((p) => {
-                    const on = selected === p.key;
-                    if (p.comingSoon) {
-                      // "Yakında": secilemez, fiyat gosterilmez.
-                      return (
-                        <div key={p.key} className="card cursor-default p-4 text-left opacity-80">
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="font-bold text-brand">{p.displayName}</span>
-                            <span className="shrink-0 rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold text-white">Yakında</span>
-                          </div>
-                          <p className="mt-1 text-xs leading-relaxed text-ink-soft">{p.description}</p>
-                          <p className="mt-2 text-xs font-semibold text-ink-muted">Yakında açılacak</p>
-                        </div>
-                      );
-                    }
-                    return (
-                      <button
-                        key={p.key}
-                        type="button"
-                        onClick={() => { setSelected(p.key); setSelectedBundle(null); }}
-                        className={`card p-4 text-left transition ${on ? 'ring-2 ring-accent' : 'hover:border-brand-300'}`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="font-bold text-brand">{p.displayName}</span>
-                          <span className={`mt-0.5 h-4 w-4 shrink-0 rounded-full border ${on ? 'border-accent bg-accent' : 'border-line'}`} />
-                        </div>
-                        <p className="mt-1 text-xs leading-relaxed text-ink-soft">{p.description}</p>
-                        <p className="mt-2 font-bold text-ink">
-                          {formatMoney(p.priceMinorUnit, getRegion(region))}{' '}
-                          <span className="text-xs font-normal text-ink-muted">· KDV Dahildir</span>
-                        </p>
-                        <p className="mt-1 text-[11px] text-ink-muted">Tahmini süre: {cat.estTr}</p>
-                      </button>
-                    );
-                  })}
-                  </div>
-                </div>
-              )}
-            </div>
+            <button
+              key={b.key}
+              type="button"
+              onClick={() => { setSelectedBundle(on ? null : b); setSelected(null); setBundleModules([]); }}
+              className={`card flex flex-col p-4 text-left transition ${on ? 'ring-2 ring-brand' : b.popular ? 'border-accent hover:border-accent' : 'hover:border-brand-300'}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-bold text-brand">{b.displayName}</span>
+                {b.popular ? (
+                  <span className="rounded-pill bg-accent px-2 py-0.5 text-[10px] font-bold text-white">★ Popüler</span>
+                ) : b.discountPct > 0 ? (
+                  <span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold text-white">%{b.discountPct}</span>
+                ) : null}
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
+              <p className="mt-1.5 flex-1 text-[11px] text-ink-muted">
+                İçindekiler: {b.members.map((m: any) => m.displayName).join(' · ')}
+              </p>
+              <p className="mt-2 text-ink">
+                {b.discountPct > 0 && (
+                  <span className="text-xs text-ink-muted line-through">{formatMoney(b.originalMinorUnit, getRegion(region))}</span>
+                )}{' '}
+                <span className="font-bold">{formatMoney(b.amountMinorUnit, getRegion(region))}</span>
+                <span className="text-xs font-normal text-ink-muted"> · KDV Dahildir</span>
+              </p>
+            </button>
           );
         })}
       </div>
+      {selectedBundle && selectedBundle.category === 'active-light' && (
+        <div className="mt-3 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm">
+          <label className="flex items-start gap-2">
+            <input type="checkbox" checked={atRisk} onChange={(e) => setAtRisk(e.target.checked)} className="mt-0.5" />
+            <span>
+              Bu paket aktif-hafif doğrulama kontrolleri içerir; yalnızca sahibi/yetkilisi olduğum hedefe karşı
+              çalıştırılmasına ve ilgili riskleri kabul ettiğime dair beyanı onaylıyorum. (Tüm modüller için tek beyan.)
+            </span>
+          </label>
+          {selectedBundle.members.some((m: any) => m.key === 'authenticated_scan') && (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <input placeholder="Test hesabı kullanıcı adı" value={authUser} onChange={(e) => setAuthUser(e.target.value)} className="field" />
+              <input type="password" placeholder="Test hesabı şifresi" value={authPass} onChange={(e) => setAuthPass(e.target.value)} className="field" />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Onaylar */}
       <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">2 · Onaylar</h2>
