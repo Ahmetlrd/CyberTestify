@@ -348,7 +348,9 @@ export const SCAN_PACKAGES: ScanPackageDef[] = [
     description:
       'Hizli, pasif on-kontrol: ana sayfanin guvenlik basliklari, TLS gecerliligi ve ' +
       'sunucu banner ozeti. Birkac dakikada biten en ucuz giris paketi.',
-    priceMinorUnit: 49900,
+    // GECICI TEST (iyzico canli-mod 1-5 TL dogrulamasi) — eski fiyat: 499 TL (49900).
+    // PROMPT_IYZICO_GECICI_1TL_TEST_GERI_AL ile 49900'e geri alinacak. SADECE bu paket.
+    priceMinorUnit: 100,
     modelProvider: PROVIDER,
     maxToolCalls: 25,
     promptTemplate: (host) => `
