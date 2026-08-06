@@ -18,15 +18,23 @@ export interface ComboBundle {
   descriptionEn: string;
   category: 'passive' | 'active-light' | 'compliance';
   discountPct: number;
+  /**
+   * NIHAI indirimli fiyat (TR, kurus). Vedat tarafindan sabitlenen yuvarlak fiyat; verilmisse
+   * discountPct'ten TURETME YERINE bu kullanilir (bkz bundlePrice). Uye order tutarlari bu
+   * TOPLAMA tam bolunur (bkz bundleMemberAmounts). TR disi bolgeler henuz canli degil → orada
+   * discountPct'e dusulur.
+   */
+  finalPriceMinorUnitTr?: number;
+  /** UI'da "Popüler" cercevesi/rozeti (pazarlama vurgusu). */
+  popular?: boolean;
   /** true ise "Yakında" — listelenir ama satin ALINAMAZ (createBundleOrder reddeder). */
   comingSoon?: boolean;
-  /** Sabit uyeler (Uyum paketi haric). */
+  /** Sabit uyeler. */
   memberKeys: string[];
-  /** true ise musteri checkout'ta uyeleri SECER (Uyum paketi: 1/2/3 modul). */
+  /** (KULLANIMDAN KALDIRILDI) Onceden Uyum paketi modul secimi; artik tum uyeler sabit dahil. */
   selectable?: boolean;
-  /** selectable ise secilebilir modul havuzu. */
   selectableKeys?: string[];
-  /** Bu key SADECE TR bolgesinde secilebilir/gorunur (ör. kvkk_hazirlik). */
+  /** Bu key SADECE TR bolgesinde gorunur (ör. kvkk_hazirlik). TR disi bolgede uyeden ELENIR. */
   trOnlyKeys?: string[];
 }
 
@@ -41,6 +49,8 @@ export const COMBO_BUNDLES: ComboBundle[] = [
       'Reviews your external configuration posture together: SSL/TLS, security headers, DNS/email, CORS and CSP. Discounted vs buying separately.',
     category: 'passive',
     discountPct: 22,
+    finalPriceMinorUnitTr: 399900, // 3.999 TL (Vedat — nihai indirimli, yuvarlak)
+    popular: true, // en genis giris paketi → "Popüler"
     memberKeys: ['ssl_tls', 'header_leak', 'dns_email', 'cors_cookie', 'csp_analiz'],
   },
   {
@@ -53,6 +63,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
       'Maps your attack surface: subdomain takeover scan, API/Swagger discovery and CMS/known-CVE detection. Discounted vs buying separately.',
     category: 'passive',
     discountPct: 20,
+    finalPriceMinorUnitTr: 449900, // 4.499 TL (Vedat — nihai, yuvarlak)
     memberKeys: ['subdomain_takeover', 'api_discovery', 'cms_cve'],
   },
   {
@@ -60,15 +71,15 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     displayName: 'Uyum Paketi',
     displayNameEn: 'Compliance Bundle',
     description:
-      'İstediğiniz uyum modüllerini birlikte seçin (KVKK / PCI-DSS / ISO 27001 — tek, ikili veya üçü birden). Seçtiğiniz modül sayısına göre indirimli fiyat. (Her modül tek tek de alınabilir.)',
+      'KVKK, PCI-DSS ve ISO 27001 ön-uyum kontrollerinin üçü birden tek pakette. Dışarıdan gözlemlenebilir hazırlık eksiklerini ilgili ilkelerle eşler (resmî denetim/uyum beyanı değildir). Tekil toplamdan indirimli.',
     descriptionEn:
-      'Pick the compliance modules you need together (PCI-DSS / ISO 27001 — one, two, or all). Discount scales with the number of modules. (Each module can still be bought individually.)',
+      'PCI-DSS and ISO 27001 readiness checks together in one package (KVKK included in Turkey). Maps externally observable gaps to the relevant principles (not an official audit or statement of compliance). Discounted vs the single-item total.',
     category: 'compliance',
     discountPct: 20,
-    memberKeys: [],
-    selectable: true,
-    selectableKeys: ['kvkk_hazirlik', 'pci_hazirlik', 'iso27001_hazirlik'],
-    trOnlyKeys: ['kvkk_hazirlik'], // KVKK yalniz TR
+    finalPriceMinorUnitTr: 799900, // 7.999 TL (Vedat — nihai, yuvarlak; TR = 3 modul dahil)
+    // Modul secimi KALDIRILDI — uyeler SABIT (uyum kontrolleri hep birlikte). KVKK yalniz TR.
+    memberKeys: ['kvkk_hazirlik', 'pci_hazirlik', 'iso27001_hazirlik'],
+    trOnlyKeys: ['kvkk_hazirlik'],
   },
   {
     key: 'bundle_active_verify',
@@ -130,7 +141,11 @@ export function resolveMembers(bundle: ComboBundle, region: string, selectedKeys
   return members;
 }
 
-/** Bundle bolgesel fiyati: uye tekil fiyatlar toplami * (1 - indirim). */
+/**
+ * Bundle bolgesel fiyati. originalMinorUnit = uye tekil fiyatlarin toplami (referans/anchor).
+ * amountMinorUnit = NIHAI fiyat: TR'de finalPriceMinorUnitTr verilmisse O; yoksa (TR disi /
+ * fiyat tanimsizsa) toplam * (1 - indirim). effectiveDiscountPct gercek indirimi yansitir.
+ */
 export function bundlePrice(
   bundle: ComboBundle,
   region: string,
@@ -140,8 +155,43 @@ export function bundlePrice(
   const prices = memberKeys.map((k) => getPricing(k, region));
   const originalMinorUnit = prices.reduce((sum, p) => sum + p.amountMinorUnit, 0);
   const currency = prices[0]?.currency ?? getPricing('basit_tarama', region).currency;
-  const amountMinorUnit = Math.round(originalMinorUnit * (1 - bundle.discountPct / 100));
-  return { memberKeys, originalMinorUnit, amountMinorUnit, currency, discountPct: bundle.discountPct };
+  const amountMinorUnit =
+    region === 'tr' && bundle.finalPriceMinorUnitTr != null
+      ? bundle.finalPriceMinorUnitTr
+      : Math.round(originalMinorUnit * (1 - bundle.discountPct / 100));
+  const effectiveDiscountPct =
+    originalMinorUnit > 0 ? Math.max(0, Math.round((1 - amountMinorUnit / originalMinorUnit) * 100)) : 0;
+  return { memberKeys, originalMinorUnit, amountMinorUnit, currency, discountPct: effectiveDiscountPct };
+}
+
+/**
+ * Uye order tutarlari: NIHAI bundle tutarini (amountMinorUnit) uyelere uye-tekil-fiyat
+ * ORANINDA dagitir; TAM bolunme icin son uye kalan kurusu yuklenir (yuvarlama artigi). Boylece
+ * uye order tutarlari TOPLAMI == bundle nihai fiyati == iyzico'ya gonderilen tutar (callback
+ * bunu dogrular). Tekil fiyat toplami 0 ise esit boler.
+ */
+export function bundleMemberAmounts(
+  bundle: ComboBundle,
+  region: string,
+  selectedKeys?: string[],
+): Array<{ key: string; amountMinorUnit: number }> {
+  const { memberKeys, originalMinorUnit, amountMinorUnit } = bundlePrice(bundle, region, selectedKeys);
+  const singles = memberKeys.map((k) => getPricing(k, region).amountMinorUnit);
+  const out: Array<{ key: string; amountMinorUnit: number }> = [];
+  let assigned = 0;
+  for (let i = 0; i < memberKeys.length; i++) {
+    let share: number;
+    if (i === memberKeys.length - 1) {
+      share = amountMinorUnit - assigned; // son uye kalani alir → toplam TAM eslesir
+    } else {
+      share = originalMinorUnit > 0
+        ? Math.round((amountMinorUnit * singles[i]) / originalMinorUnit)
+        : Math.round(amountMinorUnit / memberKeys.length);
+      assigned += share;
+    }
+    out.push({ key: memberKeys[i], amountMinorUnit: share });
+  }
+  return out;
 }
 
 // --- SATIS MODELI: yalniz bundle (kombine paket) ------------------------------

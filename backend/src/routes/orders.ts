@@ -14,7 +14,7 @@ import { creditsForPackagePrice, spendCredits, type CreditTx } from '../services
 import { enqueueOrStartScan } from '../services/orchestrator.js';
 import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
-import { COMBO_BUNDLES, getBundle, bundlePrice, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
+import { COMBO_BUNDLES, getBundle, bundlePrice, bundleMemberAmounts, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -86,7 +86,8 @@ ordersRouter.get('/bundles', async (req, res) => {
         displayName: locale === 'en' ? b.displayNameEn : b.displayName,
         description: locale === 'en' ? b.descriptionEn : b.description,
         category: b.category,
-        discountPct: b.discountPct,
+        discountPct: price.discountPct, // GERCEK indirim (nihai fiyattan turetildi)
+        popular: b.popular ?? false,
         comingSoon: b.comingSoon ?? false,
         selectable: !!b.selectable,
         // selectable ise musteri secer; TR disi bolgede trOnly (KVKK) havuzdan ELENIR.
@@ -441,9 +442,12 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
   }
 
   const price = bundlePrice(bundle, region, parsed.data.selectedModules);
-  // Uye basi indirimli pay (toplam ~ bundle fiyati; yuvarlama farki onemsiz).
-  const perMemberAmount = (k: string) =>
-    Math.round(getPricing(k, region).amountMinorUnit * (1 - bundle.discountPct / 100));
+  // Uye order tutarlari NIHAI bundle fiyatina TAM bolunur (toplam == iyzico tutari == callback
+  // dogrulamasi). Son uye yuvarlama artigini alir (bkz bundleMemberAmounts).
+  const memberAmountMap = new Map(
+    bundleMemberAmounts(bundle, region, parsed.data.selectedModules).map((m) => [m.key, m.amountMinorUnit]),
+  );
+  const perMemberAmount = (k: string) => memberAmountMap.get(k) ?? 0;
 
   // Promo: bundle TOPLAMINA uygulanir. %100 -> tum uye siparisleri paid + kuyruk (odeme yok).
   let promoFree = false;
