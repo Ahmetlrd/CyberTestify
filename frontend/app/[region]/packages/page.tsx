@@ -56,14 +56,10 @@ export default async function PackagesPage({ params }: { params: { region: strin
   // yalnizca ornek raporlari (PDF) sunulur.
   const tr = region.code === 'tr';
   const basit = packages.find((p) => p.key === 'basit_tarama');
-  // Ornek rapor listesi: basit + aktif (comingSoon olmayan) bundle uyeleri, tekillestirilmis.
-  const sampleChecks: Array<{ key: string; displayName: string }> = [];
-  const seenSample = new Set<string>();
-  if (basit) { sampleChecks.push({ key: basit.key, displayName: basit.displayName }); seenSample.add(basit.key); }
-  for (const b of bundles) {
-    if (b.comingSoon) continue;
-    for (const m of b.members) if (!seenSample.has(m.key)) { seenSample.add(m.key); sampleChecks.push(m); }
-  }
+  // Ornek rapor: PAKET/BUNDLE bazinda TEK PDF (tek tek kontrol DEGIL). basit + aktif bundle'lar.
+  const sampleItems: Array<{ key: string; displayName: string }> = [];
+  if (basit) sampleItems.push({ key: basit.key, displayName: basit.displayName });
+  for (const b of bundles) if (!b.comingSoon) sampleItems.push({ key: b.key, displayName: b.displayName });
   // Faz 5b'ye kadar fiyatlar yalnızca TRY tabanlı; TR dışı bölgelerde gösterge niteliğinde.
   const indicative = region.currency !== 'TRY';
 
@@ -236,9 +232,8 @@ export default async function PackagesPage({ params }: { params: { region: strin
           </p>
         )}
 
-        {/* ORNEK RAPORLAR — satin almadan onizleme (PDF). Tekil kontroller artik satista degil;
-            ama her kontrolun ornek ciktisi PDF olarak sunulur (paketlerin ALTINDA). */}
-        {sampleChecks.length > 0 && (
+        {/* ORNEK RAPORLAR — PAKET/BUNDLE bazinda TEK ornek PDF (tek tek kontrol DEGIL). */}
+        {sampleItems.length > 0 && (
           <div className="mb-14">
             <div className="mb-6 text-center">
               <p className="eyebrow">{tr ? 'Örnek Raporlar' : 'Sample Reports'}</p>
@@ -247,12 +242,12 @@ export default async function PackagesPage({ params }: { params: { region: strin
               </h2>
               <p className="mx-auto mt-2 max-w-xl text-sm text-ink-soft">
                 {tr
-                  ? 'Paketlerin içindeki her kontrolün örnek çıktısını, satın almadan PDF olarak inceleyin.'
-                  : 'Preview each check’s sample output as a PDF before buying.'}
+                  ? 'Her paketin örnek raporunu, satın almadan PDF olarak inceleyin.'
+                  : 'Preview each package’s sample report as a PDF before buying.'}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {sampleChecks.map((c) => (
+              {sampleItems.map((c) => (
                 <a
                   key={c.key}
                   href={`${API}/orders/sample-report/${c.key}`}
