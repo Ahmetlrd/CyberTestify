@@ -45,7 +45,12 @@ export default function LoginPage() {
             <input type="email" required className="field" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div>
-            <label className="label">Şifre</label>
+            <div className="flex items-center justify-between">
+              <label className="label">Şifre</label>
+              <Link href="/forgot-password" className="text-xs font-semibold text-accent-600 hover:underline">
+                Şifremi unuttum
+              </Link>
+            </div>
             <PasswordInput required autoComplete="current-password" value={password} onChange={setPassword} />
           </div>
           {error && <p className="form-error">{error}</p>}

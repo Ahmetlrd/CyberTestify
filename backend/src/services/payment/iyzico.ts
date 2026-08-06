@@ -3,6 +3,7 @@ import Iyzipay from 'iyzipay';
 import { config } from '../../config.js';
 import { prisma } from '../../db.js';
 import { mockInitiate, finalizePaidOrder, type PaymentProvider, type CreatePaymentResult } from './core.js';
+import { sendOrderConfirmation } from '../mailer.js';
 
 /**
  * iyzico ödeme sağlayıcısı (Türkiye) — CheckoutForm (hosted).
@@ -249,6 +250,8 @@ export async function handleIyzicoCallback(token: string): Promise<{ ok: boolean
   // TUM uye order'lari finalize et (paid + fatura + tarama). finalizePaidOrder idempotent
   // (zaten paid ise sessizce gecer) → double-callback / kismi tekrar guvenli.
   for (const o of orders) await finalizePaidOrder(o.id);
+  // (B) Siparis/odeme onayi — TEK e-posta (bundle icin tum uyeler birlikte). Mail hatasi akisi bozmaz.
+  await sendOrderConfirmation(orders.map((o) => o.id));
   return { ok: true, orderId: orders[0].id };
 }
 

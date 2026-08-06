@@ -6,6 +6,7 @@ import { decryptSecret } from './crypto.js';
 import { isVerificationStillValid } from './verification.js';
 import { checkEgressProxyHealth } from './egressHealth.js';
 import * as pentagi from '../pentagi/client.js';
+import { sendScanStarted } from './mailer.js';
 
 /**
  * Kapsam kilidi guvencesi: egress proxy (Seviye 1) ayakta DEGILSE tarama
@@ -204,6 +205,10 @@ export async function startScanForOrder(orderId: string) {
   }
 
   await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_running' } });
+
+  // (C) Flow GERCEKTEN kuyruktan cikip calismaya basladi (scan_running) — "taramaniz basladi"
+  // e-postasi. "Siparis olusturuldu" anina degil, bu gercek event'e baglanir. Mail akisi bozmaz.
+  void sendScanStarted(orderId);
 
   return flow;
 }

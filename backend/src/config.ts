@@ -116,6 +116,14 @@ export const config = {
   // iyzico CheckoutForm callback'inin (odeme sonrasi iyzico -> bize POST) gidecegi
   // PUBLIC API URL'i. Prod'da https://api.cybertestify.com. Callback bu adres + /payments/...
   publicApiUrl: process.env.PUBLIC_API_URL ?? 'http://localhost:4000',
+
+  // Brevo (transactional e-posta). BREVO_API_KEY yoksa mailer no-op'tur (loglar, akisi
+  // BOZMAZ). Gonderen: dogrulanmis alan adi (cybertestify.com) uzerinden bir adres.
+  brevo: {
+    apiKey: process.env.BREVO_API_KEY ?? '',
+    senderEmail: process.env.BREVO_SENDER_EMAIL ?? 'bilgi@cybertestify.com',
+    senderName: process.env.BREVO_SENDER_NAME ?? 'CyberTestify',
+  },
 };
 
 /**

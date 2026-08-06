@@ -3,6 +3,7 @@ import { config, validateScopeLockConfig } from './config.js';
 import * as pentagi from './pentagi/client.js';
 import { getPackageDef, securityProfileFor } from './services/scanPackages.js';
 import { generateAndStoreReport } from './services/report.js';
+import { sendReportReady } from './services/mailer.js';
 import { findOutOfScope, findForbiddenMethods, detectScriptDebugLoop, detectRepeatedFetch } from './services/scope.js';
 import { encryptSecret } from './services/crypto.js';
 import { buildActivityFeed } from './services/activityFeed.js';
@@ -263,9 +264,10 @@ async function tick() {
           data: { devAccessSecret: encryptSecret(accessSecret) },
         });
 
-        // TODO: e-posta gonderim servisine baglan — accessSecret'i rapor indirme
-        // linkinden AYRI bir e-postada musteriye ilet.
-        console.log(`[worker] Rapor hazir, siparis ${flow.orderId}. Erisim sifresi (dev'de panelde de gorunur, prod'da e-postaya tasi): ${accessSecret}`);
+        // (D) Rapor hazir + erisim sifresi e-postasi. Sifre AYRI bir kanaldan (e-posta) iletilir;
+        // panelde de pepper-cozulmus gorunur. Mail hatasi rapor akisini BOZMAZ (mailer no-throw).
+        await sendReportReady(flow.orderId, accessSecret);
+        console.log(`[worker] Rapor hazir, siparis ${flow.orderId}. Erisim sifresi e-posta ile gonderildi (panelde de gorunur).`);
         // Zamanlanmis taramadan olustuysa: basari -> failCount sifirla.
         await recordScheduleOutcome(flow.order.scheduledScanId, true);
       }

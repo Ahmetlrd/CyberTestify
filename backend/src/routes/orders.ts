@@ -12,6 +12,7 @@ import { initiateBundlePayment } from '../services/payment/iyzico.js';
 import { getSampleReportPdf } from '../services/sampleReports.js';
 import { creditsForPackagePrice, spendCredits, type CreditTx } from '../services/credits.js';
 import { enqueueOrStartScan } from '../services/orchestrator.js';
+import { sendOrderConfirmation } from '../services/mailer.js';
 import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
 import { COMBO_BUNDLES, getBundle, bundlePrice, bundleMemberAmounts, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
@@ -325,6 +326,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     });
     if (isActiveLight) await recordConsent(order.id); // tarama baslamadan ONCE
     await enqueueOrStartScan(order.id);
+    await sendOrderConfirmation([order.id]); // (B) %100 promo ile odenen tekil siparis onayi
     return res.json({ orderId: order.id, paidWithPromo: true, code: promoApplied.code });
   }
 
@@ -351,6 +353,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     if (isActiveLight) await recordConsent(order.id); // tarama baslamadan ONCE
     // Odeme yok — dogrudan tarama kuyruguna (concurrency=1; bkz orchestrator).
     await enqueueOrStartScan(order.id);
+    await sendOrderConfirmation([order.id]); // (B) kredi ile odenen tekil siparis onayi
     return res.json({ orderId: order.id, paidWithCredits: true, creditsSpent: creditsNeeded });
   }
 
@@ -510,6 +513,7 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
       code: promoApplied.code!, orderId: createdOrderIds[0], customerId: req.customerId!,
       original: price.amountMinorUnit, discount: promoApplied.discountMinorUnit!, final: 0,
     });
+    await sendOrderConfirmation(createdOrderIds); // (B) %100 promo ile odenen bundle onayi (tek mail)
     return res.json({ bundleKey, orderIds: createdOrderIds, paidWithPromo: true });
   }
 

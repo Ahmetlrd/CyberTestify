@@ -40,7 +40,9 @@ export function StatusTracker({ status }: { status: string }) {
     <div className="card p-6">
       {queued && (
         <div className="mb-4 rounded-card bg-accent-soft px-4 py-2.5 text-sm font-medium text-accent-600">
-          Şu an başka bir tarama çalışıyor — siparişiniz sırada. Otomatik olarak başlayacak.
+          Siparişiniz alındı, taramanız sırada. Şu an başka bir tarama çalışıyor; sıranız gelince
+          otomatik başlayacak — bu sayfa kendiliğinden güncellenir ve <strong>başladığında size e-posta
+          göndeririz</strong>.
         </div>
       )}
       <ol className="space-y-1">

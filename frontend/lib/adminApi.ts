@@ -43,6 +43,8 @@ export const adminApi = {
       `/admin/orders?page=${page}${status ? `&status=${status}` : ''}`,
     ),
   order: (id: string) => areq<any>(`/admin/orders/${id}`),
+  // (E) Iade olarak isaretle — 'refunded' + musteriye iade bildirim maili (backend).
+  refundOrder: (id: string) => areq<{ ok: boolean; mailed?: boolean; alreadyRefunded?: boolean }>(`/admin/orders/${id}/refund`, { method: 'POST' }),
   scopeViolations: (page = 1) => areq<Page<any>>(`/admin/scope-violations?page=${page}`),
   systemHealth: () => areq<any>('/admin/system-health'),
 };

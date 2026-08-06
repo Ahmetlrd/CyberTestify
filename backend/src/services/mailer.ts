@@ -1,0 +1,192 @@
+import { prisma } from '../db.js';
+import { config } from '../config.js';
+
+/**
+ * Transactional e-posta (Brevo REST API — POST /v3/smtp/email).
+ *
+ * Tasarim: BREVO_API_KEY yoksa mailer NO-OP'tur (uyari loglar, false doner) ve HICBIR
+ * akisi (odeme/tarama/rapor) BOZMAZ. Tum yuksek-seviye gonderici fonksiyonlari kendi
+ * icinde try/catch'lidir; e-posta hatasi asla cagirani patlatmaz.
+ *
+ * SDK YOK — fetch ile REST; ek bagimlilik gerekmez, Node 18+ global fetch.
+ */
+
+const BREVO_URL = 'https://api.brevo.com/v3/smtp/email';
+
+/** Ham gonderim. Basarili ise true. Asla throw etmez. */
+export async function sendMail(to: string, subject: string, html: string): Promise<boolean> {
+  if (!config.brevo.apiKey) {
+    console.warn(`[mail] BREVO_API_KEY yok — e-posta atlandi (to=${to}, konu="${subject}").`);
+    return false;
+  }
+  try {
+    const resp = await fetch(BREVO_URL, {
+      method: 'POST',
+      headers: {
+        'api-key': config.brevo.apiKey,
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender: { email: config.brevo.senderEmail, name: config.brevo.senderName },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+      }),
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '');
+      console.error(`[mail] Brevo hata (${resp.status}) to=${to} konu="${subject}": ${body.slice(0, 300)}`);
+      return false;
+    }
+    console.log(`[mail] gonderildi to=${to} konu="${subject}"`);
+    return true;
+  } catch (err) {
+    console.error(`[mail] gonderim istisnasi to=${to} konu="${subject}":`, err);
+    return false;
+  }
+}
+
+// --- Markali HTML sablon sarmalayici -----------------------------------------
+function fmtMoney(minor: number, currency: string): string {
+  const v = (minor / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${v} ${currency === 'TRY' ? 'TL' : currency}`;
+}
+function esc(s: string): string {
+  return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+}
+
+/** Ortak marka cercevesi (inline stil — e-posta istemcileri uyumlu). */
+function layout(opts: { heading: string; bodyHtml: string; cta?: { label: string; url: string } }): string {
+  const cta = opts.cta
+    ? `<tr><td style="padding:8px 0 4px"><a href="${esc(opts.cta.url)}" style="display:inline-block;background:#F5A623;color:#123F3A;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:15px">${esc(opts.cta.label)}</a></td></tr>`
+    : '';
+  return `<!doctype html><html lang="tr"><body style="margin:0;background:#f4f6f5;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c2b28">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f5;padding:24px 12px">
+   <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e3e8e6;border-radius:14px;overflow:hidden">
+     <tr><td style="background:#123F3A;padding:18px 24px">
+       <span style="color:#ffffff;font-size:18px;font-weight:800;letter-spacing:-.3px">Cyber<span style="color:#F5A623">Testify</span></span>
+     </td></tr>
+     <tr><td style="padding:26px 24px 8px">
+       <h1 style="margin:0 0 12px;font-size:19px;color:#123F3A">${esc(opts.heading)}</h1>
+       <div style="font-size:14px;line-height:1.6;color:#3a4a47">${opts.bodyHtml}</div>
+     </td></tr>
+     <tr><td style="padding:6px 24px 24px"><table role="presentation" cellpadding="0" cellspacing="0">${cta}</table></td></tr>
+     <tr><td style="padding:16px 24px;background:#f8faf9;border-top:1px solid #e3e8e6">
+       <p style="margin:0;font-size:11px;color:#8a9794;line-height:1.5">
+         Bu e-posta CyberTestify tarafından otomatik gönderilmiştir. Sorularınız için
+         <a href="mailto:destek@cybertestify.com" style="color:#1C6B60">destek@cybertestify.com</a>.<br>
+         CyberTestify — dijital güvenlik ön-değerlendirme hizmeti.
+       </p>
+     </td></tr>
+    </table>
+   </td></tr>
+  </table>
+ </body></html>`;
+}
+
+async function orderWithRelations(orderId: string) {
+  return prisma.order.findUnique({
+    where: { id: orderId },
+    include: { customer: { select: { email: true, fullName: true } }, package: { select: { displayName: true } }, domain: { select: { hostname: true } } },
+  });
+}
+
+// --- (A) Sifre sifirlama ------------------------------------------------------
+export async function sendPasswordReset(email: string, resetUrl: string): Promise<boolean> {
+  const html = layout({
+    heading: 'Şifre sıfırlama talebi',
+    bodyHtml: `<p>Hesabınız için şifre sıfırlama talebinde bulunuldu. Yeni şifrenizi belirlemek için aşağıdaki butona tıklayın.</p>
+      <p style="color:#8a9794;font-size:13px">Bu bağlantı <strong>1 saat</strong> geçerlidir ve yalnızca bir kez kullanılabilir. Bu talebi siz yapmadıysanız bu e-postayı yok sayabilirsiniz; şifreniz değişmez.</p>`,
+    cta: { label: 'Şifremi sıfırla', url: resetUrl },
+  });
+  return sendMail(email, 'Şifre sıfırlama — CyberTestify', html);
+}
+
+// --- (B) Siparis/odeme onayi (TEK e-posta; bundle icin tum uyeler birlikte) ---
+export async function sendOrderConfirmation(orderIds: string[]): Promise<boolean> {
+  try {
+    const ids = [...new Set(orderIds)].filter(Boolean);
+    if (!ids.length) return false;
+    const orders = await prisma.order.findMany({
+      where: { id: { in: ids } },
+      include: { customer: { select: { email: true } }, package: { select: { displayName: true } }, domain: { select: { hostname: true } } },
+    });
+    if (!orders.length) return false;
+    const email = orders[0].customer.email;
+    const hostname = orders[0].domain.hostname;
+    const currency = orders[0].currency;
+    const totalMinor = orders.reduce((s, o) => s + o.amountMinorUnit, 0);
+    const isBundle = orders.length > 1;
+    const items = orders.map((o) => `<li style="margin:2px 0">${esc(o.package.displayName)}</li>`).join('');
+    const orderRef = orders.map((o) => o.id.slice(0, 8)).join(', ');
+    const body = `<p>Siparişiniz alındı ve ödemeniz onaylandı. Teşekkür ederiz.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:12px 0;border:1px solid #e3e8e6;border-radius:10px">
+        <tr><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;color:#8a9794">Hedef</td><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:14px;font-weight:600;text-align:right">${esc(hostname)}</td></tr>
+        <tr><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;color:#8a9794;vertical-align:top">${isBundle ? 'Paket içeriği' : 'Paket'}</td><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:14px;font-weight:600;text-align:right"><ul style="margin:0;padding:0;list-style:none">${items}</ul></td></tr>
+        <tr><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;color:#8a9794">Sipariş no</td><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;text-align:right">${esc(orderRef)}</td></tr>
+        <tr><td style="padding:12px 14px;font-size:13px;color:#8a9794">Tutar</td><td style="padding:12px 14px;font-size:16px;font-weight:800;color:#123F3A;text-align:right">${fmtMoney(totalMinor, currency)}</td></tr>
+      </table>
+      <p style="color:#3a4a47">Taramanız sıraya alındı. <strong>Başladığında</strong> size ayrıca bir e-posta göndereceğiz; durumu panelinizden de takip edebilirsiniz.</p>`;
+    const html = layout({ heading: 'Siparişiniz alındı', bodyHtml: body, cta: { label: 'Siparişimi görüntüle', url: `${config.frontendUrl}/dashboard/${orders[0].id}` } });
+    return await sendMail(email, 'Siparişiniz alındı — CyberTestify', html);
+  } catch (err) {
+    console.error('[mail] sendOrderConfirmation hata:', err);
+    return false;
+  }
+}
+
+// --- (C) Tarama basladi (flow gercekten 'scan_running' oldugunda) -------------
+export async function sendScanStarted(orderId: string): Promise<boolean> {
+  try {
+    const o = await orderWithRelations(orderId);
+    if (!o) return false;
+    const body = `<p><strong>${esc(o.domain.hostname)}</strong> için <strong>${esc(o.package.displayName)}</strong> taramanız kuyruktan çıkıp çalışmaya başladı.</p>
+      <p style="color:#3a4a47">Tarama tamamlanıp raporunuz hazır olduğunda size tekrar e-posta göndereceğiz. Durumu paneldeki canlı akıştan izleyebilirsiniz.</p>`;
+    const html = layout({ heading: 'Taramanız başladı', bodyHtml: body, cta: { label: 'Canlı durumu izle', url: `${config.frontendUrl}/dashboard/${o.id}` } });
+    return await sendMail(o.customer.email, 'Taramanız başladı — CyberTestify', html);
+  } catch (err) {
+    console.error('[mail] sendScanStarted hata:', err);
+    return false;
+  }
+}
+
+// --- (D) Rapor hazir + erisim sifresi -----------------------------------------
+export async function sendReportReady(orderId: string, accessSecret: string): Promise<boolean> {
+  try {
+    const o = await orderWithRelations(orderId);
+    if (!o) return false;
+    const body = `<p><strong>${esc(o.domain.hostname)}</strong> için <strong>${esc(o.package.displayName)}</strong> raporunuz hazır.</p>
+      <p style="color:#3a4a47">Rapor güvenliğiniz için şifrelidir. Panele giriş yaptıktan sonra raporu indirirken aşağıdaki <strong>erişim şifresini</strong> girmeniz gerekir:</p>
+      <p style="margin:14px 0;padding:14px 16px;background:#f2f7f5;border:1px dashed #1C6B60;border-radius:10px;text-align:center">
+        <span style="font-size:12px;color:#8a9794;display:block;margin-bottom:4px">Rapor erişim şifreniz</span>
+        <span style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;font-weight:800;letter-spacing:1px;color:#123F3A">${esc(accessSecret)}</span>
+      </p>
+      <p style="color:#8a9794;font-size:12px">Bu şifreyi kimseyle paylaşmayın. Yalnızca bu rapora erişim için gereklidir.</p>`;
+    const html = layout({ heading: 'Raporunuz hazır', bodyHtml: body, cta: { label: 'Raporu görüntüle', url: `${config.frontendUrl}/dashboard/${o.id}` } });
+    return await sendMail(o.customer.email, 'Raporunuz hazır — CyberTestify', html);
+  } catch (err) {
+    console.error('[mail] sendReportReady hata:', err);
+    return false;
+  }
+}
+
+// --- (E) Iade bildirimi (admin-tetiklemeli) -----------------------------------
+export async function sendRefundNotice(orderId: string): Promise<boolean> {
+  try {
+    const o = await orderWithRelations(orderId);
+    if (!o) return false;
+    const body = `<p><strong>${esc(o.domain.hostname)}</strong> için <strong>${esc(o.package.displayName)}</strong> siparişinizin bedeli iade edilmiştir.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:12px 0;border:1px solid #e3e8e6;border-radius:10px">
+        <tr><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;color:#8a9794">Sipariş no</td><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;text-align:right">${esc(o.id.slice(0, 8))}</td></tr>
+        <tr><td style="padding:12px 14px;font-size:13px;color:#8a9794">İade tutarı</td><td style="padding:12px 14px;font-size:16px;font-weight:800;color:#123F3A;text-align:right">${fmtMoney(o.amountMinorUnit, o.currency)}</td></tr>
+      </table>
+      <p style="color:#3a4a47">İade tutarının kartınıza/hesabınıza yansıması, bankanıza bağlı olarak birkaç iş günü sürebilir.</p>`;
+    const html = layout({ heading: 'İadeniz gerçekleştirildi', bodyHtml: body });
+    return await sendMail(o.customer.email, 'İade bildirimi — CyberTestify', html);
+  } catch (err) {
+    console.error('[mail] sendRefundNotice hata:', err);
+    return false;
+  }
+}

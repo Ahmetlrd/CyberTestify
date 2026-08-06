@@ -82,6 +82,11 @@ model Customer {
   // kredi ile tarama alinca azalir. Denetim izi CreditTransaction'da.
   creditBalance Int @default(0)
 
+  // Sifre sifirlama: token'in SHA-256 hash'i (duz token asla DB'de durmaz) + son gecerlilik.
+  // Kullanildiginda/suresi dolunca temizlenir.
+  resetTokenHash   String?
+  resetTokenExpiry DateTime?
+
   domains            Domain[]
   orders             Order[]
   scheduledScans     ScheduledScan[]

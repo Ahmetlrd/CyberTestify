@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { checkEgressProxyHealth } from '../services/egressHealth.js';
+import { sendRefundNotice } from '../services/mailer.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -90,6 +91,19 @@ adminRouter.get('/orders/:id', async (req, res) => {
     },
   });
   res.json(o);
+});
+
+// --- (E) IADE olarak isaretle (admin-only; iyzico iadesi ELLE yapilir) --------
+// Iyzico panelinden iadeyi yaptiktan sonra admin bu aksiyonla siparisi 'refunded'
+// isaretler + musteriye iade bildirim e-postasi gonderir. requireAdmin arkasindadir.
+adminRouter.post('/orders/:id/refund', async (req, res) => {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, select: { id: true, status: true } });
+  if (!order) return res.status(404).json({ error: 'Siparis bulunamadi.' });
+  if (order.status === 'refunded') return res.json({ ok: true, alreadyRefunded: true });
+  await prisma.order.update({ where: { id: order.id }, data: { status: 'refunded' } });
+  const mailed = await sendRefundNotice(order.id); // mailer no-throw
+  console.log(`[admin] Siparis ${order.id} 'refunded' isaretlendi (mail=${mailed}).`);
+  res.json({ ok: true, mailed });
 });
 
 // --- Kapsam ihlali audit log'u ------------------------------------------------

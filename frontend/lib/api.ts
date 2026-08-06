@@ -30,6 +30,11 @@ export const api = {
     }),
   login: (email: string, password: string) =>
     request<{ token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  // (A) Sifre sifirlama — forgot HER ZAMAN {ok:true} (enumeration korumasi); reset yeni token doner.
+  forgotPassword: (email: string) =>
+    request<{ ok: boolean }>('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+  resetPassword: (token: string, password: string) =>
+    request<{ ok: boolean; token: string }>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
   createDomain: (hostname: string) =>
     request<{ domainId: string; instructions: { recordName: string; recordValue: string; note: string } }>(
       '/domains',

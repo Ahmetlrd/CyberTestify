@@ -11,10 +11,24 @@ export default function AdminOrders() {
   const [status, setStatus] = useState('');
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refunding, setRefunding] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
 
-  useEffect(() => {
+  function load() {
     adminApi.orders(page, status).then(setData).catch((e) => setError(e.message));
-  }, [page, status]);
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [page, status]);
+
+  // (E) Iade olarak isaretle — iyzico iadesi ELLE yapildiktan SONRA. Onay + musteriye mail.
+  async function refund(id: string) {
+    if (!confirm('Bu siparişi İADE EDİLDİ olarak işaretle ve müşteriye iade bildirim e-postası gönder?\n\n(iyzico panelinden iadeyi zaten yaptığınızdan emin olun.)')) return;
+    setRefunding(id); setNote(null);
+    try {
+      const r = await adminApi.refundOrder(id);
+      setNote(r.alreadyRefunded ? 'Zaten iade işaretliydi.' : `İade işaretlendi. Mail: ${r.mailed ? 'gönderildi' : 'gönderilemedi (log’a bakın)'}.`);
+      load();
+    } catch (e: any) { setNote(`Hata: ${e.message}`); } finally { setRefunding(null); }
+  }
 
   return (
     <>
@@ -32,8 +46,9 @@ export default function AdminOrders() {
       {error ? <p style={{ color: '#fca5a5' }}>{error}</p>
         : !data ? <p style={{ color: '#94a3b8' }}>Yükleniyor…</p>
         : <>
+            {note && <p style={{ color: '#a3e635', fontSize: 13, marginBottom: 8 }}>{note}</p>}
             <Table
-              columns={['Müşteri', 'Hedef', 'Paket', 'Durum', 'Tool', 'Tarih']}
+              columns={['Müşteri', 'Hedef', 'Paket', 'Durum', 'Tool', 'Tarih', 'İşlem']}
               rows={data.items.map((o: any) => [
                 o.customerEmail,
                 o.hostname,
@@ -41,6 +56,18 @@ export default function AdminOrders() {
                 <StatusBadge key="s" status={o.status} />,
                 o.toolCallCount ?? '—',
                 fmtDate(o.createdAt),
+                o.status === 'refunded' ? (
+                  <span key="r" style={{ color: '#94a3b8', fontSize: 12 }}>iade edildi</span>
+                ) : (
+                  <button
+                    key="r"
+                    onClick={() => refund(o.id)}
+                    disabled={refunding === o.id}
+                    style={{ padding: '4px 10px', borderRadius: 6, background: '#7f1d1d', color: '#fecaca', border: '1px solid #b91c1c', fontSize: 12, cursor: 'pointer' }}
+                  >
+                    {refunding === o.id ? '…' : 'İade işaretle'}
+                  </button>
+                ),
               ])}
             />
             <Pager page={data.page} pageSize={data.pageSize} total={data.total} onPage={setPage} />
