@@ -104,13 +104,13 @@ export const api = {
       '/orders/bundle',
       { method: 'POST', body: JSON.stringify(body) },
     ),
-  // Promo kodu onizleme — indirimli fiyati checkout'ta gostermek icin (satin almaz).
-  previewPromo: (code: string, packageKey: string, region = 'tr') =>
+  // Promo kodu onizleme — tekil paket (packageKey) VEYA kombine paket (bundleKey) icin.
+  previewPromo: (code: string, target: { packageKey?: string; bundleKey?: string }, region = 'tr') =>
     request<{
       valid: boolean; error?: string; code?: string;
       discountType?: 'percentage' | 'fixed'; discountValue?: number;
       originalAmountMinorUnit?: number; discountMinorUnit?: number; finalAmountMinorUnit?: number; currency?: string;
-    }>('/orders/promo/preview', { method: 'POST', body: JSON.stringify({ code, packageKey, region }) }),
+    }>('/orders/promo/preview', { method: 'POST', body: JSON.stringify({ code, ...target, region }) }),
   // (Is 2) Kredi bakiyesi + satista olan bundle'lar + son hareketler.
   getCredits: () =>
     request<{

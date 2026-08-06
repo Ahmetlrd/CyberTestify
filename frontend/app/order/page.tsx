@@ -118,10 +118,11 @@ export default function OrderPage() {
   const canUseCredits = balance >= creditsNeeded && creditsNeeded > 0 && !recurring && startMode === 'now';
 
   async function applyPromo() {
-    if (!promoInput.trim() || !selected) return;
+    if (!promoInput.trim() || (!selected && !selectedBundle)) return;
     setPromoBusy(true);
     try {
-      const r = await api.previewPromo(promoInput.trim(), selected, region);
+      const target = selectedBundle ? { bundleKey: selectedBundle.key } : { packageKey: selected! };
+      const r = await api.previewPromo(promoInput.trim(), target, region);
       setPromo(r);
     } catch {
       setPromo({ valid: false, error: 'Kod kontrol edilemedi.' });
@@ -286,13 +287,12 @@ export default function OrderPage() {
       ? new Date(startAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
       : 'Hemen';
   const payWithCreditsNow = !selectedBundle && useCredits && canUseCredits;
-  const unitAmountMinor = selectedBundle
-    ? selectedBundle.amountMinorUnit
-    : selectedPkg
-      ? promo?.valid && promo.finalAmountMinorUnit != null
-        ? promo.finalAmountMinorUnit
-        : selectedPkg.priceMinorUnit
-      : 0;
+  const baseAmountMinor = selectedBundle ? selectedBundle.amountMinorUnit : selectedPkg ? selectedPkg.priceMinorUnit : 0;
+  // Promo (tekil paket VEYA bundle) gecerliyse indirimli tutari goster.
+  const unitAmountMinor =
+    (selectedBundle || selectedPkg) && promo?.valid && promo.finalAmountMinorUnit != null
+      ? promo.finalAmountMinorUnit
+      : baseAmountMinor;
   const totalMinor = !selectedBundle && recurring ? unitAmountMinor * runs : unitAmountMinor;
   const ctaDisabled = selectedBundle
     ? !domainId || busy || !allConsents || intlComingSoon ||
@@ -317,7 +317,7 @@ export default function OrderPage() {
       <button
         key={b.key}
         type="button"
-        onClick={() => { setSelectedBundle(on ? null : b); setSelected(null); setBundleModules([]); }}
+        onClick={() => { setSelectedBundle(on ? null : b); setSelected(null); setBundleModules([]); setPromo(null); }}
         className={`card relative flex flex-col p-4 text-left transition ${
           on ? 'ring-2 ring-brand' : b.popular ? 'border-accent hover:border-accent' : 'hover:border-brand-300'
         }`}
@@ -369,7 +369,7 @@ export default function OrderPage() {
         {basitPkg && !basitPkg.comingSoon && (
           <button
             type="button"
-            onClick={() => { setSelected(basitPkg.key); setSelectedBundle(null); setBundleModules([]); }}
+            onClick={() => { setSelected(basitPkg.key); setSelectedBundle(null); setBundleModules([]); setPromo(null); }}
             className={`card relative flex flex-col p-4 text-left transition ${selected === basitPkg.key ? 'ring-2 ring-accent' : 'hover:border-brand-300'}`}
           >
             <span className="absolute -top-3 left-6 rounded-pill bg-ink-soft px-3 py-0.5 text-[10px] font-bold text-white">Giriş</span>
@@ -596,7 +596,7 @@ export default function OrderPage() {
         </div>
       )}
 
-      {selected && !intlComingSoon && (
+      {(selected || selectedBundle) && !intlComingSoon && (
         <div className="mt-5 rounded-card border border-brand-100 bg-white px-4 py-3 text-sm">
           <label className="label">Promosyon kodu (opsiyonel)</label>
           <div className="mt-1 flex gap-2">

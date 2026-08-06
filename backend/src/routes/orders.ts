@@ -620,15 +620,29 @@ ordersRouter.get('/queue/status', requireAuth, async (_req, res) => {
 
 // Promo kodu ONIZLEME — checkout'ta kod girilince indirimli fiyati gostermek icin.
 // Satin alma YAPMAZ; yalniz hesaplar (siparis aninda ayni mantik tekrar dogrulanir).
+// packageKey VEYA bundleKey ile onizleme (tekil paket ya da kombine paket). Biri zorunlu.
 const promoPreviewSchema = z.object({
   code: z.string().trim().min(1).max(64),
-  packageKey: z.enum(SCAN_PACKAGES.map((p) => p.key) as [string, ...string[]]),
+  packageKey: z.enum(SCAN_PACKAGES.map((p) => p.key) as [string, ...string[]]).optional(),
+  bundleKey: z.string().optional(),
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
 });
 ordersRouter.post('/promo/preview', requireAuth, async (req, res) => {
   const parsed = promoPreviewSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ valid: false, error: 'Geçersiz istek.' });
-  const { amountMinorUnit, currency } = getPricing(parsed.data.packageKey, parsed.data.region);
+  let amountMinorUnit: number;
+  let currency: string;
+  if (parsed.data.bundleKey) {
+    const b = getBundle(parsed.data.bundleKey);
+    if (!b) return res.status(400).json({ valid: false, error: 'Paket bulunamadı.' });
+    const price = bundlePrice(b, parsed.data.region);
+    amountMinorUnit = price.amountMinorUnit;
+    currency = price.currency;
+  } else if (parsed.data.packageKey) {
+    ({ amountMinorUnit, currency } = getPricing(parsed.data.packageKey, parsed.data.region));
+  } else {
+    return res.status(400).json({ valid: false, error: 'Geçersiz istek.' });
+  }
   const result = await evaluatePromo(parsed.data.code, amountMinorUnit);
   res.json({ ...result, currency });
 });
