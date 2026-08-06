@@ -184,6 +184,11 @@ export default function OrderPage() {
       }
       window.location.href = res.paymentPageUrl!;
     } catch (err: any) {
+      // (0) E-posta dogrulanmamis -> satin alma engellendi (409). Dogrulama ekranina yonlendir.
+      if (err?.emailUnverified) {
+        router.push(`/verify-email?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+        return;
+      }
       setError(err.message);
       setBusy(false);
     }
@@ -223,6 +228,11 @@ export default function OrderPage() {
         router.push(`/pay/${res.orderIds[0]}?bundle=${res.orderIds.join(',')}`);
       }
     } catch (err: any) {
+      // (0) E-posta dogrulanmamis -> satin alma engellendi (409). Dogrulama ekranina yonlendir.
+      if (err?.emailUnverified) {
+        router.push(`/verify-email?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+        return;
+      }
       setError(err.message);
       setBusy(false);
     }

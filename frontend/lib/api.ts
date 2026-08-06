@@ -17,19 +17,28 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ? JSON.stringify(body.error) : `İstek başarısız: ${res.status}`);
+    const msg = typeof body.error === 'string' ? body.error : body.error ? JSON.stringify(body.error) : `İstek başarısız: ${res.status}`;
+    const err = new Error(msg) as Error & { status?: number; emailUnverified?: boolean };
+    err.status = res.status;
+    if (body.emailUnverified) err.emailUnverified = true; // (satin alma) e-posta dogrulama gerekli
+    throw err;
   }
   return res.json();
 }
 
 export const api = {
   register: (email: string, password: string, termsAccepted: boolean) =>
-    request<{ token: string }>('/auth/register', {
+    request<{ token: string; emailVerified?: boolean; autoLogin?: boolean }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email, password, termsAccepted }),
     }),
   login: (email: string, password: string) =>
     request<{ token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  // (0) E-posta dogrulama
+  me: () => request<{ email: string; emailVerified: boolean }>('/auth/me'),
+  verifyEmail: (code: string) =>
+    request<{ ok: boolean; emailVerified: boolean }>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ code }) }),
+  resendVerification: () => request<{ ok: boolean }>('/auth/resend-verification', { method: 'POST' }),
   // (A) Sifre sifirlama — forgot HER ZAMAN {ok:true} (enumeration korumasi); reset yeni token doner.
   forgotPassword: (email: string) =>
     request<{ ok: boolean }>('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),

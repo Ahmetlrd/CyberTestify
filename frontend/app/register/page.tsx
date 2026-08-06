@@ -36,9 +36,11 @@ export default function RegisterPage() {
     }
     setBusy(true);
     try {
-      const { token } = await api.register(email, password, terms);
-      window.localStorage.setItem('token', token);
-      router.push(next);
+      const res = await api.register(email, password, terms);
+      window.localStorage.setItem('token', res.token);
+      // YENI hesap (emailVerified=false) -> once dogrulama ekrani. Mevcut/verified -> next.
+      if (res.emailVerified === false) router.push(`/verify-email?next=${encodeURIComponent(next)}`);
+      else router.push(next);
     } catch (err: any) {
       setError(err.message);
       setBusy(false);

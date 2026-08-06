@@ -93,6 +93,19 @@ async function orderWithRelations(orderId: string) {
   });
 }
 
+// --- (0) E-posta dogrulama kodu (kayit sonrasi) -------------------------------
+export async function sendEmailVerification(email: string, code: string): Promise<boolean> {
+  const html = layout({
+    heading: 'E-posta adresinizi doğrulayın',
+    bodyHtml: `<p>CyberTestify'a hoş geldiniz. Hesabınızı etkinleştirmek ve satın alma yapabilmek için aşağıdaki doğrulama kodunu girin:</p>
+      <p style="margin:16px 0;padding:16px;background:#f2f7f5;border:1px dashed #1C6B60;border-radius:10px;text-align:center">
+        <span style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:30px;font-weight:800;letter-spacing:6px;color:#123F3A">${esc(code)}</span>
+      </p>
+      <p style="color:#8a9794;font-size:13px">Kod <strong>15 dakika</strong> geçerlidir. Bu talebi siz yapmadıysanız bu e-postayı yok sayabilirsiniz.</p>`,
+  });
+  return sendMail(email, 'Doğrulama kodunuz — CyberTestify', html);
+}
+
 // --- (A) Sifre sifirlama ------------------------------------------------------
 export async function sendPasswordReset(email: string, resetUrl: string): Promise<boolean> {
   const html = layout({

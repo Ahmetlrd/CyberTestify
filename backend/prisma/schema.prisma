@@ -87,6 +87,13 @@ model Customer {
   resetTokenHash   String?
   resetTokenExpiry DateTime?
 
+  // E-posta dogrulama: kayittan sonra 6 haneli kod (SHA-256 hash'lenir) ile dogrulanir.
+  // ODEME (satin alma) adimi yalniz emailVerified=true icin acilir. Eski hesaplar
+  // migration ile true isaretlenir (bkz 20260806130000_email_verification).
+  emailVerified          Boolean   @default(false)
+  emailVerifyCodeHash    String?
+  emailVerifyCodeExpiry  DateTime?
+
   domains            Domain[]
   orders             Order[]
   scheduledScans     ScheduledScan[]
