@@ -14,6 +14,11 @@ func TestPassiveGuard_WriteHTTPBlocked(t *testing.T) {
 		`wget --post-data='a=1' https://target.com/x`,
 		`python3 -c "import requests; requests.post('https://target.com/x', data={})"`,
 		`printf 'POST /login HTTP/1.1\r\nHost: t\r\n\r\n' | nc target.com 80`,
+		// GERCEK YAZMA + dosya yonlendirmesi bir arada: redirect'in varligi gercek POST'u
+		// ASLA whitelist'lemez — -d/-X hala yakalanmali (regresyon guvencesi).
+		`curl -d 'a=1' https://target.com/login > out.txt`,
+		`curl -X DELETE https://target.com/api/1 > out.txt`,
+		`curl -F file=@x -D hdr.txt https://target.com/upload > out.txt`, // -F write + -D + redirect
 	}
 	for _, c := range blocked {
 		if ok, _ := IsWriteHTTPCommand(c); !ok {
@@ -33,6 +38,14 @@ func TestPassiveGuard_ReadOnlyAllowed(t *testing.T) {
 		`dig @8.8.8.8 target.com TXT`,
 		`whatweb https://target.com`,
 		`echo "we will not POST anything" && curl https://target.com/`,
+		// YANLIS-POZITIF REGRESYON (nomorelink 6 Agu KVKK — cagri 2 ve 8): -D dump-header
+		// + '>' dosya yonlendirmesi salt-okunur GET'tir, bloklanmamali.
+		`curl -L -s -D /tmp/headers_main.txt https://nomorelink.com/ > /tmp/main_page.html && wc -l /tmp/main_page.html && head -300 /tmp/main_page.html`,
+		`curl -s -D /tmp/headers.txt https://nomorelink.com/ > /tmp/body.txt 2>&1 && echo done && cat /tmp/headers.txt && wc -c /tmp/body.txt`,
+		`curl -D headers.txt https://target.com/`, // -D tek basina (dump-header)
+		`curl -f https://target.com/`,             // -f (--fail), -F ile karistirilmamali
+		`curl -s -o page.html https://target.com/ > log.txt`, // cikti dosyaya
+		`curl -s https://target.com/ | tee page.html`,        // tee ile yerel yazma
 	}
 	for _, c := range allowed {
 		if ok, m := IsWriteHTTPCommand(c); ok {

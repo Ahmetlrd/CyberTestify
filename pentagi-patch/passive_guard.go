@@ -39,7 +39,15 @@ import (
 var writeHTTPPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)-X\s*['"]?(POST|PUT|DELETE|PATCH)\b`),
 	regexp.MustCompile(`(?i)--request\s+['"]?(POST|PUT|DELETE|PATCH)\b`),
-	regexp.MustCompile(`(?i)\bcurl\b[^|;&]*?(^|\s)(-d|--data|--data-raw|--data-binary|--data-urlencode|-F|--form|-T|--upload-file)(\s|=)`),
+	// KISA BAYRAKLAR CASE-SENSITIVE (curl bayraklari buyuk/kucuk harf DUYARLIDIR):
+	// -d/--data = POST verisi (WRITE), ama -D = --dump-header (yanit basliklarini dosyaya
+	// doker, SALT-OKUNUR); -F = --form (WRITE), ama -f = --fail (zararsiz). Eski `(?i)` tum
+	// regex'i case-insensitive yaptigi icin -d, -D'yi ve -F, -f'i YANLISLIKLA yakaliyordu
+	// (yanlis-pozitif: zararsiz `curl -D dosya`/`curl -f` bloklaniyordu). Kisa bayraklari
+	// (?-i:...) ile case-sensitive kildik; uzun opsiyonlar (--data/--form/--upload-file)
+	// disaridaki (?i) altinda kalir. Dosya yonlendirme (> >> tee) HTTP metodu DEGILDIR — hic
+	// eslesmez. GERCEK yazma bayraklari (-d/-F/-T dogru case) HALA yakalanir.
+	regexp.MustCompile(`(?i)\bcurl\b[^|;&]*?(^|\s)((?-i:-d|-F|-T)|--data|--data-raw|--data-binary|--data-urlencode|--form|--upload-file)(\s|=)`),
 	regexp.MustCompile(`(?i)\bwget\b[^|;&]*?(--method\s*=\s*['"]?(POST|PUT|DELETE|PATCH)|--post-data|--post-file|--body-data|--body-file)`),
 	regexp.MustCompile(`(?i)requests\.(post|put|delete|patch)\s*\(`),
 	regexp.MustCompile(`(?i)\.method\s*=\s*['"](POST|PUT|DELETE|PATCH)['"]`),

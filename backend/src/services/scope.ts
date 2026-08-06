@@ -240,7 +240,10 @@ export function findForbiddenMethods(
     // curl ile bayrak AYNI komut parcasinda olmali (arada |;& yok). Eskiden "curl VE
     // bayrak herhangi bir yerde" idi -> rapor script'lerindeki ORNEK komutlar (curl ...
     // ve baska satirda -F ...) yanlis-pozitif POST uretiyordu (ISO scope_violation).
-    if (/\bcurl\b[^|;&]*?(^|\s)(-d|--data(-raw|-binary|-urlencode)?|-F|--form)(\s|=)/i.test(t)) hits.add('POST');
+    // CASE-SENSITIVE (Go passive_guard.go ile TUTARLI): /i YOK — curl bayraklari harf
+    // duyarli. -d/-F = WRITE; -D (--dump-header, salt-okunur) ve -f (--fail) YANLISLIKLA
+    // yakalanmasin (yanlis-pozitif: zararsiz `curl -D dosya`/`-f` bloklaniyordu).
+    if (/\bcurl\b[^|;&]*?(^|\s)(-d|--data(-raw|-binary|-urlencode)?|-F|--form)(\s|=)/.test(t)) hits.add('POST');
   }
   return [...hits];
 }
