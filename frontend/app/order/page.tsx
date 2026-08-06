@@ -308,18 +308,16 @@ export default function OrderPage() {
         key={b.key}
         type="button"
         onClick={() => { setSelectedBundle(on ? null : b); setSelected(null); setBundleModules([]); }}
-        className={`card flex flex-col p-4 text-left transition ${
+        className={`card relative flex flex-col p-4 text-left transition ${
           on ? 'ring-2 ring-brand' : b.popular ? 'border-accent hover:border-accent' : 'hover:border-brand-300'
         }`}
       >
-        <div className="flex items-start justify-between gap-2">
-          <span className="font-bold text-brand">{b.displayName}</span>
-          {b.popular ? (
-            <span className="rounded-pill bg-accent px-2 py-0.5 text-[10px] font-bold text-white">★ Popüler</span>
-          ) : b.discountPct > 0 ? (
-            <span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold text-white">%{b.discountPct}</span>
-          ) : null}
-        </div>
+        {b.popular ? (
+          <span className="absolute -top-3 left-6 rounded-pill bg-accent px-3 py-0.5 text-[10px] font-bold text-white">★ Popüler</span>
+        ) : b.discountPct > 0 ? (
+          <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-0.5 text-[10px] font-bold text-white">%{b.discountPct}</span>
+        ) : null}
+        <span className="font-bold text-brand">{b.displayName}</span>
         <p className="mt-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
         <p className="mt-1.5 flex-1 text-[11px] text-ink-muted">
           İçindekiler: {b.members.map((m: any) => m.displayName).join(' · ')}
@@ -362,12 +360,10 @@ export default function OrderPage() {
           <button
             type="button"
             onClick={() => { setSelected(basitPkg.key); setSelectedBundle(null); setBundleModules([]); }}
-            className={`card flex flex-col p-4 text-left transition ${selected === basitPkg.key ? 'ring-2 ring-accent' : 'hover:border-brand-300'}`}
+            className={`card relative flex flex-col p-4 text-left transition ${selected === basitPkg.key ? 'ring-2 ring-accent' : 'hover:border-brand-300'}`}
           >
-            <div className="flex items-start justify-between gap-2">
-              <span className="font-bold text-brand">{basitPkg.displayName}</span>
-              <span className="rounded-pill bg-ink-soft px-2 py-0.5 text-[10px] font-bold text-white">Giriş</span>
-            </div>
+            <span className="absolute -top-3 left-6 rounded-pill bg-ink-soft px-3 py-0.5 text-[10px] font-bold text-white">Giriş</span>
+            <span className="font-bold text-brand">{basitPkg.displayName}</span>
             <p className="mt-1 flex-1 text-xs leading-relaxed text-ink-soft">
               Hızlı, ucuz deneme taraması — ön izleme niteliğindedir (kapsamlı denetim değildir).
             </p>
@@ -388,12 +384,10 @@ export default function OrderPage() {
               <div
                 key={b.key}
                 aria-disabled="true"
-                className="card flex cursor-not-allowed flex-col border-dashed bg-brand-50/30 p-4 text-left opacity-60"
+                className="card relative flex cursor-not-allowed flex-col border-dashed bg-brand-50/30 p-4 text-left opacity-60"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="font-bold text-ink-soft">{b.displayName}</span>
-                  <span className="rounded-pill bg-ink-muted px-2 py-0.5 text-[10px] font-bold text-white">Yakında</span>
-                </div>
+                <span className="absolute -top-3 left-6 rounded-pill bg-ink-muted px-3 py-0.5 text-[10px] font-bold text-white">Yakında</span>
+                <span className="font-bold text-ink-soft">{b.displayName}</span>
                 <p className="mt-1 flex-1 text-xs leading-relaxed text-ink-muted">{b.description}</p>
                 <p className="mt-2 text-xs font-semibold text-ink-muted">Şu an satışa kapalı</p>
               </div>
