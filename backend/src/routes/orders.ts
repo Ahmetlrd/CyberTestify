@@ -188,16 +188,17 @@ const createOrderSchema = z.object({
 });
 
 ordersRouter.post('/', requireAuth, async (req, res) => {
-  const parsed = createOrderSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { domainId, packageKey, region } = parsed.data;
-
-  // ODEME ONCESI E-POSTA DOGRULAMA ZORUNLU: erisilemez bir mail adresiyle odeme yapip
-  // rapor-hazir/sifre mailini alamama riskini ONLE. Login/dashboard KISITLANMAZ, yalniz bu adim.
+  // ODEME ONCESI E-POSTA DOGRULAMA ZORUNLU (fail-fast; sema parse'indan ONCE): erisilemez bir
+  // mail adresiyle odeme yapip rapor-hazir/sifre mailini alamama riskini ONLE. Login/dashboard
+  // KISITLANMAZ, yalniz satin alma adimi.
   const cust0 = await prisma.customer.findUnique({ where: { id: req.customerId! }, select: { emailVerified: true } });
   if (!cust0?.emailVerified) {
     return res.status(409).json({ error: 'Satın almadan önce e-posta adresinizi doğrulayın.', emailUnverified: true });
   }
+
+  const parsed = createOrderSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { domainId, packageKey, region } = parsed.data;
 
   const domain = await prisma.domain.findFirstOrThrow({
     where: { id: domainId, customerId: req.customerId! },
@@ -421,15 +422,15 @@ const bundleOrderSchema = z.object({
   promoCode: z.string().trim().max(64).optional(),
 });
 ordersRouter.post('/bundle', requireAuth, async (req, res) => {
-  const parsed = bundleOrderSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { domainId, bundleKey, region } = parsed.data;
-
-  // ODEME ONCESI E-POSTA DOGRULAMA ZORUNLU (bundle) — createOrder ile ayni gerekce.
+  // ODEME ONCESI E-POSTA DOGRULAMA ZORUNLU (bundle; fail-fast, sema parse'indan ONCE).
   const custB = await prisma.customer.findUnique({ where: { id: req.customerId! }, select: { emailVerified: true } });
   if (!custB?.emailVerified) {
     return res.status(409).json({ error: 'Satın almadan önce e-posta adresinizi doğrulayın.', emailUnverified: true });
   }
+
+  const parsed = bundleOrderSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { domainId, bundleKey, region } = parsed.data;
 
   const domain = await prisma.domain.findFirstOrThrow({ where: { id: domainId, customerId: req.customerId! } });
   if (!isVerificationStillValid(domain)) {
