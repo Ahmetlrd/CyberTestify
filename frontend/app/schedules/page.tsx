@@ -70,9 +70,9 @@ export default function SchedulesPage() {
       ) : (
         <div className="mt-8 space-y-2.5">
           {schedules.map((s) => (
-            <div key={s.id} className="card flex items-center justify-between gap-3 p-4">
-              <div>
-                <div className="font-semibold text-ink">{s.hostname}</div>
+            <div key={s.id} className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="truncate font-semibold text-ink">{s.hostname}</div>
                 <div className="mt-0.5 text-xs text-ink-muted">
                   {FREQ[s.intervalDays] ?? `${s.intervalDays} günde bir`} · kalan {s.remainingRuns} tarama
                   {s.active && (

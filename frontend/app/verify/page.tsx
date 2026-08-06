@@ -186,14 +186,14 @@ export default function VerifyHub() {
           <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">Doğrulanmış alan adların</h2>
           <div className="mt-3 space-y-2.5">
             {validDomains.map((d) => (
-              <div key={d.id} className="card flex items-center justify-between gap-3 p-4">
-                <div>
-                  <div className="font-semibold text-ink">{d.hostname}</div>
+              <div key={d.id} className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="truncate font-semibold text-ink">{d.hostname}</div>
                   <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Doğrulandı · geçerli
                   </span>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                   <button onClick={() => goToOrder(d.id)} className="btn-primary">
                     {purchaseMode ? 'Bu alan adı ile devam et' : 'Taramayı Başlat'}
                   </button>
@@ -218,14 +218,14 @@ export default function VerifyHub() {
               const open = openId === d.id;
               return (
                 <div key={d.id} className="card p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="font-semibold text-ink">{d.hostname}</div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold text-ink">{d.hostname}</div>
                       <span className={`mt-0.5 text-xs font-medium ${expired ? 'text-red-600' : 'text-amber-600'}`}>
                         {expired ? 'Süresi doldu — yeniden doğrula' : 'Henüz doğrulanmadı'}
                       </span>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                       <button onClick={() => setOpenId(open ? null : d.id)} className="btn-outline text-sm">
                         {open ? 'Gizle' : 'Doğrula'}
                       </button>
@@ -306,7 +306,7 @@ export default function VerifyHub() {
           {o.packageName} · {new Date(o.createdAt).toLocaleDateString('tr-TR')}
         </div>
       </button>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
         <span className="badge">{ORDER_STATUS_LABEL[o.status] ?? o.status}</span>
         {isArchived ? (
           <button onClick={() => archiveOrder(o.id, false)} className="btn-ghost text-xs">
