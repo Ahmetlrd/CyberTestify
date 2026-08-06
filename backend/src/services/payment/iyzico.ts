@@ -120,9 +120,93 @@ export const iyzicoProvider: PaymentProvider = {
 };
 
 /**
+ * BUNDLE (kombine paket) icin TEK gercek iyzico CheckoutForm baslatir: TUM uye order'larin
+ * TOPLAM tutari, TEK conversationId/basketId. token TUM uye order'lara yazilir; callback
+ * token'a sahip TUM order'lari finalize eder. Tekil (initiatePayment) akisi DEGISMEZ.
+ * iyzico: basketItems fiyat TOPLAMI == price olmali; her uye kendi tutariyla eklenir.
+ */
+export async function initiateBundlePayment(orderIds: string[]): Promise<CreatePaymentResult> {
+  const orders = await prisma.order.findMany({
+    where: { id: { in: orderIds } },
+    include: { customer: true, package: true },
+  });
+  if (!orders.length) throw new Error('Bundle siparisleri bulunamadi.');
+
+  // DEV mock (yalniz NODE_ENV!=production + anahtar yok): odeme ALMADAN tum uyeleri finalize et.
+  if (config.mockPayment) {
+    for (const o of orders) await finalizePaidOrder(o.id);
+    return { paymentPageUrl: `${config.frontendUrl}/dashboard/${orderIds[0]}`, conversationId: orderIds[0] };
+  }
+  // Gercek anahtar YOKSA: tekil akisla ayni — gorsel /pay placeholder'ina dus, paid YAPMA.
+  if (!config.iyzico.apiKey || !config.iyzico.secretKey) {
+    await prisma.order.updateMany({ where: { id: { in: orderIds } }, data: { paymentProvider: 'placeholder' } });
+    return {
+      paymentPageUrl: `${config.frontendUrl}/pay/${orderIds[0]}?bundle=${orderIds.join(',')}`,
+      conversationId: orderIds[0],
+    };
+  }
+
+  const totalMinor = orders.reduce((s, o) => s + o.amountMinorUnit, 0);
+  const totalStr = (totalMinor / 100).toFixed(2);
+  const groupId = crypto.randomUUID();
+  const buyer = orders[0].customer;
+  const { name, surname } = splitName(buyer.fullName, buyer.email);
+
+  const request: Record<string, unknown> = {
+    locale: Iyzipay.LOCALE.TR,
+    conversationId: groupId,
+    price: totalStr,
+    paidPrice: totalStr,
+    currency: Iyzipay.CURRENCY.TRY,
+    basketId: groupId,
+    paymentGroup: Iyzipay.PAYMENT_GROUP.PRODUCT,
+    callbackUrl: `${config.publicApiUrl}/payments/iyzico/callback`,
+    enabledInstallments: [1],
+    buyer: {
+      id: buyer.id,
+      name,
+      surname,
+      email: buyer.email,
+      identityNumber: '11111111111',
+      registrationAddress: 'CyberTestify — dijital hizmet',
+      ip: '85.34.78.112',
+      city: 'Istanbul',
+      country: 'Turkey',
+    },
+    billingAddress: {
+      contactName: `${name} ${surname}`,
+      city: 'Istanbul',
+      country: 'Turkey',
+      address: 'CyberTestify — dijital hizmet (fatura e-posta ile iletilir)',
+    },
+    basketItems: orders.map((o) => ({
+      id: o.packageId,
+      name: o.package.displayName,
+      category1: 'Guvenlik Hizmeti',
+      itemType: Iyzipay.BASKET_ITEM_TYPE.VIRTUAL,
+      price: (o.amountMinorUnit / 100).toFixed(2),
+    })),
+  };
+
+  const result = await initializeCheckoutForm(client(), request);
+  if (result?.status !== 'success' || !result?.paymentPageUrl) {
+    const msg = result?.errorMessage || 'iyzico CheckoutForm baslatilamadi (bundle).';
+    console.error(`[iyzico] bundle initialize hatasi (orders ${orderIds.join(',')}):`, result?.errorCode, msg);
+    throw new Error(msg);
+  }
+  // token'i TUM uye order'lara yaz — callback token ile hepsini bulup finalize eder.
+  await prisma.order.updateMany({
+    where: { id: { in: orderIds } },
+    data: { paymentProvider: 'iyzico', paymentRef: result.token },
+  });
+  return { paymentPageUrl: result.paymentPageUrl, conversationId: groupId };
+}
+
+/**
  * Callback'te iyzico'dan gelen token'i DOGRULAR (retrieve). Basari + tutar eslesirse
- * siparisi finalize eder (paid + tarama). Musteriden gelen "basarili" bilgisine ASLA
- * guvenmeyiz — iyzico'ya sunucu-taraf sorariz (oynanma korumasi).
+ * siparis(ler)i finalize eder (paid + tarama). Musteriden gelen "basarili" bilgisine ASLA
+ * guvenmeyiz — iyzico'ya sunucu-taraf sorariz (oynanma korumasi). TEKIL + BUNDLE birlesik:
+ * token'a (paymentRef) sahip TUM order'lar finalize edilir (tekil=1, bundle=N).
  */
 export async function handleIyzicoCallback(token: string): Promise<{ ok: boolean; orderId?: string; error?: string }> {
   if (!token) return { ok: false, error: 'token yok' };
@@ -130,19 +214,25 @@ export async function handleIyzicoCallback(token: string): Promise<{ ok: boolean
   if (result?.status !== 'success' || result?.paymentStatus !== 'SUCCESS') {
     return { ok: false, orderId: result?.basketId, error: result?.errorMessage || result?.paymentStatus || 'odeme basarisiz' };
   }
-  const orderId = result.basketId || result.conversationId;
-  if (!orderId) return { ok: false, error: 'siparis eslesmedi' };
 
-  // Tutar dogrulama: iyzico'nun paidPrice'i siparis tutariyla eslesmeli (oynanma korumasi).
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) return { ok: false, error: 'siparis bulunamadi' };
-  // Tutar dogrulama SAYISAL yapilir (string DEGIL): iyzico tam-TL tutari "1" olarak dondurur
-  // ("1.00" DEGIL). Eski `String(paidPrice) !== "1.00"` karsilastirmasi tum tam-TL fiyatlari
-  // ("499.00" vs "499" ...) yanlis "tutar uyusmazligi" ile REDDEDIYORDU → odeme cekiliyor ama
-  // siparis awaiting_payment kaliyor, tarama baslamiyordu (canli 1 TL testinde yakalandi).
-  // paidPrice VEYA price minor-unit'e cevrilip beklenenle ~1 kurus tolerans ile karsilastirilir;
-  // anti-tamper korunur (gercek dusuk tutar hala yakalanir).
-  const expectedMinor = order.amountMinorUnit;
+  // token'a sahip TUM order'lar. initiatePayment (tekil) ve initiateBundlePayment (N) token'i
+  // order(lar)a yazdi. Geriye-uyum: bulunamazsa basketId/conversationId ile tekil order ara.
+  let orders = await prisma.order.findMany({ where: { paymentRef: token } });
+  if (!orders.length) {
+    const fallbackId = result.basketId || result.conversationId;
+    if (fallbackId) {
+      const one = await prisma.order.findUnique({ where: { id: fallbackId } });
+      if (one) orders = [one];
+    }
+  }
+  if (!orders.length) return { ok: false, error: 'siparis eslesmedi' };
+
+  // Tutar dogrulama SAYISAL (string DEGIL): iyzico tam-TL tutari "1"/"499" olarak dondurur
+  // ("1.00" DEGIL) → eski string karsilastirmasi tum tam-TL odemeleri yanlis reddediyordu.
+  // BUNDLE: beklenen = TUM uye order'larin TOPLAM tutari (uye order amount'larinin toplami =
+  // iyzico'ya gonderilen price). paidPrice/price minor-unit'e cevrilip ~1 kurus tolerans ile
+  // karsilastirilir; anti-tamper korunur (gercek dusuk tutar hala yakalanir).
+  const expectedMinor = orders.reduce((s, o) => s + o.amountMinorUnit, 0);
   const toMinor = (v: unknown) => Math.round(Number(v) * 100);
   const paidMinor = toMinor(result.paidPrice);
   const priceMinor = toMinor(result.price);
@@ -151,13 +241,15 @@ export async function handleIyzicoCallback(token: string): Promise<{ ok: boolean
     (Number.isFinite(priceMinor) && Math.abs(priceMinor - expectedMinor) <= 1);
   if (!amountOk) {
     console.error(
-      `[iyzico] tutar uyusmazligi order ${orderId}: beklenen ${expectedMinor} kurus, gelen paidPrice=${result.paidPrice} price=${result.price}`,
+      `[iyzico] tutar uyusmazligi (${orders.length} order): beklenen ${expectedMinor} kurus, gelen paidPrice=${result.paidPrice} price=${result.price}`,
     );
-    return { ok: false, orderId, error: 'tutar uyusmazligi' };
+    return { ok: false, orderId: orders[0].id, error: 'tutar uyusmazligi' };
   }
 
-  await finalizePaidOrder(orderId);
-  return { ok: true, orderId };
+  // TUM uye order'lari finalize et (paid + fatura + tarama). finalizePaidOrder idempotent
+  // (zaten paid ise sessizce gecer) → double-callback / kismi tekrar guvenli.
+  for (const o of orders) await finalizePaidOrder(o.id);
+  return { ok: true, orderId: orders[0].id };
 }
 
 /**

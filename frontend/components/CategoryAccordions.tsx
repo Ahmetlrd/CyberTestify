@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { getRegion } from '../config/regions';
 import { formatMoney } from '../config/i18n';
 
-type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean };
+type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean; bundleOnly?: boolean; bundleName?: string | null };
 
 // Satis-odakli kategori sirasi (teknik degil). keys: o kategoriye ait paket key'leri.
 // TEK KAYNAK — hem paketler sayfasi (bu bilesen) hem /order sayfasi kullanir.
@@ -133,6 +133,30 @@ export function CategoryAccordions({
                     {p.comingSoon ? (
                       // "Yakında": fiyat gosterilmez, CTA pasif (BYOK ile ayni desen).
                       <span className="btn-ghost mt-4 w-full cursor-default">{tr ? 'Yakında' : 'Coming soon'}</span>
+                    ) : p.bundleOnly ? (
+                      // SATIS MODELI: tekil satis KAPALI — bu kontrol yalniz ilgili kombine paket
+                      // icinde sunulur. Tekil "Satın Al" CTA'si YOK; yalniz bilgi + ornek rapor.
+                      <>
+                        <div className="mt-4 rounded-card border border-brand/20 bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
+                          {tr
+                            ? `Bu kontrol tek başına satılmaz; yalnızca ${p.bundleName ? `“${p.bundleName}”` : 'ilgili kombine paket'} içinde sunulur.`
+                            : `Sold only within ${p.bundleName ? `“${p.bundleName}”` : 'its bundle'}, not individually.`}
+                        </div>
+                        <div className="mt-2 inline-flex items-center gap-1 text-xs text-ink-soft">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                            <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" strokeLinecap="round" />
+                          </svg>
+                          {tr ? 'Tahmini süre:' : 'Est. time:'} {tr ? cat.estTr : cat.estEn}
+                        </div>
+                        <a
+                          href={`${apiUrl}/orders/sample-report/${p.key}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2.5 text-center text-xs font-semibold text-accent-600 underline underline-offset-2 hover:text-accent"
+                        >
+                          {tr ? 'Örnek Raporu Gör (PDF)' : 'View Sample Report (PDF)'}
+                        </a>
+                      </>
                     ) : (
                       <>
                         <div className="mt-4">

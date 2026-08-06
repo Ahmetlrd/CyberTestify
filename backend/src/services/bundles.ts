@@ -143,3 +143,32 @@ export function bundlePrice(
   const amountMinorUnit = Math.round(originalMinorUnit * (1 - bundle.discountPct / 100));
   return { memberKeys, originalMinorUnit, amountMinorUnit, currency, discountPct: bundle.discountPct };
 }
+
+// --- SATIS MODELI: yalniz bundle (kombine paket) ------------------------------
+// Karar: tekil ("tek basina") paket satisi KAPALI — SADECE basit_tarama tekil satilir.
+// Tum tekil taramalar en az bir bundle icinde mevcut (basit_tarama HARIC). Asagidaki
+// "bundle uyesi mi" kontrolu bundle tanimlarindan TURETILIR (elle liste tutulmaz; bundle
+// uyeleri degisirse otomatik dogru kalir). basit_tarama hicbir bundle'da olmadigindan
+// dogal olarak ACIK kalir. comingSoon paketler de uye olabilir — onlar zaten ayrica bloklu.
+
+/** Sabit memberKeys + selectable havuz dahil, TUM bundle uyesi paket anahtarlari. */
+export function bundleMemberKeySet(): Set<string> {
+  const s = new Set<string>();
+  for (const b of COMBO_BUNDLES) {
+    for (const k of b.memberKeys) s.add(k);
+    for (const k of b.selectableKeys ?? []) s.add(k);
+  }
+  return s;
+}
+
+/** Bu paket bir bundle'da yer aliyor mu? (yer aliyorsa TEK BASINA satilamaz). */
+export function isBundleOnlyPackage(key: string): boolean {
+  return bundleMemberKeySet().has(key);
+}
+
+/** Bu paketi iceren ILK bundle'in gosterim adi (locale'e gore) — kullaniciya mesaj icin. */
+export function primaryBundleForPackage(key: string, locale: 'tr' | 'en'): string | null {
+  const b = COMBO_BUNDLES.find((bb) => bb.memberKeys.includes(key) || (bb.selectableKeys ?? []).includes(key));
+  if (!b) return null;
+  return locale === 'en' ? b.displayNameEn : b.displayName;
+}

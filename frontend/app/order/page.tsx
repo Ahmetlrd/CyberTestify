@@ -212,10 +212,13 @@ export default function OrderPage() {
         authCredentials: needsAuth ? { username: authUser.trim(), password: authPass } : undefined,
         promoCode: promo?.valid ? promo.code : undefined,
       });
-      // %100 promo -> odeme YOK, dogrudan siparis paneli. Aksi halde ODEME EKRANINA
-      // (/pay) git — tum uye siparisleri ?bundle= ile toplam tutarla gosterilir.
+      // %100 promo -> odeme YOK, dogrudan siparis paneli. Aksi halde: TR'de backend TEK gercek
+      // iyzico CheckoutForm baslatir (paymentPageUrl) -> oraya yonlendir (tekil akisla ayni).
+      // paymentPageUrl yoksa (TR disi placeholder) eski /pay bundle ekranina dus.
       if (res.paidWithPromo) {
         router.push(`/dashboard/${res.orderIds[0]}`);
+      } else if (res.paymentPageUrl) {
+        window.location.href = res.paymentPageUrl;
       } else {
         router.push(`/pay/${res.orderIds[0]}?bundle=${res.orderIds.join(',')}`);
       }

@@ -86,7 +86,7 @@ export const api = {
     region?: string; activeTestConsent?: { riskAccepted: boolean };
     authCredentials?: { username: string; password: string }; promoCode?: string;
   }) =>
-    request<{ bundleKey: string; orderIds: string[]; paidWithPromo?: boolean; paymentPending?: boolean; bundleTotalMinorUnit?: number; currency?: string }>(
+    request<{ bundleKey: string; orderIds: string[]; paidWithPromo?: boolean; paymentPending?: boolean; bundleTotalMinorUnit?: number; currency?: string; paymentPageUrl?: string; conversationId?: string }>(
       '/orders/bundle',
       { method: 'POST', body: JSON.stringify(body) },
     ),

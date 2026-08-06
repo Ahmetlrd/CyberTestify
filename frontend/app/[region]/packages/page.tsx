@@ -4,7 +4,7 @@ import { REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 import { getDict, formatMoney } from '../../../config/i18n';
 import { CategoryAccordions } from '../../../components/CategoryAccordions';
 
-type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean };
+type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean; bundleOnly?: boolean; bundleName?: string | null };
 type Bundle = {
   key: string; displayName: string; description: string; discountPct: number;
   members: Array<{ key: string; displayName: string }>;
@@ -51,6 +51,10 @@ export default async function PackagesPage({ params }: { params: { region: strin
   const d = getDict(region).pkg;
   const packages = await getPackages(region.code);
   const bundles = await getBundles(region.code);
+  // SATIS MODELI: tekil satis KAPALI — SADECE basit_tarama tekil ("6. paket") satilir; digerleri
+  // yalniz bundle icinde. basit_tarama'yi accordion'dan AYIR, bundle'larin yanina belirgin kart yap.
+  const basit = packages.find((p) => p.key === 'basit_tarama');
+  const accordionPackages = packages.filter((p) => p.key !== 'basit_tarama');
   // Faz 5b'ye kadar fiyatlar yalnızca TRY tabanlı; TR dışı bölgelerde gösterge
   // niteliğinde (PackagePricing tablosu + bölgesel kalibrasyon gelecek).
   const indicative = region.currency !== 'TRY';
@@ -170,12 +174,53 @@ export default async function PackagesPage({ params }: { params: { region: strin
               })}
             </div>
 
-            {/* Bundle -> tekil gecis metni + ok */}
+            {/* 6. PAKET: basit_tarama — bundle'lar disinda tekil alinabilen TEK paket. Belirgin,
+                bundle grid'inin hemen altinda, deneme-amacli giris seviyesi kart. */}
+            {basit && !basit.comingSoon && (
+              <div className="mt-10">
+                <div className="mb-4 text-center">
+                  <p className="text-sm font-medium text-ink-soft">
+                    {region.code === 'tr'
+                      ? 'Sadece hızlı bir ön bakış mı istiyorsunuz? ↓'
+                      : 'Just want a quick preview first? ↓'}
+                  </p>
+                </div>
+                <div className="mx-auto max-w-2xl">
+                  <div className="card flex flex-col gap-4 border-2 border-brand/25 bg-brand-50/40 p-6 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
+                          {region.code === 'tr' ? 'Giriş Seviyesi' : 'Entry Level'}
+                        </span>
+                        <h3 className="text-lg font-bold text-brand">{basit.displayName}</h3>
+                      </div>
+                      <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+                        {region.code === 'tr'
+                          ? 'Ucuz, hızlı bir deneme taraması — CyberTestify’ı denemek için ideal. Yalnızca ana sayfanın güvenlik başlıkları, TLS geçerliliği ve sunucu banner özetini gösterir. Kapsamlı bir denetim değildir (ön izleme niteliğindedir); derinlemesine inceleme için yukarıdaki kombine paketleri tercih edin.'
+                          : 'A cheap, fast trial scan — ideal to try CyberTestify. Covers only the homepage’s security headers, TLS validity and server banner summary. It is a preview, not a comprehensive audit; for depth choose a bundle above.'}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-start sm:items-end">
+                      <div>
+                        <span className="text-3xl font-extrabold text-ink">{formatMoney(basit.priceMinorUnit, region)}</span>
+                        <span className="ml-1 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahil' : 'incl. tax'}</span>
+                      </div>
+                      <Link href={`/verify?package=${basit.key}`} className="btn-primary mt-3 w-full sm:w-auto">
+                        {region.code === 'tr' ? 'Satın Al' : 'Buy Now'}
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Bundle icerigi referansi (tekil satis KAPALI — asagisi yalnizca "hangi paket
+                hangi bundle'da" bilgisidir). */}
             <div className="mt-10 text-center">
               <p className="text-sm font-medium text-ink-soft">
                 {region.code === 'tr'
-                  ? 'Sadece tek bir kontrol mü istiyorsunuz? Aşağıdaki kategorilerden seçebilirsiniz ↓'
-                  : 'Just want a single check? Pick from the categories below ↓'}
+                  ? 'Kombine paketlerin içindeki tekil kontroller aşağıda listelenir (tekil satış kapalıdır; bu kontroller ilgili paket içinde sunulur) ↓'
+                  : 'The individual checks inside each bundle are listed below (sold only within their bundle) ↓'}
               </p>
             </div>
           </div>
@@ -191,7 +236,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
         ) : (
           <>
             {/* Tekil kontroller — kategori akordeonlari (varsayilan KAPALI) */}
-            <CategoryAccordions packages={packages} regionCode={region.code} apiUrl={API} />
+            <CategoryAccordions packages={accordionPackages} regionCode={region.code} apiUrl={API} />
 
             {/* BYOK (yakinda) — kategorilerin altinda ayri kart */}
             <div className="card mt-6 flex flex-col border-dashed p-6 md:max-w-md">

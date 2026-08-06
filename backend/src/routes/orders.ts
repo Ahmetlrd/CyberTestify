@@ -8,12 +8,13 @@ import { renderConsentPdf } from '../services/pdf.js';
 import { encryptSecret, decryptSecret } from '../services/crypto.js';
 import { getPricing, currencyFor } from '../services/pricing.js';
 import { getPaymentProvider } from '../services/payment/index.js';
+import { initiateBundlePayment } from '../services/payment/iyzico.js';
 import { getSampleReportPdf } from '../services/sampleReports.js';
 import { creditsForPackagePrice, spendCredits, type CreditTx } from '../services/credits.js';
 import { enqueueOrStartScan } from '../services/orchestrator.js';
 import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
-import { COMBO_BUNDLES, getBundle, bundlePrice, resolveMembers } from '../services/bundles.js';
+import { COMBO_BUNDLES, getBundle, bundlePrice, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -52,6 +53,10 @@ ordersRouter.get('/packages', async (req, res) => {
           fixSuggestionPriceMinorUnit: fixSuggestionPrice(p),
           // "Yakında": listelenir ama satin ALINAMAZ (frontend CTA pasif + rozet).
           comingSoon: p.comingSoon ?? false,
+          // SATIS MODELI: bundle-uyesi paketler tekil SATILAMAZ (basit_tarama HARIC). Frontend
+          // tekil "Satın Al" CTA'sini gizler, "yalnizca X icinde" notu gosterir.
+          bundleOnly: isBundleOnlyPackage(p.key),
+          bundleName: isBundleOnlyPackage(p.key) ? primaryBundleForPackage(p.key, locale) : null,
           // (Faz 3) guvenlik profili + active-light ise ek onay bloğu bilgisi (frontend).
           securityProfile: profile,
           activeTest:
@@ -206,6 +211,19 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   // "Yakında" paket: listelenir ama satin ALINAMAZ (defense-in-depth; frontend de kapatir).
   if (packageDef.comingSoon) {
     return res.status(409).json({ error: 'Bu paket yakında açılacak; şu an satın alınamıyor.' });
+  }
+
+  // SATIS MODELI (defense-in-depth): tekil paket satisi KAPALI — basit_tarama HARIC tum
+  // bundle-uyesi paketler yalniz kombine paket icinde alinir. UI CTA'yi gizler; burada
+  // dogrudan istek gelse bile REDDEDILIR (comingSoon'dan FARKLI mesaj/sebep).
+  if (isBundleOnlyPackage(packageKey)) {
+    const bname = primaryBundleForPackage(packageKey, localeFor(region) === 'en' ? 'en' : 'tr');
+    return res.status(409).json({
+      error: bname
+        ? `Bu paket yalnızca "${bname}" içinde satın alınabilir.`
+        : 'Bu paket yalnızca kombine paket içinde satın alınabilir.',
+      bundleOnly: true,
+    });
   }
 
   // (Faz 3) ACTIVE-LIGHT GUARD: bu paketler zafiyeti DOGRULAYAN aktif test istekleri
@@ -491,8 +509,25 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
     return res.json({ bundleKey, orderIds: createdOrderIds, paidWithPromo: true });
   }
 
-  // Odeme placeholder (gercek iyzico anahtari yok): uye siparisleri awaiting_payment.
-  // Tarama BASLAMAZ (mevcut mock-kapali garantisi korunur); odeme canliya gecince tahsil.
+  // BUNDLE ODEME: TR icin TEK gercek iyzico CheckoutForm — TUM uye order'larin TOPLAM tutari,
+  // tek conversationId/basketId; callback token ile hepsini paid yapar (bkz initiateBundlePayment
+  // + handleIyzicoCallback). Onceden bundle HIC odeme baslatmiyor, hep gorsel /pay placeholder'ina
+  // dusuyordu → bundle odemesi CALISMIYORDU. Tekil akis (createOrder) DEGISMEDI.
+  if (region === 'tr') {
+    let payment;
+    try {
+      payment = await initiateBundlePayment(createdOrderIds);
+    } catch (err: any) {
+      console.error(`[bundle] odeme baslatilamadi (orders ${createdOrderIds.join(',')}):`, err?.message ?? err);
+      return res.status(503).json({
+        error: 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin veya destek ile iletişime geçin.',
+        orderIds: createdOrderIds,
+      });
+    }
+    return res.json({ bundleKey, orderIds: createdOrderIds, bundleTotalMinorUnit: price.amountMinorUnit, currency: price.currency, ...payment });
+  }
+
+  // TR disi (stripe/paddle henuz canli DEGIL): mevcut placeholder davranisi korunur (paymentPending).
   return res.json({
     bundleKey,
     orderIds: createdOrderIds,
