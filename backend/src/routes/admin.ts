@@ -5,6 +5,7 @@ import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { checkEgressProxyHealth } from '../services/egressHealth.js';
 import { sendRefundNotice } from '../services/mailer.js';
+import { createDraftsFromBulk, listAllAdmin, publishNextDraft } from '../services/blog.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -104,6 +105,26 @@ adminRouter.post('/orders/:id/refund', async (req, res) => {
   const mailed = await sendRefundNotice(order.id); // mailer no-throw
   console.log(`[admin] Siparis ${order.id} 'refunded' isaretlendi (mail=${mailed}).`);
   res.json({ ok: true, mailed });
+});
+
+// --- (SEO BLOG) admin-only yonetim -------------------------------------------
+// Toplu front-matter yukleme -> draft; liste; "simdi yayinla" (en eski draft). requireAdmin arkasinda.
+adminRouter.post('/blog/bulk', async (req, res) => {
+  const text = typeof req.body?.text === 'string' ? req.body.text : '';
+  if (!text.trim()) return res.status(400).json({ error: 'Boş içerik.' });
+  const result = await createDraftsFromBulk(text);
+  res.json(result); // { created[], conflicts[], errors[] }
+});
+
+adminRouter.get('/blog', async (_req, res) => {
+  res.json(await listAllAdmin()); // { posts[], draftCount, publishedCount, lastPublishedAt }
+});
+
+adminRouter.post('/blog/publish-next', async (_req, res) => {
+  const done = await publishNextDraft();
+  if (!done) return res.json({ ok: true, published: null, message: 'Sırada yayınlanacak taslak yok.' });
+  console.log(`[admin][blog] elle yayinlandi: ${done.slug}`);
+  res.json({ ok: true, published: done });
 });
 
 // --- Kapsam ihlali audit log'u ------------------------------------------------

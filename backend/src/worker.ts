@@ -4,6 +4,7 @@ import * as pentagi from './pentagi/client.js';
 import { getPackageDef, securityProfileFor } from './services/scanPackages.js';
 import { generateAndStoreReport } from './services/report.js';
 import { sendReportReady } from './services/mailer.js';
+import { publishDailyIfDue } from './services/blog.js';
 import { findOutOfScope, findForbiddenMethods, detectScriptDebugLoop, detectRepeatedFetch } from './services/scope.js';
 import { encryptSecret } from './services/crypto.js';
 import { buildActivityFeed } from './services/activityFeed.js';
@@ -317,6 +318,12 @@ async function main() {
       await purgeExpiredReports();
     } catch (err) {
       console.error('[worker] Rapor saklama temizligi sirasinda hata:', err);
+    }
+    try {
+      // (SEO BLOG) Gunde 1: bugun (TR) henuz yayin yoksa en eski draft'i yayinla (restart-guvenli).
+      await publishDailyIfDue();
+    } catch (err) {
+      console.error('[worker] Blog gunluk yayin sirasinda hata:', err);
     }
     try {
       // Zamani gelen periyodik taramalari tetikle (normal siparis akisi, concurrency=1).

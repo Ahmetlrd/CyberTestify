@@ -46,5 +46,12 @@ export const adminApi = {
   // (E) Iade olarak isaretle — 'refunded' + musteriye iade bildirim maili (backend).
   refundOrder: (id: string) => areq<{ ok: boolean; mailed?: boolean; alreadyRefunded?: boolean }>(`/admin/orders/${id}/refund`, { method: 'POST' }),
   scopeViolations: (page = 1) => areq<Page<any>>(`/admin/scope-violations?page=${page}`),
+  // (SEO BLOG)
+  blogList: () =>
+    areq<{ posts: Array<{ id: string; title: string; slug: string; status: string; createdAt: string; publishedAt: string | null }>; draftCount: number; publishedCount: number; lastPublishedAt: string | null }>('/admin/blog'),
+  blogBulk: (text: string) =>
+    areq<{ created: Array<{ title: string; slug: string }>; conflicts: string[]; errors: string[] }>('/admin/blog/bulk', { method: 'POST', body: JSON.stringify({ text }) }),
+  blogPublishNext: () =>
+    areq<{ ok: boolean; published: { slug: string; title: string } | null; message?: string }>('/admin/blog/publish-next', { method: 'POST' }),
   systemHealth: () => areq<any>('/admin/system-health'),
 };

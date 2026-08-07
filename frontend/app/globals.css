@@ -71,3 +71,21 @@
     @apply text-ink;
   }
 }
+
+@layer components {
+  /* SEO blog makale govdesi (markdown -> HTML render edilir) */
+  .blog-body h1 { @apply mb-3 mt-8 text-2xl font-extrabold text-brand; }
+  .blog-body h2 { @apply mb-2 mt-8 text-xl font-bold text-brand; }
+  .blog-body h3 { @apply mb-1.5 mt-6 text-lg font-bold text-ink; }
+  .blog-body p { @apply my-3 text-[15px] leading-7 text-ink-soft; }
+  .blog-body ul { @apply my-3 list-disc space-y-1.5 pl-6 text-[15px] leading-7 text-ink-soft; }
+  .blog-body ol { @apply my-3 list-decimal space-y-1.5 pl-6 text-[15px] leading-7 text-ink-soft; }
+  .blog-body a { @apply text-accent-600 underline underline-offset-2; }
+  .blog-body strong { @apply font-semibold text-ink; }
+  .blog-body blockquote { @apply my-4 border-l-4 border-accent/40 bg-brand-50/40 py-2 pl-4 text-ink-soft; }
+  .blog-body code { @apply rounded bg-brand-50 px-1.5 py-0.5 font-mono text-[13px] text-brand; }
+  .blog-body pre { @apply my-4 overflow-x-auto rounded-card bg-brand-deep p-4 text-sm text-white/90; }
+  .blog-body pre code { @apply bg-transparent p-0 text-white/90; }
+  .blog-body img { @apply my-4 max-w-full rounded-card; }
+  .blog-body hr { @apply my-8 border-line; }
+}

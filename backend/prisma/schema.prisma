@@ -375,3 +375,20 @@ model PromoCodeUsage {
   finalAmountMinorUnit    Int
   createdAt               DateTime  @default(now())
 }
+
+// --- SEO otomatik blog (DB tabanli; git-commit YOK) ---------------------------
+// Admin toplu (front-matter) yukler -> status=draft. Worker gunde 1 en eski draft'i
+// published yapar. Yayinlanan makaleler /blog + /blog/[slug] + sitemap'te gorunur.
+model BlogPost {
+  id          String    @id @default(uuid())
+  title       String
+  description String    // meta aciklama (SEO)
+  slug        String    @unique // Turkce karaktersiz, tire ayrimli (backend normalize eder)
+  contentMd   String    // Markdown icerik
+  status      String    @default("draft") // draft | scheduled | published
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime? // null = henuz yayinlanmadi
+
+  @@index([status, createdAt])
+  @@index([status, publishedAt])
+}

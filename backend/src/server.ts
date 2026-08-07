@@ -11,6 +11,7 @@ import { ordersRouter } from './routes/orders.js';
 import { paymentsRouter } from './routes/payments.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { reportsRouter } from './routes/reports.js';
+import { blogRouter } from './routes/blog.js';
 import { creditsRouter } from './routes/credits.js';
 import { internalRouter } from './routes/internal.js';
 import { schedulesRouter } from './routes/schedules.js';
@@ -89,6 +90,7 @@ app.use('/domains', apiLimiter, domainsRouter);
 app.use('/orders', apiLimiter, ordersRouter);
 app.use('/payments', paymentsRouter);
 app.use('/reports', apiLimiter, reportsRouter);
+app.use('/blog', apiLimiter, blogRouter); // PUBLIC blog (yalniz published; auth yok)
 app.use('/credits', apiLimiter, creditsRouter);
 app.use('/schedules', apiLimiter, schedulesRouter);
 
