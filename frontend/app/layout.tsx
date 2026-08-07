@@ -16,6 +16,9 @@ export const metadata = {
   title: 'CyberTestify — Dakikalar İçinde Başlayan Otonom Güvenlik Taraması',
   description:
     'Sitenizin güvenliğini tamamen otonom yapay zeka ile dakikalar içinde başlatın; süre pakete/kapsama göre değişir. KVKK uyumlu, şifreli raporlama, yalnızca doğrulanmış alan adları.',
+  // Google Search Console alan adı dogrulamasi — <meta name="google-site-verification" ...>
+  // olarak her sayfanin <head>'ine (ana sayfa dahil) basilir.
+  verification: { google: 'UGTbgsVPvXpSD76mExwXFcHx2fs4FqbIPHHFmkcDzPw' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
