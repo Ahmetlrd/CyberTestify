@@ -225,8 +225,10 @@ model Order {
   ownershipConfirmedAt DateTime?
   // 2) Mesafeli Satis Sozlesmesi + On Bilgilendirme Formu onayi.
   distanceContractAcceptedAt DateTime?
-  // 3) Cayma hakki feragati (dijital/aninda ifa — Mesafeli Sozlesmeler Yon. m.15).
+  // 3) Cayma hakki feragati (dijital/aninda ifa — Mesafeli Sozlesmeler Yon. m.15). AYRI checkbox.
   withdrawalWaivedAt DateTime?
+  // 4) Yurt disi (Anthropic, PBC — ABD) veri aktarimina KVKK m.9 ACIK RIZA (ayri checkbox).
+  crossBorderConsentAt DateTime?
   // Rizanin alindigi IP ve yururlukteki hukuki metin surumu (ispat icin).
   consentIp      String?
   consentVersion String?

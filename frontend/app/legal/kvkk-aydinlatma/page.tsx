@@ -49,8 +49,19 @@ export default function Page() {
         <li><strong>iyzico</strong> — ödeme işleminin gerçekleştirilmesi (yurt içi)</li>
         <li>
           <strong>Anthropic, PBC (ABD)</strong> — self-hosted PentAGI aracılığıyla tarama komutlarının
-          işlenmesi (<strong>yurt dışı aktarım</strong>; KVKK md. 9 kapsamında uygun güvence —
-          standart sözleşme — ile yürütülür)
+          yapay zeka ile işlenmesi (<strong>yurt dışı aktarım</strong>). Bu aktarım, sipariş sırasında
+          ayrıca vereceğiniz <strong>açık rızanızla</strong> (KVKK m. 9) gerçekleştirilir. Rıza vermezseniz
+          tarama hizmeti sunulamaz. (Sistemde tarama komutlarını işleyen tek yapay zeka sağlayıcısı
+          Anthropic’tir.)
+        </li>
+        <li>
+          <strong>Brevo (Sendinblue, AB/Fransa)</strong> — işlem/bilgilendirme e-postalarının (sipariş,
+          rapor, doğrulama kodu) gönderilmesi; yalnızca e-posta adresiniz aktarılır (yurt dışı; hizmetin
+          ifası kapsamında)
+        </li>
+        <li>
+          <strong>Google LLC (ABD)</strong> — yalnızca “Google ile giriş”i tercih ederseniz, kimlik
+          doğrulaması için (yurt dışı; kendi tercihinizle)
         </li>
         <li>Yetkili kamu kurum/kuruluşları (mevzuat gereği, talep halinde)</li>
       </ul>

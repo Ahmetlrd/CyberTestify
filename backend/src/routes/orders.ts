@@ -170,9 +170,13 @@ const createOrderSchema = z.object({
   distanceContractAccepted: z.literal(true, {
     errorMap: () => ({ message: 'Mesafeli Satis Sozlesmesi ve On Bilgilendirme Formu onaylanmalidir.' }),
   }),
-  // Cayma hakki feragati (dijital/aninda ifa).
+  // Cayma hakki feragati (dijital/aninda ifa) — AYRI checkbox.
   withdrawalWaived: z.literal(true, {
     errorMap: () => ({ message: 'Cayma hakki feragat beyani onaylanmalidir.' }),
+  }),
+  // KVKK m.9 — yurt disi (Anthropic/ABD) veri aktarimina ACIK RIZA (ayri checkbox).
+  crossBorderTransfer: z.literal(true, {
+    errorMap: () => ({ message: 'Yurt disi veri aktarimina acik riza onaylanmalidir.' }),
   }),
   // Bolge (fiyat + para birimi). Yoksa tr.
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
@@ -297,6 +301,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     ownershipConfirmedAt: new Date(),
     distanceContractAcceptedAt: new Date(),
     withdrawalWaivedAt: new Date(),
+    crossBorderConsentAt: new Date(), // KVKK m.9 yurt disi (Anthropic/ABD) acik riza zaman damgasi
     consentIp: req.ip ?? null,
     consentVersion: config.legalVersion,
   };
@@ -416,6 +421,7 @@ const bundleOrderSchema = z.object({
   ownershipConfirmed: z.literal(true),
   distanceContractAccepted: z.literal(true),
   withdrawalWaived: z.literal(true),
+  crossBorderTransfer: z.literal(true), // KVKK m.9 yurt disi (Anthropic/ABD) acik riza
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
   activeTestConsent: z.object({ riskAccepted: z.boolean() }).optional(),
   authCredentials: z.object({ username: z.string().min(1).max(200), password: z.string().min(1).max(400) }).optional(),
@@ -480,6 +486,7 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
     ownershipConfirmedAt: new Date(),
     distanceContractAcceptedAt: new Date(),
     withdrawalWaivedAt: new Date(),
+    crossBorderConsentAt: new Date(), // KVKK m.9 yurt disi (Anthropic/ABD) acik riza zaman damgasi
     consentIp: req.ip ?? null,
     consentVersion: config.legalVersion,
   };

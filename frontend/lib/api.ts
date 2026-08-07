@@ -73,7 +73,7 @@ export const api = {
   createOrder: (
     domainId: string,
     packageKey: string,
-    consents: { ownershipConfirmed: boolean; distanceContractAccepted: boolean; withdrawalWaived: boolean },
+    consents: { ownershipConfirmed: boolean; distanceContractAccepted: boolean; withdrawalWaived: boolean; crossBorderTransfer: boolean },
     region = 'tr',
     useCredits = false,
     activeTestConsent?: { riskAccepted: boolean },
@@ -96,7 +96,7 @@ export const api = {
     >(`/orders/bundles?region=${region}`),
   createBundleOrder: (body: {
     domainId: string; bundleKey: string; selectedModules?: string[];
-    ownershipConfirmed: boolean; distanceContractAccepted: boolean; withdrawalWaived: boolean;
+    ownershipConfirmed: boolean; distanceContractAccepted: boolean; withdrawalWaived: boolean; crossBorderTransfer: boolean;
     region?: string; activeTestConsent?: { riskAccepted: boolean };
     authCredentials?: { username: string; password: string }; promoCode?: string;
   }) =>

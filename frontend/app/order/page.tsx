@@ -60,9 +60,11 @@ export default function OrderPage() {
   // checkbox'i: (1) On Bilgilendirme+Mesafeli+Iptal/Iade, (2) KVKK/Gizlilik.
   const [authConsent, setAuthConsent] = useState(false);
   const [contractConsent, setContractConsent] = useState(false); // On Bilgi + Mesafeli + Iptal/Iade
+  const [withdrawalConsent, setWithdrawalConsent] = useState(false); // AYRI: cayma hakki feragati
+  const [crossBorderConsent, setCrossBorderConsent] = useState(false); // AYRI: KVKK m.9 yurt disi acik riza
   const [kvkkConsent, setKvkkConsent] = useState(false); // Gizlilik + KVKK Aydinlatma
   const [showContract, setShowContract] = useState(false);
-  const allConsents = authConsent && contractConsent && kvkkConsent;
+  const allConsents = authConsent && contractConsent && withdrawalConsent && crossBorderConsent && kvkkConsent;
 
   // Düzenli (periyodik) tarama seçeneği
   const [recurring, setRecurring] = useState(false);
@@ -134,7 +136,7 @@ export default function OrderPage() {
   async function handleStart() {
     if (!domainId || busy) return;
     if (!selected) return setError('Lütfen bir paket seçin.');
-    if (!allConsents) return setError('Devam etmek için üç onayın tümünü işaretlemelisiniz.');
+    if (!allConsents) return setError('Devam etmek için onayların tümünü işaretlemelisiniz.');
     if (isActiveLight && (recurring || startMode === 'later')) return setError('Aktif-test paketleri zamanlanamaz; tek seferlik ve hemen çalıştırılır.');
     if (!activeConsentOk) return setError('Aktif test için risk kabul kutusunu işaretlemelisiniz.');
     // İleri tarih seçildiyse geçerli ve gelecekte olmalı.
@@ -170,7 +172,8 @@ export default function OrderPage() {
         {
           ownershipConfirmed: authConsent,
           distanceContractAccepted: contractConsent,
-          withdrawalWaived: contractConsent, // birlesik odeme-onay checkbox'i cayma feragatini de kapsar
+          withdrawalWaived: withdrawalConsent, // AYRI cayma feragati checkbox'i
+          crossBorderTransfer: crossBorderConsent, // KVKK m.9 yurt disi acik riza checkbox'i
         },
         region,
         payWithCredits,
@@ -197,7 +200,7 @@ export default function OrderPage() {
 
   async function handleBundleStart() {
     if (!domainId || busy || !selectedBundle) return;
-    if (!allConsents) return setError('Devam etmek için üç onayın tümünü işaretlemelisiniz.');
+    if (!allConsents) return setError('Devam etmek için onayların tümünü işaretlemelisiniz.');
     const isAL = selectedBundle.category === 'active-light';
     if (isAL && !atRisk) return setError('Aktif test için risk kabul kutusunu işaretlemelisiniz.');
     const needsAuth = selectedBundle.members?.some((m: any) => m.key === 'authenticated_scan');
@@ -212,7 +215,8 @@ export default function OrderPage() {
         selectedModules: selectedBundle.selectable ? bundleModules : undefined,
         ownershipConfirmed: authConsent,
         distanceContractAccepted: contractConsent,
-        withdrawalWaived: contractConsent,
+        withdrawalWaived: withdrawalConsent, // AYRI cayma feragati
+        crossBorderTransfer: crossBorderConsent, // KVKK m.9 yurt disi acik riza
         region,
         activeTestConsent: isAL ? { riskAccepted: atRisk } : undefined,
         authCredentials: needsAuth ? { username: authUser.trim(), password: authPass } : undefined,
@@ -255,8 +259,17 @@ export default function OrderPage() {
         <Link href="/legal/on-bilgilendirme" target="_blank" className="font-semibold text-accent-600 underline">Ön Bilgilendirme</Link>,{' '}
         <Link href="/legal/mesafeli-satis" target="_blank" className="font-semibold text-accent-600 underline">Mesafeli Satış</Link> ve{' '}
         <Link href="/legal/iptal-iade" target="_blank" className="font-semibold text-accent-600 underline">İptal/İade</Link>{' '}
-        koşullarını kabul ediyorum; hizmet <strong>anında ifa</strong> edildiğinden{' '}
-        <strong>cayma hakkımdan feragat</strong> ediyorum.
+        koşullarını okudum, kabul ediyorum.
+      </>,
+    ],
+    [
+      // AYRI, spesifik cayma hakki feragati onayi (sozlesme onayindan bagimsiz — Mesafeli
+      // Sozlesmeler Yon. m.15/ğ; iptal-iade metniyle uyumlu).
+      withdrawalConsent,
+      setWithdrawalConsent,
+      <>
+        Hizmetin cayma süresi dolmadan, <strong>onayımla derhal başlatılmasını</strong> istiyorum ve
+        bu durumda <strong>cayma hakkımı kaybedeceğimi</strong> kabul ediyorum.
       </>,
     ],
     [
@@ -272,6 +285,16 @@ export default function OrderPage() {
           KVKK Aydınlatma Metni
         </Link>{' '}
         kapsamında işlenmesini kabul ediyorum.
+      </>,
+    ],
+    [
+      // KVKK m.9 — yurt disi (Anthropic/ABD) veri aktarimi ACIK RIZA (ayri, bagimsiz checkbox).
+      crossBorderConsent,
+      setCrossBorderConsent,
+      <>
+        Tarama komutlarımın işlenmesi amacıyla kişisel verilerimin{' '}
+        <strong>yurt dışına (Anthropic, PBC — ABD)</strong> aktarılmasına{' '}
+        <strong>KVKK m. 9 kapsamında açıkça rıza</strong> gösteriyorum.
       </>,
     ],
   ];
