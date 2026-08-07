@@ -3,8 +3,9 @@ import type { MetadataRoute } from 'next';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const SITE = 'https://cybertestify.com';
 
-// Sitemap saatlik yenilenir; yeni yayinlanan blog makaleleri DB'den okunarak OTOMATIK eklenir.
-export const revalidate = 3600;
+// Sitemap 15 dk'da bir yenilenir; yeni yayinlanan blog makaleleri DB'den okunarak OTOMATIK
+// eklenir (gunde 1 yayin icin ziyadesiyle yeterli, redeploy gerekmez).
+export const revalidate = 900;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let posts: Array<{ slug: string; publishedAt: string | null }> = [];
