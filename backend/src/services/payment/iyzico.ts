@@ -204,16 +204,77 @@ export async function initiateBundlePayment(orderIds: string[]): Promise<CreateP
 }
 
 /**
+ * (3) AI COZUM ONERILERI ek-odemesi — bir raporun fix-suggestion'i icin TEK CheckoutForm.
+ * Token + tahsil edilecek tutar Report'a yazilir; callback token ile raporu bulup dogrular ve
+ * fixSuggestionsUnlockedAt set eder. Siparis/tarama akisindan BAGIMSIZ (ayri odeme).
+ */
+export async function initiateFixSuggestionPayment(orderId: string, amountMinor: number): Promise<CreatePaymentResult> {
+  const order = await prisma.order.findUniqueOrThrow({
+    where: { id: orderId },
+    include: { customer: true, package: true, report: { select: { id: true } } },
+  });
+  if (!order.report) throw new Error('Bu siparis icin rapor yok.');
+  if (!config.iyzico.apiKey || !config.iyzico.secretKey) throw new Error('Odeme yapilandirilmamis.');
+
+  const priceStr = (amountMinor / 100).toFixed(2);
+  const groupId = crypto.randomUUID();
+  const { name, surname } = splitName(order.customer.fullName, order.customer.email);
+  const request: Record<string, unknown> = {
+    locale: Iyzipay.LOCALE.TR,
+    conversationId: groupId,
+    price: priceStr,
+    paidPrice: priceStr,
+    currency: Iyzipay.CURRENCY.TRY,
+    basketId: groupId,
+    paymentGroup: Iyzipay.PAYMENT_GROUP.PRODUCT,
+    callbackUrl: `${config.publicApiUrl}/payments/iyzico/callback`,
+    enabledInstallments: [1],
+    buyer: {
+      id: order.customer.id, name, surname, email: order.customer.email,
+      identityNumber: '11111111111', registrationAddress: 'CyberTestify — dijital hizmet',
+      ip: '85.34.78.112', city: 'Istanbul', country: 'Turkey',
+    },
+    billingAddress: { contactName: `${name} ${surname}`, city: 'Istanbul', country: 'Turkey', address: 'CyberTestify — dijital hizmet (fatura e-posta ile iletilir)' },
+    basketItems: [{ id: `fix-${order.packageId}`, name: `AI Çözüm Önerileri — ${order.package.displayName}`, category1: 'Guvenlik Hizmeti', itemType: Iyzipay.BASKET_ITEM_TYPE.VIRTUAL, price: priceStr }],
+  };
+  const result = await initializeCheckoutForm(client(), request);
+  if (result?.status !== 'success' || !result?.paymentPageUrl) {
+    const msg = result?.errorMessage || 'iyzico CheckoutForm baslatilamadi (fix).';
+    console.error(`[iyzico] fix-suggestion initialize hatasi (order ${orderId}):`, result?.errorCode, msg);
+    throw new Error(msg);
+  }
+  // token + tutari rapora yaz — callback token ile bulup dogrular.
+  await prisma.report.update({ where: { id: order.report.id }, data: { fixSuggestionsPaymentRef: result.token, fixSuggestionsAmountMinor: amountMinor } });
+  return { paymentPageUrl: result.paymentPageUrl, conversationId: groupId };
+}
+
+/**
  * Callback'te iyzico'dan gelen token'i DOGRULAR (retrieve). Basari + tutar eslesirse
  * siparis(ler)i finalize eder (paid + tarama). Musteriden gelen "basarili" bilgisine ASLA
- * guvenmeyiz — iyzico'ya sunucu-taraf sorariz (oynanma korumasi). TEKIL + BUNDLE birlesik:
- * token'a (paymentRef) sahip TUM order'lar finalize edilir (tekil=1, bundle=N).
+ * guvenmeyiz — iyzico'ya sunucu-taraf sorariz (oynanma korumasi). TEKIL + BUNDLE + FIX birlesik.
  */
 export async function handleIyzicoCallback(token: string): Promise<{ ok: boolean; orderId?: string; error?: string }> {
   if (!token) return { ok: false, error: 'token yok' };
   const result = await retrieveCheckoutForm(client(), { locale: Iyzipay.LOCALE.TR, token });
   if (result?.status !== 'success' || result?.paymentStatus !== 'SUCCESS') {
     return { ok: false, orderId: result?.basketId, error: result?.errorMessage || result?.paymentStatus || 'odeme basarisiz' };
+  }
+
+  // (3) AI Cozum Onerileri ek-odemesi mi? token'a sahip rapor varsa: tutari dogrula + UNLOCK.
+  const fixReport = await prisma.report.findFirst({ where: { fixSuggestionsPaymentRef: token } });
+  if (fixReport) {
+    const toMinor = (v: unknown) => Math.round(Number(v) * 100);
+    const expected = fixReport.fixSuggestionsAmountMinor ?? -1;
+    const paidMinor = toMinor(result.paidPrice);
+    const priceMinor = toMinor(result.price);
+    const ok = (Number.isFinite(paidMinor) && Math.abs(paidMinor - expected) <= 1) || (Number.isFinite(priceMinor) && Math.abs(priceMinor - expected) <= 1);
+    if (!ok) {
+      console.error(`[iyzico] fix tutar uyusmazligi report ${fixReport.id}: beklenen ${expected}, gelen ${result.paidPrice}/${result.price}`);
+      return { ok: false, orderId: fixReport.orderId, error: 'tutar uyusmazligi' };
+    }
+    await prisma.report.update({ where: { id: fixReport.id }, data: { fixSuggestionsUnlockedAt: fixReport.fixSuggestionsUnlockedAt ?? new Date() } });
+    console.log(`[iyzico] AI Cozum Onerileri unlock (order ${fixReport.orderId})`);
+    return { ok: true, orderId: fixReport.orderId };
   }
 
   // token'a sahip TUM order'lar. initiatePayment (tekil) ve initiateBundlePayment (N) token'i

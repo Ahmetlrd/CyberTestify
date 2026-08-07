@@ -6,6 +6,9 @@ import { decryptReport } from '../services/crypto.js';
 import { renderReportPdf } from '../services/pdf.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
 import { requireAuth } from '../middleware/auth.js';
+import { getPackageDef, fixSuggestionPrice } from '../services/scanPackages.js';
+import { evaluatePromo } from '../services/promo.js';
+import { initiateFixSuggestionPayment } from '../services/payment/iyzico.js';
 
 export const reportsRouter = Router();
 
@@ -90,25 +93,52 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
 // (ana checkout da /pay placeholder'ina duser) — bu modda test/demo icin unlock'a izin
 // verilir. Anahtar girilince otomatik olarak gercek-odeme dalina gecer (TEK kontrol, ana
 // odeme akisiyla ayni "anahtar var mi" sinyali).
+const unlockSchema = z.object({ promoCode: z.string().trim().max(64).optional() });
 reportsRouter.post('/:orderId/fix-suggestions/unlock', requireAuth, async (req, res) => {
+  const parsed = unlockSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: 'Geçersiz istek.' });
+
   const report = await prisma.report.findFirstOrThrow({
     where: { orderId: req.params.orderId, order: { customerId: req.customerId! } },
+    include: { order: { select: { package: { select: { key: true } }, currency: true } } },
   });
   if (!report.fixSuggestions) {
     return res.status(404).json({ error: 'Bu rapor icin cozum onerisi uretilmedi.' });
   }
-  const paymentLive = !!config.iyzico.apiKey && !!config.iyzico.secretKey;
-  if (paymentLive) {
-    // TODO(odeme): gercek iyzico ek-odeme akisi burada baslatilmali; onay webhook'unda
-    // fixSuggestionsUnlockedAt set edilmeli. Anahtar var ama ek-odeme akisi henuz baglanmadi.
-    return res.status(501).json({ error: 'Ek-ödeme entegrasyonu henüz aktif değil.' });
+  if (report.fixSuggestionsUnlockedAt) {
+    return res.json({ ok: true, unlockedAt: report.fixSuggestionsUnlockedAt }); // zaten acik
   }
-  // SANDBOX/placeholder modu (gercek anahtar yok): odeme ALMADAN unlock'a izin ver (test/demo).
-  const updated = await prisma.report.update({
-    where: { id: report.id },
-    data: { fixSuggestionsUnlockedAt: report.fixSuggestionsUnlockedAt ?? new Date() },
-  });
-  res.json({ ok: true, unlockedAt: updated.fixSuggestionsUnlockedAt });
+
+  // Fiyat + promo (CYBER-TEST-2026 gibi). %100 -> odeme YOK, dogrudan ac. Aksi halde iyzico.
+  const pkgDef = getPackageDef(report.order.package.key as Parameters<typeof getPackageDef>[0]);
+  const listPrice = fixSuggestionPrice(pkgDef);
+  let amount = listPrice;
+  if (parsed.data.promoCode) {
+    const p = await evaluatePromo(parsed.data.promoCode, listPrice);
+    if (!p.valid) return res.status(400).json({ error: p.error ?? 'Promosyon kodu geçersiz.' });
+    amount = p.finalAmountMinorUnit ?? listPrice;
+  }
+
+  const paymentLive = !!config.iyzico.apiKey && !!config.iyzico.secretKey;
+  const freeByPromo = !!parsed.data.promoCode && amount === 0;
+
+  // SANDBOX (anahtar yok) VEYA %100 promo -> odeme ALMADAN ac.
+  if (!paymentLive || freeByPromo) {
+    const updated = await prisma.report.update({
+      where: { id: report.id },
+      data: { fixSuggestionsUnlockedAt: new Date() },
+    });
+    return res.json({ ok: true, unlockedAt: updated.fixSuggestionsUnlockedAt });
+  }
+
+  // CANLI + tutar>0 -> gercek iyzico ek-odeme; frontend paymentPageUrl'e yonlenir, callback acar.
+  try {
+    const payment = await initiateFixSuggestionPayment(req.params.orderId, amount);
+    return res.json({ paymentPageUrl: payment.paymentPageUrl });
+  } catch (err: any) {
+    console.error(`[fix-unlock] odeme baslatilamadi (order ${req.params.orderId}):`, err?.message ?? err);
+    return res.status(503).json({ error: 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin.' });
+  }
 });
 
 // Cozum onerilerini indir — YALNIZCA unlock edilmisse + erisim sifresiyle.

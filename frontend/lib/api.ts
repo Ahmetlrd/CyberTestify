@@ -171,8 +171,12 @@ export const api = {
     return res.blob();
   },
   // (3) AI Cozum Onerileri eklentisi: satin al (unlock) + indir.
-  unlockFixSuggestions: (orderId: string) =>
-    request<{ ok: boolean; unlockedAt: string }>(`/reports/${orderId}/fix-suggestions/unlock`, { method: 'POST' }),
+  // promoCode verilirse indirim; %100 -> dogrudan acilir (unlockedAt), aksi halde iyzico paymentPageUrl doner.
+  unlockFixSuggestions: (orderId: string, promoCode?: string) =>
+    request<{ ok?: boolean; unlockedAt?: string; paymentPageUrl?: string }>(`/reports/${orderId}/fix-suggestions/unlock`, {
+      method: 'POST',
+      body: JSON.stringify(promoCode ? { promoCode } : {}),
+    }),
   downloadFixSuggestions: async (orderId: string, accessSecret: string) => {
     const res = await fetch(`${API_URL}/reports/${orderId}/fix-suggestions/download`, {
       method: 'POST',

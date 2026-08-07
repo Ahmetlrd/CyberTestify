@@ -331,6 +331,10 @@ model Report {
   fixSuggestionsSalt    Bytes?
   // Odeme onayi (mock/sandbox). null = kilitli. Dolu = eklenti satin alindi.
   fixSuggestionsUnlockedAt DateTime?
+  // AI Cozum Onerileri ek-odemesi (iyzico): baslatilan checkout token'i + tahsil edilecek tutar.
+  // Callback bu token ile raporu bulur, tutari dogrular ve fixSuggestionsUnlockedAt set eder.
+  fixSuggestionsPaymentRef String?
+  fixSuggestionsAmountMinor Int?
 }
 
 // --- Ic yonetim paneli (admin) — MUSTERI sisteminden TAMAMEN AYRI --------------

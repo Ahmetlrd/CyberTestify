@@ -38,6 +38,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const [accessSecret, setAccessSecret] = useState('');
   const [unlocked, setUnlocked] = useState(false);
   const [busyFix, setBusyFix] = useState(false);
+  const [fixPromo, setFixPromo] = useState(''); // AI Cozum Onerileri promosyon kodu
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -86,12 +87,17 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
     }
   }
 
-  // (3) AI Cozum Onerileri: satin al (unlock) -> siparisi yenile.
+  // (3) AI Cozum Onerileri: satin al. iyzico paymentPageUrl donerse ORAYA yonlen; %100 promo/
+  // sandbox ise dogrudan acilir -> siparisi yenile.
   async function handleUnlockFix() {
     setBusyFix(true);
     setError(null);
     try {
-      await api.unlockFixSuggestions(params.orderId);
+      const res = await api.unlockFixSuggestions(params.orderId, fixPromo.trim() || undefined);
+      if (res.paymentPageUrl) {
+        window.location.href = res.paymentPageUrl; // gercek iyzico ek-odeme
+        return;
+      }
       const o = await api.getOrder(params.orderId);
       setOrder(o);
     } catch (err: any) {
@@ -295,10 +301,21 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
                     )}{' '}
                     karşılığında açılır.
                   </div>
+                  <div className="mt-3">
+                    <label className="text-xs font-medium text-ink-muted">Promosyon kodu (opsiyonel)</label>
+                    <input
+                      value={fixPromo}
+                      onChange={(e) => setFixPromo(e.target.value)}
+                      placeholder="Kodunuz"
+                      className="field mt-1 uppercase"
+                    />
+                  </div>
                   <button onClick={handleUnlockFix} disabled={busyFix} className="btn-primary mt-3 disabled:opacity-60">
                     {busyFix ? 'İşleniyor…' : 'Satın al ve aç'}
                   </button>
-                  <p className="mt-2 text-xs text-ink-muted">Ödeme şu an sandbox/test modundadır.</p>
+                  <p className="mt-2 text-xs text-ink-muted">
+                    Güvenli ödeme iyzico ile alınır. Promosyon kodu %100 ise ödeme adımı atlanır.
+                  </p>
                 </>
               )}
             </div>
