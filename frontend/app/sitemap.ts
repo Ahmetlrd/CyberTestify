@@ -17,12 +17,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   const now = new Date();
+  // Yalniz INDEKSLENEBILIR public icerik (login/register robots'ta Disallow — sitemap'te YOK).
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: `${SITE}/tr`, lastModified: now, changeFrequency: 'weekly', priority: 1 },
     { url: `${SITE}/tr/packages`, lastModified: now, changeFrequency: 'weekly', priority: 0.9 },
     { url: `${SITE}/blog`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
-    { url: `${SITE}/login`, lastModified: now, changeFrequency: 'monthly', priority: 0.3 },
-    { url: `${SITE}/register`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
+    { url: `${SITE}/hakkimizda`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${SITE}/iletisim`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
   ];
 
   const blogRoutes: MetadataRoute.Sitemap = posts.map((p) => ({

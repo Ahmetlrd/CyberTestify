@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
+import { JsonLd } from '../../../components/JsonLd';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const SITE = 'https://cybertestify.com';
@@ -45,8 +46,25 @@ function fmtDate(d: string | null): string {
 export default async function BlogPostPage({ params }: { params: { slug: string } }) {
   const post = await getPost(params.slug);
   if (!post) notFound();
+  const url = `${SITE}/blog/${post.slug}`;
+  const articleLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: post.title,
+    description: post.description,
+    ...(post.publishedAt ? { datePublished: post.publishedAt, dateModified: post.publishedAt } : {}),
+    author: { '@type': 'Organization', name: 'CyberTestify Ekibi', url: SITE },
+    publisher: {
+      '@type': 'Organization',
+      name: 'CyberTestify',
+      logo: { '@type': 'ImageObject', url: `${SITE}/logo.svg` },
+    },
+    mainEntityOfPage: { '@type': 'WebPage', '@id': url },
+    url,
+  };
   return (
     <main className="container-page max-w-3xl py-14">
+      <JsonLd data={articleLd} />
       <Link href="/blog" className="text-sm font-semibold text-accent-600 hover:underline">← Tüm yazılar</Link>
       <article className="mt-6">
         <h1 className="text-3xl font-extrabold text-brand sm:text-4xl">{post.title}</h1>

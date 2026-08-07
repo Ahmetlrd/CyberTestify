@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 import { getDict, formatMoney } from '../../../config/i18n';
+import { JsonLd } from '../../../components/JsonLd';
 
 type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean; bundleOnly?: boolean; bundleName?: string | null };
 type Bundle = {
@@ -63,8 +64,36 @@ export default async function PackagesPage({ params }: { params: { region: strin
   // Faz 5b'ye kadar fiyatlar yalnızca TRY tabanlı; TR dışı bölgelerde gösterge niteliğinde.
   const indicative = region.currency !== 'TRY';
 
+  // (JSON-LD) Hizmetler — Service ItemList. Fiyat "baslangic" olarak esnek ifade edilir
+  // (Offer priceSpecification.minPrice + "baslangic fiyati" aciklamasi; kesin taahhut degil).
+  const SITE = 'https://cybertestify.com';
+  const svc = (name: string, description: string, minMinor: number) => ({
+    '@type': 'Service',
+    name,
+    serviceType: 'Web güvenliği ön-değerlendirme',
+    description,
+    provider: { '@type': 'Organization', name: 'CyberTestify', url: SITE },
+    areaServed: 'TR',
+    offers: {
+      '@type': 'Offer',
+      priceCurrency: region.currency,
+      priceSpecification: { '@type': 'PriceSpecification', minPrice: (minMinor / 100).toFixed(2), priceCurrency: region.currency, description: 'Başlangıç fiyatı' },
+      url: `${SITE}/${region.code}/packages`,
+    },
+  });
+  const serviceItems = [
+    ...(basit && !basit.comingSoon ? [svc(basit.displayName, basit.description, basit.priceMinorUnit)] : []),
+    ...bundles.filter((b: any) => !b.comingSoon).map((b: any) => svc(b.displayName, b.description, b.amountMinorUnit)),
+  ];
+  const servicesLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: serviceItems.map((item, i) => ({ '@type': 'ListItem', position: i + 1, item })),
+  };
+
   return (
     <>
+      {serviceItems.length > 0 && <JsonLd data={servicesLd} />}
       <section className="bg-brand-50/60 py-16">
         <div className="container-page text-center">
           <p className="eyebrow">{d.eyebrow}</p>

@@ -97,6 +97,10 @@ services:
         NEXT_PUBLIC_API_URL: "https://api.cybertestify.com"
     container_name: cybertestify-frontend
     restart: always
+    # SSR meta icin YALNIZ bu degisken .env'den gecirilir (secret sizmasin diye env_file DEGIL).
+    # Bossa layout meta tag'i render etmez. Degistiginde `docker compose up -d frontend` yeter.
+    environment:
+      - GOOGLE_SITE_VERIFICATION=${GOOGLE_SITE_VERIFICATION:-}
     networks: [cybertestify]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
