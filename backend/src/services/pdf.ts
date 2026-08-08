@@ -282,6 +282,14 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     // Deterministik (kod-yazimi) paketler GENEL DEĞERLENDİRME'ye acik "Risk Seviyesi: X" yazar;
     // assessBasit once onu okur -> rozet metinle GARANTI tutarli. Digerlerinde severity-tabanli.
     const risk = DETERMINISTIC_PDF_PKGS.has(meta.packageKey ?? '') ? assessBasit(effectiveMd, t) : assessRisk(effectiveMd, meta.locale);
+    // (bundle_surface) Ust kutu cumlesi = GENEL DEĞERLENDİRME govde cumlesi (worst-case ALANA
+    // ozgu, koddan uretilen) — sabit/gelisiguzel "ör. sertifika/hostname" ornegi YERINE gercek
+    // bulgu. Boylece kutu <-> YÖNETİCİ ÖZETİ/GENEL DEĞERLENDİRME HER ZAMAN tutarli. (Yalniz
+    // bundle_surface; basit_tarama ve digerleri DEGISMEZ.)
+    if (meta.packageKey === 'bundle_surface') {
+      const g = effectiveMd.match(/##\s*GENEL DEĞERLENDİRME\s*\n+\*\*Risk Seviyesi:[^\n]*\*\*\s*\n+([^\n]+)/);
+      if (g) risk.sentence = g[1].trim().replace(/\*\*/g, ''); // kutu duz metin — markdown ** temizle
+    }
     assessBox = `<div class="assess assess-${risk.level}">
     <div class="assess-head"><span class="assess-title">${escapeHtml(t.assessTitle)}</span>
       <span class="risk-badge risk-${risk.level}">${escapeHtml(risk.label)}</span></div>

@@ -507,12 +507,25 @@ export function combineSurfaceAreas(results: Array<{ findings: string; fixText: 
   if (results.every((r) => r === null)) return null; // hicbir alan veri toplayamadi -> fallback
 
   const levels: Array<Level | null> = results.map((r) => (r ? extractLevel(r.findings) : null));
-  const known = levels.filter((l): l is Level => l !== null);
-  const worst: Level = known.length ? known.reduce((a, b) => (levelRank(b) > levelRank(a) ? b : a), 'low') : 'low';
+  // WORST-CASE ALAN: en yuksek seviyeli alanin indexini bul — genel rozet + kutu/genel cumle
+  // O ALANIN GERCEK bulgusuna dayanir (sabit/gelisiguzel ornek YOK). Esitlikte ilk alan (stable
+  // sort). Fonksiyonel hesap: TS closure-mutasyonunu daraltamadigi icin.
+  const ranked = levels
+    .map((lv, i) => ({ lv, i }))
+    .filter((x): x is { lv: Level; i: number } => x.lv !== null)
+    .sort((a, b) => levelRank(b.lv) - levelRank(a.lv));
+  const worstIdx = ranked.length ? ranked[0].i : -1;
+  const worst: Level = worstIdx >= 0 ? (levels[worstIdx] as Level) : 'low';
+  const worstTitle = worstIdx >= 0 ? BUNDLE_AREAS[worstIdx].title : '';
+  const worstHl = worstIdx >= 0 && results[worstIdx] ? areaHeadline(results[worstIdx]!.findings) : '';
 
   // --- YÖNETİCİ ÖZETİ (TEK, birlesik) ---
   const summary: string[] = [];
-  summary.push(`- **Genel risk seviyesi: ${RISK_WORD[worst]}** — dış yüzey yapılandırmanız 5 alanda incelendi; en yüksek risk seviyesi ${RISK_WORD[worst]}.`);
+  summary.push(
+    worst === 'low'
+      ? `- **Genel risk seviyesi: Düşük** — dış yüzey yapılandırmanız 5 alanda incelendi; belirgin bir sorun öne çıkmadı.`
+      : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — 5 alan incelendi; en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`,
+  );
   BUNDLE_AREAS.forEach((a, i) => {
     const r = results[i];
     const lv = levels[i];
@@ -522,11 +535,12 @@ export function combineSurfaceAreas(results: Array<{ findings: string; fixText: 
   });
   summary.push('- **Önerilen ilk adım:** En yüksek riskli alandan başlayın; her bulgu için adım adım hazır komutlar "AI Çözüm Önerileri" bölümünde sunulur.');
 
+  // GENEL DEĞERLENDİRME cumlesi worst-case ALANA ozgu (pdf.ts bunu ust kutuda da kullanir).
   const genelSentence =
     worst === 'high'
-      ? 'Dış yüzey yapılandırmanızda öncelikli olarak ele alınması gereken en az bir yüksek riskli alan tespit edildi. Aşağıda her alan ayrı ayrı raporlanmıştır.'
+      ? `En yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`
       : worst === 'medium'
-        ? 'Dış yüzey yapılandırmanızda kısa vadede giderilmesi önerilen orta seviyeli eksikler var; kritik/acil bir sorun öne çıkmadı. Aşağıda her alan ayrı ayrı raporlanmıştır.'
+        ? `Öne çıkan alan **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; kısa vadede giderilmesi önerilir. Kritik/acil bir sorun öne çıkmadı. Aşağıda her alan ayrı ayrı raporlanmıştır.`
         : 'Dış yüzey yapılandırmanız genel olarak sağlam; rapor yalnızca küçük iyileştirme fırsatlarını listeler. Aşağıda her alan ayrı ayrı raporlanmıştır.';
 
   // --- Alan bolumleri (exec/genel cikarilmis, ## -> ### indirilmis) ---
