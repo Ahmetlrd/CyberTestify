@@ -352,61 +352,59 @@ export const SCAN_PACKAGES: ScanPackageDef[] = [
     modelProvider: PROVIDER,
     maxToolCalls: 25,
     promptTemplate: (host) => `This is a FAST, PASSIVE and SHORT pre-check package (Basit Tarama) — NOT a deep scan.
-GOAL: Produce a clean, professional, customer-facing security pre-check report in TURKISH for the single homepage of the target below. The report must look like it was written by a senior security analyst in one sitting.
+GOAL: Produce a clean, professional, customer-facing security pre-check report in TURKISH for the single homepage of the target below. Every sentence must read as the FINAL finding of a senior security analyst writing to a client — NEVER as a description of what you did or how the scan ran.
+
 STRICT SCOPE (do not expand):
 1. HTTP security headers on the homepage only (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection, Content-Type)
 2. TLS certificate validity, expiry, chain, protocol version and cipher
 3. Server / CDN / technology fingerprint visible from response headers and HTML (passive only)
 4. Very light information disclosure visible on the homepage (e.g. obvious API endpoints in preconnect/link tags)
-FORBIDDEN (any violation = immediate termination, no report):
-- Any non-GET/HEAD/OPTIONS request
-- Exploitation, injection, authentication, brute-force, directory forcing
-- Installing any tool or package
-- Writing or executing scripts (.sh/.py/.js/.bash)
-- Re-fetching the same URL more than once
-- Building draft/intermediate files via heredoc (cat > file << EOF or similar)
+
+FORBIDDEN ACTIONS:
+- Any non-GET/HEAD/OPTIONS request; exploitation, injection, authentication, brute-force, directory forcing
+- Installing tools; writing or executing scripts (.sh/.py/.js/.bash); re-fetching the same URL; heredoc/draft files
 - Accessing any host other than the given target
 - Claiming compliance with any standard (OWASP, NIST, KVKK, PCI, ISO, etc.)
-TOOL BUDGET: Maximum 25 tool calls. After ~12 calls STOP all new discovery and write the final report. Prefer 1-command-per-check (curl, openssl, dig). Never write scripts.
-HARD RULE — NEVER SUBMIT A PARTIAL REPORT: The final report MUST be written as ONE complete, uninterrupted piece of output, from "YÖNETİCİ ÖZETİ" through the very end (including the ===FIX_SUGGESTIONS=== line). If you sense you are close to the tool-call budget or output-length limit, STOP gathering new evidence immediately and write a SHORTER but still 100% COMPLETE report using only what you already have — every mandatory section must be present, even if brief. Never end your output mid-sentence, mid-table, or mid-section. A short-but-complete report is always correct; a long-but-truncated report is always wrong.
-OUTPUT RULES (HIGHEST PRIORITY):
-- FINALIZE PROPERLY: the report is captured only when you write it as the RESULT/completion of your task step. After gathering evidence, you MUST write the COMPLETE final report (from "YÖNETİCİ ÖZETİ" through the ===FIX_SUGGESTIONS=== line) as your completion output. Do NOT just gather evidence and then stop or go idle — a scan that ends without a written final report is a FAILURE. Do NOT defer the report or fix-suggestions to a separate later subtask; write everything now, in one piece.
-- Language: FULLY TURKISH (bulgular, özet, risk açıklamaları).
-- No internal process language ("Subtask", "TASK COMPLETED", "Next step", tool logs, etc.).
-- No false positives. If evidence is weak or ambiguous, mark as "İnceleme gerekli" or omit.
-- Risk rating must be honest and consistent with findings:
-  - Kritik / Yüksek → missing critical protections that enable easy attacks (e.g. no CSP + no X-Frame-Options while interactive content exists)
-  - Orta → several important headers missing or certificate expiring soon
-  - Düşük → only minor or informational issues
-  Never output "Düşük Risk" when multiple high-impact headers are missing.
-MANDATORY REPORT STRUCTURE (exactly in this order):
-1. YÖNETİCİ ÖZETİ (3-5 short bullets)
-   - Overall risk level + one-sentence justification
-   - Most important 2-3 findings
-   - One clear next-action recommendation
-2. GENEL DEĞERLENDİRME
-   - Risk level badge text (Düşük / Orta / Yüksek)
-   - 1-2 sentence summary
-3. HTTP GÜVENLİK BAŞLIKLARI
-   - Table or clean list: Header | Durum | Kısa açıklama
-   - Only state what was actually observed
-4. TLS SERTİFİKA DURUMU
-   - Validity, days remaining, hostname match, issuer, TLS version, cipher
-   - Clear warning if expiry < 45 days
-5. SUNUCU / TEKNOLOJİ İMZASI
-   - CDN, framework, analytics, obvious passive fingerprints
-   - Only what is visible without active probing
-6. TESPİT EDİLEN RİSKLER (grouped by severity)
-   - Yüksek / Orta / Bilgilendirme
-   - Each item: short title + 1-2 sentence impact explanation
-   - No speculative claims
-7. ===FIX_SUGGESTIONS===
-   - This section is a PAID add-on ("AI Çözüm Önerileri").
-   - CRITICAL MARKER RULE: Write the marker ===FIX_SUGGESTIONS=== EXACTLY ONCE, on its OWN line, immediately before this section — it is an internal split control token, NOT visible customer text. NEVER write this marker anywhere else and NEVER reference it inline in prose (do NOT write things like "see the fix marker"); if you must refer to this section in the text above, call it "AI Çözüm Önerileri bölümü".
-   - If the order includes the paid add-on flag → write concrete, safe, actionable remediation for each important finding (config examples allowed, never exploit code).
-   - If the paid flag is NOT present → output exactly this line and nothing more under it:
-     Bu bölüm kilitli — "AI Çözüm Önerileri" eklentisi satın alınınca rapora eklenir.
-Keep the whole report SHORT and scannable (target: 1.5–2.5 pages when rendered). Prefer clarity over volume.
+
+FORBIDDEN WRITING STYLE (this is what makes the report look broken/unprofessional — obey strictly):
+- NEVER use a section heading that reads like a task or a step. FORBIDDEN heading examples (DO NOT write anything like these): "Anasayfa HTML ve başlık bilgilerini topla", "HTTP güvenlik başlıklarını analiz et", "Sertifikayı kontrol et", "Bilgileri tespit et", "... incele". A heading must be a NOUN phrase naming a report section — NEVER contain an imperative verb such as "topla", "analiz et", "tespit et", "kontrol et", "incele", "hazırla", "çek", "getir".
+- NEVER write process / self-narration / budget-accounting sentences. FORBIDDEN examples (DO NOT write anything like these): "Tüm veriler ... analiz aşaması için hazırlanmıştır.", "İkinci istek yapılmamıştır.", "Tek çağrı kısıtı korunmuştur.", "X. aşama", "adım 2", "tool call", "subtask", "bütçe". The customer must NEVER see how the scan was executed.
+- Write the finding itself, directly. Instead of "Anasayfayı çektim ve şu başlıkları gördüm", state the finding under the correct section.
+
+TOOL BUDGET: Maximum 25 tool calls. Prefer 1-command-per-check (curl, openssl, dig). After gathering evidence, write the COMPLETE final report as your completion output; never stop/idle before the ===FIX_SUGGESTIONS=== section is written.
+
+MANDATORY REPORT STRUCTURE — use these EXACT heading texts, in this exact order, with NO variation, NO extra headings, and NO task-like headings:
+
+## YÖNETİCİ ÖZETİ
+REQUIRED — always the FIRST section, NEVER skip it. 3-5 short bullets: the overall risk level in ONE word (Düşük / Orta / Yüksek), the 2-3 most important findings, and one clear next action.
+
+## GENEL DEĞERLENDİRME
+One risk-level word (Düşük / Orta / Yüksek) + a 1-2 sentence summary.
+
+## HTTP GÜVENLİK BAŞLIKLARI
+MANDATORY FORMAT: this section MUST be a SINGLE Markdown TABLE and nothing else — NO numbered list, NO prose paragraphs. Use EXACTLY these three columns and one row per header:
+| Başlık | Durum | Açıklama |
+|--------|-------|----------|
+| Strict-Transport-Security | Var | ... |
+| Content-Security-Policy | Yok | ... |
+In the "Durum" column write ONLY the single word "Var" or "Yok". Cover: HSTS (Strict-Transport-Security), Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection, Content-Type. Put the short risk note in "Açıklama".
+
+## TLS SERTİFİKA DURUMU
+Validity, days remaining, hostname match, issuer, TLS version, cipher. Clear warning if expiry < 45 days or if the certificate hostname does not match the target.
+
+## SUNUCU / TEKNOLOJİ İMZASI
+CDN, framework, analytics, obvious passive fingerprints — only what is visible without active probing.
+
+## TESPİT EDİLEN RİSKLER
+Grouped by severity: Yüksek / Orta / Bilgilendirme. Each item: short title + 1-2 sentence impact explanation. No speculation, no false positives.
+
+===FIX_SUGGESTIONS===
+- Write the marker ===FIX_SUGGESTIONS=== EXACTLY ONCE, on its OWN line, right here — NEVER anywhere else and NEVER inline in prose. Everything ABOVE this marker (all sections above) is ALWAYS free; everything BELOW it is the PAID "AI Çözüm Önerileri" add-on.
+- A paid add-on flag is provided separately at the end of this prompt. If it is PRESENT → below the marker write concrete, safe, actionable remediation for EACH important finding (config examples allowed, NEVER exploit code). If it is NOT present → write exactly this single line below the marker and nothing else:
+  Bu bölüm kilitli — "AI Çözüm Önerileri" eklentisi satın alınınca rapora eklenir.
+
+RISK CONSISTENCY: the risk word in YÖNETİCİ ÖZETİ and GENEL DEĞERLENDİRME MUST match the findings — never say "Düşük" while listing missing CSP / X-Frame-Options. If evidence is weak, mark "İnceleme gerekli".
+Keep the whole report SHORT and scannable (target: 1.5–2.5 pages). Write it as ONE complete final report.
 Target: ${host}
 `,
   },

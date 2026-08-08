@@ -166,6 +166,48 @@ function stripDelimArtifacts(md: string): string {
     .trim();
 }
 
+// (BASIT GUVENLIK AGI) basit_tarama raporundan SUREC-DILI ve GOREV-ADI kalintilarini temizler.
+// Asil cozum PROMPTTA (ajan bunlari hic yazmamali); bu, ajan yine de uretirse musteriyi koruyan
+// SON-KONTROLdur (bkz kvkk sanitizeKvkkReport benzeri). Iki tur kalinti:
+//  1) GOREV-ADI gibi duran BASLIKLAR: markdown baslik (#..) VEYA kalin (**..**) satiri, imperative
+//     fiil ("topla/analiz et/tespit et/kontrol et/incele/hazirla/cek/getir/belirle/degerlendir/
+//     tara/listele/dogrula") ile BITEN -> bu ajanin ic adim adi; TAMAMEN kaldir. (Dogru kanonik
+//     basliklar — "HTTP GÜVENLİK BAŞLIKLARI" vb. — fiille bitmez, dokunulmaz.)
+//  2) SUREC/BUTCE-MUHASEBESI cumleleri: "hazirlanmistir / istek yapilmamis / kisit korundu /
+//     analiz asamasi / adim N / subtask / tool call / butce / tavan" iceren CUMLELER -> at.
+// Tabloya (| ... |) ve kanonik basliklara (#) DOKUNMAZ. Her temizligi console.warn ile loglar.
+export function sanitizeBasitReport(md: string): string {
+  const VERB_HEADING =
+    /^\s*(?:#{1,6}\s+|\*\*)\s*.*\b(topla|analiz\s*et|tespit\s*et|kontrol\s*et|incele(?:me|yin)?|haz[ıi]rla|[çc]ek(?:me|in)?|getir|belirle|de[ğg]erlendir|tara(?:ma|yin)?|listele|do[ğg]rula)\w*\**\s*:?\s*$/i;
+  const PROC_SENT =
+    /(haz[ıi]rlanm[ıi][şs]|istek\s+yap[ıi]lmam|k[ıi]s[ıi]t[ıi]?\s*(?:korun|sa[ğg]lan)|analiz\s+a[şs]amas|a[şs]amas[ıi]\s+i[çc]in|\bad[ıi]m\s*\d+|subtask|alt[\s-]?g[oö]rev|tool[\s-]?call|arac[\s-]?[çc]a[ğg]r|\bbudget\b|b[üu]t[çc]e|\btavan\b)/i;
+  let dropped = 0;
+
+  // (1) gorev-adi basliklarini SATIR bazinda ele.
+  let lines = md.split('\n').filter((ln) => {
+    if (VERB_HEADING.test(ln)) { dropped++; return false; }
+    return true;
+  });
+
+  // (2) surec/butce cumlelerini CUMLE bazinda ele (tablo/baslik satirlarina dokunma).
+  lines = lines.map((ln) => {
+    const trimmed = ln.trim();
+    if (!trimmed || trimmed.startsWith('|') || trimmed.startsWith('#')) return ln;
+    const sentences = ln.split(/(?<=[.!?])\s+/);
+    const kept = sentences.filter((s) => {
+      if (PROC_SENT.test(s)) { dropped++; return false; }
+      return true;
+    });
+    return kept.join(' ');
+  });
+
+  const out = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  if (dropped > 0) {
+    console.warn(`[report][BASIT-GUARD] ${dropped} surec-dili/gorev-adi kalintisi temizlendi (basit_tarama).`);
+  }
+  return out;
+}
+
 /** Bulgulardan "cozum onerileri" bolumunu (KENDI SATIRINDAKI delimiter sonrasi) ayirir. */
 function splitFixSuggestions(text: string): { findings: string; fixText: string } {
   const m = FIX_DELIM_STANDALONE.exec(text);
@@ -243,6 +285,11 @@ export async function generateAndStoreReport(flowId: string) {
   // durum-ikonu son-kontrolu (bkz sanitizeKvkkReport). Diger paketler DEGISMEZ.
   const isKvkkPkg = flow.order.package.key === 'kvkk_hazirlik';
   if (isKvkkPkg) findings = sanitizeKvkkReport(findings);
+
+  // (BASIT GUVENLIK AGI) yalniz basit_tarama: gorev-adi gibi baslik + surec/butce-muhasebesi
+  // dili son-kontrolu (bkz sanitizeBasitReport). Ajan prompt kurallarina uymasa BILE musteri
+  // temiz rapor gorsun. Diger paketler DEGISMEZ.
+  if (flow.order.package.key === 'basit_tarama') findings = sanitizeBasitReport(findings);
 
   // KENDI TARAFIMIZDA veri minimizasyonu: sizmis yapisal PII'yi (email/telefon/
   // TCKN/kart/IBAN) sifreli DB'ye yazmadan ONCE maskele (ayni mantik PentAGI Go

@@ -41,6 +41,7 @@ const L = {
     fixTitle: 'AI Çözüm Önerileri',
     fixLocked: 'Bu premium bölüm, yukarıda tespit edilen HER bulgu için adım adım düzeltme talimatı ve panoya kopyalanmaya hazır yapılandırma örnekleri (Nginx/sunucu ayarları, güvenlik başlıkları vb.) içerir.',
     fixLockedCta: '🔓 Kilidi açmak için “AI Çözüm Önerileri” eklentisini satın alın.',
+    fixEmpty: 'Bu tarama için ayrıntılı düzeltme önerisi içeriği üretilemedi. “AI Çözüm Önerileri” eklentisi, tespit edilen her bulgu için adım adım düzeltme talimatı ve hazır yapılandırma örnekleri sunar.',
     footerLegal: 'Yapay zeka üretimi pasif tarama raporu — resmi denetim/sertifikasyon değildir. Gizlidir.',
     page: 'Sayfa',
     assessTitle: 'Genel Değerlendirme',
@@ -55,6 +56,7 @@ const L = {
     fixTitle: 'AI Fix Suggestions',
     fixLocked: 'This premium section contains step-by-step remediation for EACH finding above, plus ready-to-paste configuration examples (Nginx/server settings, security headers, etc.).',
     fixLockedCta: '🔓 Purchase the “AI Fix Suggestions” add-on to unlock it.',
+    fixEmpty: 'Detailed remediation content could not be produced for this scan. The “AI Fix Suggestions” add-on provides step-by-step remediation and ready-to-use configuration examples for each finding.',
     footerLegal: 'AI-generated passive scan report — not an official audit/certification. Confidential.',
     page: 'Page',
     assessTitle: 'Overall Assessment',
@@ -88,26 +90,88 @@ function assessRisk(md: string, locale: 'tr' | 'en'): { level: 'high' | 'medium'
   return { level: 'low', label: t.riskLow, sentence: t.assessLow };
 }
 
-// (basit_tarama) Ajanin ACIKCA yazdigi genel risk seviyesini rapordan okur (yeni prompt
-// YÖNETİCİ ÖZETİ + GENEL DEĞERLENDİRME'de "Düşük/Orta/Yüksek/Kritik" yazmayi ZORUNLU kilar) →
-// PDF kutusu rapor metniyle TUTARLI olur. Ilk (bas kisimdaki) acik ifadeyi alir; bulunmazsa
-// severity-tabanli assessRisk'e duser.
-function assessBasit(
+// (basit_tarama) Guvenlik BASLIKLARINI koddan parse edip BAGIMSIZ, deterministik risk
+// seviyesi hesaplar — ajanin metinde yazdigi "Düşük/Orta/Yüksek" ifadesine GUVENMEZ (ajan
+// tutarsiz olabiliyor: ustte "Düşük" deyip altta CSP/X-Frame eksik birakabiliyor). Prompt
+// (madde A.3) HTTP GÜVENLİK BAŞLIKLARI bolumunu ZORUNLU tablo yaptigi icin tablo/satir-ici
+// her iki formattan da baslik durumunu (Var/Yok) okur. Parse edilemezse assessRisk fallback.
+// KOD HESAPLAMASI KAZANIR: rozet + ozet cumlesi bu hesaptan gelir, ajan metninden DEGIL.
+const BASIT_HEADERS: Array<{ key: string; re: RegExp }> = [
+  { key: 'csp', re: /content-security-policy|(?<![a-z-])csp(?![a-z])/i },
+  { key: 'xfo', re: /x-frame-options/i },
+  { key: 'xcto', re: /x-content-type-options/i },
+  { key: 'hsts', re: /strict-transport-security|(?<![a-z-])hsts(?![a-z])/i },
+  { key: 'referrer', re: /referrer-policy/i },
+  { key: 'permissions', re: /permissions-policy|feature-policy/i },
+];
+
+// Bir metin parcasindan baslik durumunu (var/yok) cikarir. Once "Durum: <deger>" (tablo
+// hucresi VEYA satir-ici) ifadesine bakar; yoksa parcanin genelinden yok/var sinyali arar.
+function headerStatusFrom(chunk: string): 'present' | 'absent' | null {
+  const ABSENT = /(yok|eksik|absent|missing|❌|✗|✘|bulunmuyor|bulunma|mevcut de[ğg]il|tan[ıi]ml[ıi] de[ğg]il|ayarlanmam)/i;
+  const PRESENT = /(var\b|mevcut|present|✅|✓|✔|ayarlanm[ıi][şs]|tan[ıi]ml[ıi]\b|set\b)/i;
+  const m = chunk.match(/durum\s*[:：]\s*([^\n|]{0,24})/i);
+  const probe = m ? m[1] : chunk;
+  if (ABSENT.test(probe)) return 'absent';
+  if (PRESENT.test(probe)) return 'present';
+  if (ABSENT.test(chunk)) return 'absent';
+  if (PRESENT.test(chunk)) return 'present';
+  return null;
+}
+
+// Rapordan guvenlik basliklarinin var/yok durumunu okur (tablo satiri VEYA "N. Baslik" +
+// "Durum:" satir-ici). Baslik adini YALNIZ satir/hucre BASINDA arar (aciklama icindeki
+// gecisi — ör. CSP notunda "X-Content-Type-Options eksik" — yanlis eslesmesin).
+function parseBasitHeaders(md: string): { present: Set<string>; absent: Set<string> } {
+  const present = new Set<string>();
+  const absent = new Set<string>();
+  const lines = md.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    // satir basindaki markdown/liste isaretlerini ve tablo hucre ayiracini soy.
+    const lead = lines[i].replace(/^[\s|>*_#-]*(?:\d+[.)]\s*)?[\s*_]*/, '');
+    const hit = BASIT_HEADERS.find((h) => h.re.test(lead.slice(0, 40)));
+    if (!hit || present.has(hit.key) || absent.has(hit.key)) continue;
+    // durum ayni satirda (tablo) VEYA sonraki 2 satirda (satir-ici "Durum:") olabilir.
+    const window = [lines[i], lines[i + 1] ?? '', lines[i + 2] ?? ''].join('\n');
+    const st = headerStatusFrom(window);
+    if (st === 'present') present.add(hit.key);
+    else if (st === 'absent') absent.add(hit.key);
+  }
+  return { present, absent };
+}
+
+export function assessBasit(
   md: string,
   t: { riskHigh: string; riskMedium: string; riskLow: string; assessHigh: string; assessMedium: string; assessLow: string },
 ): { level: 'high' | 'medium' | 'low'; label: string; sentence: string } {
-  const head = md.slice(0, 2200);
-  // "Yüksek Risk" | "Risk seviyesi: Orta" | "Genel risk: Düşük" gibi ACIK ifade (bas kisim).
-  const m = head.match(
-    /[*_"'`]*\s*(kr[iİ]t[iİ]k|y[uü]ksek|orta|d[uü][sş][uü]k)\s*[*_"'`]*\s*risk|risk\s*(?:seviyesi|düzeyi|derecesi)?\s*[:：]?\s*[*_"'`]*\s*(kr[iİ]t[iİ]k|y[uü]ksek|orta|d[uü][sş][uü]k)/i,
-  );
-  if (m) {
-    const kw = (m[1] || m[2] || '').toLocaleLowerCase('tr');
-    if (/kr[iı]t[iı]k|y[uü]ksek/.test(kw)) return { level: 'high', label: t.riskHigh, sentence: t.assessHigh };
-    if (/orta/.test(kw)) return { level: 'medium', label: t.riskMedium, sentence: t.assessMedium };
-    if (/d[uü][sş][uü]k/.test(kw)) return { level: 'low', label: t.riskLow, sentence: t.assessLow };
-  }
-  return assessRisk(md, 'tr');
+  const { present, absent } = parseBasitHeaders(md);
+  // Parse guvenilir degilse (hic baslik taninmadi) -> severity-tabanli fallback.
+  if (present.size + absent.size === 0) return assessRisk(md, 'tr');
+
+  const cspAbsent = absent.has('csp');
+  const xfoAbsent = absent.has('xfo');
+  const critMissing = (cspAbsent ? 1 : 0) + (xfoAbsent ? 1 : 0);
+  const otherAbsent = [...absent].filter((k) => k !== 'csp' && k !== 'xfo').length;
+
+  let level: 'high' | 'medium' | 'low';
+  if (critMissing === 2 && otherAbsent > 2) level = 'high'; // CSP+X-Frame + 3+ baska baslik eksik
+  else if (critMissing >= 1) level = 'medium'; // CSP VEYA X-Frame eksik -> minimum Orta
+  else if (otherAbsent >= 3) level = 'medium'; // kritikler var ama cok sayida onemli eksik
+  else level = 'low'; // yalniz 1-2 onemsiz eksik
+
+  const label = level === 'high' ? t.riskHigh : level === 'medium' ? t.riskMedium : t.riskLow;
+  const NAMES: Record<string, string> = {
+    csp: 'Content-Security-Policy', xfo: 'X-Frame-Options', xcto: 'X-Content-Type-Options',
+    hsts: 'HSTS', referrer: 'Referrer-Policy', permissions: 'Permissions-Policy',
+  };
+  const missingCrit = [cspAbsent ? NAMES.csp : '', xfoAbsent ? NAMES.xfo : ''].filter(Boolean).join(' ve ');
+  const sentence =
+    level === 'high'
+      ? `Birden fazla kritik güvenlik başlığı${missingCrit ? ` (${missingCrit})` : ''} ve ek başlıklar eksik; öncelikli olarak ele alınması önerilir.`
+      : level === 'medium'
+        ? `Önemli güvenlik başlıkları${missingCrit ? ` (${missingCrit})` : ''} eksik; kısa vadede giderilmesi önerilir.`
+        : 'Temel güvenlik başlıkları büyük ölçüde mevcut; rapor yalnızca küçük iyileştirme fırsatlarını listeler.';
+  return { level, label, sentence };
 }
 
 // (KVKK PILOTU) Durum sutununu (Uygun/Dikkat/Eksik) SAYARAK deterministik risk + kontrol
@@ -168,7 +232,7 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 }
 
-function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions): string {
+export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions): string {
   const t = L[meta.locale];
   const dateStr = meta.createdAt.toLocaleDateString(meta.locale === 'tr' ? 'tr-TR' : 'en-GB', {
     year: 'numeric', month: 'long', day: 'numeric',
@@ -229,11 +293,17 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
     bodyHtml += `<div class="extras-section">${md.render(opts.extrasMarkdown)}</div>`;
   }
 
-  // Fix onerileri bolumu (unlock ise ekle; kilitliyse kilit notu; hic yoksa ekleme).
+  // Fix onerileri bolumu — 3 DURUM ve KOD GARANTISI: (1) unlock+icerik -> icerigi goster;
+  // (2) kilitli (icerik var, satin alinmamis) -> upsell kutusu; (3) HIC icerik yok (ajan
+  // ===FIX_SUGGESTIONS=== yazmadi) -> nazik "uretilemedi" notu. Boylece "AI Çözüm Önerileri"
+  // bolumu HER raporda MUTLAKA yer alir, ASLA sessizce kaybolmaz (KVKK haric — onun kendi
+  // "Önerilen Aksiyonlar" akisi var).
   if (opts.fixMarkdown && opts.fixMarkdown.trim()) {
     bodyHtml += `<div class="fix-section"><h2>${escapeHtml(fixTitle)}</h2>${md.render(opts.fixMarkdown)}</div>`;
   } else if (opts.fixLocked) {
     bodyHtml += `<div class="fix-locked"><h2>🔒 ${escapeHtml(fixTitle)}</h2><p>${escapeHtml(t.fixLocked)}</p><p class="fix-cta">${escapeHtml(t.fixLockedCta)}</p></div>`;
+  } else if (!isKvkk) {
+    bodyHtml += `<div class="fix-locked"><h2>🔒 ${escapeHtml(fixTitle)}</h2><p>${escapeHtml(t.fixEmpty)}</p><p class="fix-cta">${escapeHtml(t.fixLockedCta)}</p></div>`;
   }
 
   return `<!doctype html><html lang="${meta.locale}"><head><meta charset="utf-8">
