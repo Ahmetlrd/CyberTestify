@@ -208,6 +208,25 @@ async function tick() {
       // arac cagrisi OLMAMISSA (idle) bunu sonlanmis say.
       const idleWaiting = remoteStatus.status === 'waiting' && toolCallCount === prevCount;
 
+      // IDLE-WAITING SABIR (grace): >0 cagri yapmis bir ajan adimlar-arasi kisa 'waiting'e
+      // duserse (dusunme/planlama molasi) bunu TEK poll'da "bitti" SAYMA. idle ilk gozlemde
+      // idleSince'i damgala; aktivite donerse (status waiting DEGIL, ya da yeni arac cagrisi)
+      // temizle. Yalniz idle KESINTISIZ idleWaitingGraceSeconds boyunca surerse "onaylanmis
+      // idle" say. Gercekten biten ajan suresiz 'waiting' kalir (maliyetsiz bekleme); planlayan
+      // ajan devam eder (bkz flow 70: 1 cagri + plan sonrasi ilk poll'da HAKSIZ olduruluyordu).
+      // NOT: toolCallCount===0 (hic cagri yok) hali AYRI ele alinir (asagida, scan_failed).
+      let idleConfirmed = false;
+      if (idleWaiting && toolCallCount > 0) {
+        if (!flow.idleSince) {
+          await prisma.flow.update({ where: { id: flow.id }, data: { idleSince: new Date() } });
+        } else if (Date.now() - flow.idleSince.getTime() >= config.idleWaitingGraceSeconds * 1000) {
+          idleConfirmed = true;
+        }
+      } else if (flow.idleSince) {
+        // aktivite dondu (artik idle degil) → sayaci sifirla.
+        await prisma.flow.update({ where: { id: flow.id }, data: { idleSince: null } });
+      }
+
       // ERKEN DURDURMA: hic arac cagrisi yapilmadan (toolCallCount===0) flow 'waiting'e
       // dustuyse tarama daha basında durdurulmus/coktu demektir. Kisa bir baslangic
       // toleransindan (ajan henuz ilk cagrisini yapmamis olabilir) sonra, RAPOR
@@ -230,8 +249,13 @@ async function tick() {
       // Bitirme kosulu: dogal 'finished' | maliyet tavani asildi | idle 'waiting'.
       // ONEMLI: stopFlow flow'u 'finished' DEGIL 'waiting' durumuna alir
       // (PentAGI'de "stopped" statusu yok), bu yuzden bitirmeyi BIZ tetikliyoruz.
-      const done = remoteStatus.status === 'finished' || overCap || idleWaiting || !!scriptLoopHit || !!repeatFetchHit;
+      const done = remoteStatus.status === 'finished' || overCap || idleConfirmed || !!scriptLoopHit || !!repeatFetchHit;
       if (done) {
+        if (idleConfirmed && remoteStatus.status !== 'finished' && !overCap && !scriptLoopHit && !repeatFetchHit) {
+          console.log(
+            `[worker] Flow ${flow.pentagiFlowId} ${config.idleWaitingGraceSeconds}sn boyunca kesintisiz idle ('waiting', ${toolCallCount} cagri) — bitmis sayilip rapor uretiliyor.`,
+          );
+        }
         if ((overCap || scriptLoopHit || repeatFetchHit) && remoteStatus.status !== 'finished') {
           if (scriptLoopHit) {
             console.warn(

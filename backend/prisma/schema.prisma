@@ -264,6 +264,11 @@ model Flow {
   toolCallCount   Int       @default(0)
   startedAt       DateTime  @default(now())
   finishedAt      DateTime?
+  // Ajan >0 arac cagrisi yaptiktan sonra KESINTISIZ 'waiting'e (idle) girdigi AN.
+  // Aktivite donerse (status running / toolCallCount artar) null'a cekilir. Worker,
+  // idle bu andan itibaren idleWaitingGraceSeconds boyunca surerse flow'u bitirir —
+  // adimlar-arasi kisa molada YANLISLIKLA erken bitirmemek icin (bkz worker idle grace).
+  idleSince       DateTime?
   errorMessage    String?
   // Kapsam ihlali tespit edilirse, izin disi hedef(ler) buraya audit icin yazilir.
   scopeViolationTarget String?

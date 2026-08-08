@@ -88,6 +88,14 @@ export const config = {
   // Tarama basladiktan sonra ajan hic arac cagrisi yapmadan 'waiting'e duserse (erken
   // durdurma/cokme), bu tolerans suresi gecince RAPOR URETMEDEN scan_failed yapilir.
   emptyScanGraceSeconds: Number(process.env.EMPTY_SCAN_GRACE_SECONDS ?? 60),
+  // IDLE-WAITING SABIR SURESI: ajan >0 arac cagrisi yaptiktan SONRA kisa sure 'waiting'e
+  // duserse (adimlar-arasi dusunme/planlama molasi) bunu HEMEN "bitti" sayma — flow bu
+  // sure boyunca KESINTISIZ idle kalirsa bitir. Gercekten biten ajan suresiz 'waiting'
+  // kalir (fazladan beklemek maliyetsiz); dusunen ajan bir-iki poll icinde devam eder
+  // (status running / toolCallCount artar) → idle sayaci sifirlanir. Boylece planlama
+  // molasinda flow YANLISLIKLA erken bitirilmez (bkz flow 70: 1 cagri + plan sonrasi
+  // tek poll'da olduruluyordu). Poll 8s → 90s ~= 11 ardisik idle poll dogrulamasi.
+  idleWaitingGraceSeconds: Number(process.env.IDLE_WAITING_GRACE_SECONDS ?? 90),
   // SCRIPT DEBUG-LOOP KESME: ajan ayni Python/Bash script'ini tekrar tekrar yazip
   // calistirip "duzeltme" dongusune girer (bkz nomorelink vakasi) → butce bosa yanar.
   // Ayni (normalize) script adi bu kadar terminal cagrisinda gecerse dongu sayilir;
