@@ -45,7 +45,7 @@ const L = {
     footerLegal: 'Yapay zeka üretimi pasif tarama raporu — resmi denetim/sertifikasyon değildir. Gizlidir.',
     page: 'Sayfa',
     assessTitle: 'Genel Değerlendirme',
-    riskHigh: 'Yüksek Risk', riskMedium: 'Orta Risk', riskLow: 'Düşük Risk',
+    riskHigh: 'Yüksek Risk', riskMedium: 'Orta Risk', riskMediumHigh: 'Orta-Yüksek Risk', riskLow: 'Düşük Risk',
     assessHigh: 'Bu taramada acil müdahale gerektiren kritik güvenlik bulguları tespit edildi; öncelikli olarak ele alınması önerilir.',
     assessMedium: 'Bu taramada kısa vadede giderilmesi önerilen önemli güvenlik bulguları tespit edildi.',
     assessLow: 'Bu taramada ciddi/kritik bir güvenlik açığı öne çıkmadı; rapor iyileştirme fırsatlarını listeler.',
@@ -60,7 +60,7 @@ const L = {
     footerLegal: 'AI-generated passive scan report — not an official audit/certification. Confidential.',
     page: 'Page',
     assessTitle: 'Overall Assessment',
-    riskHigh: 'High Risk', riskMedium: 'Medium Risk', riskLow: 'Low Risk',
+    riskHigh: 'High Risk', riskMedium: 'Medium Risk', riskMediumHigh: 'Medium-High Risk', riskLow: 'Low Risk',
     assessHigh: 'This scan surfaced critical security findings that require prompt action; they should be prioritised.',
     assessMedium: 'This scan surfaced important security findings that should be addressed in the near term.',
     assessLow: 'This scan did not surface a serious/critical vulnerability; the report lists improvement opportunities.',
@@ -142,24 +142,27 @@ function parseBasitHeaders(md: string): { present: Set<string>; absent: Set<stri
 
 export function assessBasit(
   md: string,
-  t: { riskHigh: string; riskMedium: string; riskLow: string; assessHigh: string; assessMedium: string; assessLow: string },
-): { level: 'high' | 'medium' | 'low'; label: string; sentence: string } {
-  const mk = (level: 'high' | 'medium' | 'low') => ({
+  t: { riskHigh: string; riskMedium: string; riskMediumHigh: string; riskLow: string; assessHigh: string; assessMedium: string; assessLow: string },
+): { level: 'high' | 'medium-high' | 'medium' | 'low'; label: string; sentence: string } {
+  const mk = (level: 'high' | 'medium-high' | 'medium' | 'low') => ({
     level,
-    label: level === 'high' ? t.riskHigh : level === 'medium' ? t.riskMedium : t.riskLow,
+    label: level === 'high' ? t.riskHigh : level === 'medium-high' ? t.riskMediumHigh : level === 'medium' ? t.riskMedium : t.riskLow,
     sentence:
       level === 'high'
         ? 'Ziyaretçilere doğrudan güvenlik uyarısı gösterebilecek acil bir sorun (ör. sertifika süresi/hostname) tespit edildi; öncelikli olarak giderilmesi önerilir.'
-        : level === 'medium'
-          ? 'Öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri tespit edildi; taşıma güvenliği (TLS) genel olarak sağlam.'
-          : 'Ciddi/kritik bir güvenlik açığı öne çıkmadı; rapor yalnızca küçük iyileştirme fırsatlarını listeler.',
+        : level === 'medium-high'
+          ? 'Öncelikli giderilmesi önerilen, tek başına yüksek etkili bir yapılandırma eksikliği tespit edildi.'
+          : level === 'medium'
+            ? 'Öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri tespit edildi; taşıma güvenliği (TLS) genel olarak sağlam.'
+            : 'Ciddi/kritik bir güvenlik açığı öne çıkmadı; rapor yalnızca küçük iyileştirme fırsatlarını listeler.',
   });
 
   // (1) Rapor KOD-yazimi oldugundan GENEL DEĞERLENDİRME'deki ACIK "Risk Seviyesi: X"i oku —
-  //     tek dogruluk kaynagi; rozet ile metin GARANTI tutarli (TLS-tabanli Yüksek dahil).
-  const m = md.slice(0, 1500).match(/risk\s*seviyesi\s*[:：]\s*\**\s*(kr[iİ]t[iİ]k|y[uü]ksek|orta|d[uü][sş][uü]k)/i);
+  //     tek dogruluk kaynagi; rozet ile metin GARANTI tutarli. "Orta-Yüksek" ONCE eslesmeli.
+  const m = md.slice(0, 1500).match(/risk\s*seviyesi\s*[:：]\s*\**\s*(orta[-\s]?y[uü]ksek|kr[iİ]t[iİ]k|y[uü]ksek|orta|d[uü][sş][uü]k)/i);
   if (m) {
     const kw = m[1].toLocaleLowerCase('tr');
+    if (/orta[-\s]?y[uü]ksek/.test(kw)) return mk('medium-high');
     if (/kr[iı]t[iı]k|y[uü]ksek/.test(kw)) return mk('high');
     if (/orta/.test(kw)) return mk('medium');
     if (/d[uü][sş][uü]k/.test(kw)) return mk('low');
@@ -343,6 +346,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   /* Genel Degerlendirme kutusu (banner alti) */
   .assess { border-radius: 8px; padding: 14px 16px; margin: 4px 0 20px; border: 1px solid #DCEAE6; background: #F6FAF8; }
   .assess-high { background: #FCECEA; border-color: #F1C9C4; }
+  .assess-medium-high { background: #FBE7D6; border-color: #EFC194; }
   .assess-medium { background: #FDF3DE; border-color: #F5D9A0; }
   .assess-low { background: #EEF5F3; border-color: #CFE5DF; }
   .assess-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -350,6 +354,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .assess-body { margin: 8px 0 0; font-size: 12px; color: #1b2b28; }
   .risk-badge { color: #fff; padding: 3px 12px; border-radius: 12px; font-size: 11px; font-weight: 700; white-space: nowrap; }
   .risk-high { background: #B3261E; }
+  .risk-medium-high { background: #C4581C; } /* koyu turuncu — Yüksek (kırmızı) ile Orta (amber) arası */
   .risk-medium { background: #E0940E; }
   .risk-low { background: #1C6B60; }
   /* (KVKK) Notr "Hazirlik Durumu Ozeti" kutusu — uyum skoru DEGIL */

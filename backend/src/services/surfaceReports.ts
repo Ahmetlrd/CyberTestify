@@ -13,8 +13,8 @@ import {
 } from './surfaceEvidence.js';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
 
-const RISK_WORD = { low: 'Düşük', medium: 'Orta', high: 'Yüksek' } as const;
-type Level = 'low' | 'medium' | 'high';
+const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
+type Level = 'low' | 'medium' | 'medium-high' | 'high';
 
 function assemble(_title: string, level: Level, summaryBullets: string[], genelSentence: string, sections: string): string {
   return (
@@ -320,8 +320,11 @@ export async function generateCspReport(host: string): Promise<{ findings: strin
     if (!directives.hasFrameAncestors) weakFindings.push('`frame-ancestors` yok — clickjacking için ek koruma sağlanmıyor.');
   }
 
+  // KALIBRE: SPA'da CSP tamamen eksik TEK BASINA "Orta-Yüksek" (Yüksek DEGIL) — gercek kritik
+  // sorunlar (TLS suresi/hostname/zayif protokol veya birden fazla ciddi alan) worst-case
+  // birlestirmede Yüksek'e cikar (bkz combineSurfaceAreas birikimli kural).
   let level: Level = 'low';
-  if (!present && !cspRO) level = isSpa ? 'high' : 'medium';
+  if (!present && !cspRO) level = isSpa ? 'medium-high' : 'medium';
   else if (present && (directives?.unsafeInline || directives?.unsafeEval || directives?.wildcard)) level = 'medium';
   else if (!present && cspRO) level = 'medium';
 
@@ -340,19 +343,19 @@ export async function generateCspReport(host: string): Promise<{ findings: strin
       : '- Uygulanan bir CSP olmadığından direktif analizi yapılamadı.\n\n');
 
   const risks: string[] = [];
-  if (!present && !cspRO) risks.push(`- **${isSpa ? 'Yüksek' : 'Orta'} — CSP tamamen eksik:** XSS ve içerik enjeksiyonuna karşı tarayıcı seviyesinde savunma yok.${isSpa ? ' SPA olduğu için XSS etkisi kritiktir.' : ''}`);
+  if (!present && !cspRO) risks.push(`- **${isSpa ? 'Orta-Yüksek' : 'Orta'} — CSP tamamen eksik:** XSS ve içerik enjeksiyonuna karşı tarayıcı seviyesinde savunma yok.${isSpa ? ' SPA olduğu için XSS etkisi belirgindir.' : ''}`);
   if (!present && cspRO) risks.push('- **Orta — CSP yalnızca Report-Only:** İhlaller engellenmiyor; enforce moda geçilmeli.');
   if (present) for (const w of weakFindings.filter((x) => /unsafe|wildcard/.test(x))) risks.push(`- **Orta — Zayıf CSP direktifi:** ${w}`);
   if (!risks.length) risks.push('- CSP mevcut ve belirgin bir zayıflatıcı direktif içermiyor.');
 
   const bullets: string[] = [];
-  bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'SPA’da CSP tamamen eksik; XSS etkisi büyük.' : level === 'medium' ? (present ? 'CSP var ama zayıflatıcı direktifler içeriyor.' : 'CSP eksik/enforce edilmiyor.') : 'CSP mevcut ve makul yapılandırılmış.'}`);
+  bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'medium-high' ? 'SPA’da CSP tamamen eksik; XSS etkisi belirgin.' : level === 'medium' ? (present ? 'CSP var ama zayıflatıcı direktifler içeriyor.' : 'CSP eksik/enforce edilmiyor.') : 'CSP mevcut ve makul yapılandırılmış.'}`);
   bullets.push(`- CSP: ${present ? 'uygulanıyor' : cspRO ? 'yalnızca Report-Only' : 'yok'}${directives && weakFindings.length ? `, ${weakFindings.length} zayıf nokta` : ''}.`);
   bullets.push('- **Önerilen ilk adım:** ' + (present ? "unsafe-inline/unsafe-eval/wildcard direktiflerini kaldırın." : 'Önce Report-Only modda test edip ardından uygulanan CSP ekleyin (hazır örnekler "AI Çözüm Önerileri" eklentisinde).'));
 
   const genel =
-    level === 'high'
-      ? 'JavaScript ağırlıklı bir uygulamada Content-Security-Policy tamamen eksik; XSS ve içerik enjeksiyonu etkisi yüksek. Öncelikli olarak (önce Report-Only modda test ederek) eklenmesi önerilir.'
+    level === 'medium-high'
+      ? 'JavaScript ağırlıklı bir uygulamada Content-Security-Policy tamamen eksik; XSS ve içerik enjeksiyonu etkisi belirgin. Tek başına en kritik seviye olmasa da öncelikli olarak (önce Report-Only modda test ederek) eklenmesi önerilir.'
       : level === 'medium'
         ? (present ? 'CSP mevcut ancak koruma değerini düşüren direktifler (unsafe-inline/unsafe-eval/wildcard) içeriyor; sıkılaştırılması önerilir.' : 'Uygulanan bir CSP yok (yok veya yalnızca Report-Only). XSS azaltması için enforce edilen bir politika önerilir.')
         : 'Content-Security-Policy mevcut ve makul yapılandırılmış; rapor yalnızca küçük iyileştirmeleri listeler.';
@@ -478,15 +481,21 @@ const BUNDLE_AREAS: Array<{ title: string; gen: (h: string) => Promise<{ finding
   { title: 'CSP (İçerik Güvenlik Politikası) Analizi', gen: generateCspReport },
 ];
 
-function levelRank(l: Level): number { return l === 'high' ? 2 : l === 'medium' ? 1 : 0; }
+function levelRank(l: Level): number { return l === 'high' ? 3 : l === 'medium-high' ? 2 : l === 'medium' ? 1 : 0; }
 function extractLevel(findings: string): Level | null {
-  const m = findings.match(/Risk Seviyesi:\s*(Y[uü]ksek|Orta|D[uü][sş][uü]k)/i);
+  // "Orta-Yüksek" ONCE eslesmeli (yoksa "Orta" ya da "Yüksek" yanlis yakalar).
+  const m = findings.match(/Risk Seviyesi:\s*(Orta[-\s]?Y[uü]ksek|Y[uü]ksek|Orta|D[uü][sş][uü]k)/i);
   if (!m) return null;
   const w = m[1].toLocaleLowerCase('tr');
-  return /y[uü]ksek/.test(w) ? 'high' : /orta/.test(w) ? 'medium' : 'low';
+  if (/orta[-\s]?y[uü]ksek/.test(w)) return 'medium-high';
+  if (/y[uü]ksek/.test(w)) return 'high';
+  if (/orta/.test(w)) return 'medium';
+  return 'low';
 }
 function areaHeadline(findings: string): string {
-  const m = findings.match(/Genel risk seviyesi:\s*[^\n—-]+[—-]\s*([^\n]+)/i);
+  // "... : <seviye> — <gerekce>" — ayirici YALNIZ BOSLUKLA cevrili tire ( — / – / - ).
+  // "Orta-Yüksek" icindeki bosluksuz tireyi AYIRICI sanma (yoksa "Yüksek — ..." kalintisi cikar).
+  const m = findings.match(/Genel risk seviyesi:\s*[^\n]+?\s[—–-]\s([^\n]+)/i);
   return m ? m[1].trim().replace(/\*\*/g, '') : '';
 }
 // YÖNETİCİ ÖZETİ + GENEL DEĞERLENDİRME'yi cikar, detay bolumlerini dondur (## -> ### indir).
@@ -515,16 +524,26 @@ export function combineSurfaceAreas(results: Array<{ findings: string; fixText: 
     .filter((x): x is { lv: Level; i: number } => x.lv !== null)
     .sort((a, b) => levelRank(b.lv) - levelRank(a.lv));
   const worstIdx = ranked.length ? ranked[0].i : -1;
-  const worst: Level = worstIdx >= 0 ? (levels[worstIdx] as Level) : 'low';
+  const baseWorst: Level = worstIdx >= 0 ? (levels[worstIdx] as Level) : 'low';
   const worstTitle = worstIdx >= 0 ? BUNDLE_AREAS[worstIdx].title : '';
   const worstHl = worstIdx >= 0 && results[worstIdx] ? areaHeadline(results[worstIdx]!.findings) : '';
+
+  // BIRIKIMLI RISK: en yuksek alan 'Orta-Yüksek' iken (ör. CSP tek basina eksik) BASKA bir
+  // alan da 'Orta' veya ustunde ise -> genel rozet 'Yüksek'e cikar. Yani CSP-tek-basina =
+  // Orta-Yüksek; CSP + baska ciddi alan = Yüksek. Gercek 'Yüksek' alan (TLS suresi/hostname/
+  // zayif protokol veya DNS 2+ zayif) zaten baseWorst='high' verir, birikime gerek kalmaz.
+  const mediumPlus = levels.filter((l) => l !== null && levelRank(l as Level) >= 1).length;
+  const cumulative = baseWorst === 'medium-high' && mediumPlus >= 2;
+  const worst: Level = cumulative ? 'high' : baseWorst;
 
   // --- YÖNETİCİ ÖZETİ (TEK, birlesik) ---
   const summary: string[] = [];
   summary.push(
     worst === 'low'
       ? `- **Genel risk seviyesi: Düşük** — dış yüzey yapılandırmanız 5 alanda incelendi; belirgin bir sorun öne çıkmadı.`
-      : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — 5 alan incelendi; en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`,
+      : cumulative
+        ? `- **Genel risk seviyesi: Yüksek** — 5 alan incelendi; birden fazla alan aynı anda risk taşıyor (en yükseği **${worstTitle}**${worstHl ? ` — ${worstHl}` : ''}).`
+        : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — 5 alan incelendi; en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`,
   );
   BUNDLE_AREAS.forEach((a, i) => {
     const r = results[i];
@@ -537,11 +556,15 @@ export function combineSurfaceAreas(results: Array<{ findings: string; fixText: 
 
   // GENEL DEĞERLENDİRME cumlesi worst-case ALANA ozgu (pdf.ts bunu ust kutuda da kullanir).
   const genelSentence =
-    worst === 'high'
-      ? `En yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`
-      : worst === 'medium'
-        ? `Öne çıkan alan **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; kısa vadede giderilmesi önerilir. Kritik/acil bir sorun öne çıkmadı. Aşağıda her alan ayrı ayrı raporlanmıştır.`
-        : 'Dış yüzey yapılandırmanız genel olarak sağlam; rapor yalnızca küçük iyileştirme fırsatlarını listeler. Aşağıda her alan ayrı ayrı raporlanmıştır.';
+    cumulative
+      ? `Birden fazla alan aynı anda risk taşıyor (en yükseği **${worstTitle}**${worstHl ? ` — ${worstHl}` : ''}); birikimli risk nedeniyle genel değerlendirme Yüksek. Öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`
+      : worst === 'high'
+        ? `En yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`
+        : worst === 'medium-high'
+          ? `Öne çıkan alan **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; tek başına yüksek etkili ancak başka ciddi alan yok. Öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`
+          : worst === 'medium'
+            ? `Öne çıkan alan **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; kısa vadede giderilmesi önerilir. Kritik/acil bir sorun öne çıkmadı. Aşağıda her alan ayrı ayrı raporlanmıştır.`
+            : 'Dış yüzey yapılandırmanız genel olarak sağlam; rapor yalnızca küçük iyileştirme fırsatlarını listeler. Aşağıda her alan ayrı ayrı raporlanmıştır.';
 
   // --- Alan bolumleri (exec/genel cikarilmis, ## -> ### indirilmis) ---
   const areaSections = BUNDLE_AREAS.map((a, i) => {
