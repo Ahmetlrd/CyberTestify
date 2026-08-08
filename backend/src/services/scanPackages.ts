@@ -36,7 +36,8 @@ export interface ScanPackageDef {
     | 'race_massassign_verify'
     | 'rce_verify'
     | 'authenticated_scan'
-    | 'autonomous_pentest';
+    | 'autonomous_pentest'
+    | 'bundle_surface'; // kombine paket (tek-siparis modeli)
   displayName: string;
   description: string;
   priceMinorUnit: number; // kurus
@@ -749,6 +750,30 @@ ${FIX_SUGGESTIONS_STEP_EN}
 Output (Markdown): CORS findings + per-cookie missing flags, each with severity and a
 concrete recommendation.
 
+Target: ${host}
+`.trim(),
+  },
+  {
+    // KOMBINE PAKET (bundle) — TEK-siparis modeli. Musteri bundle_surface satin alinca 1 Order/
+    // Flow/Report/mail olusur; rapor generateBundleSurfaceReport ile 5 alani (SSL/TLS, basliklar,
+    // DNS/e-posta, CORS/cerez, CSP) TEK dokumanda birlestirir. Tekil satisi YOK (available:false
+    // + listPackages'ta bundle_ ile filtrelenir). promptTemplate placeholder (ajan ciktisi
+    // kullanilmaz; veri KOD tarafindan toplanir).
+    key: 'bundle_surface',
+    displayName: 'Dış Yüzey & Yapılandırma Paketi',
+    description:
+      'Kombine paket: SSL/TLS, güvenlik başlıkları & bilgi sızıntısı, DNS/e-posta, CORS/çerez ve ' +
+      'CSP yapılandırmasını TEK raporda birleştirir. Tamamen pasif.',
+    priceMinorUnit: 399900,
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    available: false,
+    promptTemplate: (host) => `
+PASSIVE data-collection only for the External Surface bundle. The final customer report is
+generated deterministically by code (no free-form report writing needed). Gather passive
+evidence for ${host}: HTTP security headers, TLS certificate/protocol, DNS/email
+(SPF/DMARC/DKIM/DNSSEC), CORS and CSP. Use GET/HEAD/OPTIONS and read-only DNS only; never
+exploit, never write scripts.
 Target: ${host}
 `.trim(),
   },

@@ -63,6 +63,9 @@ enum ScanPackageKey {
   network_ports
   api_scan
   byok_custom
+  // Kombine paket (bundle) TEK-siparis modeli: bundle bir "paket" gibi davranir (1 order/flow/
+  // report/mail). bundle_surface = Dis Yuzey & Yapilandirma (5 uyeyi tek raporda birlestirir).
+  bundle_surface
 }
 
 model Customer {

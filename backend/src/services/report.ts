@@ -8,7 +8,7 @@ import { buildHeaderFixSuggestions } from './fixSuggestions.js';
 import { generateBasitReport } from './basitReport.js';
 import {
   generateSslTlsReport, generateHeaderLeakReport, generateDnsEmailReport,
-  generateCorsCookieReport, generateCspReport,
+  generateCorsCookieReport, generateCspReport, generateBundleSurfaceReport,
 } from './surfaceReports.js';
 
 // Deterministik (kod-yazimi) rapor ureten paketler: key -> uretici(hostname).
@@ -20,6 +20,7 @@ const DETERMINISTIC_GENERATORS: Record<string, ((host: string) => Promise<{ find
   dns_email: generateDnsEmailReport,
   cors_cookie: generateCorsCookieReport,
   csp_analiz: generateCspReport,
+  bundle_surface: generateBundleSurfaceReport, // kombine paket -> 5 alan TEK raporda
 };
 
 type Locale = 'tr' | 'en';

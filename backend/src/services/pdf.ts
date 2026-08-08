@@ -228,7 +228,7 @@ const LOGO_SVG = `
 </svg>`.trim();
 
 // Deterministik (kod-yazimi) rapor ureten paketler — rozet acik "Risk Seviyesi"den okunur.
-const DETERMINISTIC_PDF_PKGS = new Set(['basit_tarama', 'ssl_tls', 'header_leak', 'dns_email', 'cors_cookie', 'csp_analiz']);
+const DETERMINISTIC_PDF_PKGS = new Set(['basit_tarama', 'ssl_tls', 'header_leak', 'dns_email', 'cors_cookie', 'csp_analiz', 'bundle_surface']);
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));

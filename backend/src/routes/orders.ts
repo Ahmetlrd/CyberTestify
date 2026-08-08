@@ -15,7 +15,7 @@ import { enqueueOrStartScan } from '../services/orchestrator.js';
 import { sendOrderConfirmation } from '../services/mailer.js';
 import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
-import { COMBO_BUNDLES, getBundle, bundlePrice, bundleMemberAmounts, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
+import { COMBO_BUNDLES, getBundle, bundlePrice, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -39,6 +39,10 @@ ordersRouter.get('/packages', async (req, res) => {
       // (2) kvkk_hazirlik Turkiye'ye ozel mevzuattir; EN/global menude GOSTERILMEZ.
       // GDPR/CCPA esdegerleri ileride ayri paket olarak eklenecek (bkz HANDOFF).
       .filter((p) => !(locale === 'en' && p.key === 'kvkk_hazirlik'))
+      // Bundle "paketleri" (bundle_surface vb.) tekil paket listesinde GORUNMEZ — yalniz kombine
+      // paket akisinda (GET /bundles + POST /bundle) satilir; burada bir ScanPackage satiri
+      // olarak var ama musteriye tekil satis olarak sunulmaz.
+      .filter((p) => !p.key.startsWith('bundle_'))
       .map((p) => {
         const row = priceByKey.get(p.key);
         const t = localizedPackage(p, locale);
@@ -464,13 +468,8 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Kimlik Dogrulamali Tarama iceren pakette test hesabi kullanici adi ve sifresi zorunludur.' });
   }
 
+  // TEK-siparis modelinde bundle tutari dogrudan tek Order'a yazilir (uye bazli bolme YOK).
   const price = bundlePrice(bundle, region, parsed.data.selectedModules);
-  // Uye order tutarlari NIHAI bundle fiyatina TAM bolunur (toplam == iyzico tutari == callback
-  // dogrulamasi). Son uye yuvarlama artigini alir (bkz bundleMemberAmounts).
-  const memberAmountMap = new Map(
-    bundleMemberAmounts(bundle, region, parsed.data.selectedModules).map((m) => [m.key, m.amountMinorUnit]),
-  );
-  const perMemberAmount = (k: string) => memberAmountMap.get(k) ?? 0;
 
   // Promo: bundle TOPLAMINA uygulanir. %100 -> tum uye siparisleri paid + kuyruk (odeme yok).
   let promoFree = false;
@@ -491,42 +490,44 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
     consentVersion: config.legalVersion,
   };
   const cust = await prisma.customer.findUniqueOrThrow({ where: { id: req.customerId! }, select: { fullName: true, email: true } });
-  const packageDbs = await prisma.scanPackage.findMany({ where: { key: { in: memberKeys as any } } });
-  const dbByKey = new Map(packageDbs.map((p) => [p.key, p]));
 
-  const createdOrderIds: string[] = [];
-  for (const { key, profile } of memberDefs) {
-    const packageDb = dbByKey.get(key as any);
-    if (!packageDb) continue;
-    const isAL = profile === 'active-light' || profile === 'active-verify-only';
-    const { currency } = getPricing(key, region);
-    const order = await prisma.order.create({
+  // TEK-SIPARIS MODELI: bundle bir "paket" (bundle_surface ScanPackage satiri) gibi davranir —
+  // 5 ayri Order YERINE TEK Order olusur. Boylece 1 Flow / 1 Report / 1 sifre / 1 kilit ve
+  // TEK 'tarama basladi' + TEK 'rapor hazir' maili. Uye anahtarlari yalniz fiyat/riza/rapor
+  // ICERIGI icin kullanilir; birlesik raporu generateBundleSurfaceReport uretir. Odeme (iyzico
+  // token) mekanizmasi DEGISMEDI — sadece 1 order uzerinde calisir (regresyon yok).
+  const bundlePkgDb = await prisma.scanPackage.findUnique({ where: { key: bundleKey as any } });
+  if (!bundlePkgDb) {
+    console.error(`[bundle] ScanPackage satiri yok: ${bundleKey} — migration/seed eksik.`);
+    return res.status(500).json({ error: 'Paket yapılandırması eksik; lütfen destek ile iletişime geçin.' });
+  }
+  const order = await prisma.order.create({
+    data: {
+      customerId: req.customerId!,
+      domainId: domain.id,
+      packageId: bundlePkgDb.id,
+      amountMinorUnit: price.amountMinorUnit, // NIHAI bundle tutari (tek order == iyzico tutari)
+      currency: price.currency,
+      status: promoFree ? 'paid' : 'awaiting_payment',
+      paymentProvider: promoFree ? 'promo' : 'bundle-placeholder',
+      paidAt: promoFree ? new Date() : null,
+      locale: localeFor(region),
+      byokKeyEncrypted: hasAuthScan ? encryptSecret(JSON.stringify(parsed.data.authCredentials)) : null,
+      ...consent,
+    },
+  });
+  const createdOrderIds: string[] = [order.id];
+  // Tek yetkilendirme beyani (bundle active-light uye iceriyorsa) TEK order'a baglanir.
+  if (anyActiveLight) {
+    await prisma.activeTestConsent.create({
       data: {
-        customerId: req.customerId!,
-        domainId: domain.id,
-        packageId: packageDb.id,
-        amountMinorUnit: perMemberAmount(key),
-        currency,
-        status: promoFree ? 'paid' : 'awaiting_payment',
-        paymentProvider: promoFree ? 'promo' : 'bundle-placeholder',
-        paidAt: promoFree ? new Date() : null,
-        locale: localeFor(region),
-        byokKeyEncrypted: key === 'authenticated_scan' ? encryptSecret(JSON.stringify(parsed.data.authCredentials)) : null,
-        ...consent,
+        customerId: req.customerId!, orderId: order.id, packageKey: bundleKey as any,
+        legalName: cust.fullName?.trim() || cust.email, companyName: null,
+        riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
       },
     });
-    createdOrderIds.push(order.id);
-    if (isAL) {
-      await prisma.activeTestConsent.create({
-        data: {
-          customerId: req.customerId!, orderId: order.id, packageKey: key as any,
-          legalName: cust.fullName?.trim() || cust.email, companyName: null,
-          riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
-        },
-      });
-    }
-    if (promoFree) await enqueueOrStartScan(order.id); // %100 promo: hemen kuyruga (concurrency=1 sirayla)
   }
+  if (promoFree) await enqueueOrStartScan(order.id); // %100 promo: hemen kuyruga (concurrency=1)
 
   if (promoFree && promoApplied) {
     // Bundle icin TEK kullanim kaydi (ilk uye siparisine bagli).

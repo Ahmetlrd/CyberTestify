@@ -466,3 +466,90 @@ function buildCspFix(host: string, o: { present: boolean; weak: boolean }): stri
   parts.push('### Report-Only ile test\n\n```\nContent-Security-Policy-Report-Only: default-src \'self\'; report-uri /csp-report\n```\n\nRaporları izleyip yanlış-pozitifleri giderdikten sonra başlığı `Content-Security-Policy` olarak yayınlayın.');
   return parts.join('\n\n');
 }
+
+// ======================================================================================
+// BUNDLE: Dış Yüzey & Yapılandırma — 5 alani TEK raporda birlestir (worst-case rozet)
+// ======================================================================================
+const BUNDLE_AREAS: Array<{ title: string; gen: (h: string) => Promise<{ findings: string; fixText: string } | null> }> = [
+  { title: 'SSL/TLS Yapılandırma Denetimi', gen: generateSslTlsReport },
+  { title: 'Güvenlik Başlıkları & Bilgi Sızıntısı', gen: generateHeaderLeakReport },
+  { title: 'DNS & E-posta Güvenliği', gen: generateDnsEmailReport },
+  { title: 'CORS & Çerez Güvenliği', gen: generateCorsCookieReport },
+  { title: 'CSP (İçerik Güvenlik Politikası) Analizi', gen: generateCspReport },
+];
+
+function levelRank(l: Level): number { return l === 'high' ? 2 : l === 'medium' ? 1 : 0; }
+function extractLevel(findings: string): Level | null {
+  const m = findings.match(/Risk Seviyesi:\s*(Y[uü]ksek|Orta|D[uü][sş][uü]k)/i);
+  if (!m) return null;
+  const w = m[1].toLocaleLowerCase('tr');
+  return /y[uü]ksek/.test(w) ? 'high' : /orta/.test(w) ? 'medium' : 'low';
+}
+function areaHeadline(findings: string): string {
+  const m = findings.match(/Genel risk seviyesi:\s*[^\n—-]+[—-]\s*([^\n]+)/i);
+  return m ? m[1].trim().replace(/\*\*/g, '') : '';
+}
+// YÖNETİCİ ÖZETİ + GENEL DEĞERLENDİRME'yi cikar, detay bolumlerini dondur (## -> ### indir).
+function detailOnly(findings: string): string {
+  const parts = findings.split(/(?=^## )/m); // [0]=YÖNETİCİ, [1]=GENEL, geri kalan = detay
+  return parts.slice(2).join('').replace(/^## /gm, '### ').trim();
+}
+
+export async function generateBundleSurfaceReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+  // Her alan kendi kanitini toplar (bagimsiz, saf); paralel calistir, biri patlarsa null.
+  const results = await Promise.all(BUNDLE_AREAS.map((a) => a.gen(host).catch(() => null)));
+  return combineSurfaceAreas(results);
+}
+
+// 5 alan sonucunu (bazilari null olabilir) TEK rapora birlestirir. Ayri fonksiyon: sentetik
+// verilerle (null-alan / worst-case) test edilebilsin diye. Hepsi null ise -> null (fallback).
+export function combineSurfaceAreas(results: Array<{ findings: string; fixText: string } | null>): { findings: string; fixText: string } | null {
+  if (results.every((r) => r === null)) return null; // hicbir alan veri toplayamadi -> fallback
+
+  const levels: Array<Level | null> = results.map((r) => (r ? extractLevel(r.findings) : null));
+  const known = levels.filter((l): l is Level => l !== null);
+  const worst: Level = known.length ? known.reduce((a, b) => (levelRank(b) > levelRank(a) ? b : a), 'low') : 'low';
+
+  // --- YÖNETİCİ ÖZETİ (TEK, birlesik) ---
+  const summary: string[] = [];
+  summary.push(`- **Genel risk seviyesi: ${RISK_WORD[worst]}** — dış yüzey yapılandırmanız 5 alanda incelendi; en yüksek risk seviyesi ${RISK_WORD[worst]}.`);
+  BUNDLE_AREAS.forEach((a, i) => {
+    const r = results[i];
+    const lv = levels[i];
+    if (!r || !lv) { summary.push(`- **${a.title}:** veri toplanamadı.`); return; }
+    const hl = areaHeadline(r.findings);
+    summary.push(`- **${a.title}:** ${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`);
+  });
+  summary.push('- **Önerilen ilk adım:** En yüksek riskli alandan başlayın; her bulgu için adım adım hazır komutlar "AI Çözüm Önerileri" bölümünde sunulur.');
+
+  const genelSentence =
+    worst === 'high'
+      ? 'Dış yüzey yapılandırmanızda öncelikli olarak ele alınması gereken en az bir yüksek riskli alan tespit edildi. Aşağıda her alan ayrı ayrı raporlanmıştır.'
+      : worst === 'medium'
+        ? 'Dış yüzey yapılandırmanızda kısa vadede giderilmesi önerilen orta seviyeli eksikler var; kritik/acil bir sorun öne çıkmadı. Aşağıda her alan ayrı ayrı raporlanmıştır.'
+        : 'Dış yüzey yapılandırmanız genel olarak sağlam; rapor yalnızca küçük iyileştirme fırsatlarını listeler. Aşağıda her alan ayrı ayrı raporlanmıştır.';
+
+  // --- Alan bolumleri (exec/genel cikarilmis, ## -> ### indirilmis) ---
+  const areaSections = BUNDLE_AREAS.map((a, i) => {
+    const r = results[i];
+    if (!r) return `## ${a.title}\n\n> Bu alan için veri toplanamadı (bağlantı/sorgu başarısız); diğer alanlar tam olarak raporlanmıştır.\n`;
+    return `## ${a.title}\n\n${detailOnly(r.findings)}\n`;
+  }).join('\n');
+
+  const findings =
+    `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
+    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${genelSentence}\n\n` +
+    `${areaSections}`;
+
+  // --- AI ÇÖZÜM ÖNERİLERİ (5 alan TEK bolumde, alt-basliklarla) ---
+  const fixParts = BUNDLE_AREAS.map((a, i) => {
+    const r = results[i];
+    if (!r || !r.fixText.trim()) return '';
+    return `### ${a.title}\n\n${r.fixText.trim()}`;
+  }).filter(Boolean);
+  const fixText =
+    'Bu bölüm, dış yüzey taramanızda tespit edilen tüm eksiklikler için alan alan düzeltme önerileri içerir. Sunucunuza uygun örnekleri (Nginx/Firebase/Apache/DNS) kopyalayın.\n\n' +
+    fixParts.join('\n\n');
+
+  return { findings, fixText };
+}
