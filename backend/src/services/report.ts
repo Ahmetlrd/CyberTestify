@@ -4,6 +4,7 @@ import { encryptReport, generateReportAccessSecret } from './crypto.js';
 import { redactAll } from './piiRedaction.js';
 import { FIX_SUGGESTIONS_DELIM } from './scanPackages.js';
 import { hasPassiveExtras, runPassiveExtras, renderPassiveExtrasMarkdown, PASSIVE_EXTRAS_DELIM } from './passiveExtras.js';
+import { buildHeaderFixSuggestions } from './fixSuggestions.js';
 
 type Locale = 'tr' | 'en';
 
@@ -263,7 +264,7 @@ export async function generateAndStoreReport(flowId: string) {
   // (3) Cozum onerilerini bulgulardan AYIR (ayni akista uretildi, ekstra maliyet yok).
   const split = splitFixSuggestions(collectFindings(logs));
   let findings = split.findings;
-  const fixText = split.fixText;
+  let fixText = split.fixText;
 
   // EKSIK RAPOR TESPITI: ajan hicbir kaynakta (task/subtask/report result) TAMAMLAMA
   // yazmamissa (ör. injection_verify: tavana carparak yazma adimina ulasamadi) findings
@@ -290,6 +291,16 @@ export async function generateAndStoreReport(flowId: string) {
   // dili son-kontrolu (bkz sanitizeBasitReport). Ajan prompt kurallarina uymasa BILE musteri
   // temiz rapor gorsun. Diger paketler DEGISMEZ.
   if (flow.order.package.key === 'basit_tarama') findings = sanitizeBasitReport(findings);
+
+  // (FIX GARANTISI) Ajan ===FIX_SUGGESTIONS=== bolumunu yazmadiysa fixText BOS kalir ->
+  // rapora sifreli fix blogu kaydedilmez -> musteri "AI Çözüm Önerileri satin al/indir"
+  // kutusunu HIC goremez. basit_tarama'da eksik guvenlik basliklarindan DETERMINISTIK,
+  // somut duzeltme onerileri uret (ek LLM/maliyet YOK) ki bolum HER raporda satin alinip
+  // indirilebilsin. Ajan kendi fix'ini yazdiysa ona DOKUNMA.
+  if (flow.order.package.key === 'basit_tarama' && !fixText.trim() && findings.trim().length > 0 && !incomplete) {
+    fixText = buildHeaderFixSuggestions(findings, flow.order.domain.hostname);
+    console.warn('[report][BASIT-FIX] Ajan fix yazmadi -> deterministik baslik-remediation uretildi (satin alinabilir).');
+  }
 
   // KENDI TARAFIMIZDA veri minimizasyonu: sizmis yapisal PII'yi (email/telefon/
   // TCKN/kart/IBAN) sifreli DB'ye yazmadan ONCE maskele (ayni mantik PentAGI Go
