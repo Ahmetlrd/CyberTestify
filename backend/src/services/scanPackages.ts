@@ -351,21 +351,64 @@ export const SCAN_PACKAGES: ScanPackageDef[] = [
     priceMinorUnit: 49900,
     modelProvider: PROVIDER,
     maxToolCalls: 25,
-    promptTemplate: (host) => `
-This is a FAST, PASSIVE and SHORT pre-check — NOT a deep scan. Send a normal GET request
-ONLY to the HOMEPAGE of the single target below and summarize these passive facts:
-HTTP security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options), server/tech
-banner, and whether the TLS certificate is valid.
-
-Use AT MOST 2-3 tools, then finish IMMEDIATELY. Do NOT open new subtasks.
-${SAFETY_EN}
-${BUDGET_GUARD_EN}
-${FIX_SUGGESTIONS_STEP_EN}
-
-Output: write a SHORT bullet summary and COMPLETE the task immediately.
-
+    promptTemplate: (host) => `This is a FAST, PASSIVE and SHORT pre-check package (Basit Tarama) — NOT a deep scan.
+GOAL: Produce a clean, professional, customer-facing security pre-check report in TURKISH for the single homepage of the target below. The report must look like it was written by a senior security analyst in one sitting.
+STRICT SCOPE (do not expand):
+1. HTTP security headers on the homepage only (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection, Content-Type)
+2. TLS certificate validity, expiry, chain, protocol version and cipher
+3. Server / CDN / technology fingerprint visible from response headers and HTML (passive only)
+4. Very light information disclosure visible on the homepage (e.g. obvious API endpoints in preconnect/link tags)
+FORBIDDEN (any violation = immediate termination, no report):
+- Any non-GET/HEAD/OPTIONS request
+- Exploitation, injection, authentication, brute-force, directory forcing
+- Installing any tool or package
+- Writing or executing scripts (.sh/.py/.js/.bash)
+- Re-fetching the same URL more than once
+- Building draft/intermediate files via heredoc (cat > file << EOF or similar)
+- Opening subtasks
+- Accessing any host other than the given target
+- Claiming compliance with any standard (OWASP, NIST, KVKK, PCI, ISO, etc.)
+TOOL BUDGET: Maximum 25 tool calls. After ~12 calls STOP all new discovery and write the final report. Prefer 1-command-per-check (curl, openssl, dig). Never write scripts.
+HARD RULE — NEVER SUBMIT A PARTIAL REPORT: The final report MUST be written as ONE complete, uninterrupted piece of output, from "YÖNETİCİ ÖZETİ" through the very end (including the ===FIX_SUGGESTIONS=== line). If you sense you are close to the tool-call budget or output-length limit, STOP gathering new evidence immediately and write a SHORTER but still 100% COMPLETE report using only what you already have — every mandatory section must be present, even if brief. Never end your output mid-sentence, mid-table, or mid-section. A short-but-complete report is always correct; a long-but-truncated report is always wrong.
+OUTPUT RULES (HIGHEST PRIORITY):
+- Write the COMPLETE final report in this single step. Never leave findings for a later subtask.
+- Language: FULLY TURKISH (bulgular, özet, risk açıklamaları).
+- No internal process language ("Subtask", "TASK COMPLETED", "Next step", tool logs, etc.).
+- No false positives. If evidence is weak or ambiguous, mark as "İnceleme gerekli" or omit.
+- Risk rating must be honest and consistent with findings:
+  - Kritik / Yüksek → missing critical protections that enable easy attacks (e.g. no CSP + no X-Frame-Options while interactive content exists)
+  - Orta → several important headers missing or certificate expiring soon
+  - Düşük → only minor or informational issues
+  Never output "Düşük Risk" when multiple high-impact headers are missing.
+MANDATORY REPORT STRUCTURE (exactly in this order):
+1. YÖNETİCİ ÖZETİ (3-5 short bullets)
+   - Overall risk level + one-sentence justification
+   - Most important 2-3 findings
+   - One clear next-action recommendation
+2. GENEL DEĞERLENDİRME
+   - Risk level badge text (Düşük / Orta / Yüksek)
+   - 1-2 sentence summary
+3. HTTP GÜVENLİK BAŞLIKLARI
+   - Table or clean list: Header | Durum | Kısa açıklama
+   - Only state what was actually observed
+4. TLS SERTİFİKA DURUMU
+   - Validity, days remaining, hostname match, issuer, TLS version, cipher
+   - Clear warning if expiry < 45 days
+5. SUNUCU / TEKNOLOJİ İMZASI
+   - CDN, framework, analytics, obvious passive fingerprints
+   - Only what is visible without active probing
+6. TESPİT EDİLEN RİSKLER (grouped by severity)
+   - Yüksek / Orta / Bilgilendirme
+   - Each item: short title + 1-2 sentence impact explanation
+   - No speculative claims
+7. ===FIX_SUGGESTIONS===
+   - This section is a PAID add-on ("AI Çözüm Önerileri").
+   - If the order includes the paid add-on flag → write concrete, safe, actionable remediation for each important finding (config examples allowed, never exploit code).
+   - If the paid flag is NOT present → output exactly this line and nothing more under it:
+     Bu bölüm kilitli — "AI Çözüm Önerileri" eklentisi satın alınınca rapora eklenir.
+Keep the whole report SHORT and scannable (target: 1.5–2.5 pages when rendered). Prefer clarity over volume.
 Target: ${host}
-`.trim(),
+`,
   },
   {
     key: 'ssl_tls',

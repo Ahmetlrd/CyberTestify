@@ -158,8 +158,18 @@ export async function startScanForOrder(orderId: string) {
   const noScriptLine =
     pkgProfile === 'passive' ? '\n\n' + (order.locale === 'en' ? NO_SCRIPT_HARD_EN : NO_SCRIPT_HARD_TR) : '';
 
+  // (basit_tarama) "AI Cozum Onerileri" paralı eklentisi POST-SCAN upsell'dir: icerik HER tarama'da
+  // uretilir (===FIX_SUGGESTIONS=== sonrasi), AYRI sifrelenip saklanir ve satin alinca render/
+  // download'da acilir (bkz report.ts split + reports.ts fixSuggestionsUnlockedAt). Bu yuzden yeni
+  // prompt'taki "paid add-on flag" HER ZAMAN PRESENT olarak enjekte edilir → ajan icerigi hep yazar;
+  // gercek kilit/satis downstream'de uygulanir. (Scan-aninda satin-alma modeli yok.)
+  const fixAddonLine =
+    pkg.key === 'basit_tarama'
+      ? '\n\nPAID ADD-ON FLAG: PRESENT — the "AI Çözüm Önerileri" content IS included in this generation. Always write the full, concrete remediation content in Turkish after the ===FIX_SUGGESTIONS=== line (it will be encrypted and unlocked on purchase downstream). Do NOT output the "kilitli" placeholder line.'
+      : '';
+
   const prompt =
-    pkg.promptTemplate(order.domain.hostname) + credLine + langLine + budgetLine + methodLine + noScriptLine;
+    pkg.promptTemplate(order.domain.hostname) + credLine + langLine + budgetLine + methodLine + noScriptLine + fixAddonLine;
   const modelProvider = pkg.modelProvider;
 
   // YARIS-GUVENLI concurrency=1: PentAGI'yi cagirmadan ONCE 'running' slotunu

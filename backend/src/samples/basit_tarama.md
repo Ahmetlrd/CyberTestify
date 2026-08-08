@@ -8,19 +8,17 @@
 
 ## Bulgular
 
-# ornek-site.com Hızlı Güvenlik Ön-Kontrolü
+# ornek-site.com — Hızlı Güvenlik Ön-Kontrolü
 
-## Yönetici Özeti
+## 1. YÖNETİCİ ÖZETİ
 
-ornek-site.com ana sayfası üzerinde gerçekleştirilen hızlı, pasif ön-kontrol; TLS geçerliliği, temel HTTP güvenlik başlıkları ve sunucu banner bilgisini özetler. Genel görünüm olumlu; şifreleme güncel ve HTTPS zorunlu tutulmakta. Ancak birkaç güvenlik başlığı eksik olup, bunların eklenmesi kısa vadede önerilir. Kritik veya yüksek seviyeli bir bulgu tespit edilmemiştir.
+ornek-site.com ana sayfası üzerinde hızlı ve pasif bir güvenlik ön-kontrolü yapıldı. Şifreleme güncel (TLS 1.3) ve HTTPS zorunlu tutuluyor; sunucu banner'ında sürüm ifşası yok. Buna karşılık üç temel HTTP güvenlik başlığı (X-Frame-Options, X-Content-Type-Options, Content-Security-Policy) eksik. Bu eksiklikler doğrudan bir açık oluşturmaz ancak tarayıcı seviyesindeki savunma katmanlarını zayıflatır. **Genel risk seviyesi: Orta.** Kritik veya yüksek seviyeli bir bulgu tespit edilmedi.
 
-## 1. TLS / Sertifika
+## 2. GENEL DEĞERLENDİRME
 
-- **Durum**: ✅ Geçerli
-- **Protokol**: TLS 1.3 (güncel)
-- **HTTPS Yönlendirmesi**: ✅ Mevcut (HTTP → HTTPS, 301 kalıcı yönlendirme)
+Hedefin temel taşıma güvenliği (TLS/HTTPS) sağlam durumda ve teknoloji imzası dikkatli şekilde gizlenmiş. Tespit edilen eksiklikler, eklenmesi kısa vadede önerilen ancak tek başına sömürülebilir olmayan başlıklarla sınırlı. Bu nedenle sitenin genel güvenlik duruşu **Orta Risk** olarak değerlendirilmiştir — hızlı ve düşük maliyetli düzeltmelerle Düşük seviyeye çekilebilir.
 
-## 2. HTTP Güvenlik Başlıkları
+## 3. HTTP GÜVENLİK BAŞLIKLARI
 
 | Başlık | Durum | Not |
 |--------|-------|-----|
@@ -28,19 +26,57 @@ ornek-site.com ana sayfası üzerinde gerçekleştirilen hızlı, pasif ön-kont
 | X-Frame-Options | ❌ Eksik | Clickjacking koruması yok |
 | X-Content-Type-Options | ❌ Eksik | MIME-sniffing koruması yok |
 | Content-Security-Policy | ❌ Eksik | XSS azaltma katmanı yok |
+| Referrer-Policy | ⚠️ Eksik | Referrer sızıntısı ihtimali (düşük etki) |
 
-## 3. Sunucu Banner
+## 4. TLS SERTİFİKA DURUMU
 
-- **Server**: nginx (sürüm bilgisi gizlenmiş) — ✅ iyi uygulama
-- Teknoloji/sürüm ifşası gözlemlenmedi.
+- **Durum:** ✅ Geçerli
+- **Protokol:** TLS 1.3 (güncel)
+- **HTTPS Yönlendirmesi:** ✅ Mevcut (HTTP → HTTPS, 301 kalıcı yönlendirme)
+- Sertifika süresi geçerlilik aralığı içinde; zincir eksiği gözlemlenmedi.
 
-## Bulgu Özeti
+## 5. SUNUCU/TEKNOLOJİ İMZASI
 
-| # | Bulgu | Şiddet | Öneri |
-|---|-------|--------|-------|
-| 1 | X-Frame-Options başlığı eksik | Orta | `X-Frame-Options: SAMEORIGIN` ekleyin |
-| 2 | X-Content-Type-Options eksik | Orta | `X-Content-Type-Options: nosniff` ekleyin |
-| 3 | Content-Security-Policy eksik | Orta | Sitenize uygun temel bir CSP tanımlayın |
+- **Server:** nginx (sürüm bilgisi gizlenmiş) — ✅ iyi uygulama
+- Uygulama çatısı / dil sürümü ifşası gözlemlenmedi.
+- Bilgi ifşası oluşturan hata sayfası veya debug çıktısı tespit edilmedi.
+
+## 6. TESPİT EDİLEN RİSKLER
+
+| # | Bulgu | Şiddet | Kısa Açıklama |
+|---|-------|--------|----------------|
+| 1 | X-Frame-Options başlığı eksik | Orta | Sayfa iframe içine alınıp clickjacking'e açık olabilir |
+| 2 | X-Content-Type-Options eksik | Orta | Tarayıcı MIME-sniffing ile içeriği yanlış yorumlayabilir |
+| 3 | Content-Security-Policy eksik | Orta | XSS ve içerik enjeksiyonuna karşı azaltma katmanı yok |
+| 4 | Referrer-Policy eksik | Düşük | Dış bağlantılara referrer bilgisi sızabilir |
+
+## 7. AI Çözüm Önerileri (Eklenti)
+
+> Bu bölüm **AI Çözüm Önerileri** eklentisiyle açılır. Aşağıda örnek içerik, eklentinin sunduğu somut düzeltme rehberinin formatını gösterir.
+
+**1. X-Frame-Options ekleyin**
+nginx yapılandırmanıza şu satırı ekleyin:
+```
+add_header X-Frame-Options "SAMEORIGIN" always;
+```
+
+**2. X-Content-Type-Options ekleyin**
+```
+add_header X-Content-Type-Options "nosniff" always;
+```
+
+**3. Content-Security-Policy tanımlayın**
+Sitenize uygun temel bir politika ile başlayın, sonra sıkılaştırın:
+```
+add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'" always;
+```
+
+**4. Referrer-Policy ekleyin**
+```
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+```
+
+Değişikliklerden sonra `nginx -t` ile doğrulayıp yeniden yükleyin (`systemctl reload nginx`).
 
 ---
 

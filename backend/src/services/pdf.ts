@@ -86,6 +86,28 @@ function assessRisk(md: string, locale: 'tr' | 'en'): { level: 'high' | 'medium'
   return { level: 'low', label: t.riskLow, sentence: t.assessLow };
 }
 
+// (basit_tarama) Ajanin ACIKCA yazdigi genel risk seviyesini rapordan okur (yeni prompt
+// YÖNETİCİ ÖZETİ + GENEL DEĞERLENDİRME'de "Düşük/Orta/Yüksek/Kritik" yazmayi ZORUNLU kilar) →
+// PDF kutusu rapor metniyle TUTARLI olur. Ilk (bas kisimdaki) acik ifadeyi alir; bulunmazsa
+// severity-tabanli assessRisk'e duser.
+function assessBasit(
+  md: string,
+  t: { riskHigh: string; riskMedium: string; riskLow: string; assessHigh: string; assessMedium: string; assessLow: string },
+): { level: 'high' | 'medium' | 'low'; label: string; sentence: string } {
+  const head = md.slice(0, 2200);
+  // "Yüksek Risk" | "Risk seviyesi: Orta" | "Genel risk: Düşük" gibi ACIK ifade (bas kisim).
+  const m = head.match(
+    /[*_"'`]*\s*(kr[iİ]t[iİ]k|y[uü]ksek|orta|d[uü][sş][uü]k)\s*[*_"'`]*\s*risk|risk\s*(?:seviyesi|düzeyi|derecesi)?\s*[:：]?\s*[*_"'`]*\s*(kr[iİ]t[iİ]k|y[uü]ksek|orta|d[uü][sş][uü]k)/i,
+  );
+  if (m) {
+    const kw = (m[1] || m[2] || '').toLocaleLowerCase('tr');
+    if (/kr[iı]t[iı]k|y[uü]ksek/.test(kw)) return { level: 'high', label: t.riskHigh, sentence: t.assessHigh };
+    if (/orta/.test(kw)) return { level: 'medium', label: t.riskMedium, sentence: t.assessMedium };
+    if (/d[uü][sş][uü]k/.test(kw)) return { level: 'low', label: t.riskLow, sentence: t.assessLow };
+  }
+  return assessRisk(md, 'tr');
+}
+
 // (KVKK PILOTU) Durum sutununu (Uygun/Dikkat/Eksik) SAYARAK deterministik risk + kontrol
 // ozeti uretir — LLM'in tutarsiz etiketine GUVENME. Severity-tabanli assessRisk KVKK'da
 // calismiyordu (KVKK "Uygun/Dikkat/Eksik" kullanir, "kritik/yuksek" degil) — bu onu duzeltir.
@@ -186,7 +208,10 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
     <div class="ctrl-summary"><span class="ctrl-title">Hazırlık Durumu Özeti</span>
       <span class="ctrl-line">${escapeHtml(summaryLine)}</span></div>`;
   } else {
-    const risk = assessRisk(effectiveMd, meta.locale);
+    // basit_tarama: yeni prompt raporda ACIK risk seviyesi (YÖNETİCİ ÖZETİ/GENEL DEĞERLENDİRME)
+    // yazar → kutu ile rapor metni TUTARLI olsun diye once onu oku (assessBasit); digerlerinde
+    // severity-tabanli assessRisk. Boylece "metin Orta der ama kutu Düşük" tutarsizligi olmaz.
+    const risk = meta.packageKey === 'basit_tarama' ? assessBasit(effectiveMd, t) : assessRisk(effectiveMd, meta.locale);
     assessBox = `<div class="assess assess-${risk.level}">
     <div class="assess-head"><span class="assess-title">${escapeHtml(t.assessTitle)}</span>
       <span class="risk-badge risk-${risk.level}">${escapeHtml(risk.label)}</span></div>
