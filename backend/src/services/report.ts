@@ -6,6 +6,21 @@ import { FIX_SUGGESTIONS_DELIM } from './scanPackages.js';
 import { hasPassiveExtras, runPassiveExtras, renderPassiveExtrasMarkdown, PASSIVE_EXTRAS_DELIM } from './passiveExtras.js';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
 import { generateBasitReport } from './basitReport.js';
+import {
+  generateSslTlsReport, generateHeaderLeakReport, generateDnsEmailReport,
+  generateCorsCookieReport, generateCspReport,
+} from './surfaceReports.js';
+
+// Deterministik (kod-yazimi) rapor ureten paketler: key -> uretici(hostname).
+// Hepsi { findings, fixText } | null doner (null -> ajan/ham-kanit fallback).
+const DETERMINISTIC_GENERATORS: Record<string, ((host: string) => Promise<{ findings: string; fixText: string } | null>) | undefined> = {
+  basit_tarama: generateBasitReport,
+  ssl_tls: generateSslTlsReport,
+  header_leak: generateHeaderLeakReport,
+  dns_email: generateDnsEmailReport,
+  cors_cookie: generateCorsCookieReport,
+  csp_analiz: generateCspReport,
+};
 
 type Locale = 'tr' | 'en';
 
@@ -267,23 +282,25 @@ export async function generateAndStoreReport(flowId: string) {
   let findings = split.findings;
   let fixText = split.fixText;
 
-  // (basit_tarama) DETERMINISTIK RAPOR — ajanin ciktisini PARSE ETME. Ajan hem raporu hem
-  // komut formatini (curl -I / curl -v / Python script...) ongorulemez uretiyor. Bunun yerine
-  // veriyi KENDI KODUMUZLA cek (HTTP basliklari + TLS sertifikasi + HTML — bkz basitReport.ts;
-  // Ek Pasif Kontroller ile ayni yaklasim) ve raporu KOD yaz. Formattan BAGIMSIZ, her zaman
-  // tutarli. Hedefe ulasilamazsa (site kapali) null -> ajan/ham-kanit yoluna dusulur.
-  if (flow.order.package.key === 'basit_tarama') {
+  // DETERMINISTIK RAPOR — ajanin ciktisini PARSE ETME. Ajan hem raporu hem komut formatini
+  // (curl -I / curl -v / Python script...) ongorulemez uretiyor. Bunun yerine veriyi KENDI
+  // KODUMUZLA cek (HTTP/TLS/DNS/CORS/HTML — Ek Pasif Kontroller ile ayni yaklasim) ve raporu
+  // KOD yaz. Formattan BAGIMSIZ, her zaman tutarli. Hedefe ulasilamazsa null -> ajan/ham-kanit
+  // yoluna dusulur. basit_tarama + bundle_surface uyeleri (ssl_tls/header_leak/dns_email/
+  // cors_cookie/csp_analiz) bu yolla uretilir.
+  const detGen = DETERMINISTIC_GENERATORS[flow.order.package.key];
+  if (detGen) {
     try {
-      const built = await generateBasitReport(flow.order.domain.hostname);
+      const built = await detGen(flow.order.domain.hostname);
       if (built) {
         findings = built.findings;
         fixText = built.fixText;
-        console.log('[report][BASIT] Rapor KOD-toplanmis kanittan DETERMINISTIK uretildi (ajan ciktisi kullanilmadi).');
+        console.log(`[report][DET] ${flow.order.package.key}: rapor KOD-toplanmis kanittan DETERMINISTIK uretildi (ajan ciktisi kullanilmadi).`);
       } else {
-        console.warn('[report][BASIT] Hedefe ulasilamadi (HTTP/TLS kaniti yok) -> ajan/ham-kanit yoluna dusuluyor.');
+        console.warn(`[report][DET] ${flow.order.package.key}: hedefe ulasilamadi (kanit yok) -> ajan/ham-kanit yoluna dusuluyor.`);
       }
     } catch (err) {
-      console.error('[report][BASIT] deterministik rapor uretilemedi, ajan yoluna dusuluyor:', err);
+      console.error(`[report][DET] ${flow.order.package.key}: deterministik rapor uretilemedi, ajan yoluna dusuluyor:`, err);
     }
   }
 

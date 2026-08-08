@@ -227,6 +227,9 @@ const LOGO_SVG = `
   <path d="M9.2 12.2l1.9 1.9 3.9-4.1" stroke="#123F3A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
 </svg>`.trim();
 
+// Deterministik (kod-yazimi) rapor ureten paketler — rozet acik "Risk Seviyesi"den okunur.
+const DETERMINISTIC_PDF_PKGS = new Set(['basit_tarama', 'ssl_tls', 'header_leak', 'dns_email', 'cors_cookie', 'csp_analiz']);
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 }
@@ -276,7 +279,9 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     // basit_tarama: yeni prompt raporda ACIK risk seviyesi (YÖNETİCİ ÖZETİ/GENEL DEĞERLENDİRME)
     // yazar → kutu ile rapor metni TUTARLI olsun diye once onu oku (assessBasit); digerlerinde
     // severity-tabanli assessRisk. Boylece "metin Orta der ama kutu Düşük" tutarsizligi olmaz.
-    const risk = meta.packageKey === 'basit_tarama' ? assessBasit(effectiveMd, t) : assessRisk(effectiveMd, meta.locale);
+    // Deterministik (kod-yazimi) paketler GENEL DEĞERLENDİRME'ye acik "Risk Seviyesi: X" yazar;
+    // assessBasit once onu okur -> rozet metinle GARANTI tutarli. Digerlerinde severity-tabanli.
+    const risk = DETERMINISTIC_PDF_PKGS.has(meta.packageKey ?? '') ? assessBasit(effectiveMd, t) : assessRisk(effectiveMd, meta.locale);
     assessBox = `<div class="assess assess-${risk.level}">
     <div class="assess-head"><span class="assess-title">${escapeHtml(t.assessTitle)}</span>
       <span class="risk-badge risk-${risk.level}">${escapeHtml(risk.label)}</span></div>
