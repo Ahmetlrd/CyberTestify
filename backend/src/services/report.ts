@@ -395,7 +395,7 @@ const T = {
       '**Resmi degildir:** Bu rapor resmi uyumluluk denetimi/sertifikasyon (ASV/QSA vb.) yerine gecmez.',
       '**Sorumluluk:** Bulgularin dogrulanmasi ve giderilmesi musterinin sorumlulugundadir.',
     ],
-    fixTitle: 'AI Cozum Onerileri', fixNote: 'Bu bolum duzeltme (remediation) icindir; istismar/exploit kodu icermez.',
+    fixTitle: 'AI Çözüm Önerileri', fixNote: 'Bu bölüm düzeltme (remediation) içindir; istismar/exploit kodu içermez.',
   },
   en: {
     title: 'Security Scan Report', target: 'Target', pkg: 'Package', created: 'Generated at',
@@ -469,5 +469,7 @@ export function renderFixSuggestionsMarkdown(hostname: string, fixText: string, 
   if (packageKey === 'kvkk_hazirlik') {
     return `> Bu bölüm düzeltme (remediation) önerileri içindir; istismar/exploit kodu içermez.\n\n${fixText}\n`;
   }
-  return `# ${t.fixTitle} — ${hostname}\n\n> ${t.fixNote}\n\n${fixText}\n`;
+  // PDF tarafi zaten "AI Çözüm Önerileri" baslik (h2) ekliyor (buildHtml fix-section); burada
+  // AYRICA "# ... — host" H1'i EKLEMEYIZ (cift baslik/tekrar olurdu). Yalniz not + icerik.
+  return `> ${t.fixNote}\n\n${fixText}\n`;
 }

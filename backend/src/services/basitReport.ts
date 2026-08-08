@@ -161,12 +161,14 @@ function detectTech(headers: Map<string, string>, html: string): { tech: string[
 const SEC_KEYS = ['csp', 'xfo', 'xcto', 'hsts', 'referrer', 'permissions'] as const;
 type SecKey = (typeof SEC_KEYS)[number];
 
-function riskLevel(absent: Set<SecKey>): 'low' | 'medium' | 'high' {
-  const critMissing = (absent.has('csp') ? 1 : 0) + (absent.has('xfo') ? 1 : 0);
-  const otherAbsent = [...absent].filter((k) => k !== 'csp' && k !== 'xfo').length;
-  if (critMissing === 2 && otherAbsent > 2) return 'high';
-  if (critMissing >= 1) return 'medium';
-  if (otherAbsent >= 3) return 'medium';
+// KALIBRE: "Yüksek" YALNIZ gercek/aciak bir sorunda (TLS suresi dolmus VEYA hostname
+// uyusmazligi — ziyaretçiye dogrudan tarayıcı uyarisi). Salt eksik guvenlik basligi
+// (savunma-derinligi bosluklari) panik dili olan "Yüksek" degil "Orta"dir. Yalniz 1-2
+// onemsiz baslik eksikse "Düşük". (Grok geri bildirimi: baslik eksikligini abartma.)
+function riskLevel(absent: Set<SecKey>, tls: TlsInfo): 'low' | 'medium' | 'high' {
+  if (tls.found && (tls.hostnameMatch === false || (tls.daysLeft != null && tls.daysLeft < 0))) return 'high';
+  const crit = absent.has('csp') || absent.has('xfo');
+  if (crit || absent.size >= 3) return 'medium';
   return 'low';
 }
 
@@ -198,7 +200,7 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
     const row = HEADER_ROWS.find((r) => r.key === k)!;
     if (!ev.headers.has(row.hdr)) absent.add(k);
   }
-  const level = riskLevel(absent);
+  const level = riskLevel(absent, ev.tls);
   const missingSec = SEC_KEYS.filter((k) => absent.has(k)).map((k) => HEADER_ROWS.find((r) => r.key === k)!.header);
 
   // Tablo
@@ -240,9 +242,10 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
   if (tlsInf.daysLeft != null && tlsInf.daysLeft < 0) riskItems.push('- **Yüksek — Sertifika süresi dolmuş:** Site tarayıcılarca güvensiz kabul edilir; ziyaretçi kaybına yol açar.');
   const critList: string[] = missingSec.filter((h) => h === 'Content-Security-Policy' || h === 'X-Frame-Options');
   if (critList.length) {
-    const sev = critList.length === 2 ? 'Yüksek' : 'Orta';
-    const spaNote = isSpa && critList.includes('Content-Security-Policy') ? ' Site JavaScript ağırlıklı bir SPA olduğundan XSS riski daha da kritiktir.' : '';
-    riskItems.push(`- **${sev} — Kritik güvenlik başlıkları eksik (${critList.join(', ')}):** XSS ve/veya clickjacking saldırılarına karşı tarayıcı seviyesinde savunma bulunmuyor.${spaNote}`);
+    // Siddet "Orta" — badge ile tutarli (baslik eksikligi savunma-derinligi boslugudur, aktif
+    // istismar kaniti degil). SPA'da CSP eksikligini vurgula ama panik dili kullanma.
+    const spaNote = isSpa && critList.includes('Content-Security-Policy') ? ' Site JavaScript ağırlıklı bir SPA olduğundan CSP eksikliği XSS etkisini büyütür; önceliklendirilmesi önerilir.' : '';
+    riskItems.push(`- **Orta — Kritik güvenlik başlıkları eksik (${critList.join(', ')}):** XSS ve/veya clickjacking saldırılarına karşı tarayıcı seviyesinde savunma bulunmuyor.${spaNote}`);
   }
   const otherMissing = missingSec.filter((h) => !critList.includes(h));
   if (otherMissing.length) riskItems.push(`- **Orta — Ek güvenlik başlıkları eksik (${otherMissing.join(', ')}):** Savunma derinliği zayıf; tek tek düşük etkili olsa da birlikte saldırı yüzeyini genişletir.`);
@@ -250,18 +253,25 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
   if (!riskItems.length) riskItems.push('- Belirgin bir güvenlik riski öne çıkmadı; rapor yalnızca küçük iyileştirme fırsatlarını listeler.');
 
   // Yonetici ozeti
+  const tlsProblem = tlsInf.hostnameMatch === false ? 'TLS sertifikası bu alan adıyla eşleşmiyor' : tlsInf.daysLeft != null && tlsInf.daysLeft < 0 ? 'TLS sertifikasının süresi dolmuş' : '';
+  const riskReason =
+    level === 'high'
+      ? `${tlsProblem} — ziyaretçilere doğrudan tarayıcı güvenlik uyarısı gösterebilir.`
+      : level === 'medium'
+        ? 'öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri var; taşıma güvenliği (TLS) sağlam.'
+        : 'ciddi/kritik bir açık öne çıkmadı; yalnızca küçük iyileştirme fırsatları var.';
   const bullets: string[] = [];
-  bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'birden fazla kritik başlık ve/veya sertifika sorunu tespit edildi.' : level === 'medium' ? 'giderilmesi önerilen önemli güvenlik başlığı eksiklikleri var; taşıma güvenliği (TLS) genelde sağlam.' : 'ciddi/kritik bir açık öne çıkmadı.'}`);
+  bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${riskReason}`);
   if (missingSec.length) bullets.push(`- ${missingSec.length}/6 önemli güvenlik başlığı eksik: ${missingSec.join(', ')}.`);
   else bullets.push('- Önerilen güvenlik başlıklarının tamamı mevcut.');
   if (tlsInf.found) bullets.push(`- TLS ${tlsInf.hostnameMatch === false ? '⚠️ hostname uyuşmazlığı' : tlsInf.daysLeft != null && tlsInf.daysLeft >= 0 ? `geçerli (${tlsInf.daysLeft} gün)` : 'geçerli'}${tlsInf.protocol ? `, ${tlsInf.protocol}` : ''}.`);
-  bullets.push('- **Önerilen ilk adım:** Eksik HTTP güvenlik başlıklarını sunucu yapılandırmasına ekleyin (hazır komutlar için "AI Çözüm Önerileri" bölümüne bakın).');
+  bullets.push('- **Önerilen ilk adım:** Eksik HTTP güvenlik başlıklarını sunucu yapılandırmasına ekleyin; adım adım hazır komutlar "AI Çözüm Önerileri" eklentisinde sunulur.');
 
   const genel =
     level === 'high'
-      ? 'Öncelikli ele alınması gereken kritik güvenlik başlığı eksiklikleri ve/veya sertifika sorunları var. Bunlar tek başına siteyi ele geçirmez ancak XSS/clickjacking gibi saldırıların başarı şansını belirgin şekilde artırır.'
+      ? 'Ziyaretçilere doğrudan güvenlik uyarısı gösterebilecek bir TLS sertifikası sorunu tespit edildi; acilen giderilmesi önerilir. Ayrıca eksik güvenlik başlıkları savunma derinliğini zayıflatıyor.'
       : level === 'medium'
-        ? 'Kısa vadede giderilmesi önerilen önemli güvenlik başlığı eksiklikleri var; taşıma güvenliği (TLS/HTTPS) genel olarak sağlam. Eksik başlıklar düşük maliyetli sunucu ayarlarıyla kapatılabilir.'
+        ? 'Öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri var; taşıma güvenliği (TLS/HTTPS) genel olarak sağlam. Eksik başlıklar tek başına siteyi ele geçirmez ancak XSS/clickjacking gibi saldırıların başarı şansını artırır ve düşük maliyetli sunucu ayarlarıyla kapatılabilir.'
         : 'Ciddi/kritik bir güvenlik açığı öne çıkmadı; rapor öncelikle savunma derinliğini artıracak küçük iyileştirme fırsatlarını listeler.';
 
   const findings =

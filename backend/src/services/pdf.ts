@@ -144,34 +144,33 @@ export function assessBasit(
   md: string,
   t: { riskHigh: string; riskMedium: string; riskLow: string; assessHigh: string; assessMedium: string; assessLow: string },
 ): { level: 'high' | 'medium' | 'low'; label: string; sentence: string } {
+  const mk = (level: 'high' | 'medium' | 'low') => ({
+    level,
+    label: level === 'high' ? t.riskHigh : level === 'medium' ? t.riskMedium : t.riskLow,
+    sentence:
+      level === 'high'
+        ? 'Ziyaretçilere doğrudan güvenlik uyarısı gösterebilecek acil bir sorun (ör. sertifika süresi/hostname) tespit edildi; öncelikli olarak giderilmesi önerilir.'
+        : level === 'medium'
+          ? 'Öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri tespit edildi; taşıma güvenliği (TLS) genel olarak sağlam.'
+          : 'Ciddi/kritik bir güvenlik açığı öne çıkmadı; rapor yalnızca küçük iyileştirme fırsatlarını listeler.',
+  });
+
+  // (1) Rapor KOD-yazimi oldugundan GENEL DEĞERLENDİRME'deki ACIK "Risk Seviyesi: X"i oku —
+  //     tek dogruluk kaynagi; rozet ile metin GARANTI tutarli (TLS-tabanli Yüksek dahil).
+  const m = md.slice(0, 1500).match(/risk\s*seviyesi\s*[:：]\s*\**\s*(kr[iİ]t[iİ]k|y[uü]ksek|orta|d[uü][sş][uü]k)/i);
+  if (m) {
+    const kw = m[1].toLocaleLowerCase('tr');
+    if (/kr[iı]t[iı]k|y[uü]ksek/.test(kw)) return mk('high');
+    if (/orta/.test(kw)) return mk('medium');
+    if (/d[uü][sş][uü]k/.test(kw)) return mk('low');
+  }
+
+  // (2) Acik ifade yoksa (eski/ajan raporu): HTTP baslik tablosundan turet.
   const { present, absent } = parseBasitHeaders(md);
-  // Parse guvenilir degilse (hic baslik taninmadi) -> severity-tabanli fallback.
-  if (present.size + absent.size === 0) return assessRisk(md, 'tr');
-
-  const cspAbsent = absent.has('csp');
-  const xfoAbsent = absent.has('xfo');
-  const critMissing = (cspAbsent ? 1 : 0) + (xfoAbsent ? 1 : 0);
-  const otherAbsent = [...absent].filter((k) => k !== 'csp' && k !== 'xfo').length;
-
-  let level: 'high' | 'medium' | 'low';
-  if (critMissing === 2 && otherAbsent > 2) level = 'high'; // CSP+X-Frame + 3+ baska baslik eksik
-  else if (critMissing >= 1) level = 'medium'; // CSP VEYA X-Frame eksik -> minimum Orta
-  else if (otherAbsent >= 3) level = 'medium'; // kritikler var ama cok sayida onemli eksik
-  else level = 'low'; // yalniz 1-2 onemsiz eksik
-
-  const label = level === 'high' ? t.riskHigh : level === 'medium' ? t.riskMedium : t.riskLow;
-  const NAMES: Record<string, string> = {
-    csp: 'Content-Security-Policy', xfo: 'X-Frame-Options', xcto: 'X-Content-Type-Options',
-    hsts: 'HSTS', referrer: 'Referrer-Policy', permissions: 'Permissions-Policy',
-  };
-  const missingCrit = [cspAbsent ? NAMES.csp : '', xfoAbsent ? NAMES.xfo : ''].filter(Boolean).join(' ve ');
-  const sentence =
-    level === 'high'
-      ? `Birden fazla kritik güvenlik başlığı${missingCrit ? ` (${missingCrit})` : ''} ve ek başlıklar eksik; öncelikli olarak ele alınması önerilir.`
-      : level === 'medium'
-        ? `Önemli güvenlik başlıkları${missingCrit ? ` (${missingCrit})` : ''} eksik; kısa vadede giderilmesi önerilir.`
-        : 'Temel güvenlik başlıkları büyük ölçüde mevcut; rapor yalnızca küçük iyileştirme fırsatlarını listeler.';
-  return { level, label, sentence };
+  if (present.size + absent.size === 0) return assessRisk(md, 'tr'); // (3) son care
+  const crit = absent.has('csp') || absent.has('xfo');
+  if (crit || absent.size >= 3) return mk('medium');
+  return mk('low');
 }
 
 // (KVKK PILOTU) Durum sutununu (Uygun/Dikkat/Eksik) SAYARAK deterministik risk + kontrol
