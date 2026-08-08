@@ -143,13 +143,38 @@ export function sanitizeKvkkReport(md: string): string {
   return out;
 }
 
-/** Bulgulardan "cozum onerileri" bolumunu (delimiter sonrasi) ayirir. */
+// Ayirici YALNIZ KENDI SATIRINDA (opsiyonel markdown baslik "#" + bosluk ile) GERCEK
+// ayiricidir. Ajan bazen isareti YONETICI OZETI icinde satir-ici capraz-referans olarak
+// yazar (ör. "...icin bkz. ===FIX_SUGGESTIONS===)"); bu GERCEK bolme noktasi DEGILDIR.
+// indexOf ile o satir-ici geciste bolunce 3-6. zorunlu bolumler yanlislikla kilitli/paid
+// tarafa duser + ")." gibi kalinti sizar (bkz order 8b1c9758 / flow 68 bug'i). Kendi
+// satirindaki ILK geciste boluyoruz.
+const FIX_DELIM_STANDALONE = new RegExp(`^[ \\t]*#{0,6}[ \\t]*${FIX_SUGGESTIONS_DELIM}[ \\t]*$`, 'm');
+
+/**
+ * GUVENLIK AGI: ham ic-format isareti (===FIX_SUGGESTIONS===) render edilen musteri
+ * metninde ASLA gorunmemeli. Kendi satirindaki (baslik dahil) kalinti isareti TAMAMEN
+ * kaldirir; satir-ici geciste anlamli bir ifadeyle degistirir; yalniz noktalama kalan
+ * (")." / "." / ")") artik satirlarini ve fazla bos satirlari temizler.
+ */
+function stripDelimArtifacts(md: string): string {
+  return md
+    .replace(new RegExp(`^[ \\t]*#{0,6}[ \\t]*${FIX_SUGGESTIONS_DELIM}[ \\t]*$`, 'gm'), '')
+    .replace(new RegExp(FIX_SUGGESTIONS_DELIM, 'g'), 'AI Çözüm Önerileri bölümü')
+    .replace(/^[ \t]*[).]+[ \t]*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** Bulgulardan "cozum onerileri" bolumunu (KENDI SATIRINDAKI delimiter sonrasi) ayirir. */
 function splitFixSuggestions(text: string): { findings: string; fixText: string } {
-  const idx = text.indexOf(FIX_SUGGESTIONS_DELIM);
-  if (idx === -1) return { findings: text.trim(), fixText: '' };
+  const m = FIX_DELIM_STANDALONE.exec(text);
+  // Gercek (kendi satirinda) ayirici yoksa: hepsi bulgudur, fix bolumu yok. Metinde
+  // yalniz satir-ici bir kalinti varsa da onu temizle (ham isaret sizmasin).
+  if (!m) return { findings: stripDelimArtifacts(text), fixText: '' };
   return {
-    findings: text.slice(0, idx).trim(),
-    fixText: text.slice(idx + FIX_SUGGESTIONS_DELIM.length).trim(),
+    findings: stripDelimArtifacts(text.slice(0, m.index)),
+    fixText: stripDelimArtifacts(text.slice(m.index + m[0].length)),
   };
 }
 

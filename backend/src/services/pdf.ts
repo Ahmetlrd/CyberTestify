@@ -39,7 +39,8 @@ const L = {
     brandTagline: 'Otomatik Güvenlik Tarama Raporu',
     target: 'Hedef', pkg: 'Paket', date: 'Tarih',
     fixTitle: 'AI Çözüm Önerileri',
-    fixLocked: 'Bu bölüm kilitli — "AI Çözüm Önerileri" eklentisi satın alınınca rapora eklenir.',
+    fixLocked: 'Bu premium bölüm, yukarıda tespit edilen HER bulgu için adım adım düzeltme talimatı ve panoya kopyalanmaya hazır yapılandırma örnekleri (Nginx/sunucu ayarları, güvenlik başlıkları vb.) içerir.',
+    fixLockedCta: '🔓 Kilidi açmak için “AI Çözüm Önerileri” eklentisini satın alın.',
     footerLegal: 'Yapay zeka üretimi pasif tarama raporu — resmi denetim/sertifikasyon değildir. Gizlidir.',
     page: 'Sayfa',
     assessTitle: 'Genel Değerlendirme',
@@ -52,7 +53,8 @@ const L = {
     brandTagline: 'Automated Security Scan Report',
     target: 'Target', pkg: 'Package', date: 'Date',
     fixTitle: 'AI Fix Suggestions',
-    fixLocked: 'This section is locked — it is added once the "AI Fix Suggestions" add-on is purchased.',
+    fixLocked: 'This premium section contains step-by-step remediation for EACH finding above, plus ready-to-paste configuration examples (Nginx/server settings, security headers, etc.).',
+    fixLockedCta: '🔓 Purchase the “AI Fix Suggestions” add-on to unlock it.',
     footerLegal: 'AI-generated passive scan report — not an official audit/certification. Confidential.',
     page: 'Page',
     assessTitle: 'Overall Assessment',
@@ -231,7 +233,7 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
   if (opts.fixMarkdown && opts.fixMarkdown.trim()) {
     bodyHtml += `<div class="fix-section"><h2>${escapeHtml(fixTitle)}</h2>${md.render(opts.fixMarkdown)}</div>`;
   } else if (opts.fixLocked) {
-    bodyHtml += `<div class="fix-locked"><h2>🔒 ${escapeHtml(fixTitle)}</h2><p>${escapeHtml(t.fixLocked)}</p></div>`;
+    bodyHtml += `<div class="fix-locked"><h2>🔒 ${escapeHtml(fixTitle)}</h2><p>${escapeHtml(t.fixLocked)}</p><p class="fix-cta">${escapeHtml(t.fixLockedCta)}</p></div>`;
   }
 
   return `<!doctype html><html lang="${meta.locale}"><head><meta charset="utf-8">
@@ -315,6 +317,7 @@ function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions):
   .fix-section h2 { color: #E0940E; }
   .fix-locked { margin-top: 22px; padding: 14px; background: #EEF5F3; border: 1px dashed #5FA396; border-radius: 6px; color: #14514A; }
   .fix-locked h2 { color: #5FA396; margin: 0 0 4px; font-size: 14px; }
+  .fix-locked .fix-cta { margin: 8px 0 0; font-weight: 600; color: #14514A; }
 </style></head>
 <body>
   <div class="cover-band">

@@ -402,6 +402,7 @@ MANDATORY REPORT STRUCTURE (exactly in this order):
    - No speculative claims
 7. ===FIX_SUGGESTIONS===
    - This section is a PAID add-on ("AI Çözüm Önerileri").
+   - CRITICAL MARKER RULE: Write the marker ===FIX_SUGGESTIONS=== EXACTLY ONCE, on its OWN line, immediately before this section — it is an internal split control token, NOT visible customer text. NEVER write this marker anywhere else and NEVER reference it inline in prose (do NOT write things like "see the fix marker"); if you must refer to this section in the text above, call it "AI Çözüm Önerileri bölümü".
    - If the order includes the paid add-on flag → write concrete, safe, actionable remediation for each important finding (config examples allowed, never exploit code).
    - If the paid flag is NOT present → output exactly this line and nothing more under it:
      Bu bölüm kilitli — "AI Çözüm Önerileri" eklentisi satın alınınca rapora eklenir.
