@@ -122,32 +122,49 @@ export function buildHeaderFixSuggestions(findingsMd: string, hostname: string):
     .map((k, i) => `### ${i + 1}. ${REMEDIATION[k].title}\n\n${REMEDIATION[k].body}`)
     .join('\n\n');
 
-  const combined = targets
-    .filter((k) => k !== 'xxss')
-    .map((k) => {
-      const line: Record<HeaderKey, string> = {
-        csp: 'add_header Content-Security-Policy "default-src \'self\'; frame-ancestors \'self\'" always;',
-        xfo: 'add_header X-Frame-Options "SAMEORIGIN" always;',
-        xcto: 'add_header X-Content-Type-Options "nosniff" always;',
-        hsts: 'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;',
-        referrer: 'add_header Referrer-Policy "strict-origin-when-cross-origin" always;',
-        permissions: 'add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;',
-        xxss: '',
-      };
-      return line[k];
-    })
-    .filter(Boolean)
-    .join('\n');
+  // Kanonik baslik adi + degeri (tum platform ornekleri bundan uretilir — tek kaynak).
+  const HV: Record<HeaderKey, { name: string; value: string }> = {
+    csp: { name: 'Content-Security-Policy', value: "default-src 'self'; frame-ancestors 'self'" },
+    xfo: { name: 'X-Frame-Options', value: 'SAMEORIGIN' },
+    xcto: { name: 'X-Content-Type-Options', value: 'nosniff' },
+    hsts: { name: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+    referrer: { name: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+    permissions: { name: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
+    xxss: { name: 'X-XSS-Protection', value: '1; mode=block' },
+  };
+  const keys = targets.filter((k) => k !== 'xxss');
+
+  const combined = keys.map((k) => `add_header ${HV[k].name} "${HV[k].value}" always;`).join('\n');
+  // Firebase Hosting (firebase.json) + Vercel (vercel.json) — JSON key/value dizisi
+  const jsonHeaders = keys.map((k) => `          { "key": "${HV[k].name}", "value": "${HV[k].value}" }`).join(',\n');
+  // Next.js (next.config.js) — tek tirnak
+  const nextHeaders = keys.map((k) => `          { key: '${HV[k].name}', value: '${HV[k].value}' }`).join(',\n');
+  // Apache (.htaccess)
+  const apache = keys.map((k) => `Header always set ${HV[k].name} "${HV[k].value}"`).join('\n');
 
   return (
     `Aşağıdaki öneriler, ${hostname} ana sayfasında tespit edilen eksik güvenlik başlıklarını gidermeye yöneliktir. ` +
-    `Örnekler Nginx içindir; farklı bir sunucu/hosting kullanıyorsanız aynı başlıkları o platformun yöntemiyle ekleyin.\n\n` +
+    `Her başlık için önce kısa açıklama, ardından Nginx örneği verilmiştir; en sonda Nginx dışı platformlar (Firebase, Vercel, Next.js, Apache) için hazır bloklar bulabilirsiniz. Kendi sunucunuza uygun olanı kopyalayın.\n\n` +
     `${items}\n\n` +
-    `### Tümünü birleştiren Nginx yapılandırması\n\n` +
+    `### Tümünü birleştiren yapılandırma — Nginx\n\n` +
     `Sunucu bloğunuza (server { ... }) ekleyip \`nginx -t\` ile doğrulayın, ardından \`systemctl reload nginx\` ile yeniden yükleyin:\n\n` +
-    '```nginx\n' +
-    `${combined}\n` +
+    '```nginx\n' + `${combined}\n` + '```\n\n' +
+    `### Diğer platformlar için hazır yapılandırma\n\n` +
+    `Aynı başlıkları, sunucunuz Nginx değilse aşağıdaki hazır bloklardan uygun olanıyla ekleyebilirsiniz.\n\n` +
+    `**Firebase Hosting — \`firebase.json\`:**\n\n` +
+    '```json\n' +
+    `{\n  "hosting": {\n    "headers": [\n      {\n        "source": "**",\n        "headers": [\n${jsonHeaders}\n        ]\n      }\n    ]\n  }\n}\n` +
     '```\n\n' +
+    `**Vercel — \`vercel.json\`:**\n\n` +
+    '```json\n' +
+    `{\n  "headers": [\n    {\n      "source": "/(.*)",\n      "headers": [\n${jsonHeaders}\n      ]\n    }\n  ]\n}\n` +
+    '```\n\n' +
+    `**Next.js — \`next.config.js\`:**\n\n` +
+    '```js\n' +
+    `module.exports = {\n  async headers() {\n    return [\n      {\n        source: '/(.*)',\n        headers: [\n${nextHeaders}\n        ],\n      },\n    ];\n  },\n};\n` +
+    '```\n\n' +
+    `**Apache — \`.htaccess\` (mod_headers):**\n\n` +
+    '```apache\n' + `${apache}\n` + '```\n\n' +
     `Değişikliklerden sonra tarayıcı geliştirici araçları (Network sekmesi) veya \`curl -I https://${hostname}\` ile başlıkların yanıta eklendiğini doğrulayın.`
   );
 }
