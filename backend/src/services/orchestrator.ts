@@ -7,6 +7,7 @@ import { isVerificationStillValid } from './verification.js';
 import { checkEgressProxyHealth } from './egressHealth.js';
 import * as pentagi from '../pentagi/client.js';
 import { sendScanStarted } from './mailer.js';
+import { isDeterministicPackage } from './report.js';
 
 /**
  * Kapsam kilidi guvencesi: egress proxy (Seviye 1) ayakta DEGILSE tarama
@@ -203,12 +204,13 @@ export async function startScanForOrder(orderId: string) {
     throw err;
   }
 
-  // (PENTAGI'SIZ) basit_tarama raporu TAMAMEN backend collector'lariyla (generateBasitReport →
-  // collectEvidence: fetchHome + node:tls) uretilir; PentAGI ajani/sandbox'i GEREKSIZ (12 tool-call
-  // + ~5 dk bosa gidiyordu). Flow KAYDI durum/kuyruk/ilerleme/mail icin DURUR ama PentAGI flow'u
-  // ACILMAZ — pentagiFlowId 'deterministic-' sentinel'i alir; worker bunu gorup raporu DOGRUDAN
-  // uretir. Diger paketler (bundle_surface dahil) DEGISMEZ: normal PentAGI akisi.
-  if (order.package.key === 'basit_tarama') {
+  // (PENTAGI'SIZ) Rapor TAMAMEN backend collector'lariyla uretilen paketler (basit_tarama +
+  // bundle_surface ve 5 uyesi ssl_tls/header_leak/dns_email/cors_cookie/csp_analiz) icin PentAGI
+  // ajani/sandbox'i GEREKSIZ (tool-call + dakikalarca bosa gidiyordu). Flow KAYDI durum/kuyruk/
+  // ilerleme/mail icin DURUR ama PentAGI flow'u ACILMAZ — pentagiFlowId 'deterministic-' sentinel'i
+  // alir; worker bunu gorup raporu DOGRUDAN uretir (generateAndStoreReport paket key'ine gore dogru
+  // ureticiyi cagirir). Uyum/Kesif paketleri ve verify paketleri DEGISMEZ: normal PentAGI akisi.
+  if (isDeterministicPackage(order.package.key)) {
     flow = await prisma.flow.update({ where: { id: flow.id }, data: { pentagiFlowId: `deterministic-${order.id}` } });
   } else {
     // Slot bizim — simdi PentAGI flow'unu yarat ve gercek ID ile guncelle.

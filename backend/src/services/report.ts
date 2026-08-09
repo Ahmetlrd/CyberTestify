@@ -23,6 +23,13 @@ const DETERMINISTIC_GENERATORS: Record<string, ((host: string) => Promise<{ find
   bundle_surface: generateBundleSurfaceReport, // kombine paket -> 5 alan TEK raporda
 };
 
+// Rapor TAMAMEN koddan uretilen (backend collector'lari) paketler -> PentAGI ajani/sandbox'i
+// GEREKSIZ. Orchestrator bunlar icin createFlow'u atlar (pentagiFlowId 'deterministic-' sentinel);
+// worker + generateAndStoreReport zaten sentinel'e gore PentAGI cagrilarini atliyor. TEK KAYNAK.
+export function isDeterministicPackage(key: string): boolean {
+  return DETERMINISTIC_GENERATORS[key] !== undefined;
+}
+
 type Locale = 'tr' | 'en';
 
 /**
