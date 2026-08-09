@@ -12,7 +12,11 @@ import {
 } from './surfaceReports.js';
 import { generateBundleComplianceReport } from './complianceReports.js';
 import { generateBundleReconReport } from './reconReports.js';
-import { generateInjectionVerifyReport, generateIdorVerifyReport, generateBundleActiveVerifyReport } from './activeVerifyReports.js';
+import {
+  generateInjectionVerifyReport, generateIdorVerifyReport, generateBundleActiveVerifyReport,
+  generateSsrfVerifyReport, generateRceVerifyReport, generateFileUploadVerifyReport,
+  generateBusinessLogicVerifyReport, generateRaceMassAssignVerifyReport,
+} from './activeVerifyReports.js';
 
 // Deterministik (kod-yazimi) rapor ureten paketler: key -> uretici(hostname).
 // Hepsi { findings, fixText } | null doner (null -> ajan/ham-kanit fallback).
@@ -28,7 +32,12 @@ const DETERMINISTIC_GENERATORS: Record<string, ((host: string) => Promise<{ find
   bundle_recon: generateBundleReconReport, // kombine paket -> subdomain+api+cms/cve TEK raporda
   injection_verify: generateInjectionVerifyReport, // aktif-hafif: SQLi/XSS kod-tabanli prob (PentAGI'siz)
   idor_verify: generateIdorVerifyReport, // aktif-hafif: kimlik-dogrulamasiz IDOR gostergesi (PentAGI'siz)
-  bundle_active_verify: generateBundleActiveVerifyReport, // kombine: injection+idor gercek + 5 kontrol durustluk notu
+  bundle_active_verify: generateBundleActiveVerifyReport, // kombine: 7 aktif-hafif kontrol (in-band)
+  ssrf_verify: generateSsrfVerifyReport,
+  rce_verify: generateRceVerifyReport,
+  file_upload_verify: generateFileUploadVerifyReport,
+  business_logic_verify: generateBusinessLogicVerifyReport,
+  race_massassign_verify: generateRaceMassAssignVerifyReport,
 };
 
 // Rapor TAMAMEN koddan uretilen (backend collector'lari) paketler -> PentAGI ajani/sandbox'i

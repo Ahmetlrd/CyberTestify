@@ -14,6 +14,7 @@
  *  - XSS: yalniz benzersiz zararsiz isaret; JS calistirma YOK, stored XSS denenmez.
  *  - IDOR: yalniz GET; komsu ID; DONEN VERI SAKLANMAZ (sadece uzunluk/hash/durum karsilastirilir).
  */
+import { randomBytes } from 'node:crypto';
 import { collectHttp } from './surfaceEvidence.js';
 
 const MIN_DELAY_MS = 1200;         // istekler arasi min bekleme (hedefi yormamak)
@@ -280,4 +281,255 @@ export async function collectIdorEvidence(host: string): Promise<IdorEvidence> {
   if (ctx.stopped) notes.push(ctx.stopped);
   if (!eps.length) notes.push('Ana sayfada sayısal/tahmin-edilebilir ID içeren bir uç nokta (ör. `?id=123`, `/user/45`) bulunamadı.');
   return { ok: true, candidates: eps.length, endpointsTested: tested, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+}
+
+// ======================================================================================
+// ORTAK — FAZ B/C/D (SSRF, RCE, Dosya Yükleme, İş Mantığı, Race/Mass-Assignment)
+// Hepsi in-band; PentAGI'siz; ProbeCtx devre kesici + tek-deneme (retry YOK) ile.
+// ======================================================================================
+export type SideEffectRisk = 'none' | 'possible' | 'confirmed';
+export type VFinding = {
+  check: string; inputPoint: string; vulnerable: boolean; technique: string;
+  evidence: string; confidence: 'high' | 'medium' | 'low'; severity: 'high' | 'medium' | 'low';
+  sideEffectRisk: SideEffectRisk;
+};
+export type ActiveCheckEvidence = { ok: boolean; inputsFound: number; probesSent: number; findings: VFinding[]; stopped: string | null; notes: string[] };
+
+const OOB_ECHO_BASE = (process.env.PUBLIC_API_URL ?? 'https://api.cybertestify.com').replace(/\/$/, '');
+const OOB_ECHO_HOST = (() => { try { return new URL(OOB_ECHO_BASE).hostname.toLowerCase(); } catch { return 'api.cybertestify.com'; } })();
+const SLEEP_S = 5;                 // echo gecikmesi + rce sleep suresi
+const randToken = () => randomBytes(16).toString('hex');
+
+// HARD-GUARD (koda gomulu): ic ag / bulut metadata / localhost ASLA hedeflenmez.
+function isInternalHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/\.$/, '');
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.internal') || h.endsWith('.local')) return true;
+  if (h === '169.254.169.254' || h === 'metadata.google.internal' || h === '100.100.100.200') return true;
+  if (h === '::1' || h === '0.0.0.0') return true;
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const a = +m[1], b = +m[2];
+    if (a === 127 || a === 10 || a === 0 || a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+  }
+  return false;
+}
+
+// ======================================================================================
+// FAZ B.1 — ssrf_verify (in-band, OOB YOK): kontrollu-gecikme echo URL + zaman farki
+// ======================================================================================
+const FETCH_PARAM_RE = /(^|_)(url|uri|link|webhook|callback|image|img|src|source|dest|destination|redirect|redir|feed|proxy|fetch|load|domain|site|target|host|page|ref|next|return|continue|file|path|preview|thumb|avatar|logo)$/i;
+
+export async function collectSsrfEvidence(host: string): Promise<ActiveCheckEvidence> {
+  const home = await collectHttp(host);
+  if (!home.ok) return { ok: false, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  const inputs = discoverInputs(host, home.html).filter((ip) => FETCH_PARAM_RE.test(ip.param)).slice(0, 3);
+  const ctx = new ProbeCtx();
+  const findings: VFinding[] = [];
+  const notes: string[] = [];
+  const base = await ctx.fetchOnce(`https://${host}/`);
+  if (base) ctx.baseline = base.ms;
+
+  for (const ip of inputs) {
+    if (ctx.stopped) break;
+    const token = randToken();
+    const echoUrl = `${OOB_ECHO_BASE}/oob/echo/${token}`;
+    // HARD-GUARD: probe URL yalniz kendi echo host'umuz olabilir; ic ag ASLA.
+    try { const eh = new URL(echoUrl).hostname.toLowerCase(); if (eh !== OOB_ECHO_HOST || isInternalHost(eh)) continue; } catch { continue; }
+    const label = `${ip.method} ${new URL(ip.action).pathname}?${ip.param}`;
+    const r = ip.method === 'GET'
+      ? await ctx.fetchOnce(buildGetUrl(ip, echoUrl), { expectSlow: true })
+      : await ctx.fetchOnce(ip.action, { method: 'POST', body: buildFormBody(ip, echoUrl), contentType: 'application/x-www-form-urlencoded', expectSlow: true });
+    if (r && r.status > 0 && r.ms >= ctx.baseline + (SLEEP_S * 1000) - 1000) {
+      // (esik: baseline + ~SLEEP_S sn) — kontrollu gecikme hedefin yanitina yansidi
+      findings.push({ check: 'ssrf', inputPoint: label, vulnerable: true, technique: 'time-based (kontrollü gecikme echo)', evidence: `Parametreye kontrolümüzdeki gecikmeli URL verildiğinde hedefin yanıtı ~${(r.ms / 1000).toFixed(1)}s'ye çıktı (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — sunucu-taraflı fetch (SSRF) göstergesi.`, confidence: 'medium', severity: 'high', sideEffectRisk: 'none' });
+    }
+  }
+  if (ctx.stopped) notes.push(ctx.stopped);
+  if (!inputs.length) notes.push('Sunucu-taraflı fetch tetikleyebilecek bir parametre (url/webhook/image vb.) bulunamadı.');
+  return { ok: true, inputsFound: inputs.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+}
+
+// ======================================================================================
+// FAZ B.2 — rce_verify (in-band): SADECE zaman-tabanli zararsiz sleep payload'lari
+// ======================================================================================
+// HARD-GUARD: yalniz bu sabit, zararsiz gecikme payload'lari. Dosya/ag/komut YOK.
+const RCE_SLEEP_PAYLOADS = [`; sleep ${SLEEP_S} #`, `| sleep ${SLEEP_S}`, `$(sleep ${SLEEP_S})`, `\`sleep ${SLEEP_S}\``];
+
+export async function collectRceEvidence(host: string): Promise<ActiveCheckEvidence> {
+  const home = await collectHttp(host);
+  if (!home.ok) return { ok: false, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  const inputs = discoverInputs(host, home.html).slice(0, 3);
+  const ctx = new ProbeCtx();
+  const findings: VFinding[] = [];
+  const notes: string[] = [];
+  const base = await ctx.fetchOnce(`https://${host}/`);
+  if (base) ctx.baseline = base.ms;
+
+  for (const ip of inputs) {
+    if (ctx.stopped) break;
+    const label = `${ip.method} ${new URL(ip.action).pathname}?${ip.param}`;
+    let hit = false;
+    for (const payload of RCE_SLEEP_PAYLOADS.slice(0, 2)) { // input basina en fazla 2 deneme, retry YOK
+      if (ctx.stopped || hit) break;
+      const val = `1${payload}`;
+      const r = ip.method === 'GET'
+        ? await ctx.fetchOnce(buildGetUrl(ip, val), { expectSlow: true })
+        : await ctx.fetchOnce(ip.action, { method: 'POST', body: buildFormBody(ip, val), contentType: 'application/x-www-form-urlencoded', expectSlow: true });
+      if (r && r.status > 0 && r.ms >= ctx.baseline + (SLEEP_S * 1000) - 700) {
+        hit = true;
+        findings.push({ check: 'rce', inputPoint: label, vulnerable: true, technique: 'time-based (blind, sleep)', evidence: `Zaman-tabanlı zararsız gecikme payload'ı yanıt süresini ~${(r.ms / 1000).toFixed(1)}s'ye çıkardı (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — blind komut çalıştırma göstergesi.`, confidence: 'medium', severity: 'high', sideEffectRisk: 'none' });
+      }
+    }
+  }
+  if (ctx.stopped) notes.push(ctx.stopped);
+  if (!inputs.length) notes.push('Komuta ulaşabilecek bir giriş parametresi bulunamadı.');
+  return { ok: true, inputsFound: inputs.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+}
+
+// ======================================================================================
+// FAZ C — file_upload_verify: tek zararsiz/inert dosya yukleme probu; geri cagirma YOK
+// ======================================================================================
+function discoverUploadForms(host: string, html: string): Array<{ action: string; fileField: string; otherFields: string[] }> {
+  const out: Array<{ action: string; fileField: string; otherFields: string[] }> = [];
+  for (const fm of html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)) {
+    const inner = fm[2];
+    const fileField = inner.match(/<input\b[^>]*type=["']file["'][^>]*\bname=["']([^"']+)["']/i)?.[1]
+      ?? inner.match(/<input\b[^>]*\bname=["']([^"']+)["'][^>]*type=["']file["']/i)?.[1];
+    if (!fileField) continue;
+    const action = absUrl(fm[1].match(/action\s*=\s*["']([^"']*)["']/i)?.[1] || '/', host);
+    if (!action) continue;
+    const others: string[] = [];
+    for (const im of inner.matchAll(/<input\b[^>]*\bname=["']([^"']+)["']/gi)) if (im[1] !== fileField && !/^(csrf|_token|authenticity_token)/i.test(im[1])) others.push(im[1]);
+    out.push({ action, fileField, otherFields: others.slice(0, 8) });
+  }
+  return out.slice(0, 2);
+}
+function buildMultipart(fileField: string, filename: string, fileType: string, fileContent: string, other: string[]): { body: string; contentType: string } {
+  const boundary = '----cybertestify' + randToken();
+  let body = '';
+  for (const f of other) body += `--${boundary}\r\nContent-Disposition: form-data; name="${f}"\r\n\r\ntest\r\n`;
+  body += `--${boundary}\r\nContent-Disposition: form-data; name="${fileField}"; filename="${filename}"\r\nContent-Type: ${fileType}\r\n\r\n${fileContent}\r\n`;
+  body += `--${boundary}--\r\n`;
+  return { body, contentType: `multipart/form-data; boundary=${boundary}` };
+}
+const UPLOAD_REJECT_RE = /(not allowed|invalid file|unsupported|desteklenmeyen|geçersiz dosya|izin veril|reddedild|file type|yalnızca|only .* allowed|hata|error)/i;
+
+export async function collectFileUploadEvidence(host: string): Promise<ActiveCheckEvidence> {
+  const home = await collectHttp(host);
+  if (!home.ok) return { ok: false, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  const forms = discoverUploadForms(host, home.html);
+  const ctx = new ProbeCtx();
+  const findings: VFinding[] = [];
+  const notes: string[] = [];
+  const base = await ctx.fetchOnce(`https://${host}/`);
+  if (base) ctx.baseline = base.ms;
+
+  for (const f of forms) {
+    if (ctx.stopped) break;
+    // Zararsiz, INERT, cift-uzantili test dosyasi (calistirilamaz). GERI CAGIRILMAZ.
+    const { body, contentType } = buildMultipart(f.fileField, 'cybertestify_probe.php.txt', 'text/plain', 'CYBERTESTIFY-UPLOAD-PROBE (inert, non-executable test file)', f.otherFields);
+    const r = await ctx.fetchOnce(f.action, { method: 'POST', body, contentType }); // tek deneme, retry YOK
+    const label = new URL(f.action).pathname;
+    if (!r || ctx.stopped) continue;
+    const accepted = (r.status === 200 || r.status === 201 || r.status === 302) && !UPLOAD_REJECT_RE.test(r.text);
+    if (accepted) {
+      findings.push({ check: 'file_upload', inputPoint: label, vulnerable: true, technique: 'inert file accepted (double-extension)', evidence: `Çift uzantılı (.php.txt) zararsız test dosyası, açık bir doğrulama reddi olmadan kabul edilmiş görünüyor (HTTP ${r.status}). Yükleme filtresi zayıf olabilir; kesin doğrulama için manuel test gerekir (dosya GERİ ÇAĞIRILMADI/çalıştırılmadı).`, confidence: 'low', severity: 'medium', sideEffectRisk: 'possible' });
+    }
+  }
+  if (ctx.stopped) notes.push(ctx.stopped);
+  if (!forms.length) notes.push('Ana sayfada dosya yükleme formu (input type=file) bulunamadı.');
+  return { ok: true, inputsFound: forms.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+}
+
+// ======================================================================================
+// FAZ D.1 — business_logic_verify: GÖZLEM + GET-tabanli adim-atlama (MUTASYON/ISTEK-YAZMA YOK)
+// KOD-GUVENCESI: bu kontrol hicbir state-degistiren istek (POST/PUT/...) GONDERMEZ -> tamamlama IMKANSIZ.
+// ======================================================================================
+const STEP_SKIP_RE = /\/(success|completed?|confirm(ation)?|thank[-_]?you|tesekkur|onay|basarili|receipt|invoice)\b/i;
+const PRICE_FIELD_RE = /name=["'](price|amount|total|cost|fiyat|tutar|qty|quantity|adet|miktar|discount|indirim)["']/i;
+
+export async function collectBusinessLogicEvidence(host: string): Promise<ActiveCheckEvidence> {
+  const home = await collectHttp(host);
+  if (!home.ok) return { ok: false, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  const html = home.html;
+  const ctx = new ProbeCtx();
+  const findings: VFinding[] = [];
+  const notes: string[] = [];
+
+  // (a) İstemci-tarafli fiyat/miktar alani (hidden veya duz) — GOZLEM (istek yok)
+  const hiddenPrice = html.match(new RegExp(`<input[^>]*type=["']hidden["'][^>]*${PRICE_FIELD_RE.source}`, 'i')) || html.match(new RegExp(`<input[^>]*${PRICE_FIELD_RE.source}[^>]*type=["']hidden["']`, 'i'));
+  if (hiddenPrice) {
+    findings.push({ check: 'business_logic', inputPoint: 'form (hidden price/qty)', vulnerable: true, technique: 'observation (client-controllable amount)', evidence: 'Formda gizli (hidden) bir fiyat/miktar alanı gözlemlendi. Bu alan istemci tarafında değiştirilebilir; sunucu-taraflı fiyat/miktar doğrulaması yapılmıyorsa fiyat manipülasyonu riski oluşur (kesin doğrulama kimlik-doğrulamalı manuel test gerektirir).', confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
+  }
+
+  // (b) Adim-atlama: success/confirm sayfalarina DOGRUDAN GET (yalniz GET; tamamlama YOK)
+  const links = new Set<string>();
+  for (const m of html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)) { const abs = absUrl(m[1].replace(/&amp;/g, '&'), host); if (abs && STEP_SKIP_RE.test(abs)) links.add(abs); }
+  const base = await ctx.fetchOnce(`https://${host}/`);
+  if (base) ctx.baseline = base.ms;
+  for (const url of [...links].slice(0, 2)) {
+    if (ctx.stopped) break;
+    const r = await ctx.fetchOnce(url); // GET — state degistirmez
+    if (r && r.status === 200 && !/oturum|login|giriş yap|unauthorized|403|yetkisiz/i.test(r.text.slice(0, 2000))) {
+      findings.push({ check: 'business_logic', inputPoint: new URL(url).pathname, vulnerable: true, technique: 'observation (step-skip, GET only)', evidence: `Bir "başarılı/onay" adımı sayfası (${new URL(url).pathname}) ön koşul olmadan doğrudan GET ile erişilebilir göründü — adım-atlama (business logic) göstergesi olabilir; manuel doğrulama önerilir.`, confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
+    }
+  }
+  if (ctx.stopped) notes.push(ctx.stopped);
+  if (!findings.length) notes.push('Gözlemlenebilir bir istemci-tarafı fiyat/miktar alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.');
+  return { ok: true, inputsFound: (hiddenPrice ? 1 : 0) + links.size, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+}
+
+// ======================================================================================
+// FAZ D.2 — race_massassign_verify: TEK mass-assignment POST probu + race YÜZEY notu
+// KOD-GUVENCESI: tamamlama/odeme uc noktalari blocklist ile ATLANIR; TEK istek, retry YOK;
+// yalniz POST (PUT/PATCH/DELETE asla). Gercek yetki degisikligi TEYIT EDILMEZ.
+// ======================================================================================
+const COMPLETION_BLOCKLIST_RE = /(pay|payment|checkout|charge|billing|order[-_]?(complete|confirm|place)|purchase|subscribe|abone|iade|refund|delete|remove|sil|iptal|cancel)/i;
+
+function discoverMassAssignForm(host: string, html: string): { action: string; fields: string[] } | null {
+  for (const fm of html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)) {
+    const attrs = fm[1];
+    if (!/method\s*=\s*["']?\s*post/i.test(attrs)) continue;
+    const action = absUrl(attrs.match(/action\s*=\s*["']([^"']*)["']/i)?.[1] || '/', host);
+    if (!action || COMPLETION_BLOCKLIST_RE.test(action)) continue; // HARD-GUARD: tamamlama uc noktalarini atla
+    const inner = fm[2];
+    const fields: string[] = [];
+    for (const im of inner.matchAll(/<input\b[^>]*\bname=["']([^"']+)["']/gi)) if (!/^(csrf|_token|authenticity_token|captcha)/i.test(im[1])) fields.push(im[1]);
+    // Kayit/profil benzeri form (email/username/name iceren)
+    if (fields.some((f) => /email|user|name|isim|ad|profil|account/i.test(f))) return { action, fields: fields.slice(0, 10) };
+  }
+  return null;
+}
+
+export async function collectRaceMassAssignEvidence(host: string): Promise<ActiveCheckEvidence> {
+  const home = await collectHttp(host);
+  if (!home.ok) return { ok: false, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  const form = discoverMassAssignForm(host, home.html);
+  const ctx = new ProbeCtx();
+  const findings: VFinding[] = [];
+  const notes: string[] = [];
+  const base = await ctx.fetchOnce(`https://${host}/`);
+  if (base) ctx.baseline = base.ms;
+
+  if (form) {
+    // Sahte/test verisi + fazladan isAdmin/role alani. TEK POST, retry YOK.
+    const usp = new URLSearchParams();
+    for (const f of form.fields) usp.set(f, /email/i.test(f) ? `cybertestify-probe+${randToken().slice(0, 8)}@example.com` : 'cybertestify-test');
+    usp.set('isAdmin', 'true'); usp.set('role', 'admin'); usp.set('is_admin', 'true');
+    const r = ctx.stopped ? null : await ctx.fetchOnce(form.action, { method: 'POST', body: usp.toString(), contentType: 'application/x-www-form-urlencoded' });
+    const label = new URL(form.action).pathname;
+    if (r && r.status > 0 && !ctx.stopped) {
+      const accepted = (r.status === 200 || r.status === 201 || r.status === 302) && !/(error|hata|invalid|geçersiz|reddedil|not allowed|zorunlu|required)/i.test(r.text.slice(0, 3000));
+      if (accepted) {
+        findings.push({ check: 'race_massassign', inputPoint: label, vulnerable: true, technique: 'mass-assignment (extra isAdmin/role field)', evidence: `Kayıt/profil benzeri forma fazladan "isAdmin/role" alanları eklendiğinde istek açık bir reddedilme olmadan kabul edildi (HTTP ${r.status}). Mass-assignment (over-posting) göstergesi; yetki değişikliği TEYİT EDİLMEDİ (sadece ilk yanıt gözlemlendi).`, confidence: 'low', severity: 'medium', sideEffectRisk: 'possible' });
+      }
+    }
+  }
+  // Race yüzeyi — otomatik yıkıcı paralel yazma YAPILMAZ (güvenlik); not olarak belirtilir.
+  notes.push('Race-condition (eşzamanlılık) testi, tüketilebilir bir kaynağı (kupon/stok) gerçekten değiştirme riski taşıdığından bu otomatik taramada **çalıştırılmadı**; güvenli/test edilebilir bir uç nokta ile manuel doğrulama önerilir.');
+  if (ctx.stopped) notes.push(ctx.stopped);
+  if (!form) notes.push('Mass-assignment için uygun (tamamlama/ödeme dışı) kayıt/profil formu bulunamadı.');
+  return { ok: true, inputsFound: form ? 1 : 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }

@@ -104,6 +104,19 @@ app.use('/admin', adminIpAllowlist, apiLimiter, requireAdmin, adminRouter);
 // Ic ag endpoint'leri (egress proxy icin) — CORS/rate-limit yok, secret korumali.
 app.use('/internal', internalRouter);
 
+// --- OOB echo (kontrollu gecikme) — SSRF zaman-tabanli tespiti icin ------------------
+// ssrf_verify, hedefteki bir "sunucu-tarafli fetch" parametresine BU URL'i verir. Hedef bu
+// URL'i sunucu tarafinda cekerse, endpoint ~5sn bekledigi icin HEDEFIN yaniti da gecikir ->
+// worker bu gecikmeyi olcup SSRF'i DOLAYLI (orta guven) kanitlar. Endpoint hicbir sey yapmaz,
+// veri tutmaz; sadece bekleyip 200 doner. PUBLIC (hedef sunucu cagirir, secret veremez).
+const echoLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false });
+app.all('/oob/echo/:token', echoLimiter, async (req, res) => {
+  const token = String(req.params.token || '');
+  if (!/^[a-f0-9]{8,64}$/i.test(token)) return res.status(400).type('text/plain').send('bad token');
+  await new Promise((r) => setTimeout(r, 5000)); // kontrollu, sabit gecikme (SSRF sinyali)
+  res.status(200).type('text/plain').send('ok');
+});
+
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Global hata yakalayici — async handler'lardaki throw'lar ( or. Prisma

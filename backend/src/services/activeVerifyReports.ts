@@ -6,7 +6,11 @@
  * rozeti + "ne kontrol edildi" seffafligi + bulgu tablosu + kilitli "AI Cozum Onerileri".
  * generateXReport { findings, fixText } | null doner (hedefe ulasilamazsa null -> fallback).
  */
-import { collectInjectionEvidence, collectIdorEvidence, type InjEvidence, type IdorEvidence } from './activeVerifyEvidence.js';
+import {
+  collectInjectionEvidence, collectIdorEvidence, type InjEvidence, type IdorEvidence,
+  collectSsrfEvidence, collectRceEvidence, collectFileUploadEvidence, collectBusinessLogicEvidence, collectRaceMassAssignEvidence,
+  type ActiveCheckEvidence,
+} from './activeVerifyEvidence.js';
 
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
 type Level = 'low' | 'medium' | 'medium-high' | 'high';
@@ -180,11 +184,11 @@ type ActiveMember = { key: string; title: string; gen?: (host: string) => Promis
 const ACTIVE_BUNDLE_MEMBERS: ActiveMember[] = [
   { key: 'injection_verify', title: 'Enjeksiyon (SQLi/XSS) Doğrulama', gen: generateInjectionVerifyReport },
   { key: 'idor_verify', title: 'Yetkisiz Erişim (IDOR) Doğrulama', gen: generateIdorVerifyReport },
-  { key: 'ssrf_verify', title: 'SSRF Doğrulama' },
-  { key: 'file_upload_verify', title: 'Dosya Yükleme Doğrulama' },
-  { key: 'business_logic_verify', title: 'İş Mantığı Doğrulama' },
-  { key: 'race_massassign_verify', title: 'Race / Mass-Assignment Doğrulama' },
-  { key: 'rce_verify', title: 'RCE / Komut Enjeksiyonu Doğrulama' },
+  { key: 'ssrf_verify', title: 'SSRF Doğrulama', gen: generateSsrfVerifyReport },
+  { key: 'file_upload_verify', title: 'Dosya Yükleme Doğrulama', gen: generateFileUploadVerifyReport },
+  { key: 'business_logic_verify', title: 'İş Mantığı Doğrulama', gen: generateBusinessLogicVerifyReport },
+  { key: 'race_massassign_verify', title: 'Race / Mass-Assignment Doğrulama', gen: generateRaceMassAssignVerifyReport },
+  { key: 'rce_verify', title: 'RCE / Komut Enjeksiyonu Doğrulama', gen: generateRceVerifyReport },
 ];
 
 const PENDING_NOTE =
@@ -232,7 +236,7 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
   const summary: string[] = [];
   summary.push(
     worst === 'low'
-      ? `- **Genel risk seviyesi: Düşük** — çalıştırılan ${realCount} aktif doğrulama kontrolünde (Enjeksiyon, IDOR) belirgin bir zafiyet kanıtı bulunamadı.`
+      ? `- **Genel risk seviyesi: Düşük** — çalıştırılan ${realCount} aktif doğrulama kontrolünde belirgin bir zafiyet kanıtı öne çıkmadı.`
       : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — çalıştırılan kontrollerde en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`,
   );
   ACTIVE_BUNDLE_MEMBERS.forEach((m, i) => {
@@ -246,14 +250,20 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
       summary.push(`- **${m.title}:** ⏳ henüz eklenmedi (geliştirme aşamasında).`);
     }
   });
-  summary.push(`- **Şeffaflık:** Bu pakette şu an **${realCount}/${ACTIVE_BUNDLE_MEMBERS.length}** kontrol (Enjeksiyon, IDOR) tam işlevseldir; kalan ${pendingCount} kontrol aşamalı olarak devreye alınmaktadır ve bu taramada çalıştırılmamıştır.`);
+  summary.push(
+    pendingCount === 0
+      ? `- **Şeffaflık:** Paketteki **${realCount}/${ACTIVE_BUNDLE_MEMBERS.length}** kontrolün tamamı bu taramada çalıştırıldı. SSRF ve RCE tespitleri OOB altyapısı olmadan **zaman-tabanlı/dolaylı (orta güvenilirlik)** yapılır; ilgili bölümlerde belirtilmiştir.`
+      : `- **Şeffaflık:** Bu pakette şu an **${realCount}/${ACTIVE_BUNDLE_MEMBERS.length}** kontrol tam işlevseldir; kalan ${pendingCount} kontrol aşamalı olarak devreye alınmaktadır ve bu taramada çalıştırılmamıştır.`,
+  );
   summary.push('- **Önerilen ilk adım:** Çalıştırılan kontrollerdeki bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.');
 
   const genel =
     (worst === 'low'
-      ? 'Çalıştırılan aktif doğrulama kontrollerinde (Enjeksiyon, IDOR) belirgin bir zafiyet kanıtı öne çıkmadı.'
-      : `Çalıştırılan kontrollerde en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi önerilir.`) +
-    ` Bu paketin ${pendingCount} kontrolü (SSRF, Dosya Yükleme, İş Mantığı, Race/Mass-Assignment, RCE) halen olgunlaştırma aşamasındadır ve bu taramada çalıştırılmamıştır — ilgili bölümlerde bu durum açıkça belirtilmiştir. Aşağıda her kontrol ayrı ayrı raporlanmıştır.`;
+      ? 'Çalıştırılan aktif doğrulama kontrollerinde belirgin bir zafiyet kanıtı öne çıkmadı.'
+      : `Çalıştırılan kontrollerde en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi/doğrulanması önerilir.`) +
+    (pendingCount === 0
+      ? ' Paketteki 7 kontrolün tamamı çalıştırılmıştır (SSRF/RCE zaman-tabanlı/dolaylı). Aşağıda her kontrol ayrı ayrı raporlanmıştır.'
+      : ` Bu paketin ${pendingCount} kontrolü halen olgunlaştırma aşamasındadır ve bu taramada çalıştırılmamıştır — ilgili bölümlerde açıkça belirtilmiştir. Aşağıda her kontrol ayrı ayrı raporlanmıştır.`);
 
   // --- Bolumler ---
   const sections = ACTIVE_BUNDLE_MEMBERS.map((m, i) => {
@@ -276,8 +286,164 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
     return `### ${m.title}\n\n${results[i]!.fixText.trim()}`;
   }).filter(Boolean);
   const fixText =
-    'Bu bölüm, çalıştırılan aktif doğrulama kontrollerinde (Enjeksiyon, IDOR) tespit edilen bulgular için düzeltme önerileri içerir.\n\n' +
+    'Bu bölüm, çalıştırılan aktif doğrulama kontrollerinde tespit edilen bulgular için düzeltme önerileri içerir.\n\n' +
     fixParts.join('\n\n');
 
   return { findings, fixText };
 }
+
+// ======================================================================================
+// FAZ B/C/D — SSRF, RCE, Dosya Yükleme, İş Mantığı, Race/Mass-Assignment
+// Ortak, VFinding-tabanlı rapor kurucu. Türkçe metni TAMAMEN kod yazar (ajan yok).
+// ======================================================================================
+type CheckCfg = {
+  title: string;
+  whatChecked: string[];      // "NE KONTROL EDİLDİ" satırları
+  confidenceNote?: string;    // ek dürüstlük/güven notu (ssrf/rce dolaylı vb.)
+  fixTitle: string;
+  fixFound: string[];
+  fixClean: string[];
+  cleanGenel: string;
+};
+function levelFromFindings(fs: ActiveCheckEvidence['findings']): Level {
+  if (fs.some((f) => f.severity === 'high')) return 'high';
+  if (fs.some((f) => f.severity === 'medium')) return 'medium-high';
+  return 'low'; // sadece low-severity gözlem(ler) veya bulgu yok -> rozeti yükseltme
+}
+const SIDE_EFFECT_WORD: Record<string, string> = { none: 'yok', possible: 'olası', confirmed: 'doğrulandı' };
+
+function buildActiveCheckReport(ev: ActiveCheckEvidence, cfg: CheckCfg): { findings: string; fixText: string } | null {
+  if (!ev.ok) return null;
+  const level = levelFromFindings(ev.findings);
+  const has = ev.findings.length > 0;
+
+  const bullets = [
+    `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'aktif doğrulama ile zafiyet göstergesi KANITLANDI.' : level === 'medium-high' ? 'dikkat gerektiren bir gösterge bulundu (manuel doğrulama önerilir).' : has ? 'yalnızca düşük-önemli gözlem(ler) bulundu.' : 'belirgin bir zafiyet göstergesi bulunamadı.'}`,
+    `- İncelenen giriş/uç nokta: **${ev.inputsFound}** · Gönderilen probe: **${ev.probesSent}** · Bulgu: ${ev.findings.length}.`,
+    '- **Önerilen ilk adım:** ' + (has ? 'Bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.' : 'Sertleştirme adımları "AI Çözüm Önerileri" bölümünde.'),
+  ];
+  const genel = has
+    ? (level === 'high' ? 'Aktif-hafif doğrulama ile bir zafiyet göstergesi tespit edildi; öncelikli olarak giderilmesi/doğrulanması önerilir.' : 'Dikkat gerektiren bir gösterge bulundu; bağlama göre manuel doğrulama önerilir.')
+    : cfg.cleanGenel;
+
+  const method = '## NE KONTROL EDİLDİ\n\n' + cfg.whatChecked.map((l) => `- ${l}`).join('\n') + '\n\n';
+  const table = has
+    ? '## BULGULAR\n\n| Giriş/Uç Nokta | Teknik | Kanıt | Güven | Yan-etki riski | Ciddiyet |\n|----------------|--------|-------|-------|----------------|----------|\n' +
+      ev.findings.map((f) => `| ${f.inputPoint} | ${f.technique} | ${f.evidence.replace(/\|/g, '\\|')} | ${f.confidence === 'high' ? 'Yüksek' : f.confidence === 'medium' ? 'Orta' : 'Düşük'} | ${SIDE_EFFECT_WORD[f.sideEffectRisk]} | ${RISK_WORD[f.severity]} |`).join('\n') + '\n\n'
+    : '## BULGULAR\n\nGönderilen zararsız problara karşı belirgin bir zafiyet göstergesi bulunamadı.\n\n';
+  const confNote = cfg.confidenceNote ? `> ${cfg.confidenceNote}\n\n` : '';
+  const sideEffectNote = ev.findings.some((f) => f.sideEffectRisk !== 'none')
+    ? '> **Yan etki uyarısı:** Bu kontroldeki bir/birkaç probe, hedefte bir kayıt/dosya oluşturmuş **olabilir** (yan-etki riski "olası" olarak işaretlenenler). Bu, "kanıtla — istismar etme" ilkesi gereği tek seferlik ve zararsız içerikle yapılmıştır; yine de kontrol edip gerekirse temizlemeniz önerilir.\n\n'
+    : '';
+  const notes = ev.notes.length ? ev.notes.map((n) => `> ${n}`).join('\n') + '\n\n' : '';
+  const findings = assemble(level, bullets, genel, `${method}${table}${confNote}${sideEffectNote}${notes}${SCOPE_NOTE_ACTIVE}\n`);
+
+  const fixText = has
+    ? `### ${cfg.fixTitle} — düzeltme\n\n` + cfg.fixFound.map((l) => `- ${l}`).join('\n')
+    : `### ${cfg.fixTitle} — proaktif sertleştirme\n\n` + cfg.fixClean.map((l) => `- ${l}`).join('\n');
+  return { findings, fixText };
+}
+
+const SSRF_CFG: CheckCfg = {
+  title: 'SSRF Doğrulama',
+  whatChecked: [
+    'Sunucu-taraflı fetch tetikleyebilecek parametreler (url/webhook/image/redirect vb.) tespit edildi.',
+    'Bu parametrelere, **kontrolümüzdeki** gecikmeli bir echo URL’i verildi; hedefin yanıt süresi baseline ile karşılaştırıldı (sunucu bu URL’i çekerse yanıt gecikir).',
+    'İç ağ / bulut-metadata / localhost (169.254.169.254, RFC1918, 127.0.0.1 vb.) **asla** hedeflenmedi (koda gömülü hard-guard).',
+  ],
+  confidenceNote: 'OOB doğrulama altyapısı kullanılmadığı için bu tespit **zaman-tabanlı, dolaylı ve orta güvenilirliktedir**; kesin doğrulama için ek/manuel test önerilir.',
+  fixTitle: 'SSRF',
+  fixFound: [
+    'Sunucu-taraflı fetch yapan parametreleri bir **allowlist** ile kısıtlayın (yalnızca izin verilen alan adları/şemalar).',
+    'İç ağ adreslerine (RFC1918, 169.254.169.254, localhost) giden istekleri sunucu tarafında **engelleyin**; DNS rebinding’e karşı çözümlenen IP’yi de kontrol edin.',
+    'Mümkünse dış kaynak çekme işlemlerini izole bir servis/kısıtlı ağ üzerinden yapın.',
+  ],
+  fixClean: [
+    'Kullanıcıdan URL alan tüm alanlarda sunucu-taraflı **allowlist** + iç ağ engellemesi uygulayın (proaktif).',
+    'Dış fetch gerektiğinde şema/host doğrulaması + zaman aşımı + boyut limiti koyun.',
+  ],
+  cleanGenel: 'Tespit edilen fetch-benzeri parametrelerde, kontrolümüzdeki gecikmeli URL’e karşı sunucu-taraflı fetch (SSRF) göstergesi gözlemlenmedi.',
+};
+const RCE_CFG: CheckCfg = {
+  title: 'RCE / Komut Enjeksiyonu Doğrulama',
+  whatChecked: [
+    'Komuta ulaşabilecek giriş parametreleri tespit edildi.',
+    'Yalnızca **zararsız, zaman-tabanlı** gecikme payload’ları (sleep) gönderildi; yanıt süresi baseline ile karşılaştırıldı (blind kanıt).',
+    'Gerçek komut çalıştırma (dosya okuma/yazma, ağ bağlantısı, reverse shell) **asla** denenmedi (koda gömülü hard-guard: yalnız sabit sleep payload listesi).',
+  ],
+  confidenceNote: 'OOB/canary altyapısı kullanılmadığı için bu tespit **zaman-tabanlı, dolaylı ve orta güvenilirliktedir** (ağ gecikmesi yanıltabilir); kesin doğrulama için manuel test önerilir.',
+  fixTitle: 'RCE / Komut Enjeksiyonu',
+  fixFound: [
+    'Kullanıcı girdisini asla doğrudan bir sistem komutuna/shell’e geçirmeyin; mümkünse sistem komutu çağırmaktan tamamen kaçının.',
+    'Zorunluysa, komutları argüman dizisi (exec + args) ile çalıştırın; shell birleştirme (string) KULLANMAYIN; girdiyi allowlist ile doğrulayın.',
+    'Uygulamayı en düşük yetkiyle çalıştırın; giden ağ bağlantılarını kısıtlayın.',
+  ],
+  fixClean: [
+    'Sistem komutu çağıran kod yollarını gözden geçirin; girdiyi allowlist ile doğrulayın, shell string birleştirmeden kaçının (proaktif).',
+    'En düşük yetki + giden ağ kısıtı uygulayın.',
+  ],
+  cleanGenel: 'Tespit edilen girişlerde, zaman-tabanlı zararsız problara karşı blind komut çalıştırma göstergesi gözlemlenmedi.',
+};
+const UPLOAD_CFG: CheckCfg = {
+  title: 'Dosya Yükleme Doğrulama',
+  whatChecked: [
+    'Dosya yükleme formu (input type=file) tespit edildi.',
+    'Tek seferlik, **zararsız ve çalıştırılamaz (inert)**, çift uzantılı (.php.txt) bir test dosyası gönderildi; yalnızca kabul/red durumu gözlemlendi.',
+    'Yüklenen dosya **geri çağrılmadı/çalıştırılmadı** (koda gömülü kural).',
+  ],
+  fixTitle: 'Dosya Yükleme',
+  fixFound: [
+    'Dosya tipini **sunucu tarafında** doğrulayın (uzantı + gerçek MIME/işaret baytları); çift uzantı / uzantı hilelerine karşı allowlist kullanın.',
+    'Yüklenen dosyaları web köküne KOYMAYIN; çalıştırılamaz bir depoda (veya CDN’de) saklayın; rastgele isim verin.',
+    'Yükleme boyutu/tipi limitleri + kimlik doğrulama uygulayın.',
+  ],
+  fixClean: [
+    'Yükleme uç noktalarında sunucu-taraflı tip/MIME doğrulaması + allowlist + web-kökü dışı depolama uygulayın (proaktif).',
+  ],
+  cleanGenel: 'Tespit edilen yükleme formunda, zararsız test dosyası için belirgin bir zayıf-doğrulama göstergesi gözlemlenmedi (veya yükleme formu bulunamadı).',
+};
+const BUSINESS_CFG: CheckCfg = {
+  title: 'İş Mantığı Doğrulama',
+  whatChecked: [
+    'Ana sayfa/formlar üzerinde **istemci-tarafında değiştirilebilir** fiyat/miktar alanları (hidden input) gözlemlendi (yalnızca gözlem — istek gönderilmedi).',
+    'Bir "başarılı/onay" adımı sayfasına ön koşul olmadan **yalnızca GET** ile erişilip erişilemediği kontrol edildi (adım-atlama göstergesi).',
+    '⚠️ Bu kontrol **hiçbir state-değiştiren istek (POST/PUT/…) göndermez** — sepet/ödeme **asla** oluşturulmaz/tamamlanmaz (koda gömülü kural).',
+  ],
+  confidenceNote: 'İş mantığı zafiyetleri bağlama özeldir; bu kontrol yüzey/gösterge seviyesindedir. Kesin doğrulama kimlik-doğrulamalı manuel test gerektirir.',
+  fixTitle: 'İş Mantığı',
+  fixFound: [
+    'Fiyat/miktar/indirim gibi değerleri **asla** istemciden gelen değerle işlemeyin; sunucu tarafında yeniden hesaplayın/doğrulayın.',
+    'Çok adımlı akışlarda her adımın ön koşulunu sunucu tarafında zorunlu kılın (adım-atlamayı engelleyin).',
+  ],
+  fixClean: [
+    'Kritik değerleri (fiyat/miktar) sunucu tarafında doğrulayın; çok adımlı akışlarda adım sırası kontrolü uygulayın (proaktif).',
+  ],
+  cleanGenel: 'Gözlemlenebilir bir istemci-tarafı fiyat/miktar alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.',
+};
+const RACE_CFG: CheckCfg = {
+  title: 'Race / Mass-Assignment Doğrulama',
+  whatChecked: [
+    'Kayıt/profil benzeri bir POST formu tespit edildi (ödeme/tamamlama uç noktaları **hariç tutuldu** — koda gömülü blocklist).',
+    'Forma fazladan `isAdmin/role` alanları eklenmiş **tek** bir istek gönderildi; yalnızca kabul/red gözlendi (yetki değişikliği **teyit edilmedi**; tekrar/retry **yok**).',
+    'Race-condition (eşzamanlılık) testi, tüketilebilir bir kaynağı gerçekten değiştirme riski taşıdığından **otomatik çalıştırılmadı** (aşağıda not).',
+  ],
+  confidenceNote: 'Mass-assignment göstergesi yalnızca ilk yanıttan çıkarılmıştır (düşük güven). Race-condition için güvenli/test edilebilir bir uç nokta ile manuel doğrulama önerilir.',
+  fixTitle: 'Race / Mass-Assignment',
+  fixFound: [
+    'Sunucu tarafında **allowlist** ile yalnızca izin verilen alanları bağlayın (mass-assignment/over-posting’i engelleyin); `isAdmin/role` gibi alanları asla istemciden almayın.',
+    'Kritik işlemlerde (kupon/stok/bakiye) **atomik** işlemler + kilit/idempotency anahtarı kullanarak race-condition’ı engelleyin.',
+  ],
+  fixClean: [
+    'Model bağlamada alan allowlist’i (mass-assignment koruması) uygulayın; kritik işlemlerde atomik/idempotent tasarım kullanın (proaktif).',
+  ],
+  cleanGenel: 'Uygun (tamamlama/ödeme dışı) bir kayıt/profil formu bulunamadı veya mass-assignment probu kabul edilmedi.',
+};
+
+export async function generateSsrfVerifyReport(host: string) { return buildActiveCheckReport(await collectSsrfEvidence(host), SSRF_CFG); }
+export async function generateRceVerifyReport(host: string) { return buildActiveCheckReport(await collectRceEvidence(host), RCE_CFG); }
+export async function generateFileUploadVerifyReport(host: string) { return buildActiveCheckReport(await collectFileUploadEvidence(host), UPLOAD_CFG); }
+export async function generateBusinessLogicVerifyReport(host: string) { return buildActiveCheckReport(await collectBusinessLogicEvidence(host), BUSINESS_CFG); }
+export async function generateRaceMassAssignVerifyReport(host: string) { return buildActiveCheckReport(await collectRaceMassAssignEvidence(host), RACE_CFG); }
+// Saf kurucu testler icin (sentetik ActiveCheckEvidence ile):
+export const _cfg = { SSRF_CFG, RCE_CFG, UPLOAD_CFG, BUSINESS_CFG, RACE_CFG };
+export { buildActiveCheckReport };
