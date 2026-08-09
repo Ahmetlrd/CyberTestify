@@ -98,7 +98,8 @@ const DANGLING_SIGS: Array<{ service: string; suffixes: string[]; fp: string[] }
 export type DanglingHit = { sub: string; cname: string; service: string; confidence: 'confirmed' | 'suspected'; note: string };
 export type SubCnameState = 'dangling' | 'suspected' | 'managed' | 'active' | 'nocname';
 export type SubEvidence = {
-  ok: boolean;                 // crt.sh ulasildi mi
+  ok: boolean;                 // veri kaynagi (CT) gecerli yanit verdi mi (= dataSource==='ok')
+  dataSource: 'ok' | 'unavailable'; // 'ok': en az bir CT kaynagi calisti (0 sonuc gercek negatif); 'unavailable': ikisi de erisilemedi
   total: number;               // benzersiz alt domain sayisi
   resolved: number;            // CNAME cozulen sayi
   subdomains: string[];        // bulunan tum alt domainler (rapor envanteri, kapali ust sinir)
@@ -122,9 +123,13 @@ function addName(set: Set<string>, raw: string | undefined, apex: string) {
   }
 }
 
-// crt.sh (birincil) sik sik 502/timeout doner; basarisizsa certSpotter'a (yedek) dus.
-async function crtshNames(apex: string): Promise<string[] | null> {
+// crt.sh (birincil) sik sik 502/timeout/000 doner; basarisizsa certSpotter'a (yedek) dus.
+// KRITIK: "gercek 0 sonuc" ile "veri kaynagina ulasilamadi"yi ayirt et -> sourceOk. En az bir
+// CT kaynagi GECERLI (2xx + parse-edilebilir JSON dizi) yanit verdiyse sourceOk=true (dizi bos
+// olsa bile gercek negatif sonuc). Ikisi de hata/timeout verdiyse sourceOk=false (unavailable).
+async function collectCtNames(apex: string): Promise<{ names: string[]; sourceOk: boolean }> {
   const set = new Set<string>();
+  let sourceOk = false;
   // 1) crt.sh — birkac kez dene
   for (let attempt = 0; attempt < 3; attempt++) {
     const r = await safeGet(`https://crt.sh/?q=%25.${encodeURIComponent(apex)}&output=json`, CRTSH_TIMEOUT_MS);
@@ -132,28 +137,32 @@ async function crtshNames(apex: string): Promise<string[] | null> {
       try {
         const arr = JSON.parse(r.text) as Array<{ name_value?: string; common_name?: string }>;
         for (const row of arr) { addName(set, row.name_value, apex); addName(set, row.common_name, apex); }
+        sourceOk = true; // gecerli JSON dizi geldi (bos olsa bile gercek sonuc)
       } catch { /* parse hatasi -> yedek */ }
       break;
     }
     if (attempt < 2) await new Promise((res) => setTimeout(res, 1500));
   }
-  // 2) crt.sh sonuc vermediyse certSpotter (Certificate Transparency yedek kaynak)
-  if (set.size === 0) {
+  // 2) crt.sh ise yaramadiysa certSpotter (yedek CT kaynagi)
+  if (!sourceOk || set.size === 0) {
     const r = await safeGet(`https://api.certspotter.com/v1/issuances?domain=${encodeURIComponent(apex)}&include_subdomains=true&expand=dns_names`, CRTSH_TIMEOUT_MS);
     if (r.ok && r.text && /^\s*\[/.test(r.text)) {
       try {
         const arr = JSON.parse(r.text) as Array<{ dns_names?: string[] }>;
         for (const row of arr) for (const n of row.dns_names ?? []) addName(set, n, apex);
+        sourceOk = true;
       } catch { /* yoksay */ }
     }
   }
-  return set.size ? [...set].sort() : null;
+  return { names: [...set].sort(), sourceOk };
 }
 
 export async function collectSubdomains(host: string): Promise<SubEvidence> {
   const apex = apexDomain(host);
-  const names = await crtshNames(apex);
-  if (names === null) return { ok: false, total: 0, resolved: 0, subdomains: [], cnames: [], managedCnames: [], dangling: [] };
+  const { names, sourceOk } = await collectCtNames(apex);
+  // Veri kaynagina ulasilamadi (crt.sh + certSpotter ikisi de hata/timeout) -> "unavailable".
+  // ASLA "0 bulundu / temiz" gibi sunma (Grok A). sourceOk true ise names bos olsa da GERCEK negatif.
+  if (!sourceOk) return { ok: false, dataSource: 'unavailable', total: 0, resolved: 0, subdomains: [], cnames: [], managedCnames: [], dangling: [] };
 
   const toResolve = names.slice(0, MAX_SUBDOMAINS_RESOLVE);
   const cnameResults = await pMap(toResolve, DOH_CONCURRENCY, async (sub) => {
@@ -194,6 +203,7 @@ export async function collectSubdomains(host: string): Promise<SubEvidence> {
 
   return {
     ok: true,
+    dataSource: 'ok',
     total: names.length,
     resolved: toResolve.length,
     subdomains: names.slice(0, 100),
@@ -461,7 +471,7 @@ export type ReconEvidence = { host: string; sub: SubEvidence; api: ApiEvidence; 
 export async function collectReconEvidence(host: string): Promise<ReconEvidence> {
   const http = await collectHttp(host);
   const [sub, api, cms] = await Promise.all([
-    collectSubdomains(host).catch(() => ({ ok: false, total: 0, resolved: 0, subdomains: [], cnames: [], managedCnames: [], dangling: [] } as SubEvidence)),
+    collectSubdomains(host).catch(() => ({ ok: false, dataSource: 'unavailable', total: 0, resolved: 0, subdomains: [], cnames: [], managedCnames: [], dangling: [] } as SubEvidence)),
     collectApi(host).catch(() => ({ ok: false, tried: [], reachable: [] } as ApiEvidence)),
     collectCms(host, http).catch(() => ({ ok: false, evidence: [], extras: [], cveOk: false, cveTotal: 0, cves: [] } as CmsEvidence)),
   ]);

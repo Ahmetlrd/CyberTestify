@@ -14,16 +14,149 @@ const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yükse
 type Level = 'low' | 'medium' | 'medium-high' | 'high';
 function levelRank(l: Level): number { return l === 'high' ? 3 : l === 'medium-high' ? 2 : l === 'medium' ? 1 : 0; }
 
-type Area = { title: string; level: Level; headline: string; body: string; fixText: string };
+type Area = { title: string; level: Level; headline: string; body: string; fixText: string; dataUnavailable?: boolean };
 
 const CAUTION_CVE = '> **Not:** Aşağıdaki CVE listesi, tespit edilen sürümle NVD (NIST Ulusal Zafiyet Veritabanı) üzerinden **otomatik eşlenen** bilinen zafiyetlerdir; sürümünüz için sömürülebilir oldukları **doğrulanmamıştır** ve bir kısmı eklenti/tema kaynaklı olabilir. Kesin durum için güncelleme + hedefli doğrulama önerilir.';
 
 const SUB_DISPLAY_MAX = 100; // envanterde gosterilecek alt domain ust siniri (collector CNAME kapsami ile hizali)
 
 // ======================================================================================
+// "BULGU YOK" AI COZUM ONERILERI — proaktif sertlestirme/izleme rehberi (%100 kod, LLM yok)
+// Bulgu bulunmadiginda bile somut, adim-adim, kopyala-yapistir icerik verir (Grok B).
+// ======================================================================================
+function buildSubMonitoringFix(): string {
+  return [
+    '### Subdomain Takeover — proaktif izleme rehberi',
+    '',
+    'Şu an devralınabilir alt domain tespit edilmedi. Bu durumu **sürekli** korumak için, yeni/beklenmeyen alt domain sertifikalarını erken yakalayacak bir Certificate Transparency (CT) izleme sistemi kurun:',
+    '',
+    '**1) certSpotter ile ücretsiz e-posta/webhook uyarısı**',
+    '',
+    '`sslmate.com/certspotter` üzerinde alan adınızı (ör. `nomorelink.com`, alt domainler dahil) izlemeye ekleyin; yeni sertifika yayınlandığında e-posta/webhook uyarısı alırsınız (yeni bir alt domain sertifikası, sizin oluşturmadığınız bir kayıt olabilir).',
+    '',
+    '**2) crt.sh’i periyodik sorgulayan basit bir cron (kendi sunucunuzda)**',
+    '',
+    'Her gün alt domain listesini çekip bir öncekiyle karşılaştıran, yeni giren alt domainde uyarı veren örnek betik:',
+    '',
+    '```bash',
+    '#!/usr/bin/env bash',
+    '# /etc/cron.daily/ct-watch  (chmod +x)',
+    'DOMAIN="ornek.com"',
+    'STATE="/var/lib/ct-watch/$DOMAIN.txt"',
+    'mkdir -p "$(dirname "$STATE")"; touch "$STATE"',
+    'curl -s "https://crt.sh/?q=%25.$DOMAIN&output=json" \\',
+    '  | jq -r ".[].name_value" | tr "[:upper:]" "[:lower:]" | sed "s/^\\*\\.//" \\',
+    '  | sort -u > /tmp/ct-now.txt',
+    'NEW=$(comm -13 "$STATE" /tmp/ct-now.txt)',
+    'if [ -n "$NEW" ]; then',
+    '  echo "$NEW" | mail -s "[CT] Yeni alt domain: $DOMAIN" siz@ornek.com',
+    '  cp /tmp/ct-now.txt "$STATE"',
+    'fi',
+    '```',
+    '',
+    '**3) Alt domain envanteri tutun** — hangi alt domainin hangi servise/ekibe ait olduğunu belgeleyin; boşta kalan (kullanılmayan) CNAME kayıtlarını, bulut kaynağını silmeden önce DNS’ten kaldırın (kaldırma sırası önemlidir).',
+  ].join('\n');
+}
+
+function buildApiHardeningFix(): string {
+  return [
+    '### API & Swagger Keşfi — proaktif sertleştirme rehberi',
+    '',
+    'Herkese açık API dokümantasyonu bulunamadı. Bunu kalıcı kılmak için, Swagger/OpenAPI/ReDoc gibi şema uçlarını üretimde kimlik doğrulama veya IP kısıtı arkasına alın. Platformunuza uygun örneği uygulayın:',
+    '',
+    '**Nginx — `/swagger*`, `/api-docs*`, `/openapi.json` için IP allowlist + Basic-Auth**',
+    '',
+    '```nginx',
+    'location ~* ^/(swagger|api-docs|v2/api-docs|v3/api-docs|openapi\\.json|redoc) {',
+    '    allow 203.0.113.0/24;   # ofis/VPN IP bloğunuz',
+    '    deny all;               # geri kalan herkese kapalı',
+    '    auth_basic "Restricted";',
+    '    auth_basic_user_file /etc/nginx/.htpasswd;  # htpasswd ile oluşturun',
+    '    # ... mevcut proxy_pass/try_files yönergeleriniz ...',
+    '}',
+    '```',
+    '',
+    '**Apache (.htaccess)**',
+    '',
+    '```apache',
+    '<LocationMatch "^/(swagger|api-docs|openapi\\.json|redoc)">',
+    '    AuthType Basic',
+    '    AuthName "Restricted"',
+    '    AuthUserFile /etc/apache2/.htpasswd',
+    '    Require valid-user',
+    '    Require ip 203.0.113.0/24',
+    '</LocationMatch>',
+    '```',
+    '',
+    '**Caddy**',
+    '',
+    '```caddy',
+    '@apidocs path /swagger* /api-docs* /openapi.json /redoc*',
+    'basic_auth @apidocs {',
+    '    admin $2a$14$...   # caddy hash-password ile üretin',
+    '}',
+    '```',
+    '',
+    '**Ek öneriler:** OpenAPI şemanıza global `security` tanımı ekleyin; GraphQL kullanıyorsanız üretimde introspection’ı kapatın (`introspection: false`).',
+  ].join('\n');
+}
+
+function buildCmsHardeningFix(detected: boolean): string {
+  return [
+    `### CMS & Bilinen CVE — proaktif güncel kalma rehberi`,
+    '',
+    detected
+      ? 'Tespit edilen sürüm için, sürümü açıkça kapsayan bilinen CVE bulunamadı. Bu durumu korumak için güncellemeyi otomatikleştirin ve bağımlılıklarınızı sürekli tarayın:'
+      : 'Bilinen bir CMS tespit edilmedi (özel/gizlenmiş uygulama olabilir). Güncel kalmayı ve bilinen-zafiyet takibini otomatikleştirin:',
+    '',
+    '**1) WordPress kullanıyorsanız — otomatik minor + güvenlik güncellemesi**',
+    '',
+    '`wp-config.php` içine:',
+    '',
+    '```php',
+    "define( 'WP_AUTO_UPDATE_CORE', 'minor' );  // güvenlik/minor sürümleri otomatik",
+    '```',
+    '',
+    'Eklenti/tema otomatik güncellemesi için (WP-CLI):',
+    '',
+    '```bash',
+    'wp plugin auto-updates enable --all',
+    'wp theme auto-updates enable --all',
+    '```',
+    '',
+    '**2) CI/CD’ye ücretsiz bağımlılık taraması (SCA) ekleyin**',
+    '',
+    '- **Dependabot** (GitHub, ücretsiz): depoya `.github/dependabot.yml` ekleyin:',
+    '',
+    '```yaml',
+    'version: 2',
+    'updates:',
+    '  - package-ecosystem: "composer"   # WordPress/PHP için; npm/pip/… da desteklenir',
+    '    directory: "/"',
+    '    schedule: { interval: "weekly" }',
+    '```',
+    '',
+    '- **npm audit** (Node projeleri): CI adımınıza `npm audit --audit-level=high` ekleyin; yüksek/kritik açık varsa derleme kırılsın.',
+    '',
+    '**3) Sürüm ifşasını azaltın** — `<meta generator>`, `X-Powered-By`, `/readme.html`, `/CHANGELOG.txt` gibi sürüm sızdıran noktaları kaldırın/kapatın; böylece otomatik CVE eşlemesi saldırganlar için zorlaşır.',
+  ].join('\n');
+}
+
+// ======================================================================================
 // 1) subdomain_takeover
 // ======================================================================================
 function buildSubArea(ev: SubEvidence): Area {
+  // Veri kaynagina ulasilamadi (crt.sh + certSpotter ikisi de erisilemedi) -> "temiz" DEME.
+  if (ev.dataSource === 'unavailable') {
+    const body = [
+      '> ⚠️ **Veri kaynağına şu an ulaşılamadı.** Alt domain envanteri, Certificate Transparency (CT) log sağlayıcılarından (crt.sh ve yedek certSpotter) toplanır; bu tarama sırasında **her iki kaynak da** geçici olarak yanıt vermedi (kesinti/zaman aşımı/hız sınırı).',
+      '',
+      'Bu nedenle bu bölüm için **sonuç üretilemedi** — bu, "alt domain yok/temiz" anlamına **gelmez**. Tarama kısa süre sonra tekrar denendiğinde bu bölüm normal şekilde dolacaktır. CT kaynakları (özellikle crt.sh) zaman zaman kısa kesintiler yaşayabilir.',
+      '',
+      '> Kapsam: Yalnızca pasif kaynaklar (Certificate Transparency logları + gözlemlenebilir DNS). Alt domain brute-force / aktif tarama yapılmamıştır.',
+    ].join('\n');
+    return { title: 'Subdomain Takeover Taraması', level: 'low', headline: 'Veri kaynağına ulaşılamadı — sonuç üretilemedi', body, fixText: buildSubMonitoringFix(), dataUnavailable: true };
+  }
   const confirmed = ev.dangling.filter((d) => d.confidence === 'confirmed');
   const suspected = ev.dangling.filter((d) => d.confidence === 'suspected');
   let level: Level = 'low';
@@ -94,7 +227,7 @@ function buildSubArea(ev: SubEvidence): Area {
     ? '### Subdomain Takeover — düzeltme\n\n' +
       [...confirmed, ...suspected].map((d) => `- **${d.sub}** (${d.service}): Bu alt domain kullanılmıyorsa DNS’ten **CNAME kaydını silin**. Kullanılıyorsa, ${d.service} tarafında kaynağı **yeniden oluşturup sahiplenin** (claim), böylece kayıt boşta kalmaz.`).join('\n') +
       '\n\n- Genel önlem: Kullanılmayan alt domainleri düzenli olarak temizleyin; bulut kaynağı silmeden önce DNS kaydını kaldırın (kaldırma sırası önemli).'
-    : '### Subdomain Takeover\n\nDevralınabilir alt domain tespit edilmedi. Alt domain envanterinizi düzenli gözden geçirin; kullanılmayan CNAME kayıtlarını silin.';
+    : buildSubMonitoringFix();
 
   return { title: 'Subdomain Takeover Taraması', level, headline, body: lines.join('\n'), fixText };
 }
@@ -169,7 +302,7 @@ function buildApiArea(ev: ApiEvidence): Area {
   lines.push('> Kapsam: Yalnızca herkese açık dokümantasyon yolları GET ile denenmiştir; hiçbir uç nokta çağrılmamış/istismar edilmemiştir (pasif keşif).');
 
   const fixText = level === 'low'
-    ? '### API & Swagger Keşfi\n\nHerkese açık API dokümantasyonu bulunamadı. Yine de üretimde Swagger/OpenAPI arayüzlerini kapatmayı veya kimlik doğrulama arkasına almayı standart hale getirin.'
+    ? buildApiHardeningFix()
     : '### API & Swagger Keşfi — düzeltme\n\n' + [
         '- Üretim ortamında Swagger UI / ReDoc / `*/api-docs` / `openapi.json` gibi şema uçlarını **kapatın** veya kimlik doğrulama (IP allowlist / SSO) arkasına alın.',
         spec && !spec.hasGlobalAuth ? '- API şemanıza global `security` tanımı ekleyin; her hassas uç nokta için kimlik doğrulama/yetki zorunlu olsun.' : '',
@@ -262,13 +395,15 @@ function buildCmsArea(ev: CmsEvidence): Area {
   lines.push('> Kapsam: Pasif parmak izi + NVD üzerinden bilinen-CVE eşlemesi. Hiçbir CVE **istismar edilmemiş/doğrulanmamıştır**.');
 
   const fixText = !ev.cms
-    ? '### CMS & Bilinen CVE\n\nBilinen bir CMS tespit edilmedi; özel uygulamalar için düzenli bağımlılık taraması (SCA) ve güvenlik güncellemeleri önerilir.'
-    : '### CMS & Bilinen CVE — düzeltme\n\n' + [
+    ? buildCmsHardeningFix(false)
+    : (ev.cves.length === 0
+      ? buildCmsHardeningFix(true)
+      : '### CMS & Bilinen CVE — düzeltme\n\n' + [
         `- **${ev.cms}${ev.version ? ` ${ev.version}` : ''}** kurulumunu en güncel kararlı sürüme yükseltin; otomatik güvenlik güncellemelerini açın.`,
         ev.cves.length ? '- Yukarıdaki CVE’leri NVD bağlantılarından inceleyin; güncelleme ile kapananları öncelikli uygulayın, kapanmayanlar için üreticinin azaltıcı önerilerini (WAF kuralı/yapılandırma) uygulayın.' : '',
         '- Kullanılmayan eklenti/tema/modülleri kaldırın; kalanları güncel tutun (CVE’lerin önemli kısmı eklenti/tema kaynaklıdır).',
         '- Sürüm/teknoloji ifşasını azaltın: `<meta generator>`, `X-Powered-By`, `/readme.html`, `/CHANGELOG.txt` gibi sürüm sızdıran noktaları kaldırın/kapatın.',
-      ].filter(Boolean).join('\n');
+      ].filter(Boolean).join('\n'));
 
   return { title: 'CMS & Bilinen CVE Taraması', level, headline, body: lines.join('\n'), fixText };
 }
@@ -303,23 +438,28 @@ export function combineReconAreas(ev: ReconEvidence): { findings: string; fixTex
 
   const areas: Area[] = [buildSubArea(ev.sub), buildApiArea(ev.api), buildCmsArea(ev.cms)];
 
-  const ranked = areas.map((a, i) => ({ a, i })).sort((x, y) => levelRank(y.a.level) - levelRank(x.a.level));
-  const baseWorst = ranked[0].a.level;
-  const worstArea = ranked[0].a;
+  // Risk siralamasi YALNIZ veri toplanabilen alanlar uzerinden (veri-kaynagi-basarisiz alan riske
+  // dahil edilmez; "temiz" gibi sayilmaz — surface'in null-alan davranisiyla tutarli).
+  const available = areas.filter((a) => !a.dataUnavailable);
+  const unavailableCount = areas.length - available.length;
+  const ranked = available.map((a) => a).sort((x, y) => levelRank(y.level) - levelRank(x.level));
+  const baseWorst: Level = ranked.length ? ranked[0].level : 'low';
+  const worstArea = ranked.length ? ranked[0] : areas[0];
   // Birikimli risk (surface ile tutarli): en yuksek 'Orta-Yüksek' iken 2+ alan Orta+ ise -> Yüksek.
-  const mediumPlus = areas.filter((a) => levelRank(a.level) >= 1).length;
+  const mediumPlus = available.filter((a) => levelRank(a.level) >= 1).length;
   const cumulative = baseWorst === 'medium-high' && mediumPlus >= 2;
   const worst: Level = cumulative ? 'high' : baseWorst;
+  const scannedNote = unavailableCount ? ` (${unavailableCount} alanda veri kaynağına ulaşılamadı)` : '';
 
   const summary: string[] = [];
   summary.push(
     worst === 'low'
-      ? '- **Genel risk seviyesi: Düşük** — keşif yüzeyiniz 3 alanda incelendi; devralınabilir alt domain, açık hassas API veya sürümü kapsayan bilinen yüksek CVE öne çıkmadı. Dışarıdan görünen yüzeyiniz şu an için dar ve kontrollü görünüyor.'
+      ? `- **Genel risk seviyesi: Düşük** — keşif yüzeyiniz ${available.length} alanda incelendi${scannedNote}; devralınabilir alt domain, açık hassas API veya sürümü kapsayan bilinen yüksek CVE öne çıkmadı. Dışarıdan görünen yüzeyiniz şu an için dar ve kontrollü görünüyor.`
       : cumulative
-        ? `- **Genel risk seviyesi: Yüksek** — 3 alan incelendi; birden fazla alan aynı anda risk taşıyor (en yükseği **${worstArea.title}** — ${worstArea.headline}).`
-        : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — 3 alan incelendi; en yüksek risk **${worstArea.title}** alanında (${worstArea.headline}).`,
+        ? `- **Genel risk seviyesi: Yüksek** — ${available.length} alan incelendi${scannedNote}; birden fazla alan aynı anda risk taşıyor (en yükseği **${worstArea.title}** — ${worstArea.headline}).`
+        : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — ${available.length} alan incelendi${scannedNote}; en yüksek risk **${worstArea.title}** alanında (${worstArea.headline}).`,
   );
-  for (const a of areas) summary.push(`- **${a.title}:** ${RISK_WORD[a.level]} — ${a.headline}`);
+  for (const a of areas) summary.push(a.dataUnavailable ? `- **${a.title}:** veri kaynağına ulaşılamadı (sonuç üretilemedi)` : `- **${a.title}:** ${RISK_WORD[a.level]} — ${a.headline}`);
   summary.push('- **Önerilen ilk adım:** En yüksek riskli alandan başlayın; her bulgu için adım adım hazır çözümler "AI Çözüm Önerileri" bölümünde sunulur.');
 
   const genelSentence =
@@ -333,7 +473,9 @@ export function combineReconAreas(ev: ReconEvidence): { findings: string; fixTex
             ? `Öne çıkan alan **${worstArea.title}** (${worstArea.headline}); kısa vadede giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`
             : 'Dışarıdan görünen alt domain, API ve CMS yüzeyiniz şu an için dar ve kontrollü görünüyor; rapor, tam envanter ve önerilen iyi pratiklerle birlikte her alanı ayrı ayrı belgeler. Aşağıda her alan ayrı ayrı raporlanmıştır.';
 
-  const areaSections = areas.map((a) => `## ${a.title}\n\n**Genel risk seviyesi: ${RISK_WORD[a.level]} — ${a.headline}**\n\n${a.body}\n`).join('\n');
+  const areaSections = areas.map((a) => a.dataUnavailable
+    ? `## ${a.title}\n\n**${a.headline}**\n\n${a.body}\n`
+    : `## ${a.title}\n\n**Genel risk seviyesi: ${RISK_WORD[a.level]} — ${a.headline}**\n\n${a.body}\n`).join('\n');
 
   const findings =
     `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
