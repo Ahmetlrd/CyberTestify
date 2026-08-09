@@ -15,7 +15,14 @@
  *  - IDOR: yalniz GET; komsu ID; DONEN VERI SAKLANMAZ (sadece uzunluk/hash/durum karsilastirilir).
  */
 import { randomBytes, createHash } from 'node:crypto';
+import puppeteer from 'puppeteer-core';
 import { collectHttp } from './surfaceEvidence.js';
+
+// Headless render (SPA keşfi) — PDF üretimiyle AYNI sistem Chromium'unu kullanır (ek kurulum yok).
+const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
+const HEADLESS_PAGE_TIMEOUT_MS = 10000;   // sayfa basina sert timeout
+const HEADLESS_MAX_PAGES = 8;             // headless'te taranacak sayfa ust siniri (perf)
+const MAX_CONCURRENT_HEADLESS = 3;        // es zamanli tarayici instance ust siniri (kaynak korumasi)
 
 const MIN_DELAY_MS = 1200;         // istekler arasi min bekleme (hedefi yormamak)
 const REQ_TIMEOUT_MS = 10000;
@@ -85,12 +92,13 @@ function discoverInputs(host: string, html: string): InputPoint[] {
   const seen = new Set<string>();
   const push = (ip: InputPoint) => { const k = `${ip.method} ${ip.action} ${ip.param}`; if (!seen.has(k)) { seen.add(k); out.push(ip); } };
 
-  // 1) Linklerdeki query param'lar (href="...?a=1&b=2")
+  // 1) Linklerdeki query param'lar (href="...?a=1&b=2") — asset (png/webp/js/css vb.) linkleri HARIC.
   for (const m of html.matchAll(/href\s*=\s*["']([^"']*\?[^"']+)["']/gi)) {
     const abs = absUrl(m[1].replace(/&amp;/g, '&'), host);
     if (!abs) continue;
     try {
       const u = new URL(abs);
+      if (CRAWL_ASSET_RE.test(u.pathname)) continue; // logo.png?v=1 gibi asset cache-buster'lari test noktasi degil
       const params: Record<string, string> = {};
       u.searchParams.forEach((v, k) => { params[k] = v; });
       for (const p of Object.keys(params)) push({ method: 'GET', action: `${u.origin}${u.pathname}`, param: p, params: { ...params }, source: 'url' });
@@ -143,6 +151,7 @@ const WELL_KNOWN_PATHS = ['/search?q=cybertestify', '/contact', '/login', '/regi
 
 export type Surface = {
   ok: boolean;
+  method: 'static' | 'headless'; // kesif yontemi (ham HTML mi, JS-render mi)
   pagesScanned: number;       // BENZERSIZ icerikli sayfa sayisi (ayni SPA shell tekrar sayilmaz)
   urlsFetched: number;        // toplam cekilen URL (dedup oncesi)
   jsRendered: boolean;        // hedef JS ile render ediliyor gorunuyor (ham HTML'de link/form yok)
@@ -155,7 +164,7 @@ export type Surface = {
 };
 
 async function crawlSurface(host: string): Promise<Surface> {
-  const empty: Surface = { ok: false, pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null };
+  const empty: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null };
   const home = await collectHttp(host);
   if (!home.ok) return empty;
 
@@ -214,7 +223,129 @@ async function crawlSurface(host: string): Promise<Surface> {
     for (const f of discoverUploadForms(host, pg.html)) { const k = `${f.action}:${f.fileField}`; if (!seenUp.has(k)) { seenUp.add(k); uploadForms.push(f); } }
     if (!massAssignForm) massAssignForm = discoverMassAssignForm(host, pg.html);
   }
-  return { ok: true, pagesScanned: pages.length, urlsFetched, jsRendered, homeHtml: home.html, homeHeaders: home.headers, inputs, idEndpoints, uploadForms, massAssignForm };
+  return { ok: true, method: 'static', pagesScanned: pages.length, urlsFetched, jsRendered, homeHtml: home.html, homeHeaders: home.headers, inputs, idEndpoints, uploadForms, massAssignForm };
+}
+
+// ======================================================================================
+// HEADLESS (JS-render) KESIF — SPA siteleri icin. PDF ile AYNI sistem Chromium'u; SADECE
+// render edilmis DOM'dan link/form/input TOPLAR — form doldurma/submit/tiklama/etkilesim YOK.
+// Es zamanli tarayici sayisi semafor ile sinirli; sayfa basina sert timeout; kaynak blocklama.
+// ======================================================================================
+let headlessActive = 0;
+const headlessQueue: Array<() => void> = [];
+async function acquireHeadless(): Promise<void> {
+  if (headlessActive < MAX_CONCURRENT_HEADLESS) { headlessActive++; return; }
+  await new Promise<void>((res) => headlessQueue.push(res)); // slot serbest kalinca devral (sayac release'te korunur)
+}
+function releaseHeadless(): void {
+  const next = headlessQueue.shift();
+  if (next) next(); // slot bir sonraki bekleyene devredilir (sayac AYNI kalir)
+  else headlessActive--;
+}
+let chromiumUnavailable = false; // bir kez basarisiz olursa tekrar deneme (perf)
+
+async function crawlHeadless(host: string): Promise<Surface | null> {
+  if (chromiumUnavailable) return null;
+  const homeUrl = `https://${host}/`;
+  await acquireHeadless();
+  let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
+  try {
+    browser = await puppeteer.launch({ executablePath: CHROMIUM_PATH, headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+  } catch {
+    chromiumUnavailable = true; // Chromium yok/baslatilamadi -> statik'e dus
+    releaseHeadless();
+    return null;
+  }
+  try {
+    const pages: Array<{ url: string; html: string }> = [];
+    const seenUrl = new Set<string>();
+    const seenHash = new Set<string>();
+    const md5 = (s: string) => createHash('md5').update(s).digest('hex');
+    let consec5xx = 0;
+    let stopped = false;
+
+    // Tek sayfayi render edip render-edilmis HTML'i dondur. HARD-GUARD: yalniz ayni host, ic-ag ASLA.
+    const renderOne = async (url: string): Promise<string | null> => {
+      try { const u = new URL(url); if (u.hostname.toLowerCase() !== host.toLowerCase() || isInternalHost(u.hostname)) return null; } catch { return null; }
+      const page = await browser!.newPage();
+      try {
+        await page.setUserAgent('CyberTestify-ActiveVerify/1.0');
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+          const rt = req.resourceType();
+          // Perf: gorsel/font/media/stylesheet blokla. Guvenlik: ic-ag isteklerini blokla.
+          let block = rt === 'image' || rt === 'font' || rt === 'media' || rt === 'stylesheet';
+          try { if (isInternalHost(new URL(req.url()).hostname)) block = true; } catch { /* yoksay */ }
+          if (block) req.abort().catch(() => {}); else req.continue().catch(() => {});
+        });
+        const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: HEADLESS_PAGE_TIMEOUT_MS });
+        const st = resp?.status() ?? 0;
+        if (st >= 500) { consec5xx++; if (consec5xx >= 3) stopped = true; } else consec5xx = 0;
+        if (st === 429) stopped = true;
+        // JS render'in oturmasi icin kisa bekleme (networkidle; asilirsa yoksay).
+        await page.waitForNetworkIdle({ idleTime: 500, timeout: 4000 }).catch(() => {});
+        return await page.content();
+      } catch { return null; } finally { await page.close().catch(() => {}); }
+    };
+
+    // 1) Ana sayfayi render et
+    const homeHtml = await renderOne(homeUrl);
+    if (!homeHtml) return null;
+    seenUrl.add(homeUrl); seenHash.add(md5(homeHtml));
+    pages.push({ url: homeUrl, html: homeHtml });
+
+    // 2) Render-edilmis DOM'dan ic linkleri topla (JS ile eklenenler DAHIL)
+    const linkSet = new Set<string>();
+    for (const m of homeHtml.matchAll(/href\s*=\s*["']([^"'#]+)["']/gi)) {
+      const abs = absUrl(m[1].replace(/&amp;/g, '&'), host);
+      if (!abs) continue;
+      try { const u = new URL(abs); if (CRAWL_ASSET_RE.test(u.pathname)) continue; const norm = `${u.origin}${u.pathname}${u.search}`; if (norm !== homeUrl) linkSet.add(norm); } catch { /* atla */ }
+    }
+    const targets = [...linkSet].slice(0, HEADLESS_MAX_PAGES - 1);
+    for (const p of WELL_KNOWN_PATHS) { const a = absUrl(p, host); if (a && a !== homeUrl && !targets.includes(a)) targets.push(a); }
+
+    // 3) Sayfalari render et (benzersiz icerik + sayfa ust siniri)
+    for (const t of targets) {
+      if (stopped || pages.length >= HEADLESS_MAX_PAGES || seenUrl.size >= CRAWL_HARD_CAP) break;
+      if (seenUrl.has(t)) continue; seenUrl.add(t);
+      const html = await renderOne(t);
+      if (!html) continue;
+      const h = md5(html);
+      if (seenHash.has(h)) continue; // ayni shell -> benzersiz sayma
+      seenHash.add(h);
+      pages.push({ url: t, html });
+    }
+
+    // 4) Render-edilmis sayfalardan input/ID/form kesfini birlestir (MEVCUT extractor'lar)
+    const inputs: InputPoint[] = []; const seenIn = new Set<string>();
+    const idEndpoints: Surface['idEndpoints'] = []; const seenId = new Set<string>();
+    const uploadForms: Surface['uploadForms'] = []; const seenUp = new Set<string>();
+    let massAssignForm: Surface['massAssignForm'] = null;
+    for (const pg of pages) {
+      for (const ip of discoverInputs(host, pg.html)) { const k = `${ip.method} ${ip.action} ${ip.param}`; if (!seenIn.has(k)) { seenIn.add(k); inputs.push(ip); } }
+      for (const e of discoverIdEndpoints(host, pg.html)) { const k = `${e.kind}:${e.idParam}:${(() => { try { const u = new URL(e.url); return u.origin + u.pathname; } catch { return e.url; } })()}`; if (!seenId.has(k)) { seenId.add(k); idEndpoints.push(e); } }
+      for (const f of discoverUploadForms(host, pg.html)) { const k = `${f.action}:${f.fileField}`; if (!seenUp.has(k)) { seenUp.add(k); uploadForms.push(f); } }
+      if (!massAssignForm) massAssignForm = discoverMassAssignForm(host, pg.html);
+    }
+    return { ok: true, method: 'headless', pagesScanned: pages.length, urlsFetched: seenUrl.size, jsRendered: true, homeHtml, homeHeaders: new Map(), inputs, idEndpoints, uploadForms, massAssignForm };
+  } catch {
+    return null;
+  } finally {
+    await browser.close().catch(() => {});
+    releaseHeadless();
+  }
+}
+
+// HIBRIT: once hizli statik kesif; SPA supheli + statik input BULAMADIYSA headless'e dus.
+async function buildSurface(host: string): Promise<Surface> {
+  const stat = await crawlSurface(host);
+  const staticSurfaceCount = stat.inputs.length + stat.idEndpoints.length + stat.uploadForms.length + (stat.massAssignForm ? 1 : 0);
+  // Statik zaten input buldu -> headless GEREKSIZ (perf). Yalniz SPA supheli + 0 input -> headless.
+  if (stat.ok && staticSurfaceCount === 0 && stat.jsRendered) {
+    const hl = await crawlHeadless(host).catch(() => null);
+    if (hl && hl.ok) return hl; // render sonucu (input bulsa da bulmasa da) — daha guclu kapsam bilgisi
+  }
+  return stat;
 }
 
 // In-flight cache: ayni host icin es zamanli 7 kontrol TEK crawl paylasir.
@@ -223,16 +354,26 @@ const SURFACE_TTL_MS = 120_000;
 export function discoverSurface(host: string): Promise<Surface> {
   const c = SURFACE_CACHE.get(host);
   if (c && Date.now() - c.at < SURFACE_TTL_MS) return c.p;
-  const p = crawlSurface(host).catch(() => ({ ok: false, pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null } as Surface));
+  const p = buildSurface(host).catch(() => ({ ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null } as Surface));
   SURFACE_CACHE.set(host, { at: Date.now(), p });
   return p;
 }
 
 // SPA/JS-render uyari notu — giris noktasi bulunamayan taramalarda yaniltici olmamak icin.
+// method=headless ise SPA render EDILDI -> "gercekten yok" (daha guclu temiz); method=static+jsRendered
+// ise render EDILEMEDI -> "bilmiyoruz" (kapsam sinirli).
 export function spaHint(surf: Surface): string {
-  return surf.jsRendered
-    ? ' **Not:** Hedef büyük olasılıkla JavaScript ile render edilen (SPA) bir uygulamadır; menü/bağlantı ve formlar tarayıcıda oluşturulduğundan ham-HTML taramasında giriş noktaları görünmeyebilir — bu tür sitelerde kapsam düşüktür ve "giriş noktası bulunamadı" sonucu güvenlik kanıtı değildir.'
-    : '';
+  if (!surf.jsRendered) return '';
+  if (surf.method === 'headless')
+    return ' **Not:** Hedef JavaScript ile render edilen (SPA) bir uygulamadır ve bu tarama sayfalar **headless tarayıcı ile render edilerek** yapılmıştır; buna rağmen test edilebilir giriş noktası bulunamaması, render sonrası sayfada gerçekten giriş noktası olmadığını gösterir (ham-HTML sınırlaması değil — daha güçlü bir "temiz" göstergesi; yine de kimlik-doğrulamalı akışlar kapsam dışıdır).';
+  return ' **Not:** Hedef büyük olasılıkla JavaScript ile render edilen (SPA) bir uygulamadır; menü/bağlantı ve formlar tarayıcıda oluşturulduğundan ham-HTML taramasında giriş noktaları görünmeyebilir — headless render bu taramada kullanılamadı, bu nedenle kapsam sınırlıdır ve "giriş noktası bulunamadı" güvenlik kanıtı değildir.';
+}
+
+// Kesif yontemi seffaflik notu (rapor icin).
+export function discoveryMethodNote(surf: Surface): string {
+  return surf.method === 'headless'
+    ? 'Bu tarama, JavaScript ile render edilen (SPA) hedef tespit edildiği için sayfalar **headless tarayıcı ile render edilerek** gerçekleştirilmiştir.'
+    : 'Standart HTML taraması yeterli kapsam sağladığından JavaScript render (headless) kullanılmadı.';
 }
 
 // ======================================================================================

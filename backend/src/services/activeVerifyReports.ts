@@ -9,7 +9,7 @@
 import {
   collectInjectionEvidence, collectIdorEvidence, type InjEvidence, type IdorEvidence,
   collectSsrfEvidence, collectRceEvidence, collectFileUploadEvidence, collectBusinessLogicEvidence, collectRaceMassAssignEvidence,
-  type ActiveCheckEvidence, discoverSurface, spaHint,
+  type ActiveCheckEvidence, discoverSurface, spaHint, discoveryMethodNote,
 } from './activeVerifyEvidence.js';
 
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
@@ -241,7 +241,8 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
       : `**${pagesScanned}** benzersiz sayfa/uç nokta tarandı, **${totalInputs}** giriş noktası test edildi, toplam **${totalProbes}** istek gönderildi. ` +
         (confirmedHigh > 0
           ? `**${confirmedHigh}** kontrolde yüksek/kritik seviyeli zafiyet göstergesi bulundu (aşağıda detaylı).`
-          : `Doğrulanmış kritik/yüksek seviyeli bir zafiyet **tespit edilmedi**.`));
+          : `Doğrulanmış kritik/yüksek seviyeli bir zafiyet **tespit edilmedi**.`)) +
+    `\n>\n> _Keşif yöntemi: ${discoveryMethodNote(surf)}_`;
 
   // --- KONTROL ÖZETİ TABLOSU (durum + güven) ---
   // Güven: SADECE gerçekten test çalıştıysa (input>0) seviye gösterilir; aksi halde NÖTR "Kapsam dışı"
