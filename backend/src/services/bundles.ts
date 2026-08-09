@@ -227,8 +227,14 @@ export function bundleMemberKeySet(): Set<string> {
   return s;
 }
 
-/** Bu paket bir bundle'da yer aliyor mu? (yer aliyorsa TEK BASINA satilamaz). */
+// ISTISNA: bir bundle uyesi OLSA BILE tekil satilabilen paketler. injection_verify + idor_verify
+// deterministik (PentAGI'siz) + OOB gerektirmeyen aktif-hafif kontroller olarak TEKIL satisa acildi;
+// iceren bundle (bundle_active_verify) hala comingSoon. Diger 5 aktif kontrol bundle'da kilitli kalir.
+const INDIVIDUALLY_SELLABLE_MEMBERS = new Set<string>(['injection_verify', 'idor_verify']);
+
+/** Bu paket bir bundle'da yer aliyor mu? (yer aliyorsa TEK BASINA satilamaz — istisna hariç). */
 export function isBundleOnlyPackage(key: string): boolean {
+  if (INDIVIDUALLY_SELLABLE_MEMBERS.has(key)) return false;
   return bundleMemberKeySet().has(key);
 }
 

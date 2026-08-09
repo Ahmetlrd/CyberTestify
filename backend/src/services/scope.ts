@@ -215,6 +215,15 @@ export function detectRepeatedFetch(
   return worst;
 }
 
+// Profil-farkinda yasak-metot filtresi. Aktif-hafif (active-light / active-verify-only) paketlerde
+// egress-proxy POST'a IZIN VERIR (ACTIVE_LIGHT_METHODS); dolayisiyla worker da POST'u "kural ihlali"
+// sayip taramayi DURDURMAMALI (aksi halde XSS/enjeksiyon POST probe'u hic calisamaz). PUT/PATCH/DELETE
+// (yazma/silme/degistirme) HER profilde yasak kalir. Pasif profilde POST dahil hepsi yasak (degismedi).
+export function forbiddenMethodsForProfile(methods: string[], profile: string | null | undefined): string[] {
+  const isActive = profile === 'active-light' || profile === 'active-verify-only';
+  return isActive ? methods.filter((m) => m.toUpperCase() !== 'POST') : methods;
+}
+
 export function findForbiddenMethods(
   items: Array<{ name?: string | null; args: string | null | undefined; result?: string | null }>,
 ): string[] {

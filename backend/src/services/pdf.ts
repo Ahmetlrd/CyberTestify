@@ -231,7 +231,7 @@ const LOGO_SVG = `
 </svg>`.trim();
 
 // Deterministik (kod-yazimi) rapor ureten paketler — rozet acik "Risk Seviyesi"den okunur.
-const DETERMINISTIC_PDF_PKGS = new Set(['basit_tarama', 'ssl_tls', 'header_leak', 'dns_email', 'cors_cookie', 'csp_analiz', 'bundle_surface', 'bundle_compliance', 'bundle_recon']);
+const DETERMINISTIC_PDF_PKGS = new Set(['basit_tarama', 'ssl_tls', 'header_leak', 'dns_email', 'cors_cookie', 'csp_analiz', 'bundle_surface', 'bundle_compliance', 'bundle_recon', 'injection_verify', 'idor_verify']);
 // Birlesik bundle raporlari: ust kutu cumlesi = GENEL DEĞERLENDİRME govde cumlesi (worst-case alana ozgu).
 const BUNDLE_COMBINED_PKGS = new Set(['bundle_surface', 'bundle_compliance', 'bundle_recon']);
 

@@ -247,10 +247,17 @@ export default function OrderPage() {
     [
       authConsent,
       setAuthConsent,
-      <>
-        Bu alan adının <strong>ve altyapısının</strong> sahibi veya yetkilisiyim; yalnızca bu hedefe
-        <strong> pasif</strong> tarama yapılmasına rıza gösteriyorum.
-      </>,
+      isActiveLight ? (
+        <>
+          Bu alan adının <strong>ve altyapısının</strong> sahibi veya yetkilisiyim; bu hedefe
+          <strong> aktif-hafif doğrulama testi</strong> yapılmasına rıza gösteriyorum.
+        </>
+      ) : (
+        <>
+          Bu alan adının <strong>ve altyapısının</strong> sahibi veya yetkilisiyim; yalnızca bu hedefe
+          <strong> pasif</strong> tarama yapılmasına rıza gösteriyorum.
+        </>
+      ),
     ],
     [
       contractConsent,

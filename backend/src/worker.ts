@@ -5,7 +5,7 @@ import { getPackageDef, securityProfileFor } from './services/scanPackages.js';
 import { generateAndStoreReport } from './services/report.js';
 import { sendReportReady } from './services/mailer.js';
 import { publishDailyIfDue } from './services/blog.js';
-import { findOutOfScope, findForbiddenMethods, detectScriptDebugLoop, detectRepeatedFetch } from './services/scope.js';
+import { findOutOfScope, findForbiddenMethods, forbiddenMethodsForProfile, detectScriptDebugLoop, detectRepeatedFetch } from './services/scope.js';
 import { encryptSecret } from './services/crypto.js';
 import { buildActivityFeed } from './services/activityFeed.js';
 import { promoteQueued } from './services/orchestrator.js';
@@ -124,7 +124,10 @@ async function tick() {
           const methods = findForbiddenMethods(
             logs.toolCallLogs.map((t) => ({ name: t.name, args: t.args, result: t.result })),
           );
-          if (methods.length) forbiddenMethodHit = methods.join(', ');
+          // PROFIL-FARKINDA: active-light/active-verify-only'de POST'a izin ver (egress-proxy ile
+          // TUTARLI); PUT/PATCH/DELETE her profilde yasak. Bkz forbiddenMethodsForProfile.
+          const effective = forbiddenMethodsForProfile(methods, securityProfileFor(pkg));
+          if (effective.length) forbiddenMethodHit = effective.join(', ');
         }
 
         // (D) SCRIPT DEBUG-LOOP / SCRIPT-ETRAFINDA-DONME — ajan bir script yazip etrafinda

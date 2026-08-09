@@ -12,6 +12,7 @@ import {
 } from './surfaceReports.js';
 import { generateBundleComplianceReport } from './complianceReports.js';
 import { generateBundleReconReport } from './reconReports.js';
+import { generateInjectionVerifyReport, generateIdorVerifyReport } from './activeVerifyReports.js';
 
 // Deterministik (kod-yazimi) rapor ureten paketler: key -> uretici(hostname).
 // Hepsi { findings, fixText } | null doner (null -> ajan/ham-kanit fallback).
@@ -25,6 +26,8 @@ const DETERMINISTIC_GENERATORS: Record<string, ((host: string) => Promise<{ find
   bundle_surface: generateBundleSurfaceReport, // kombine paket -> 5 alan TEK raporda
   bundle_compliance: generateBundleComplianceReport, // kombine paket -> KVKK+PCI+ISO TEK raporda
   bundle_recon: generateBundleReconReport, // kombine paket -> subdomain+api+cms/cve TEK raporda
+  injection_verify: generateInjectionVerifyReport, // aktif-hafif: SQLi/XSS kod-tabanli prob (PentAGI'siz)
+  idor_verify: generateIdorVerifyReport, // aktif-hafif: kimlik-dogrulamasiz IDOR gostergesi (PentAGI'siz)
 };
 
 // Rapor TAMAMEN koddan uretilen (backend collector'lari) paketler -> PentAGI ajani/sandbox'i
