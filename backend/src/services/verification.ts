@@ -14,6 +14,29 @@ import { config } from '../config.js';
  * islem yapabiliyordur — bu segment icin makul bir varsayim.
  */
 
+// ======================================================================================
+// SADECE TEST/QA — resmi, herkese açık, KASITLI olarak zafiyetli bırakılmış pratik hedefler.
+// Bu domainler (ve YALNIZ bunlar) için domain-sahiplik DNS-TXT doğrulaması ATLANIR; diğer
+// TÜM kurallar (consent checkbox'ları, circuit breaker, "asla tamamlama" guard'ları) AYNEN
+// uygulanır. Kolayca genişletilebilir/kaldırılabilir sabit liste — başka domain için ÇALIŞMAZ.
+// Hepsi güvenlik testi PRATİĞİ için resmî olarak var olan sitelerdir (OWASP/Acunetix/PortSwigger/IBM).
+// ======================================================================================
+const KNOWN_PUBLIC_TEST_TARGETS = new Set<string>([
+  'demo.owasp-juice.shop',   // OWASP Juice Shop resmi demo
+  'juice-shop.herokuapp.com', // OWASP Juice Shop (Heroku)
+  'testphp.vulnweb.com',      // Acunetix test sitesi (PHP)
+  'testasp.vulnweb.com',      // Acunetix test sitesi (ASP)
+  'testaspnet.vulnweb.com',   // Acunetix test sitesi (ASP.NET)
+  'rest.vulnweb.com',         // Acunetix test sitesi (REST)
+  'demo.testfire.net',        // IBM AltoroMutual demo
+  'ginandjuice.shop',         // PortSwigger resmi demo
+]);
+
+export function isKnownPublicTestTarget(hostname: string): boolean {
+  const h = hostname.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  return KNOWN_PUBLIC_TEST_TARGETS.has(h);
+}
+
 export function generateVerificationToken(): string {
   const random = crypto.randomBytes(16).toString('hex');
   return `${config.dnsVerificationPrefix}=${random}`;
@@ -40,13 +63,19 @@ export async function checkDomainVerification(domainId: string): Promise<boolean
   const domain = await prisma.domain.findUniqueOrThrow({ where: { id: domainId } });
 
   let verified = false;
-  try {
-    // _pentest-verify.<domain> TXT kaydinda beklenen degeri ariyoruz.
-    const records = await dns.resolveTxt(`_pentest-verify.${domain.hostname}`);
-    const flat = records.map((r) => r.join(''));
-    verified = flat.includes(domain.verificationToken);
-  } catch {
-    verified = false;
+  if (isKnownPublicTestTarget(domain.hostname)) {
+    // TEST/QA whitelist: DNS-TXT sahiplik dogrulamasi ATLANIR (bkz KNOWN_PUBLIC_TEST_TARGETS).
+    // IP cozumlemesi (scope kilidi icin) yine de asagida yapilir.
+    verified = true;
+  } else {
+    try {
+      // _pentest-verify.<domain> TXT kaydinda beklenen degeri ariyoruz.
+      const records = await dns.resolveTxt(`_pentest-verify.${domain.hostname}`);
+      const flat = records.map((r) => r.join(''));
+      verified = flat.includes(domain.verificationToken);
+    } catch {
+      verified = false;
+    }
   }
 
   // Dogrulaninca hedefin IP'lerini cozumleyip sakla — kapsam (scope) kontrolu
@@ -84,7 +113,9 @@ export async function checkDomainVerification(domainId: string): Promise<boolean
  */
 const VERIFICATION_TTL_DAYS = 30;
 
-export function isVerificationStillValid(domain: { status: string; verifiedAt: Date | null }): boolean {
+export function isVerificationStillValid(domain: { status: string; verifiedAt: Date | null; hostname?: string }): boolean {
+  // TEST/QA whitelist: bilinen resmî pratik hedeflerinde sahiplik doğrulaması aranmaz.
+  if (domain.hostname && isKnownPublicTestTarget(domain.hostname)) return true;
   if (domain.status !== 'verified' || !domain.verifiedAt) return false;
   const ageMs = Date.now() - domain.verifiedAt.getTime();
   return ageMs < VERIFICATION_TTL_DAYS * 24 * 60 * 60 * 1000;
