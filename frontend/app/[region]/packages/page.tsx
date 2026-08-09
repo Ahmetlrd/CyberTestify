@@ -57,6 +57,11 @@ export default async function PackagesPage({ params }: { params: { region: strin
   // yalnizca ornek raporlari (PDF) sunulur.
   const tr = region.code === 'tr';
   const basit = packages.find((p) => p.key === 'basit_tarama');
+  // Tekil satilabilen AKTIF-HAFIF kontroller (injection_verify + idor_verify) — PentAGI'siz,
+  // deterministik. basit_tarama gibi bagimsiz "Satın Al" karti olarak gosterilir. Diger 5 aktif
+  // kontrol hala bundle-only/comingSoon (backend bundleOnly:true doner -> burada suzulur).
+  const ACTIVE_SINGLE_KEYS = ['injection_verify', 'idor_verify'];
+  const activeSingles = packages.filter((p) => ACTIVE_SINGLE_KEYS.includes(p.key) && !p.comingSoon && !p.bundleOnly);
   // Ornek rapor: PAKET/BUNDLE bazinda TEK PDF (tek tek kontrol DEGIL). basit + aktif bundle'lar.
   const sampleItems: Array<{ key: string; displayName: string }> = [];
   if (basit) sampleItems.push({ key: basit.key, displayName: basit.displayName });
@@ -160,6 +165,36 @@ export default async function PackagesPage({ params }: { params: { region: strin
                   </Link>
                 </div>
               )}
+              {/* Tekil AKTIF-HAFIF kontroller (injection_verify + idor_verify) — bagimsiz Satın Al kartlari. */}
+              {activeSingles.map((p) => (
+                <div key={p.key} className="card relative flex flex-col border-2 border-accent/40 p-6">
+                  <span className="absolute -top-3 left-6 rounded-pill bg-accent px-3 py-1 text-xs font-bold text-white">
+                    {tr ? 'Aktif Doğrulama' : 'Active Verify'}
+                  </span>
+                  <h3 className="text-lg font-bold text-brand">{p.displayName}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-ink-soft">{p.description}</p>
+                  <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
+                    <span className="font-semibold">{tr ? 'Yöntem' : 'Method'}:</span>{' '}
+                    {tr
+                      ? 'Kanıtla — istismar etme: sınırlı, zararsız doğrulama probları'
+                      : 'Prove, not exploit: limited, harmless verification probes'}
+                  </div>
+                  <div className="mt-4 flex-1">
+                    <div>
+                      <span className="text-3xl font-extrabold text-ink">{formatMoney(p.priceMinorUnit, region)}</span>
+                      <span className="ml-1 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahil' : 'incl. tax'}</span>
+                    </div>
+                    <div className="mt-1.5 text-[11px] text-ink-soft">
+                      {tr
+                        ? 'Aktif-hafif test; yalnızca sahibi/yetkilisi olduğunuz hedefte çalıştırın.'
+                        : 'Active-light test; run only on targets you own/are authorized for.'}
+                    </div>
+                  </div>
+                  <Link href={`/verify?package=${p.key}`} className="btn-outline mt-6 w-full">
+                    {tr ? 'Satın Al' : 'Buy Now'}
+                  </Link>
+                </div>
+              ))}
               {bundles.map((b) => {
                 const savedMinor = b.originalMinorUnit - b.amountMinorUnit;
                 const hasSaving = savedMinor > 0; // recon gibi nihai > tekil-toplam ise indirim GOSTERILMEZ
