@@ -68,6 +68,7 @@ enum ScanPackageKey {
   bundle_surface
   bundle_compliance // kombine paket (Uyum: KVKK+PCI+ISO, tek-siparis)
   bundle_recon // kombine paket (Keşif: subdomain+api+cms/cve, tek-siparis)
+  bundle_active_verify // kombine paket (Aktif Doğrulama: injection+idor gerçek, 5 kontrol olgunlaşıyor)
 }
 
 model Customer {

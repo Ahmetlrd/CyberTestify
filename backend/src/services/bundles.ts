@@ -96,12 +96,14 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     displayName: 'Aktif Doğrulama Paketi',
     displayNameEn: 'Active Verification Bundle',
     description:
-      'Yedi aktif-hafif zafiyet doğrulama kontrolünün tümü tek pakette: Enjeksiyon, IDOR, SSRF, Dosya Yükleme, İş Mantığı, Race/Mass-Assignment ve RCE. Zafiyeti kanıtlar, istismar etmez; tek yetkilendirme beyanı yeterli. Tekil toplamdan belirgin indirimli.',
+      'Yedi aktif-hafif zafiyet doğrulama kontrolünün tümü tek pakette: Enjeksiyon, IDOR, SSRF, Dosya Yükleme, İş Mantığı, Race/Mass-Assignment ve RCE. Zafiyeti kanıtlar, istismar etmez; tek yetkilendirme beyanı yeterli. Tekil toplamdan belirgin indirimli. ' +
+      'Not: Bu paketin bazı kontrolleri (Enjeksiyon, IDOR) tam işlevseldir; kalan kontroller aşamalı olarak devreye alınmaktadır.',
     descriptionEn:
-      'All seven active-light verification checks in one bundle: Injection, IDOR, SSRF, File Upload, Business Logic, Race/Mass-Assignment and RCE. Proves presence, never exploits; a single authorization declaration covers all. Strongly discounted vs buying separately.',
+      'All seven active-light verification checks in one bundle: Injection, IDOR, SSRF, File Upload, Business Logic, Race/Mass-Assignment and RCE. Proves presence, never exploits; a single authorization declaration covers all. Strongly discounted vs buying separately. ' +
+      'Note: some checks (Injection, IDOR) are fully functional; the remaining checks are being rolled out progressively.',
     category: 'active-light',
     discountPct: 25,
-    comingSoon: true,
+    comingSoon: false,
     memberKeys: [
       'injection_verify',
       'idor_verify',
@@ -227,14 +229,8 @@ export function bundleMemberKeySet(): Set<string> {
   return s;
 }
 
-// ISTISNA: bir bundle uyesi OLSA BILE tekil satilabilen paketler. injection_verify + idor_verify
-// deterministik (PentAGI'siz) + OOB gerektirmeyen aktif-hafif kontroller olarak TEKIL satisa acildi;
-// iceren bundle (bundle_active_verify) hala comingSoon. Diger 5 aktif kontrol bundle'da kilitli kalir.
-const INDIVIDUALLY_SELLABLE_MEMBERS = new Set<string>(['injection_verify', 'idor_verify']);
-
-/** Bu paket bir bundle'da yer aliyor mu? (yer aliyorsa TEK BASINA satilamaz — istisna hariç). */
+/** Bu paket bir bundle'da yer aliyor mu? (yer aliyorsa TEK BASINA satilamaz). */
 export function isBundleOnlyPackage(key: string): boolean {
-  if (INDIVIDUALLY_SELLABLE_MEMBERS.has(key)) return false;
   return bundleMemberKeySet().has(key);
 }
 

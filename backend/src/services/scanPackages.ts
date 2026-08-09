@@ -39,7 +39,8 @@ export interface ScanPackageDef {
     | 'autonomous_pentest'
     | 'bundle_surface' // kombine paket (tek-siparis modeli)
     | 'bundle_compliance' // kombine paket (Uyum: KVKK+PCI+ISO, tek-siparis)
-    | 'bundle_recon'; // kombine paket (Keşif: subdomain+api+cms/cve, tek-siparis)
+    | 'bundle_recon' // kombine paket (Keşif: subdomain+api+cms/cve, tek-siparis)
+    | 'bundle_active_verify'; // kombine paket (Aktif Doğrulama: injection+idor gerçek, 5 kontrol olgunlaşıyor)
   displayName: string;
   description: string;
   priceMinorUnit: number; // kurus
@@ -822,6 +823,26 @@ Gather passive evidence for ${host}: Certificate Transparency subdomains, DNS CN
 well-known API/Swagger documentation paths, CMS fingerprint (headers/meta/HTML) and version.
 Use GET/HEAD only; never exploit, never write scripts.
 Target: ${host}
+`.trim(),
+  },
+  {
+    // KOMBINE PAKET (bundle) — Aktif Doğrulama Paketi (7 aktif-hafif kontrol). TEK-siparis modeli.
+    // Rapor generateBundleActiveVerifyReport ile: injection_verify + idor_verify GERCEK (kod-tabanli,
+    // PentAGI'siz) bolumleri + diger 5 kontrol icin NET "henuz olgunlasmadi" durustluk notu.
+    // available:false + bundle_ filtresi. Aktif-hafif -> sipariste activeTestConsent zorunlu.
+    key: 'bundle_active_verify',
+    displayName: 'Aktif Doğrulama Paketi',
+    description:
+      'Kombine paket: Aktif-hafif zafiyet doğrulama. Enjeksiyon (SQLi/XSS) + IDOR tam işlevsel; ' +
+      'kalan 5 kontrol aşamalı devreye alınıyor. Zafiyeti kanıtlar, istismar etmez.',
+    priceMinorUnit: 2699475,
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    available: false,
+    promptTemplate: (host) => `
+ACTIVE-LIGHT verification bundle; final report generated deterministically by code (no free-form
+report writing). Only injection (SQLi/XSS) and IDOR checks are executed (code-based probes); the
+remaining checks report an explicit "not yet matured" note. Target: ${host}
 `.trim(),
   },
   {

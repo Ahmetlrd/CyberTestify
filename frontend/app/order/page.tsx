@@ -110,8 +110,6 @@ export default function OrderPage() {
   const selectedPkg = packages.find((p) => p.key === selected);
   // SATIS MODELI: tekil kontrol satisi YOK — secilebilir TEK "tekil" paket basit_tarama (giris).
   const basitPkg = packages.find((p) => p.key === 'basit_tarama');
-  // Tekil satilabilen aktif-hafif kontroller (injection_verify + idor_verify) — secilebilir kartlar.
-  const activeSingles = packages.filter((p) => (p.key === 'injection_verify' || p.key === 'idor_verify') && !p.comingSoon && !p.bundleOnly);
   const isActiveLight = selectedPkg?.securityProfile === 'active-light';
   // (#4) Uluslararasi odeme (Paddle) henuz canli degil — TR disi bolgede nazik "yakinda".
   const intlComingSoon = region !== 'tr';
@@ -415,25 +413,6 @@ export default function OrderPage() {
             </p>
           </button>
         )}
-        {/* Tekil aktif-hafif kontroller (injection_verify + idor_verify) — secilebilir. */}
-        {activeSingles.map((p) => (
-          <button
-            key={p.key}
-            type="button"
-            onClick={() => { setSelected(p.key); setSelectedBundle(null); setBundleModules([]); setPromo(null); }}
-            className={`card relative flex flex-col p-4 text-left transition ${selected === p.key ? 'ring-2 ring-accent' : 'hover:border-brand-300'}`}
-          >
-            <span className="absolute -top-3 left-6 rounded-pill bg-accent px-3 py-0.5 text-[10px] font-bold text-white">Aktif</span>
-            <span className="font-bold text-brand">{p.displayName}</span>
-            <p className="mt-1 flex-1 text-xs leading-relaxed text-ink-soft">
-              Aktif-hafif doğrulama (kanıtla — istismar etme); yalnızca yetkili olduğunuz hedefte.
-            </p>
-            <p className="mt-2 font-bold text-ink">
-              {formatMoney(p.priceMinorUnit, getRegion(region))}{' '}
-              <span className="text-xs font-normal text-ink-muted">· KDV Dahil</span>
-            </p>
-          </button>
-        ))}
         {activeBundles.map((b) => bundleCard(b))}
       </div>
       {/* "Yakında" paketler — devre disi, gri, SONA alindi (secilemez). */}

@@ -10,6 +10,7 @@ import { collectInjectionEvidence, collectIdorEvidence, type InjEvidence, type I
 
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
 type Level = 'low' | 'medium' | 'medium-high' | 'high';
+function levelRank(l: Level): number { return l === 'high' ? 3 : l === 'medium-high' ? 2 : l === 'medium' ? 1 : 0; }
 
 function assemble(level: Level, summaryBullets: string[], genelSentence: string, sections: string): string {
   return (
@@ -165,6 +166,118 @@ export function buildIdorReport(ev: IdorEvidence): { findings: string; fixText: 
         '- Sıralı sayısal ID yerine **UUID/rastgele tanımlayıcı** kullanın.',
         '- Kimlik doğrulamalı akışlar için ayrı, oturum-tabanlı bir IDOR testi planlayın (bu paketin kapsamı dışında).',
       ].join('\n');
+
+  return { findings, fixText };
+}
+
+// ======================================================================================
+// bundle_active_verify — BIRLESIK RAPOR (injection+idor GERCEK + 5 kontrol DURUSTLUK notu)
+// ======================================================================================
+// injection_verify/idor_verify KENDI rapor mantigini DEGISTIRMEDEN cagirir; ciktilarini birlesik
+// rapora yerlestirir. Diger 5 uyenin deterministik generator'i YOK -> sessizce bos/hatali sonuc
+// yerine NET "henuz olgunlasmadi" notu basar (Grok/tuketici-durustlugu geregi).
+type ActiveMember = { key: string; title: string; gen?: (host: string) => Promise<{ findings: string; fixText: string } | null> };
+const ACTIVE_BUNDLE_MEMBERS: ActiveMember[] = [
+  { key: 'injection_verify', title: 'Enjeksiyon (SQLi/XSS) Doğrulama', gen: generateInjectionVerifyReport },
+  { key: 'idor_verify', title: 'Yetkisiz Erişim (IDOR) Doğrulama', gen: generateIdorVerifyReport },
+  { key: 'ssrf_verify', title: 'SSRF Doğrulama' },
+  { key: 'file_upload_verify', title: 'Dosya Yükleme Doğrulama' },
+  { key: 'business_logic_verify', title: 'İş Mantığı Doğrulama' },
+  { key: 'race_massassign_verify', title: 'Race / Mass-Assignment Doğrulama' },
+  { key: 'rce_verify', title: 'RCE / Komut Enjeksiyonu Doğrulama' },
+];
+
+const PENDING_NOTE =
+  '> **Bu kontrol şu anda geliştirme/olgunlaştırma aşamasındadır.** Güvenilir ve doğrulanabilir bir ' +
+  'sonuç üretebildiğimizden emin olana kadar bu taramada **çalıştırılmadı** — sessizce boş veya yanlış ' +
+  'bir sonuç göstermektense bunu açıkça belirtmeyi tercih ediyoruz. Bu kontrol pakete yakında eklenecektir.';
+
+function extractLevel(findings: string): Level {
+  const m = findings.match(/Risk Seviyesi:\s*(Orta[-\s]?Y[uü]ksek|Y[uü]ksek|Orta|D[uü][sş][uü]k)/i);
+  if (!m) return 'low';
+  const w = m[1].toLocaleLowerCase('tr');
+  if (/orta[-\s]?y[uü]ksek/.test(w)) return 'medium-high';
+  if (/y[uü]ksek/.test(w)) return 'high';
+  if (/orta/.test(w)) return 'medium';
+  return 'low';
+}
+function headlineOf(findings: string): string {
+  const m = findings.match(/Genel risk seviyesi:\s*[^\n]+?\s[—–-]\s([^\n]+)/i);
+  return m ? m[1].trim().replace(/\*\*/g, '') : '';
+}
+// YÖNETİCİ ÖZETİ + GENEL DEĞERLENDİRME'yi cikar, detay bolumlerini dondur (## -> ### indir).
+function detailOnly(findings: string): string {
+  const parts = findings.split(/(?=^## )/m);
+  return parts.slice(2).join('').replace(/^## /gm, '### ').trim();
+}
+
+export async function generateBundleActiveVerifyReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+  // Gercek (deterministik) uyeleri calistir; digerleri stub.
+  const results = await Promise.all(
+    ACTIVE_BUNDLE_MEMBERS.map(async (m) => (m.gen ? await m.gen(host).catch(() => null) : null)),
+  );
+  const realIdx = ACTIVE_BUNDLE_MEMBERS.map((m, i) => (m.gen ? i : -1)).filter((i) => i >= 0);
+  // Gercek uyelerin hicbiri veri toplayamadiysa (hedefe ulasilamadi) -> fallback.
+  if (realIdx.every((i) => !results[i])) return null;
+
+  const levels: Array<Level | null> = ACTIVE_BUNDLE_MEMBERS.map((m, i) => (m.gen && results[i] ? extractLevel(results[i]!.findings) : null));
+  const ranked = levels.map((lv, i) => ({ lv, i })).filter((x): x is { lv: Level; i: number } => x.lv !== null).sort((a, b) => levelRank(b.lv) - levelRank(a.lv));
+  const worst: Level = ranked.length ? ranked[0].lv : 'low';
+  const worstTitle = ranked.length ? ACTIVE_BUNDLE_MEMBERS[ranked[0].i].title : '';
+  const worstHl = ranked.length && results[ranked[0].i] ? headlineOf(results[ranked[0].i]!.findings) : '';
+  const pendingCount = ACTIVE_BUNDLE_MEMBERS.filter((m) => !m.gen).length;
+  const realCount = ACTIVE_BUNDLE_MEMBERS.length - pendingCount;
+
+  // --- YÖNETİCİ ÖZETİ ---
+  const summary: string[] = [];
+  summary.push(
+    worst === 'low'
+      ? `- **Genel risk seviyesi: Düşük** — çalıştırılan ${realCount} aktif doğrulama kontrolünde (Enjeksiyon, IDOR) belirgin bir zafiyet kanıtı bulunamadı.`
+      : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — çalıştırılan kontrollerde en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`,
+  );
+  ACTIVE_BUNDLE_MEMBERS.forEach((m, i) => {
+    if (m.gen) {
+      const lv = levels[i];
+      const r = results[i];
+      if (!r || !lv) { summary.push(`- **${m.title}:** veri toplanamadı (hedefe ulaşılamadı).`); return; }
+      const hl = headlineOf(r.findings);
+      summary.push(`- **${m.title}:** ${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`);
+    } else {
+      summary.push(`- **${m.title}:** ⏳ henüz eklenmedi (geliştirme aşamasında).`);
+    }
+  });
+  summary.push(`- **Şeffaflık:** Bu pakette şu an **${realCount}/${ACTIVE_BUNDLE_MEMBERS.length}** kontrol (Enjeksiyon, IDOR) tam işlevseldir; kalan ${pendingCount} kontrol aşamalı olarak devreye alınmaktadır ve bu taramada çalıştırılmamıştır.`);
+  summary.push('- **Önerilen ilk adım:** Çalıştırılan kontrollerdeki bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.');
+
+  const genel =
+    (worst === 'low'
+      ? 'Çalıştırılan aktif doğrulama kontrollerinde (Enjeksiyon, IDOR) belirgin bir zafiyet kanıtı öne çıkmadı.'
+      : `Çalıştırılan kontrollerde en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi önerilir.`) +
+    ` Bu paketin ${pendingCount} kontrolü (SSRF, Dosya Yükleme, İş Mantığı, Race/Mass-Assignment, RCE) halen olgunlaştırma aşamasındadır ve bu taramada çalıştırılmamıştır — ilgili bölümlerde bu durum açıkça belirtilmiştir. Aşağıda her kontrol ayrı ayrı raporlanmıştır.`;
+
+  // --- Bolumler ---
+  const sections = ACTIVE_BUNDLE_MEMBERS.map((m, i) => {
+    if (m.gen) {
+      const r = results[i];
+      if (!r) return `## ${m.title}\n\n> Bu kontrol için veri toplanamadı (hedefe ulaşılamadı); diğer kontroller raporlanmıştır.\n`;
+      return `## ${m.title}\n\n${detailOnly(r.findings)}\n`;
+    }
+    return `## ${m.title}\n\n${PENDING_NOTE}\n`;
+  }).join('\n');
+
+  const findings =
+    `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
+    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${genel}\n\n` +
+    `${sections}`;
+
+  // --- AI ÇÖZÜM ÖNERİLERİ (yalniz gercek uyeler) ---
+  const fixParts = ACTIVE_BUNDLE_MEMBERS.map((m, i) => {
+    if (!m.gen || !results[i]?.fixText.trim()) return '';
+    return `### ${m.title}\n\n${results[i]!.fixText.trim()}`;
+  }).filter(Boolean);
+  const fixText =
+    'Bu bölüm, çalıştırılan aktif doğrulama kontrollerinde (Enjeksiyon, IDOR) tespit edilen bulgular için düzeltme önerileri içerir.\n\n' +
+    fixParts.join('\n\n');
 
   return { findings, fixText };
 }
