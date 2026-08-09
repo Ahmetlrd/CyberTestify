@@ -9,7 +9,7 @@
 import {
   collectInjectionEvidence, collectIdorEvidence, type InjEvidence, type IdorEvidence,
   collectSsrfEvidence, collectRceEvidence, collectFileUploadEvidence, collectBusinessLogicEvidence, collectRaceMassAssignEvidence,
-  type ActiveCheckEvidence,
+  type ActiveCheckEvidence, discoverSurface, spaHint,
 } from './activeVerifyEvidence.js';
 
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
@@ -53,7 +53,7 @@ export function buildInjectionReport(ev: InjEvidence): { findings: string; fixTe
   const xss = ev.findings.filter((f) => f.type === 'XSS');
 
   const bullets = [
-    `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'aktif doğrulama ile enjeksiyon zafiyeti KANITLANDI.' : level === 'medium-high' || level === 'medium' ? 'olası bir enjeksiyon göstergesi bulundu (bağlama göre doğrulama önerilir).' : ev.inputsFound ? 'test edilen giriş noktalarında enjeksiyon kanıtı bulunamadı.' : 'ana sayfada test edilebilir giriş noktası saptanmadı.'}`,
+    `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'aktif doğrulama ile enjeksiyon zafiyeti KANITLANDI.' : level === 'medium-high' || level === 'medium' ? 'olası bir enjeksiyon göstergesi bulundu (bağlama göre doğrulama önerilir).' : ev.inputsFound ? 'test edilen giriş noktalarında enjeksiyon kanıtı bulunamadı.' : 'taranan sayfalarda test edilebilir giriş noktası saptanmadı.'}`,
     `- Taranan sayfa/uç nokta: **${ev.pagesScanned}** · Test edilen giriş noktası: **${ev.inputsFound}** · Gönderilen payload: **${ev.payloadsSent}** (toplam ${ev.probesSent} istek) · SQLi bulgusu: ${sqli.length} · XSS bulgusu: ${xss.length}.`,
     '- **Önerilen ilk adım:** ' + (ev.findings.length ? 'Kanıtlanan giriş noktalarını parametreli sorgu / çıktı kodlaması ile kapatın; hazır adımlar "AI Çözüm Önerileri" bölümünde.' : 'Girdi doğrulama ve çıktı kodlamasını standart hale getirin; hazır sertleştirme adımları "AI Çözüm Önerileri" bölümünde.'),
   ];
@@ -69,7 +69,7 @@ export function buildInjectionReport(ev: InjEvidence): { findings: string; fixTe
   // Ne kontrol edildi — seffaflik (bulgu olsa da olmasa da)
   const method = [
     '## NE KONTROL EDİLDİ\n',
-    'Ana sayfadan keşfedilen giriş noktaları (URL query parametreleri + form alanları) üzerinde, giriş noktası başına zararsız doğrulama probları:',
+    'Taranan sayfalardan (ana sayfa + iç linkler + iyi-bilinen yollar) keşfedilen giriş noktaları (URL query parametreleri + form alanları) üzerinde, giriş noktası başına zararsız doğrulama probları:',
     '',
     '- **SQLi (hata-tabanlı):** Tek tırnak (`\'`) enjekte edilip yanıtta veritabanı hata imzası (MySQL/PostgreSQL/Oracle/MSSQL/SQLite) arandı.',
     `- **SQLi (zaman-tabanlı):** Hata görülmeyen noktalarda tek bir zararsız gecikme probu (SLEEP) ile yanıt süresi baseline’a göre ölçüldü (blind SQLi göstergesi).`,
@@ -143,7 +143,7 @@ export function buildIdorReport(ev: IdorEvidence): { findings: string; fixText: 
 
   const method = [
     '## NE KONTROL EDİLDİ\n',
-    'Ana sayfadan keşfedilen, tahmin edilebilir/sayısal ID içeren uç noktalar (ör. `?id=123`, `/user/45`) üzerinde:',
+    'Taranan sayfalardan keşfedilen, tahmin edilebilir/sayısal ID içeren uç noktalar (ör. `?id=123`, `/user/45`) üzerinde:',
     '',
     '- ID değeri **komşu bir değere** (N-1 / N+1) değiştirilip, kimlik doğrulaması olmadan **GET** isteği gönderildi.',
     '- Yalnızca yanıt **durumu ve boyutu** karşılaştırıldı; **dönen içerik saklanmadı/alıntılanmadı**.',
@@ -216,6 +216,7 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
   const runs = await Promise.all(ACTIVE_BUNDLE_MEMBERS.map((m) => m.run(host).catch(() => null)));
   // Hicbir uye veri toplayamadiysa (hedefe ulasilamadi) -> fallback.
   if (runs.every((r) => !r || !r.rep)) return null;
+  const surf = await discoverSurface(host); // cache'ten — benzersiz sayfa + SPA bilgisi
 
   const levels: Array<Level | null> = runs.map((r) => (r?.rep ? extractLevel(r.rep.findings) : null));
   const ranked = levels.map((lv, i) => ({ lv, i })).filter((x): x is { lv: Level; i: number } => x.lv !== null).sort((a, b) => levelRank(b.lv) - levelRank(a.lv));
@@ -224,22 +225,27 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
   const worstHl = ranked.length && runs[ranked[0].i]?.rep ? headlineOf(runs[ranked[0].i]!.rep!.findings) : '';
 
   // --- Gercek sayaclar (uydurma YOK) ---
-  const pagesScanned = Math.max(0, ...runs.map((r) => r?.pages ?? 0));
+  const pagesScanned = surf.pagesScanned;                              // BENZERSIZ icerikli sayfa
   const totalInputs = runs.reduce((s, r) => s + (r?.inputs ?? 0), 0);
-  const totalProbes = runs.reduce((s, r) => s + (r?.probes ?? 0), 0);
+  const totalProbes = runs.reduce((s, r) => s + (r?.probes ?? 0), 0);  // baseline + gercek prob
   const confirmedHigh = runs.filter((r, i) => r?.rep && levels[i] === 'high').length;
   const dataOk = runs.filter((r) => r?.rep).length;
+  const noInputs = totalInputs === 0;
 
-  // --- ÜST ÖZET KUTUSU (ilk sayfa, güçlü çerçeve; gerçek N/M/P ile) ---
+  // --- ÜST ÖZET KUTUSU (ilk sayfa; gerçek N/M/P; input yoksa "gerçek prob yok" netliği) ---
   const box =
     `> ### Değerlendirme Özeti\n` +
     `> **7 aktif güvenlik kontrol kategorisinin tamamı değerlendirildi.** ` +
-    `**${pagesScanned}** sayfa/uç nokta tarandı, **${totalInputs}** giriş noktası test edildi, toplam **${totalProbes}** prob gönderildi. ` +
-    (confirmedHigh > 0
-      ? `**${confirmedHigh}** kontrolde yüksek/kritik seviyeli zafiyet göstergesi bulundu (aşağıda detaylı).`
-      : `Doğrulanmış kritik/yüksek seviyeli bir zafiyet **tespit edilmedi**.`);
+    (noInputs
+      ? `**${pagesScanned}** benzersiz sayfa/uç nokta tarandı; **test edilebilir giriş noktası (parametre/form/ID) bulunamadı** — bu nedenle gerçek doğrulama probu gönderilmedi (yalnızca ${totalProbes} erişilebilirlik/baseline isteği). Bu **zafiyet olmadığının kanıtı değildir**; kapsam sınırına bakınız.` + spaHint(surf)
+      : `**${pagesScanned}** benzersiz sayfa/uç nokta tarandı, **${totalInputs}** giriş noktası test edildi, toplam **${totalProbes}** istek gönderildi. ` +
+        (confirmedHigh > 0
+          ? `**${confirmedHigh}** kontrolde yüksek/kritik seviyeli zafiyet göstergesi bulundu (aşağıda detaylı).`
+          : `Doğrulanmış kritik/yüksek seviyeli bir zafiyet **tespit edilmedi**.`));
 
   // --- KONTROL ÖZETİ TABLOSU (durum + güven) ---
+  // Güven: SADECE gerçekten test çalıştıysa (input>0) seviye gösterilir; aksi halde NÖTR "Kapsam dışı"
+  // (PDF renklendirme yalnız risk kelimelerini boyar; "Kapsam dışı" nötr kalır — yanıltıcı kırmızı yok).
   const statusOf = (r: MemberRun | null, lv: Level | null): string => {
     if (!r || !r.rep) return 'Veri toplanamadı';
     if (r.fc > 0 && lv === 'high') return '⚠ Zafiyet göstergesi';
@@ -247,8 +253,9 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
     if (r.inputs === 0) return 'Test edilebilir giriş noktası bulunamadı';
     return '✓ Zafiyet kanıtı yok';
   };
-  const tableRows = ACTIVE_BUNDLE_MEMBERS.map((m, i) => `| ${m.title} | ${statusOf(runs[i], levels[i])} | ${m.conf} |`).join('\n');
-  const controlTable = `## KONTROL ÖZETİ\n\n| Kontrol | Sonuç | Güven |\n|---------|-------|-------|\n${tableRows}\n\n> Güven seviyesi: SSRF/RCE dolaylı (zaman-tabanlı, OOB yok) → **Orta**; Dosya Yükleme/İş Mantığı/Race gözlemsel → **Düşük**; Enjeksiyon hata/yansıma-tabanlı → **Yüksek**.\n`;
+  const confCell = (r: MemberRun | null, conf: string): string => (r && r.rep && r.inputs > 0 ? conf : 'Kapsam dışı');
+  const tableRows = ACTIVE_BUNDLE_MEMBERS.map((m, i) => `| ${m.title} | ${statusOf(runs[i], levels[i])} | ${confCell(runs[i], m.conf)} |`).join('\n');
+  const controlTable = `## KONTROL ÖZETİ\n\n| Kontrol | Sonuç | Güven |\n|---------|-------|-------|\n${tableRows}\n\n> Güven yalnızca gerçekten test çalıştırılan (giriş noktası bulunan) kontroller için gösterilir; giriş noktası bulunamayan kontroller **Kapsam dışı**dır. Test edilenlerde: SSRF/RCE dolaylı (zaman-tabanlı, OOB yok) → Orta; gözlemsel (Dosya Yükleme/İş Mantığı/Race) → Düşük; Enjeksiyon hata/yansıma-tabanlı → Yüksek.\n`;
 
   // --- YÖNETİCİ ÖZETİ ---
   const summary: string[] = [];
@@ -263,14 +270,20 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
     const hl = headlineOf(r.rep.findings);
     summary.push(`- **${m.title}:** ${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`);
   });
-  summary.push(`- **Şeffaflık:** ${dataOk}/7 kontrol veri toplayabildi; **${pagesScanned}** sayfa, **${totalInputs}** giriş noktası, **${totalProbes}** prob. SSRF/RCE tespitleri OOB altyapısı olmadan zaman-tabanlı/dolaylı (orta güven); gözlemsel kontroller (Dosya Yükleme/İş Mantığı/Race) kesin doğrulama için manuel test gerektirir.`);
+  summary.push(
+    noInputs
+      ? `- **Şeffaflık:** ${dataOk}/7 kontrol çalıştı; **${pagesScanned}** benzersiz sayfa tarandı ancak **test edilebilir giriş noktası bulunamadı** — gerçek doğrulama probu gönderilmedi (yalnızca ${totalProbes} baseline erişilebilirlik isteği). Bu, zafiyet olmadığının kanıtı değildir.` + spaHint(surf)
+      : `- **Şeffaflık:** ${dataOk}/7 kontrol veri toplayabildi; **${pagesScanned}** benzersiz sayfa, **${totalInputs}** giriş noktası, **${totalProbes}** istek. SSRF/RCE tespitleri OOB altyapısı olmadan zaman-tabanlı/dolaylı (orta güven); gözlemsel kontroller (Dosya Yükleme/İş Mantığı/Race) kesin doğrulama için manuel test gerektirir.`,
+  );
   summary.push('- **Önerilen ilk adım:** Çalıştırılan kontrollerdeki bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.');
 
   const genel =
     (worst === 'low'
       ? '7 aktif doğrulama kontrol kategorisinin tamamı değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.'
       : `Çalıştırılan kontrollerde en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi/doğrulanması önerilir.`) +
-    ` ${pagesScanned} sayfa/uç nokta tarandı, ${totalInputs} giriş noktasında toplam ${totalProbes} prob gönderildi. SSRF/RCE zaman-tabanlı/dolaylıdır. Aşağıda her kontrol ayrı ayrı raporlanmıştır.`;
+    (noInputs
+      ? ` ${pagesScanned} benzersiz sayfa/uç nokta tarandı; test edilebilir bir giriş noktası (parametre/form/ID) bulunamadığından gerçek doğrulama probu gönderilmedi (yalnızca baseline istekleri). Aşağıda her kontrol ayrı ayrı raporlanmıştır.`
+      : ` ${pagesScanned} benzersiz sayfa/uç nokta tarandı, ${totalInputs} giriş noktasında toplam ${totalProbes} istek gönderildi. SSRF/RCE zaman-tabanlı/dolaylıdır. Aşağıda her kontrol ayrı ayrı raporlanmıştır.`);
 
   const sections = ACTIVE_BUNDLE_MEMBERS.map((m, i) => {
     const r = runs[i];
