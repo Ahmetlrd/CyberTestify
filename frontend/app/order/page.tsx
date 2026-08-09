@@ -52,6 +52,9 @@ export default function OrderPage() {
 
   // (Faz 3 v2) active-light — tek risk-kabul checkbox'i (ek alan yok).
   const [atRisk, setAtRisk] = useState(false);
+  // (Aktif Doğrulama Paketi) ödeme-öncesi düşük-kapsam ön-kontrolü.
+  const [scopeLow, setScopeLow] = useState<boolean | null>(null); // null=henüz kontrol edilmedi
+  const [lowScopeAck, setLowScopeAck] = useState(false);
   // (#5) authenticated_scan — test hesabi kimlik bilgileri.
   const [authUser, setAuthUser] = useState('');
   const [authPass, setAuthPass] = useState('');
@@ -107,6 +110,19 @@ export default function OrderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
+  // (Aktif Doğrulama Paketi) Ödeme öncesi hızlı kapsam ön-kontrolü. SADECE bu paket seçiliyken
+  // çalışır (en riskli — "test edilecek giriş noktası" bulmaya dayalı). Düşük sinyalde uyarı gösterilir.
+  useEffect(() => {
+    setLowScopeAck(false);
+    setScopeLow(null);
+    if (!domainId || selectedBundle?.key !== 'bundle_active_verify') return;
+    let cancelled = false;
+    api.scopeEstimate(domainId)
+      .then((r) => { if (!cancelled) setScopeLow(r.lowSignal); })
+      .catch(() => { if (!cancelled) setScopeLow(false); }); // hata -> engelleme, uyarı gösterme
+    return () => { cancelled = true; };
+  }, [domainId, selectedBundle?.key]);
+
   const selectedPkg = packages.find((p) => p.key === selected);
   // SATIS MODELI: tekil kontrol satisi YOK — secilebilir TEK "tekil" paket basit_tarama (giris).
   const basitPkg = packages.find((p) => p.key === 'basit_tarama');
@@ -115,6 +131,8 @@ export default function OrderPage() {
   const intlComingSoon = region !== 'tr';
   const needsAuthCreds = selected === 'authenticated_scan';
   const activeConsentOk = (!isActiveLight || atRisk) && (!needsAuthCreds || (authUser.trim() && authPass));
+  // (Aktif Doğrulama Paketi) düşük-kapsam uyarısı gösterilecek mi (ön-kontrol düşük sinyal döndüyse).
+  const showLowScopeWarning = selectedBundle?.key === 'bundle_active_verify' && scopeLow === true;
   const creditsNeeded = selectedPkg ? Math.max(1, Math.round(selectedPkg.priceMinorUnit / creditUnit)) : 0;
   // Kredi ile odeme yalnizca tek-seferlik/hemen taramada (zamanlanmis akis prepaid farkli).
   const canUseCredits = balance >= creditsNeeded && creditsNeeded > 0 && !recurring && startMode === 'now';
@@ -206,6 +224,7 @@ export default function OrderPage() {
     const needsAuth = selectedBundle.members?.some((m: any) => m.key === 'authenticated_scan');
     if (needsAuth && (!authUser.trim() || !authPass)) return setError('Bu paket için test hesabı bilgileri gerekli.');
     if (selectedBundle.selectable && bundleModules.length === 0) return setError('En az bir modül seçin.');
+    if (showLowScopeWarning && !lowScopeAck) return setError('Devam etmek için ön kontrol uyarısını onaylamalısınız.');
     setBusy(true);
     setError(null);
     try {
@@ -221,6 +240,7 @@ export default function OrderPage() {
         activeTestConsent: isAL ? { riskAccepted: atRisk } : undefined,
         authCredentials: needsAuth ? { username: authUser.trim(), password: authPass } : undefined,
         promoCode: promo?.valid ? promo.code : undefined,
+        lowScopeAcknowledged: showLowScopeWarning ? lowScopeAck : undefined,
       });
       // %100 promo -> odeme YOK, dogrudan siparis paneli. Aksi halde: TR'de backend TEK gercek
       // iyzico CheckoutForm baslatir (paymentPageUrl) -> oraya yonlendir (tekil akisla ayni).
@@ -327,7 +347,8 @@ export default function OrderPage() {
   const ctaDisabled = selectedBundle
     ? !domainId || busy || !allConsents || intlComingSoon ||
       (selectedBundle.category === 'active-light' && !atRisk) ||
-      (selectedBundle.selectable && bundleModules.length === 0)
+      (selectedBundle.selectable && bundleModules.length === 0) ||
+      (showLowScopeWarning && !lowScopeAck) // düşük-kapsam uyarısı onaylanmadan ödeme yok
     : !domainId || busy || !selected || !allConsents || !activeConsentOk || intlComingSoon;
   const ctaLabel = busy
     ? 'Başlatılıyor…'
@@ -726,6 +747,22 @@ export default function OrderPage() {
                 </>
               ) : (
                 <p className="mt-2 text-sm text-ink-soft">Devam etmek için bir paket seçin.</p>
+              )}
+              {showLowScopeWarning && (
+                <div className="mt-4 rounded-card border-2 border-amber-400 bg-amber-50 p-4 text-sm">
+                  <p className="font-bold text-amber-900">⚠️ Ön kontrol sonucu</p>
+                  <p className="mt-1 leading-relaxed text-amber-900/90">
+                    Sitenizde otomatik hızlı taramada <strong>çok az/hiç test edilebilir giriş noktası</strong> (form,
+                    parametre, ID) tespit edilemedi. Bu genellikle sitenin <strong>JavaScript ile render edilen (SPA)</strong> bir
+                    yapıya sahip olmasından kaynaklanır. Tarama sırasında daha derin bir headless analiz de yapılacaktır, ancak
+                    sonuç yine de çoğu kontrolde <strong>"kapsam dışı"</strong> çıkabilir. Bu durumda ödenen tutar, çalıştırılan
+                    kontrollerin kendisi için değil, <strong>kapsamlı bir değerlendirme sürecinin tamamı</strong> için alınır.
+                  </p>
+                  <label className="mt-3 flex cursor-pointer items-start gap-2 font-medium text-amber-900">
+                    <input type="checkbox" checked={lowScopeAck} onChange={(e) => setLowScopeAck(e.target.checked)} className="mt-0.5" />
+                    <span>Yine de devam etmek istiyorum.</span>
+                  </label>
+                </div>
               )}
               <button onClick={onCta} disabled={ctaDisabled} className="btn-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-50">
                 {ctaLabel}

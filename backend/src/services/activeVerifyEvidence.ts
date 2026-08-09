@@ -369,6 +369,59 @@ export function spaHint(surf: Surface): string {
   return ' **Not:** Hedef büyük olasılıkla JavaScript ile render edilen (SPA) bir uygulamadır; menü/bağlantı ve formlar tarayıcıda oluşturulduğundan ham-HTML taramasında giriş noktaları görünmeyebilir — headless render bu taramada kullanılamadı, bu nedenle kapsam sınırlıdır ve "giriş noktası bulunamadı" güvenlik kanıtı değildir.';
 }
 
+// ======================================================================================
+// ODEME-ONCESI HIZLI KAPSAM SINYALI — bundle_active_verify icin. SADECE statik (headless YOK),
+// ana sayfa + ~3 ic link; kaba bir "test edilecek giris noktasi var mi" sinyali. Ucuz/hizli
+// (asil tarama odeme sonrasi headless dahil calisir). Hedefi yormamak icin gecikme YOK ama ~4 GET.
+// ======================================================================================
+export type ScopeSignal = { reachable: boolean; jsRendered: boolean; inputCount: number; pagesScanned: number; lowSignal: boolean };
+
+async function quickGet(url: string): Promise<string | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, redirect: 'follow', headers: { 'user-agent': 'CyberTestify-PassiveCheck/1.0', accept: 'text/html,*/*' } });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    return (buf.length > 300_000 ? buf.subarray(0, 300_000) : buf).toString('utf-8');
+  } catch { return null; } finally { clearTimeout(timer); }
+}
+
+export async function quickScopeSignal(host: string): Promise<ScopeSignal> {
+  const home = await collectHttp(host);
+  if (!home.ok) return { reachable: false, jsRendered: false, inputCount: 0, pagesScanned: 0, lowSignal: false };
+  // SPA sinyali (crawlSurface ile AYNI heuristik)
+  const anchors = (home.html.match(/<a\s[^>]*href\s*=/gi) ?? []).length;
+  const formCount = (home.html.match(/<form\b/gi) ?? []).length;
+  const scriptCount = (home.html.match(/<script\b/gi) ?? []).length;
+  const spaShell = /<div[^>]+(id|class)\s*=\s*["'](root|app|__next|__nuxt|q-app)\b|__NEXT_DATA__|window\.__NUXT__|ng-version=/i.test(home.html);
+  const jsRendered = (anchors <= 2 && formCount === 0) && (scriptCount >= 1) && (spaShell || home.html.length < 30000);
+
+  // Ana sayfa + en fazla 3 ic link (asset HARIC) — hizli.
+  const homeUrl = `https://${host}/`;
+  const links: string[] = []; const seenL = new Set<string>([homeUrl]);
+  for (const m of home.html.matchAll(/href\s*=\s*["']([^"'#]+)["']/gi)) {
+    if (links.length >= 3) break;
+    const abs = absUrl(m[1].replace(/&amp;/g, '&'), host);
+    if (!abs) continue;
+    try { const u = new URL(abs); if (CRAWL_ASSET_RE.test(u.pathname)) continue; const norm = `${u.origin}${u.pathname}${u.search}`; if (!seenL.has(norm)) { seenL.add(norm); links.push(norm); } } catch { /* atla */ }
+  }
+  const pages: string[] = [home.html];
+  for (const l of links) { const html = await quickGet(l); if (html) pages.push(html); }
+
+  const inputs = new Set<string>(); const ids = new Set<string>(); const uploads = new Set<string>(); let mass = false;
+  for (const html of pages) {
+    for (const ip of discoverInputs(host, html)) inputs.add(`${ip.method} ${ip.action} ${ip.param}`);
+    for (const e of discoverIdEndpoints(host, html)) ids.add(`${e.kind}:${e.idParam}`);
+    for (const f of discoverUploadForms(host, html)) uploads.add(`${f.action}:${f.fileField}`);
+    if (!mass && discoverMassAssignForm(host, html)) mass = true;
+  }
+  const inputCount = inputs.size + ids.size + uploads.size + (mass ? 1 : 0);
+  // Dusuk sinyal: SPA supheli VEYA hic input yok.
+  const lowSignal = jsRendered || inputCount === 0;
+  return { reachable: true, jsRendered, inputCount, pagesScanned: pages.length, lowSignal };
+}
+
 // Kesif yontemi seffaflik notu (rapor icin).
 export function discoveryMethodNote(surf: Surface): string {
   return surf.method === 'headless'

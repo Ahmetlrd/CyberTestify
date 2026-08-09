@@ -94,11 +94,16 @@ export const api = {
         originalMinorUnit: number; amountMinorUnit: number; currency: string; comingSoon?: boolean;
       }>
     >(`/orders/bundles?region=${region}`),
+  // (Aktif Doğrulama Paketi) Ödeme öncesi hızlı kapsam tahmini — düşük sinyalde UI uyarı gösterir.
+  scopeEstimate: (domainId: string) =>
+    request<{ lowSignal: boolean; jsRendered: boolean; inputCount: number; reachable: boolean }>(
+      `/domains/${domainId}/scope-estimate`,
+    ),
   createBundleOrder: (body: {
     domainId: string; bundleKey: string; selectedModules?: string[];
     ownershipConfirmed: boolean; distanceContractAccepted: boolean; withdrawalWaived: boolean; crossBorderTransfer: boolean;
     region?: string; activeTestConsent?: { riskAccepted: boolean };
-    authCredentials?: { username: string; password: string }; promoCode?: string;
+    authCredentials?: { username: string; password: string }; promoCode?: string; lowScopeAcknowledged?: boolean;
   }) =>
     request<{ bundleKey: string; orderIds: string[]; paidWithPromo?: boolean; paymentPending?: boolean; bundleTotalMinorUnit?: number; currency?: string; paymentPageUrl?: string; conversationId?: string }>(
       '/orders/bundle',

@@ -430,6 +430,8 @@ const bundleOrderSchema = z.object({
   activeTestConsent: z.object({ riskAccepted: z.boolean() }).optional(),
   authCredentials: z.object({ username: z.string().min(1).max(200), password: z.string().min(1).max(400) }).optional(),
   promoCode: z.string().trim().max(64).optional(),
+  // (Aktif Doğrulama Paketi) Ödeme öncesi "düşük kapsam" uyarısı gösterildiyse müşteri onayı.
+  lowScopeAcknowledged: z.boolean().optional(),
 });
 ordersRouter.post('/bundle', requireAuth, async (req, res) => {
   // ODEME ONCESI E-POSTA DOGRULAMA ZORUNLU (bundle; fail-fast, sema parse'indan ONCE).
@@ -514,6 +516,9 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
         paidAt: promoFree ? new Date() : null,
         locale: localeFor(region),
         byokKeyEncrypted: hasAuthScan ? encryptSecret(JSON.stringify(parsed.data.authCredentials)) : null,
+        // (Aktif Doğrulama Paketi) düşük-kapsam uyarısı onayı — ispat için sakla.
+        lowScopeWarningShown: parsed.data.lowScopeAcknowledged === true,
+        lowScopeWarningAcknowledgedAt: parsed.data.lowScopeAcknowledged === true ? new Date() : null,
         ...consent,
       },
     });

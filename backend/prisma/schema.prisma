@@ -239,6 +239,11 @@ model Order {
   consentIp      String?
   consentVersion String?
 
+  // (Aktif Doğrulama Paketi) Ödeme öncesi "düşük kapsam" uyarısı gösterildi mi + müşteri
+  // "yine de devam" onayı zaman damgası (ispat: az/hiç giriş noktası bulunabileceği önceden bildirildi).
+  lowScopeWarningShown          Boolean   @default(false)
+  lowScopeWarningAcknowledgedAt DateTime?
+
   // Cikti dili (rapor + ajan yaniti). Bolgeden turetilir: tr->tr, us/ae->en.
   locale         String       @default("tr")
 

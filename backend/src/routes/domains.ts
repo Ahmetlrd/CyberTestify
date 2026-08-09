@@ -7,6 +7,7 @@ import {
   isVerificationStillValid,
 } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
+import { quickScopeSignal } from '../services/activeVerifyEvidence.js';
 
 export const domainsRouter = Router();
 
@@ -65,6 +66,24 @@ domainsRouter.post('/', requireAuth, async (req, res) => {
 domainsRouter.post('/:domainId/verify', requireAuth, async (req, res) => {
   const verified = await checkDomainVerification(req.params.domainId);
   res.json({ verified });
+});
+
+// ODEME-ONCESI hizli kapsam tahmini (SADECE Aktif Doğrulama Paketi UI'si cagirir). Statik,
+// ucuz sinyal: hedefte test edilebilir giris noktasi (form/parametre/ID) var mi. Asil tarama
+// odeme sonrasi (headless dahil) calisir. Domain musteriye ait olmali.
+domainsRouter.get('/:domainId/scope-estimate', requireAuth, async (req, res) => {
+  const domain = await prisma.domain.findFirst({
+    where: { id: req.params.domainId, customerId: req.customerId! },
+    select: { hostname: true },
+  });
+  if (!domain) return res.status(404).json({ error: 'Alan adı bulunamadı.' });
+  try {
+    const sig = await quickScopeSignal(domain.hostname);
+    res.json({ lowSignal: sig.lowSignal, jsRendered: sig.jsRendered, inputCount: sig.inputCount, reachable: sig.reachable });
+  } catch {
+    // On-kontrol basarisiz olursa akisi ENGELLEME — uyari gostermeden devam (lowSignal:false).
+    res.json({ lowSignal: false, jsRendered: false, inputCount: 0, reachable: false });
+  }
 });
 
 // Tek alan adi sil. Taramasi (siparisi) olan alan adi silinemez (kayit butunlugu).
