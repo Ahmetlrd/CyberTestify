@@ -4,8 +4,9 @@
  * subdomain_takeover + api_discovery + cms_cve — ucu de KOD-toplanmis kanittan (reconEvidence.ts)
  * uretilir; PentAGI ajani HIC calismaz. CVE bilgisi yalnizca NVD'nin yapisal cevabindan gelir,
  * Turkce rapor cumlesini HER ZAMAN kod yazar. Cikti bundle_surface/bundle_compliance ile ayni
- * bicimde: TEK Yonetici Ozeti + TEK genel risk rozeti (worst-case + birikimli) + 3 alan + TEK
- * "AI Cozum Onerileri" (kilit mekanizmasiyla). generateBundleReconReport { findings, fixText } | null doner.
+ * bicimde: TEK Yonetici Ozeti + TEK genel risk rozeti (worst-case + birikimli) + Kapsam & Metodoloji
+ * + 3 alan (tam envanter/metodoloji tablolari) + Iyi Pratikler (ucretsiz) + TEK "AI Cozum Onerileri"
+ * (kilitli). generateBundleReconReport { findings, fixText } | null doner.
  */
 import { collectReconEvidence, type ReconEvidence, type SubEvidence, type ApiEvidence, type CmsEvidence } from './reconEvidence.js';
 
@@ -16,6 +17,8 @@ function levelRank(l: Level): number { return l === 'high' ? 3 : l === 'medium-h
 type Area = { title: string; level: Level; headline: string; body: string; fixText: string };
 
 const CAUTION_CVE = '> **Not:** Aşağıdaki CVE listesi, tespit edilen sürümle NVD (NIST Ulusal Zafiyet Veritabanı) üzerinden **otomatik eşlenen** bilinen zafiyetlerdir; sürümünüz için sömürülebilir oldukları **doğrulanmamıştır** ve bir kısmı eklenti/tema kaynaklı olabilir. Kesin durum için güncelleme + hedefli doğrulama önerilir.';
+
+const SUB_DISPLAY_MAX = 100; // envanterde gosterilecek alt domain ust siniri (collector CNAME kapsami ile hizali)
 
 // ======================================================================================
 // 1) subdomain_takeover
@@ -32,44 +35,60 @@ function buildSubArea(ev: SubEvidence): Area {
     : suspected.length
       ? `${suspected.length} şüpheli alt domain — manuel doğrulama gerekli`
       : ev.total
-        ? `${ev.total} alt domain görüldü; devralınabilir kayıt tespit edilmedi`
+        ? `${ev.total} alt domain envanterlendi; devralınabilir kayıt tespit edilmedi`
         : 'Sertifika şeffaflığı kayıtlarında alt domain görülmedi';
 
   const lines: string[] = [];
-  lines.push(`Certificate Transparency (crt.sh / certSpotter) kayıtlarından **${ev.total}** benzersiz alt domain görüldü; bunlardan ${ev.resolved} tanesinin CNAME kaydı çözümlendi.`);
+  lines.push(`Certificate Transparency (crt.sh / certSpotter) kayıtlarından **${ev.total}** benzersiz alt domain envanterlendi; bunlardan **${ev.resolved}** tanesinin CNAME kaydı çözümlenip devralma (subdomain takeover) açısından incelendi.`);
   lines.push('');
 
   if (confirmed.length || suspected.length) {
-    lines.push('## DEVRALINABİLİR (DANGLING) ALT DOMAİNLER\n');
+    lines.push('### Devralınabilir (dangling) alt domainler\n');
     lines.push('| Alt Domain | CNAME Hedefi | Servis | Durum | Açıklama |');
     lines.push('|-----------|--------------|--------|-------|----------|');
     for (const d of [...confirmed, ...suspected]) {
-      lines.push(`| ${d.sub} | ${d.cname} | ${d.service} | ${d.confidence === 'confirmed' ? '⚠️ Doğrulandı' : 'Şüpheli'} | ${d.note} |`);
+      lines.push(`| ${d.sub} | ${d.cname} | ${d.service} | ${d.confidence === 'confirmed' ? '⚠️ Doğrulandı' : 'Şüpheli' } | ${d.note} |`);
     }
     lines.push('');
     lines.push('> **Subdomain takeover riski:** Bir alt domain, artık size ait olmayan/terk edilmiş bir bulut kaynağına (CNAME) işaret ediyorsa, saldırgan o kaynağı kendi adına oluşturup alt domaininiz üzerinden içerik yayınlayabilir (oltalama, çerez/oturum çalma, marka istismarı). En yüksek öncelikli keşif bulgusudur.');
     lines.push('');
   } else {
-    lines.push('Çözümlenen CNAME kayıtlarında, terk edilmiş bir buluta işaret eden **devralınabilir (dangling)** alt domain tespit edilmedi.');
+    // Negatif sonucu OLCULU + olumlu cerceve (garanti vermeden).
+    lines.push('Çözümlenen CNAME kayıtlarında, terk edilmiş bir bulut kaynağına işaret eden **devralınabilir (dangling)** alt domain tespit edilmedi. Bu, dışarıdan görünen alt domain yüzeyinizin şu an için **dar ve kontrollü** göründüğünü gösterir.');
+    lines.push('');
+  }
+
+  // TAM ENVANTER TABLOSU (yeni fetch yok; collector'in tasidigi CNAME durumlari).
+  if (ev.cnames.length) {
+    lines.push('### Alt domain envanteri (durum tablosu)\n');
+    lines.push('Bulunan alt domainler ve CNAME çözümlemesi sonucu durumları:');
+    lines.push('');
+    lines.push('| Alt Domain | CNAME Hedefi | Durum |');
+    lines.push('|-----------|--------------|-------|');
+    const stateLabel = (s: string) => s === 'dangling' ? '⚠️ Devralınabilir' : s === 'suspected' ? '⚠️ Şüpheli' : s === 'managed' ? 'Aktif (yönetilen dış servis)' : s === 'active' ? 'Aktif (CNAME kaydı var)' : 'CNAME kaydı yok (doğrudan A/AAAA)';
+    for (const c of ev.cnames.slice(0, SUB_DISPLAY_MAX)) {
+      lines.push(`| ${c.sub} | ${c.cname ?? '—'} | ${stateLabel(c.state)} |`);
+    }
+    lines.push('');
+    if (ev.total > ev.resolved) {
+      lines.push(`_(+${ev.total - ev.resolved} alt domain daha CT kayıtlarında bulundu; **tamamı envanterlenmiştir**, yalnızca ilk ${ev.resolved} tanesi bu tabloda CNAME durumuyla gösterilmiştir.)_`);
+      lines.push('');
+    }
+  } else if (ev.subdomains.length) {
+    lines.push('### Alt domain envanteri\n');
+    lines.push(ev.subdomains.map((s) => `- ${s}`).join('\n'));
     lines.push('');
   }
 
   if (ev.managedCnames.length) {
-    lines.push('## YÖNETİLEN DIŞ SERVİS CNAME’LERİ (bilgi)\n');
+    lines.push('### Yönetilen dış servis CNAME’leri (bilgi)\n');
     lines.push('Aşağıdaki alt domainler bilinen bir dış servise (CNAME) işaret ediyor ve şu an **canlı** görünüyor — risk değil, envanter bilgisidir:');
     lines.push('');
-    for (const m of ev.managedCnames.slice(0, 15)) lines.push(`- **${m.sub}** → ${m.cname} (${m.service})`);
+    for (const m of ev.managedCnames.slice(0, 20)) lines.push(`- **${m.sub}** → ${m.cname} (${m.service})`);
     lines.push('');
   }
 
-  if (ev.total && ev.subdomains.length) {
-    lines.push('## GÖRÜLEN ALT DOMAİNLER (örnekleme)\n');
-    lines.push(ev.subdomains.map((s) => `- ${s}`).join('\n'));
-    if (ev.total > ev.subdomains.length) lines.push(`\n_(+${ev.total - ev.subdomains.length} tane daha; tümü CT kayıtlarından pasif olarak elde edildi.)_`);
-    lines.push('');
-  }
-
-  lines.push('> Kapsam: Yalnızca pasif kaynaklar (Certificate Transparency + gözlemlenebilir DNS). Alt domain brute-force / aktif tarama yapılmamıştır.');
+  lines.push('> Kapsam: Yalnızca pasif kaynaklar (Certificate Transparency logları + gözlemlenebilir DNS). Alt domain brute-force / aktif tarama yapılmamıştır.');
 
   const fixText = confirmed.length || suspected.length
     ? '### Subdomain Takeover — düzeltme\n\n' +
@@ -103,26 +122,35 @@ function buildApiArea(ev: ApiEvidence): Area {
           : 'Herkese açık API/Swagger dokümantasyonu bulunamadı';
 
   const lines: string[] = [];
-  if (ev.reachable.length) {
-    lines.push('## ERİŞİLEBİLİR API NOKTALARI\n');
-    lines.push('| Yol | Durum | Tür |');
-    lines.push('|-----|-------|-----|');
-    for (const r of ev.reachable) lines.push(`| ${r.path} | HTTP ${r.status} | ${r.kind === 'spec' ? 'OpenAPI/Swagger şeması' : r.kind === 'graphql' ? 'GraphQL' : 'Swagger/ReDoc arayüzü'} |`);
-    lines.push('');
-  } else {
-    lines.push('Denenen ~12 yaygın API dokümantasyon yolunda (`/openapi.json`, `/swagger.json`, `/v3/api-docs`, `/swagger-ui.html` vb.) herkese açık bir şema/arayüz bulunamadı.');
-    lines.push('');
+  lines.push(`Aşağıdaki **${ev.tried.length}** yaygın API dokümantasyon/keşif yolu GET ile denenmiştir. Hiçbir uç nokta çağrılmamış/istismar edilmemiştir (pasif keşif).`);
+  lines.push('');
+
+  // DENENEN TUM YOLLAR — tam liste tablosu (metodoloji seffafligi).
+  const reachSet = new Map(ev.reachable.map((r) => [r.path, r.kind]));
+  lines.push('### Denenen yollar (tam liste)\n');
+  lines.push('| Yol | HTTP | Durum |');
+  lines.push('|-----|------|-------|');
+  for (const t of ev.tried) {
+    const kind = reachSet.get(t.path);
+    const durum = kind
+      ? (kind === 'spec' ? '✓ Bulundu (OpenAPI/Swagger şeması)' : kind === 'graphql' ? '✓ Bulundu (GraphQL)' : '✓ Bulundu (Swagger/ReDoc arayüzü)')
+      : (t.status === 401 || t.status === 403) ? 'Erişim reddedildi (korumalı)'
+        : t.status === 200 ? 'Yanıt döndü (şema değil)'
+          : t.status === 0 ? 'Yanıt yok'
+            : 'Bulunamadı';
+    lines.push(`| ${t.path} | ${t.status || '—'} | ${durum} |`);
   }
+  lines.push('');
 
   if (spec) {
-    lines.push('## API ŞEMASI DETAYI\n');
+    lines.push('### API şeması detayı\n');
     lines.push(`- Şema yolu: \`${spec.path}\``);
     if (spec.title) lines.push(`- Başlık: ${spec.title}${spec.version ? ` (v${spec.version})` : ''}`);
     lines.push(`- Tanımlı uç nokta sayısı: **${spec.endpointCount}**`);
     lines.push(`- Genel kimlik doğrulama tanımı: ${spec.hasGlobalAuth ? 'var (global `security`)' : '⚠️ şemada global `security` tanımı yok'}`);
     lines.push('');
     if (sensitive.length) {
-      lines.push('### Hassas uç noktalar\n');
+      lines.push('#### Hassas uç noktalar\n');
       lines.push('Yol/işlem adı hassas anahtar kelime içeren uç noktalar (yalnızca şemadan; **çağrılmamıştır**):');
       lines.push('');
       lines.push('| Metot | Yol | Kimlik doğrulama |');
@@ -132,6 +160,10 @@ function buildApiArea(ev: ApiEvidence): Area {
       if (noAuthSensitive.length) lines.push(`> **${noAuthSensitive.length} hassas uç nokta** şemada kimlik doğrulama tanımı olmadan listeleniyor. Bu, yetkisiz erişime açık olabileceklerine dair güçlü bir göstergedir (doğrulama için manuel test gerekir).`);
       lines.push('');
     }
+  } else {
+    // Negatif sonuc — olculu + olumlu cerceve.
+    lines.push('Denenen yolların hiçbiri herkese açık bir API şeması/arayüzü döndürmedi. Herkese açık API dokümantasyonu bulunmaması, saldırganların API yüzeyinizi dışarıdan kolayca **haritalayamayacağı** anlamına gelir — bu, dış saldırı yüzeyi açısından olumlu bir işarettir.');
+    lines.push('');
   }
 
   lines.push('> Kapsam: Yalnızca herkese açık dokümantasyon yolları GET ile denenmiştir; hiçbir uç nokta çağrılmamış/istismar edilmemiştir (pasif keşif).');
@@ -151,6 +183,14 @@ function buildApiArea(ev: ApiEvidence): Area {
 // ======================================================================================
 // 3) cms_cve
 // ======================================================================================
+const FINGERPRINT_SOURCES = [
+  'HTTP yanıt başlıkları (`Server`, `X-Powered-By`, `X-Generator`, `X-Drupal-Cache`, `X-Magento-Cache-Debug`)',
+  '`<meta name="generator">` etiketi',
+  'HTML yol/kalıp izleri (`/wp-content/`, `/wp-includes/`, `Drupal.settings`, `/sites/all/`, `option=com_`, `/media/jui/`, `typo3conf`, `Magento_`)',
+  'Yaygın sürüm dosyaları (WordPress `/readme.html`, Drupal `/CHANGELOG.txt`)',
+  'Kütüphane/eklenti ipuçları (WooCommerce, jQuery sürümü)',
+];
+
 function cveLevel(ev: CmsEvidence): Level {
   if (!ev.cms) return 'low';
   const worst = ev.cves.reduce((m, c) => Math.max(m, c.score), 0);
@@ -178,11 +218,18 @@ function buildCmsArea(ev: CmsEvidence): Area {
           : `${ev.cms} tespit edildi; sürüm belirlenemedi`;
 
   const lines: string[] = [];
+  // Metodoloji — her durumda goster (seffaflik).
+  lines.push('### İncelenen parmak izi kaynakları\n');
+  lines.push('CMS/çatı ve sürüm tespiti için ana sayfa yanıtı üzerinde aşağıdaki pasif sinyallere bakıldı:');
+  lines.push('');
+  lines.push(FINGERPRINT_SOURCES.map((s) => `- ${s}`).join('\n'));
+  lines.push('');
+
   if (!ev.cms) {
-    lines.push('Ana sayfa yanıtı (HTTP başlıkları + `<meta generator>` + HTML kalıpları) üzerinden bilinen bir CMS/çatı parmak izi tespit edilmedi. Bu, özel geliştirilmiş bir uygulama veya iyi gizlenmiş bir kurulum olabileceğine işaret eder.');
+    lines.push('Bu sinyallerin **hiçbiri** bilinen bir CMS/çatı ile eşleşmedi. Bu, özel geliştirilmiş bir uygulama veya CMS izlerini bilinçli olarak gizleyen bir kurulum olabileceğine işaret eder; her iki durum da dışarıdan otomatik CMS/CVE eşlemesini zorlaştırır.');
     lines.push('');
   } else {
-    lines.push('## PARMAK İZİ\n');
+    lines.push('### Parmak izi sonucu\n');
     lines.push(`- Tespit edilen sistem: **${ev.cms}${ev.version ? ` ${ev.version}` : ''}**`);
     lines.push(`- Nasıl tespit edildi: ${ev.evidence.join('; ')}`);
     if (ev.extras.length) lines.push(`- Ek gözlemler: ${ev.extras.join(' · ')}`);
@@ -190,13 +237,13 @@ function buildCmsArea(ev: CmsEvidence): Area {
     lines.push('');
 
     if (ev.cpeQueried) {
-      lines.push('## BİLİNEN CVE EŞLEŞMELERİ (NVD)\n');
+      lines.push('### Bilinen CVE eşleşmeleri (NVD)\n');
       if (!ev.cveOk) {
         lines.push('NVD (NIST Ulusal Zafiyet Veritabanı) sorgusu bu tarama sırasında yanıt vermedi; CVE eşlemesi yapılamadı. Lütfen sürümünüzü NVD üzerinde manuel doğrulayın.');
       } else if (ev.cveTotal === 0) {
-        lines.push(`Tespit edilen sürüm (\`${ev.cpeQueried}\`) için NVD’de eşleşen bilinen CVE bulunamadı. Yine de eklenti/tema güncellemelerini ihmal etmeyin.`);
+        lines.push(`Tespit edilen sürüm (\`${ev.cpeQueried}\`) için NVD’de, sürümü açıkça kapsayan bilinen bir CVE bulunamadı. Bu, çekirdek sürümünüzün güncel/yamalı olduğuna dair olumlu bir göstergedir; yine de eklenti/tema güncellemelerini ihmal etmeyin.`);
       } else {
-        lines.push(`\`${ev.cpeQueried}\` için NVD’de **${ev.cveTotal}** eşleşen CVE bulundu. En yüksek CVSS skoruna göre ilk ${ev.cves.length} tanesi:`);
+        lines.push(`\`${ev.cpeQueried}\` için NVD’de, sürümü açıkça kapsayan **${ev.cveTotal}** CVE bulundu. En yüksek CVSS skoruna göre ilk ${ev.cves.length} tanesi:`);
         lines.push('');
         lines.push('| CVE | Ciddiyet | CVSS | Özet |');
         lines.push('|-----|----------|------|------|');
@@ -227,6 +274,27 @@ function buildCmsArea(ev: CmsEvidence): Area {
 }
 
 // ======================================================================================
+// SABIT BOLUMLER (bulgu olsa da olmasa da) — %100 kod, LLM yok
+// ======================================================================================
+const METHODOLOGY_SECTION =
+  '## KAPSAM VE METODOLOJİ\n\n' +
+  'Bu rapor, üç keşif alanında **pasif** (istismar içermeyen) tekniklerle, dışarıdan gözlemlenebilir verilerden otomatik olarak üretilmiştir:\n\n' +
+  '- **Subdomain Takeover:** Alt domainler Certificate Transparency loglarından (crt.sh, yedek olarak certSpotter) toplanır; her biri Cloudflare DoH ile DNS/CNAME çözümlemesinden geçirilir ve bilinen “dangling” (terk edilmiş bulut servisi) imza veritabanıyla karşılaştırılır.\n' +
+  '- **API & Swagger Keşfi:** Yaygın API dokümantasyon yollarından oluşan sabit bir liste GET ile denenir; bulunan OpenAPI/Swagger şemaları ayrıştırılır ve hassas/kimlik-doğrulamasız uç noktalar işaretlenir (uç noktalar çağrılmaz).\n' +
+  '- **CMS & Bilinen CVE:** HTTP başlıkları, `<meta generator>` ve HTML kalıpları üzerinden CMS ve sürüm parmak izi çıkarılır; tespit edilen sürüm, NVD (NIST Ulusal Zafiyet Veritabanı) sorgulanarak — sürümü açıkça kapsayan — bilinen CVE’lerle eşlenir.\n\n' +
+  '> Tüm veriler dışarıdan, hedefe zarar vermeden toplanmıştır. Kimlik doğrulama gerektiren alanlar, iç ağ ve aktif sömürü bu paketin kapsamı dışındadır.\n';
+
+const BEST_PRACTICES_SECTION =
+  '## İYİ PRATİKLER / ÖNERİLEN SONRAKİ ADIMLAR\n\n' +
+  'Bu tarama sonucundan bağımsız olarak, saldırı yüzeyinizi dar tutmak için önerilen kalıcı uygulamalar:\n\n' +
+  '- **Kullanılmayan CNAME kayıtlarını düzenli olarak temizleyin** — terk edilmiş bulut kaynaklarına işaret eden kayıtlar subdomain takeover riski taşır; bulut kaynağını silmeden önce DNS kaydını kaldırın.\n' +
+  '- **API dokümantasyonunuz (Swagger/OpenAPI) varsa** yalnızca kimlik doğrulamalı erişime açık tutun; üretimde herkese açık yayınlamayın.\n' +
+  '- **CMS, eklenti ve tema sürümlerinizi** otomatik güncelleme veya düzenli takiple güncel tutun; bilinen CVE’lere karşı yamalı kalın.\n' +
+  '- **Certificate Transparency (CT) log izleme** araçları (crt.sh, certSpotter vb.) ile yeni/beklenmeyen alt domain sertifikalarını erken fark edin.\n' +
+  '- **Sürüm/teknoloji ifşasını azaltın** — `Server`, `X-Powered-By`, `<meta generator>` gibi başlık/etiketlerle gereksiz sürüm bilgisi sızdırmayın.\n' +
+  '- **Alt domain envanterinizi belgeleyin** — hangi alt domainin hangi servise/ekibe ait olduğunu bilmek, boşta kalan kayıtları hızlıca fark etmenizi sağlar.\n';
+
+// ======================================================================================
 // BIRLESTIRME
 // ======================================================================================
 export function combineReconAreas(ev: ReconEvidence): { findings: string; fixText: string } | null {
@@ -246,7 +314,7 @@ export function combineReconAreas(ev: ReconEvidence): { findings: string; fixTex
   const summary: string[] = [];
   summary.push(
     worst === 'low'
-      ? '- **Genel risk seviyesi: Düşük** — keşif yüzeyiniz 3 alanda incelendi; devralınabilir alt domain, açık hassas API veya bilinen yüksek CVE öne çıkmadı.'
+      ? '- **Genel risk seviyesi: Düşük** — keşif yüzeyiniz 3 alanda incelendi; devralınabilir alt domain, açık hassas API veya sürümü kapsayan bilinen yüksek CVE öne çıkmadı. Dışarıdan görünen yüzeyiniz şu an için dar ve kontrollü görünüyor.'
       : cumulative
         ? `- **Genel risk seviyesi: Yüksek** — 3 alan incelendi; birden fazla alan aynı anda risk taşıyor (en yükseği **${worstArea.title}** — ${worstArea.headline}).`
         : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — 3 alan incelendi; en yüksek risk **${worstArea.title}** alanında (${worstArea.headline}).`,
@@ -263,14 +331,16 @@ export function combineReconAreas(ev: ReconEvidence): { findings: string; fixTex
           ? `Öne çıkan alan **${worstArea.title}** (${worstArea.headline}); tek başına yüksek etkili. Öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`
           : worst === 'medium'
             ? `Öne çıkan alan **${worstArea.title}** (${worstArea.headline}); kısa vadede giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`
-            : 'Keşif yüzeyiniz genel olarak sağlam; rapor yalnızca envanter ve küçük iyileştirme fırsatlarını listeler. Aşağıda her alan ayrı ayrı raporlanmıştır.';
+            : 'Dışarıdan görünen alt domain, API ve CMS yüzeyiniz şu an için dar ve kontrollü görünüyor; rapor, tam envanter ve önerilen iyi pratiklerle birlikte her alanı ayrı ayrı belgeler. Aşağıda her alan ayrı ayrı raporlanmıştır.';
 
   const areaSections = areas.map((a) => `## ${a.title}\n\n**Genel risk seviyesi: ${RISK_WORD[a.level]} — ${a.headline}**\n\n${a.body}\n`).join('\n');
 
   const findings =
     `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
     `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${genelSentence}\n\n` +
-    `${areaSections}`;
+    `${METHODOLOGY_SECTION}\n` +
+    `${areaSections}\n` +
+    `${BEST_PRACTICES_SECTION}`;
 
   const fixText =
     'Bu bölüm, keşif taramanızda tespit edilen tüm eksiklikler için alan alan düzeltme önerileri içerir.\n\n' +

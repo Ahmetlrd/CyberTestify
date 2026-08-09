@@ -18,7 +18,7 @@ const HTTP_TIMEOUT_MS = 9000;
 const CRTSH_TIMEOUT_MS = 20000;
 const DOH_TIMEOUT_MS = 7000;
 const NVD_TIMEOUT_MS = 20000;
-const MAX_SUBDOMAINS_RESOLVE = 60; // CNAME cozulecek alt domain ust siniri (sure kontrolu)
+const MAX_SUBDOMAINS_RESOLVE = 100; // CNAME cozulecek alt domain ust siniri (envanter/display ile hizali)
 const DOH_CONCURRENCY = 12;
 const MAX_CVES_LISTED = 12;
 
@@ -96,11 +96,13 @@ const DANGLING_SIGS: Array<{ service: string; suffixes: string[]; fp: string[] }
 ];
 
 export type DanglingHit = { sub: string; cname: string; service: string; confidence: 'confirmed' | 'suspected'; note: string };
+export type SubCnameState = 'dangling' | 'suspected' | 'managed' | 'active' | 'nocname';
 export type SubEvidence = {
   ok: boolean;                 // crt.sh ulasildi mi
   total: number;               // benzersiz alt domain sayisi
   resolved: number;            // CNAME cozulen sayi
-  subdomains: string[];        // ornekleme (rapor icin, kapali sayida)
+  subdomains: string[];        // bulunan tum alt domainler (rapor envanteri, kapali ust sinir)
+  cnames: Array<{ sub: string; cname?: string; state: SubCnameState }>; // cozulen her alt domain + CNAME + durum
   managedCnames: Array<{ sub: string; cname: string; service: string }>; // bilinen servise CNAME (canli — bilgi)
   dangling: DanglingHit[];
 };
@@ -151,7 +153,7 @@ async function crtshNames(apex: string): Promise<string[] | null> {
 export async function collectSubdomains(host: string): Promise<SubEvidence> {
   const apex = apexDomain(host);
   const names = await crtshNames(apex);
-  if (names === null) return { ok: false, total: 0, resolved: 0, subdomains: [], managedCnames: [], dangling: [] };
+  if (names === null) return { ok: false, total: 0, resolved: 0, subdomains: [], cnames: [], managedCnames: [], dangling: [] };
 
   const toResolve = names.slice(0, MAX_SUBDOMAINS_RESOLVE);
   const cnameResults = await pMap(toResolve, DOH_CONCURRENCY, async (sub) => {
@@ -181,11 +183,21 @@ export async function collectSubdomains(host: string): Promise<SubEvidence> {
     }
   });
 
+  // Cozulen her alt domain icin durum tablosu (yeni fetch YOK — zaten toplanan veriyi tasir).
+  const danglingByS = new Map(dangling.map((d) => [d.sub, d.confidence]));
+  const managedBySet = new Set(managedCnames.map((m) => m.sub));
+  const cnames: SubEvidence['cnames'] = cnameResults.map(({ sub, cname }) => {
+    const dc = danglingByS.get(sub);
+    const state: SubCnameState = dc === 'confirmed' ? 'dangling' : dc === 'suspected' ? 'suspected' : managedBySet.has(sub) ? 'managed' : cname ? 'active' : 'nocname';
+    return { sub, cname, state };
+  });
+
   return {
     ok: true,
     total: names.length,
     resolved: toResolve.length,
-    subdomains: names.slice(0, 25),
+    subdomains: names.slice(0, 100),
+    cnames,
     managedCnames,
     dangling,
   };
@@ -200,6 +212,7 @@ const SENSITIVE_RE = /(admin|internal|debug|token|secret|password|passwd|credent
 export type ApiSpec = { path: string; title?: string; version?: string; endpointCount: number; sensitive: Array<{ method: string; path: string; noAuth: boolean }>; hasGlobalAuth: boolean };
 export type ApiEvidence = {
   ok: boolean;
+  tried: Array<{ path: string; status: number }>; // denenen TUM yollar + HTTP durumu (rapor tam-liste tablosu)
   reachable: Array<{ path: string; status: number; kind: 'spec' | 'ui' | 'graphql' }>;
   spec?: ApiSpec;
 };
@@ -265,7 +278,8 @@ export async function collectApi(host: string): Promise<ApiEvidence> {
     // Swagger/ReDoc arayuzu — HTML icinde arayuze ozgu isaret. Genel SPA sayfasi elenir.
     if (/swagger-ui|swaggerui|redoc|openapi|api documentation|swagger\.json|api-docs/i.test(r.text)) reachable.push({ path, status: r.status, kind: 'ui' });
   }
-  return { ok: anyOk, reachable, spec };
+  const tried = results.map(({ path, r }) => ({ path, status: r.status }));
+  return { ok: anyOk, tried, reachable, spec };
 }
 
 // ======================================================================================
@@ -447,8 +461,8 @@ export type ReconEvidence = { host: string; sub: SubEvidence; api: ApiEvidence; 
 export async function collectReconEvidence(host: string): Promise<ReconEvidence> {
   const http = await collectHttp(host);
   const [sub, api, cms] = await Promise.all([
-    collectSubdomains(host).catch(() => ({ ok: false, total: 0, resolved: 0, subdomains: [], managedCnames: [], dangling: [] } as SubEvidence)),
-    collectApi(host).catch(() => ({ ok: false, reachable: [] } as ApiEvidence)),
+    collectSubdomains(host).catch(() => ({ ok: false, total: 0, resolved: 0, subdomains: [], cnames: [], managedCnames: [], dangling: [] } as SubEvidence)),
+    collectApi(host).catch(() => ({ ok: false, tried: [], reachable: [] } as ApiEvidence)),
     collectCms(host, http).catch(() => ({ ok: false, evidence: [], extras: [], cveOk: false, cveTotal: 0, cves: [] } as CmsEvidence)),
   ]);
   return { host, sub, api, cms };
