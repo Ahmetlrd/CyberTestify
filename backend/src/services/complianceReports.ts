@@ -35,7 +35,7 @@ function detailOnly(findings: string): string {
 }
 const CAUTION = '> Bu bölüm dışarıdan gözlemlenebilir teknik göstergeleri ilgili ilke/madde ile eşler; **resmî bir uyum/uygunluk denetimi veya sertifikasyon beyanı DEĞİLDİR.** Kesin uygunluk için kapsamlı, ayrı bir denetim gerekir.';
 
-type Priority = { sev: Level; text: string; horizon: 'quick' | 'medium' };
+type Priority = { sev: Level; text: string; horizon: 'quick' | 'medium'; impact?: string };
 type Area = { findings: string; fixText: string; priorities: Priority[] };
 // Guvenlik basliklari mini-gozlem tablosu (6 baslik) — PCI/ISO derinlik icin.
 function headerMiniTable(headers: Map<string, string>): string {
@@ -280,9 +280,9 @@ function buildKvkkArea(ev: ComplianceEvidence): Area {
     `${CAUTION}\n\n## DEĞERLENDİRME (Ne gördük / Ne görmedik)\n\n${comment}\n\n## KVKK GÖZLEM TABLOSU\n\n| KVKK İlkesi/Konu | Gözlem | Durum | Öneri |\n|------------------|--------|-------|-------|\n${rows}\n\n${trackerDetail}${formSection}${SCOPE.kvkk}\n`);
   const fixText = buildKvkkFix(ev, { policyMissing: !ev.policyFound, bannerMissing: !ev.cookieBanner, trackingNoConsent, contactMissing: !ev.contactFound, preConsentCookies: ev.preConsentCookies });
   const priorities: Priority[] = [];
-  if (trackingNoConsent) priorities.push({ sev: 'high', text: 'KVKK — Çerez açık rızası ekleyin ve rıza öncesi izleyici çerezleri durdurun.', horizon: 'medium' });
-  if (!ev.policyFound) priorities.push({ sev: 'medium', text: 'KVKK — Erişilebilir aydınlatma metni / gizlilik politikası yayınlayın.', horizon: 'medium' });
-  if (!ev.contactFound) priorities.push({ sev: 'medium', text: 'KVKK — Veri sorumlusu ve iletişim bilgisini sitede erişilebilir kılın.', horizon: 'quick' });
+  if (trackingNoConsent) priorities.push({ sev: 'high', text: 'KVKK — Çerez açık rızası ekleyin ve rıza öncesi izleyici çerezleri durdurun.', horizon: 'medium', impact: 'En yüksek yasal risk — uygulamada en sık idari yaptırıma konu olan eksiklik' });
+  if (!ev.policyFound) priorities.push({ sev: 'medium', text: 'KVKK — Erişilebilir aydınlatma metni / gizlilik politikası yayınlayın.', horizon: 'medium', impact: 'Şeffaflık yükümlülüğünü karşılar (m.10)' });
+  if (!ev.contactFound) priorities.push({ sev: 'medium', text: 'KVKK — Veri sorumlusu ve iletişim bilgisini sitede erişilebilir kılın.', horizon: 'quick', impact: 'Düşük eforlu; VERBIS/şeffaflık için gerekli' });
   return { findings, fixText, priorities };
 }
 
@@ -336,12 +336,12 @@ function buildPciArea(ev: ComplianceEvidence): Area {
     `${CAUTION}\n\n## DEĞERLENDİRME (Ne gördük / Ne görmedik)\n\n${comment}\n\n## PCI-DSS GÖZLEM TABLOSU\n\n| Gereksinim | Gözlem | Gözlemlenebilir kontrol | Öneri |\n|-----------|--------|------------------------|-------|\n${rows}\n\n## GÜVENLİK BAŞLIKLARI DETAYI (Req 6.4)\n\n${headerMiniTable(http.headers)}\n\n${SCOPE.pci}\n`);
   const fixText = buildComplianceFix(ev, 'PCI-DSS', { tlsBad, missingHdrs: missingHdrs.map((h) => h.h), insecureCookies: insecureCookies.length > 0, versionBanner, exposed: exposedHits.map((e) => e.path), extra: [...(ev.httpsRedirect === 'no' ? ['HTTP→HTTPS yönlendirmesi ekleyin (tüm trafiği HTTPS’e zorlayın).'] : []), ...(pwAutocomplete ? ['Parola/hassas form alanlarına `autocomplete="off"` (veya `new-password`) ekleyin.'] : []), ...(ev.stagingTraces.length ? ['Debug modunu kapatın; kaynak haritalarını (sourceMappingURL) ve test/staging izlerini üretimden kaldırın.'] : [])] });
   const priorities: Priority[] = [];
-  if (exposedHits.length) priorities.push({ sev: 'high', text: `PCI-DSS (Req 3) — Açıkta kalan dosyalara erişimi engelleyin: ${exposedHits.map((e) => e.path).join(', ')}.`, horizon: 'quick' });
-  if (tlsBad) priorities.push({ sev: 'high', text: 'PCI-DSS (Req 4) — TLS’i güçlendirin (zayıf sürüm/sertifika sorununu giderin).', horizon: 'quick' });
-  if (ev.stagingTraces.length) priorities.push({ sev: 'high', text: 'PCI-DSS (Req 6) — Test/staging/debug izlerini üretimden kaldırın.', horizon: 'quick' });
-  if (missingHdrs.length >= 2) priorities.push({ sev: 'medium', text: 'PCI-DSS (Req 6.4) — Eksik güvenlik başlıklarını ekleyin.', horizon: 'quick' });
-  if (ev.httpsRedirect === 'no') priorities.push({ sev: 'medium', text: 'PCI-DSS (Req 4.1) — Tüm HTTP trafiğini HTTPS’e yönlendirin + HSTS.', horizon: 'quick' });
-  if (pwAutocomplete) priorities.push({ sev: 'medium', text: 'PCI-DSS (Req 8) — Parola/hassas form alanlarında autocomplete’i kapatın.', horizon: 'quick' });
+  if (exposedHits.length) priorities.push({ sev: 'high', text: `PCI-DSS (Req 3) — Açıkta kalan dosyalara erişimi engelleyin: ${exposedHits.map((e) => e.path).join(', ')}.`, horizon: 'quick', impact: 'Doğrudan veri ifşası riski' });
+  if (tlsBad) priorities.push({ sev: 'high', text: 'PCI-DSS (Req 4) — TLS’i güçlendirin (zayıf sürüm/sertifika sorununu giderin).', horizon: 'quick', impact: 'Aktarımda kart verisi güvenliği için kritik' });
+  if (ev.stagingTraces.length) priorities.push({ sev: 'high', text: 'PCI-DSS (Req 6) — Test/staging/debug izlerini üretimden kaldırın.', horizon: 'quick', impact: 'Saldırı yüzeyini ve bilgi ifşasını azaltır' });
+  if (missingHdrs.length >= 2) priorities.push({ sev: 'medium', text: 'PCI-DSS (Req 6.4) — Eksik güvenlik başlıklarını ekleyin.', horizon: 'quick', impact: 'XSS/clickjacking yüzeyini kapatır' });
+  if (ev.httpsRedirect === 'no') priorities.push({ sev: 'medium', text: 'PCI-DSS (Req 4.1) — Tüm HTTP trafiğini HTTPS’e yönlendirin + HSTS.', horizon: 'quick', impact: 'Şifresiz erişimi engeller' });
+  if (pwAutocomplete) priorities.push({ sev: 'medium', text: 'PCI-DSS (Req 8) — Parola/hassas form alanlarında autocomplete’i kapatın.', horizon: 'quick', impact: 'Paylaşımlı cihazda kimlik sızıntısını azaltır' });
   return { findings, fixText, priorities };
 }
 
@@ -396,12 +396,12 @@ function buildIsoArea(ev: ComplianceEvidence): Area {
     `${CAUTION}\n\n## DEĞERLENDİRME (Ne gördük / Ne görmedik)\n\n${comment}\n\n## ISO 27001 ANNEX A GÖZLEM TABLOSU\n\n| Madde | Gözlem | Gözlemlenebilir kontrol | Öneri |\n|-------|--------|------------------------|-------|\n${rows}\n\n${leakSection}${tpSection}${SCOPE.iso}\n`);
   const fixText = buildComplianceFix(ev, 'ISO 27001', { tlsBad, missingHdrs: missingHdrs.map((h) => h.h), insecureCookies: false, versionBanner, exposed: exposedHits.map((e) => e.path), policyMissing: !ev.policyFound, extra: [...(ev.securityTxt ? [] : ['`/.well-known/security.txt` ile bir zafiyet bildirim kanalı yayınlayın (A.5.7).']), ...(ev.thirdPartyDomains.length ? ['Görünen dış bağımlılıkları (üçüncü taraf servisler) envanterleyip veri-işleyen değerlendirmesine dâhil edin (A.15).'] : [])] });
   const priorities: Priority[] = [];
-  if (exposedHits.length) priorities.push({ sev: 'high', text: 'ISO 27001 (A.8.12) — Açıkta kalan dosya/bilgi sızıntısını giderin.', horizon: 'quick' });
-  if (tlsBad) priorities.push({ sev: 'high', text: 'ISO 27001 (A.8.24) — TLS yapılandırmasını güçlendirin.', horizon: 'quick' });
-  if (ev.infoLeak.length >= 2) priorities.push({ sev: 'high', text: 'ISO 27001 (A.8.12) — Bilgi sızıntısı göstergelerini (IP/yorum/e-posta) giderin.', horizon: 'quick' });
-  if (!ev.securityTxt) priorities.push({ sev: 'medium', text: 'ISO 27001 (A.5.7) — /.well-known/security.txt ile zafiyet bildirim kanalı yayınlayın.', horizon: 'quick' });
-  if (!ev.policyFound) priorities.push({ sev: 'medium', text: 'ISO 27001 (A.5.1) — Erişilebilir bir güvenlik/gizlilik politikası yayınlayın.', horizon: 'medium' });
-  if (ev.thirdPartyDomains.length) priorities.push({ sev: 'medium', text: 'ISO 27001 (A.15) — Görünen üçüncü taraf bağımlılıklarını envanterleyip değerlendirin.', horizon: 'medium' });
+  if (exposedHits.length) priorities.push({ sev: 'high', text: 'ISO 27001 (A.8.12) — Açıkta kalan dosya/bilgi sızıntısını giderin.', horizon: 'quick', impact: 'Veri sızıntısını doğrudan durdurur' });
+  if (tlsBad) priorities.push({ sev: 'high', text: 'ISO 27001 (A.8.24) — TLS yapılandırmasını güçlendirin.', horizon: 'quick', impact: 'Kriptografi kontrolü için temel' });
+  if (ev.infoLeak.length >= 2) priorities.push({ sev: 'high', text: 'ISO 27001 (A.8.12) — Bilgi sızıntısı göstergelerini (IP/yorum/e-posta) giderin.', horizon: 'quick', impact: 'İç bilgi ifşasını azaltır' });
+  if (!ev.securityTxt) priorities.push({ sev: 'medium', text: 'ISO 27001 (A.5.7) — /.well-known/security.txt ile zafiyet bildirim kanalı yayınlayın.', horizon: 'quick', impact: 'Hızlı ve düşük eforlu kazanım' });
+  if (!ev.policyFound) priorities.push({ sev: 'medium', text: 'ISO 27001 (A.5.1) — Erişilebilir bir güvenlik/gizlilik politikası yayınlayın.', horizon: 'medium', impact: 'Politika kontrolü için görünür kanıt' });
+  if (ev.thirdPartyDomains.length) priorities.push({ sev: 'medium', text: 'ISO 27001 (A.15) — Görünen üçüncü taraf bağımlılıklarını envanterleyip değerlendirin.', horizon: 'medium', impact: 'Tedarik zinciri riskini yönetir' });
   return { findings, fixText, priorities };
 }
 
@@ -479,7 +479,7 @@ export function combineComplianceAreas(results: Array<{ findings: string; fixTex
   const uniq = [...priorities].sort((a, b) => levelRank(b.sev) - levelRank(a.sev)).filter((p) => { const k = p.text.toLocaleLowerCase('tr'); if (seen.has(k)) return false; seen.add(k); return true; });
   const quick = uniq.filter((p) => p.horizon === 'quick').slice(0, 8);
   const medium = uniq.filter((p) => p.horizon === 'medium').slice(0, 8);
-  const renderGroup = (items: Priority[]) => items.map((p, i) => `${i + 1}. **[${RISK_WORD[p.sev]}]** ${p.text}`).join('\n');
+  const renderGroup = (items: Priority[]) => items.map((p, i) => `${i + 1}. **[${RISK_WORD[p.sev]}]** ${p.text}${p.impact ? ` → *${p.impact}*` : ''}`).join('\n');
   const prioritySection = uniq.length
     ? `## ÖNCELİKLİ AKSİYONLAR\n\nDışarıdan gözlemlenen boşluklar, uygulama eforuna göre iki grupta önceliklendirildi:\n\n` +
       (quick.length ? `### ⚡ Hızlı Kazanımlar (genellikle sunucu/yapılandırma — 1-2 gün)\n\n${renderGroup(quick)}\n\n` : '') +
