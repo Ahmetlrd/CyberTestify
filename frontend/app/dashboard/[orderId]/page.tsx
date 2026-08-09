@@ -107,16 +107,6 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
     }
   }
 
-  async function handleDownloadFix() {
-    setError(null);
-    try {
-      const blob = await api.downloadFixSuggestions(params.orderId, accessSecret);
-      downloadBlob(blob, `cozum-onerileri-${params.orderId}.md`);
-    } catch (err: any) {
-      setError(err.message);
-    }
-  }
-
   if (!order && !error) {
     return (
       <main className="container-page max-w-xl py-16">
@@ -283,8 +273,12 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               </p>
               {order.report.fixSuggestionsUnlocked ? (
                 <>
-                  <button onClick={handleDownloadFix} disabled={!accessSecret} className="btn-primary mt-4 disabled:opacity-50">
-                    Çözüm önerilerini indir
+                  <div className="mt-3 rounded-card border border-brand-200 bg-brand-50/40 px-4 py-3 text-sm text-ink-soft">
+                    ✓ Açıldı — çözüm önerileri artık <strong>raporunuzun içinde</strong> yer alıyor. Güncel raporu
+                    (çözüm önerileri dahil) indirmek için aşağıdaki butonu kullanın.
+                  </div>
+                  <button onClick={handleDownload} disabled={!accessSecret} className="btn-primary mt-3 disabled:opacity-50">
+                    Raporu indir (çözüm önerileri dahil)
                   </button>
                   {!accessSecret && (
                     <p className="mt-2 text-xs text-ink-muted">Önce yukarıdaki erişim kodunu girin.</p>
