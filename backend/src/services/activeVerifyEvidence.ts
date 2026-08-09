@@ -23,6 +23,7 @@ const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromiu
 const HEADLESS_PAGE_TIMEOUT_MS = 10000;   // sayfa basina sert timeout
 const HEADLESS_MAX_PAGES = 8;             // headless'te taranacak sayfa ust siniri (perf)
 const MAX_CONCURRENT_HEADLESS = 3;        // es zamanli tarayici instance ust siniri (kaynak korumasi)
+const HEADLESS_PRECHECK_TIMEOUT_MS = 6000; // odeme-oncesi TEK-sayfa on-kontrol icin daha kisa timeout
 
 const MIN_DELAY_MS = 1200;         // istekler arasi min bekleme (hedefi yormamak)
 const REQ_TIMEOUT_MS = 10000;
@@ -370,11 +371,13 @@ export function spaHint(surf: Surface): string {
 }
 
 // ======================================================================================
-// ODEME-ONCESI HIZLI KAPSAM SINYALI — bundle_active_verify icin. SADECE statik (headless YOK),
-// ana sayfa + ~3 ic link; kaba bir "test edilecek giris noktasi var mi" sinyali. Ucuz/hizli
-// (asil tarama odeme sonrasi headless dahil calisir). Hedefi yormamak icin gecikme YOK ama ~4 GET.
+// ODEME-ONCESI HIZLI KAPSAM SINYALI — bundle_active_verify icin. Once ucuz statik kontrol;
+// statik BOSSA (SPA olabilir) TEK-sayfa headless render ile teyit et (asil tarama gibi
+// tam multi-page crawl DEGIL — sadece ana sayfa). Boylece Juice Shop gibi zengin SPA'larda
+// YANLIS ALARM olmaz; nomorelink gibi gercekten bos landing SPA'da uyari dogru cikar.
+// Headless yok/timeout/hata -> BELIRSIZ -> uyari GOSTERME (musteriyi bosuna korkutma).
 // ======================================================================================
-export type ScopeSignal = { reachable: boolean; jsRendered: boolean; inputCount: number; pagesScanned: number; lowSignal: boolean };
+export type ScopeSignal = { reachable: boolean; jsRendered: boolean; inputCount: number; pagesScanned: number; lowSignal: boolean; method: 'static' | 'headless' };
 
 async function quickGet(url: string): Promise<string | null> {
   const ctrl = new AbortController();
@@ -387,17 +390,64 @@ async function quickGet(url: string): Promise<string | null> {
   } catch { return null; } finally { clearTimeout(timer); }
 }
 
+function countInputsIn(host: string, htmls: string[]): number {
+  const inputs = new Set<string>(); const ids = new Set<string>(); const uploads = new Set<string>(); let mass = false;
+  for (const html of htmls) {
+    for (const ip of discoverInputs(host, html)) inputs.add(`${ip.method} ${ip.action} ${ip.param}`);
+    for (const e of discoverIdEndpoints(host, html)) ids.add(`${e.kind}:${e.idParam}`);
+    for (const f of discoverUploadForms(host, html)) uploads.add(`${f.action}:${f.fileField}`);
+    if (!mass && discoverMassAssignForm(host, html)) mass = true;
+  }
+  return inputs.size + ids.size + uploads.size + (mass ? 1 : 0);
+}
+
+// TEK sayfa (ana sayfa) headless render — on-kontrol icin hafif. Semafor + resource-block +
+// ic-ag hard-guard mevcut headless ile AYNI. Basarisiz/timeout -> null.
+async function renderHomepageHeadless(host: string): Promise<string | null> {
+  if (chromiumUnavailable) return null;
+  const homeUrl = `https://${host}/`;
+  try { const u = new URL(homeUrl); if (u.hostname.toLowerCase() !== host.toLowerCase() || isInternalHost(u.hostname)) return null; } catch { return null; }
+  await acquireHeadless();
+  let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
+  try {
+    browser = await puppeteer.launch({ executablePath: CHROMIUM_PATH, headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+  } catch {
+    chromiumUnavailable = true;
+    releaseHeadless();
+    return null;
+  }
+  try {
+    const page = await browser.newPage();
+    try {
+      await page.setUserAgent('CyberTestify-PassiveCheck/1.0');
+      await page.setRequestInterception(true);
+      page.on('request', (req) => {
+        const rt = req.resourceType();
+        let block = rt === 'image' || rt === 'font' || rt === 'media' || rt === 'stylesheet';
+        try { if (isInternalHost(new URL(req.url()).hostname)) block = true; } catch { /* yoksay */ }
+        if (block) req.abort().catch(() => {}); else req.continue().catch(() => {});
+      });
+      await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: HEADLESS_PRECHECK_TIMEOUT_MS });
+      await page.waitForNetworkIdle({ idleTime: 500, timeout: 3000 }).catch(() => {});
+      return await page.content();
+    } catch { return null; } finally { await page.close().catch(() => {}); }
+  } finally {
+    await browser.close().catch(() => {});
+    releaseHeadless();
+  }
+}
+
 export async function quickScopeSignal(host: string): Promise<ScopeSignal> {
   const home = await collectHttp(host);
-  if (!home.ok) return { reachable: false, jsRendered: false, inputCount: 0, pagesScanned: 0, lowSignal: false };
-  // SPA sinyali (crawlSurface ile AYNI heuristik)
+  if (!home.ok) return { reachable: false, jsRendered: false, inputCount: 0, pagesScanned: 0, lowSignal: false, method: 'static' };
+  // SPA sinyali (crawlSurface ile AYNI heuristik) — bilgi amacli.
   const anchors = (home.html.match(/<a\s[^>]*href\s*=/gi) ?? []).length;
   const formCount = (home.html.match(/<form\b/gi) ?? []).length;
   const scriptCount = (home.html.match(/<script\b/gi) ?? []).length;
   const spaShell = /<div[^>]+(id|class)\s*=\s*["'](root|app|__next|__nuxt|q-app)\b|__NEXT_DATA__|window\.__NUXT__|ng-version=/i.test(home.html);
   const jsRendered = (anchors <= 2 && formCount === 0) && (scriptCount >= 1) && (spaShell || home.html.length < 30000);
 
-  // Ana sayfa + en fazla 3 ic link (asset HARIC) — hizli.
+  // 1) UCUZ STATIK: ana sayfa + en fazla 3 ic link (asset HARIC).
   const homeUrl = `https://${host}/`;
   const links: string[] = []; const seenL = new Set<string>([homeUrl]);
   for (const m of home.html.matchAll(/href\s*=\s*["']([^"'#]+)["']/gi)) {
@@ -408,18 +458,21 @@ export async function quickScopeSignal(host: string): Promise<ScopeSignal> {
   }
   const pages: string[] = [home.html];
   for (const l of links) { const html = await quickGet(l); if (html) pages.push(html); }
+  const staticCount = countInputsIn(host, pages);
 
-  const inputs = new Set<string>(); const ids = new Set<string>(); const uploads = new Set<string>(); let mass = false;
-  for (const html of pages) {
-    for (const ip of discoverInputs(host, html)) inputs.add(`${ip.method} ${ip.action} ${ip.param}`);
-    for (const e of discoverIdEndpoints(host, html)) ids.add(`${e.kind}:${e.idParam}`);
-    for (const f of discoverUploadForms(host, html)) uploads.add(`${f.action}:${f.fileField}`);
-    if (!mass && discoverMassAssignForm(host, html)) mass = true;
+  // Statik zaten input buldu -> DUSUK DEGIL (hizli, headless'e gerek yok). Wikipedia vb.
+  if (staticCount > 0) return { reachable: true, jsRendered, inputCount: staticCount, pagesScanned: pages.length, lowSignal: false, method: 'static' };
+
+  // 2) STATIK BOS -> TEK-sayfa HEADLESS render ile teyit (Juice Shop gibi SPA'da icerik var mi).
+  const renderedHtml = await renderHomepageHeadless(host).catch(() => null);
+  if (renderedHtml === null) {
+    // Headless yok/timeout/hata -> BELIRSIZ -> uyari GOSTERME (lowSignal:false).
+    return { reachable: true, jsRendered, inputCount: 0, pagesScanned: pages.length, lowSignal: false, method: 'static' };
   }
-  const inputCount = inputs.size + ids.size + uploads.size + (mass ? 1 : 0);
-  // Dusuk sinyal: SPA supheli VEYA hic input yok.
-  const lowSignal = jsRendered || inputCount === 0;
-  return { reachable: true, jsRendered, inputCount, pagesScanned: pages.length, lowSignal };
+  const renderedCount = countInputsIn(host, [renderedHtml]);
+  // Render sonrasi da input yoksa -> GERCEKTEN dusuk kapsam -> UYAR. Varsa -> uyarma.
+  const lowSignal = renderedCount === 0;
+  return { reachable: true, jsRendered, inputCount: renderedCount, pagesScanned: 1, lowSignal, method: 'headless' };
 }
 
 // Kesif yontemi seffaflik notu (rapor icin).

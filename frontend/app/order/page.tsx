@@ -54,6 +54,7 @@ export default function OrderPage() {
   const [atRisk, setAtRisk] = useState(false);
   // (Aktif Doğrulama Paketi) ödeme-öncesi düşük-kapsam ön-kontrolü.
   const [scopeLow, setScopeLow] = useState<boolean | null>(null); // null=henüz kontrol edilmedi
+  const [scopeChecking, setScopeChecking] = useState(false); // ön-kontrol devam ediyor (SPA'da headless render ~birkaç sn)
   const [lowScopeAck, setLowScopeAck] = useState(false);
   // (#5) authenticated_scan — test hesabi kimlik bilgileri.
   const [authUser, setAuthUser] = useState('');
@@ -115,11 +116,14 @@ export default function OrderPage() {
   useEffect(() => {
     setLowScopeAck(false);
     setScopeLow(null);
+    setScopeChecking(false);
     if (!domainId || selectedBundle?.key !== 'bundle_active_verify') return;
     let cancelled = false;
+    setScopeChecking(true);
     api.scopeEstimate(domainId)
       .then((r) => { if (!cancelled) setScopeLow(r.lowSignal); })
-      .catch(() => { if (!cancelled) setScopeLow(false); }); // hata -> engelleme, uyarı gösterme
+      .catch(() => { if (!cancelled) setScopeLow(false); }) // hata -> engelleme, uyarı gösterme
+      .finally(() => { if (!cancelled) setScopeChecking(false); });
     return () => { cancelled = true; };
   }, [domainId, selectedBundle?.key]);
 
@@ -348,6 +352,7 @@ export default function OrderPage() {
     ? !domainId || busy || !allConsents || intlComingSoon ||
       (selectedBundle.category === 'active-light' && !atRisk) ||
       (selectedBundle.selectable && bundleModules.length === 0) ||
+      (selectedBundle.key === 'bundle_active_verify' && scopeChecking) || // ön-kontrol bitene kadar bekle
       (showLowScopeWarning && !lowScopeAck) // düşük-kapsam uyarısı onaylanmadan ödeme yok
     : !domainId || busy || !selected || !allConsents || !activeConsentOk || intlComingSoon;
   const ctaLabel = busy
@@ -747,6 +752,9 @@ export default function OrderPage() {
                 </>
               ) : (
                 <p className="mt-2 text-sm text-ink-soft">Devam etmek için bir paket seçin.</p>
+              )}
+              {selectedBundle?.key === 'bundle_active_verify' && scopeChecking && (
+                <p className="mt-3 text-center text-xs text-ink-muted">Hedefiniz için kapsam ön kontrolü yapılıyor…</p>
               )}
               {showLowScopeWarning && (
                 <div className="mt-4 rounded-card border-2 border-amber-400 bg-amber-50 p-4 text-sm">
