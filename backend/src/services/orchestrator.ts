@@ -203,15 +203,24 @@ export async function startScanForOrder(orderId: string) {
     throw err;
   }
 
-  // Slot bizim — simdi PentAGI flow'unu yarat ve gercek ID ile guncelle.
-  try {
-    const created = await pentagi.createFlow(modelProvider, prompt);
-    flow = await prisma.flow.update({ where: { id: flow.id }, data: { pentagiFlowId: created.id } });
-  } catch (err) {
-    // PentAGI cagrisi patlarsa rezervasyonu birak (slotu serbest birak).
-    await prisma.flow.delete({ where: { id: flow.id } }).catch(() => {});
-    await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed' } });
-    throw err;
+  // (PENTAGI'SIZ) basit_tarama raporu TAMAMEN backend collector'lariyla (generateBasitReport →
+  // collectEvidence: fetchHome + node:tls) uretilir; PentAGI ajani/sandbox'i GEREKSIZ (12 tool-call
+  // + ~5 dk bosa gidiyordu). Flow KAYDI durum/kuyruk/ilerleme/mail icin DURUR ama PentAGI flow'u
+  // ACILMAZ — pentagiFlowId 'deterministic-' sentinel'i alir; worker bunu gorup raporu DOGRUDAN
+  // uretir. Diger paketler (bundle_surface dahil) DEGISMEZ: normal PentAGI akisi.
+  if (order.package.key === 'basit_tarama') {
+    flow = await prisma.flow.update({ where: { id: flow.id }, data: { pentagiFlowId: `deterministic-${order.id}` } });
+  } else {
+    // Slot bizim — simdi PentAGI flow'unu yarat ve gercek ID ile guncelle.
+    try {
+      const created = await pentagi.createFlow(modelProvider, prompt);
+      flow = await prisma.flow.update({ where: { id: flow.id }, data: { pentagiFlowId: created.id } });
+    } catch (err) {
+      // PentAGI cagrisi patlarsa rezervasyonu birak (slotu serbest birak).
+      await prisma.flow.delete({ where: { id: flow.id } }).catch(() => {});
+      await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed' } });
+      throw err;
+    }
   }
 
   await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_running' } });

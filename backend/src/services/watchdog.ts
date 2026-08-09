@@ -45,8 +45,10 @@ export async function reapStuckFlows() {
     // PentAGI'yi durdurmayi DENE ama basarisizligi DB guncellemesini ENGELLEMESIN
     // (proxy/pentagi coktuyse stopFlow zaten patlar; onemli olan slotu serbest birakmak).
     // deleteFlow: takilan flow'un terminal container'ini da yik (orphan birakma).
-    // 'reserving-' rezervasyonda gercek flow yok → deleteFlow cagirma.
-    if (!orphanReservation) {
+    // 'reserving-'/'deterministic-' sentinel'lerinde gercek PentAGI flow'u yok → stop/deleteFlow
+    // cagirma (bosuna patlar). (deterministic- yalniz worker cokup >120dk kalirsa buraya duser.)
+    const noRealFlow = flow.pentagiFlowId.startsWith('reserving-') || flow.pentagiFlowId.startsWith('deterministic-');
+    if (!noRealFlow) {
       await pentagi.stopFlow(flow.pentagiFlowId).catch(() => {});
       await pentagi.deleteFlow(flow.pentagiFlowId).catch(() => {});
     }

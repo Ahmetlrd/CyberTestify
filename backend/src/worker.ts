@@ -38,7 +38,8 @@ const POLL_INTERVAL_MS = 8000;
  * gercek PentAGI flow'u yok — deleteFlow cagirma.
  */
 async function teardownFlowContainer(pentagiFlowId: string) {
-  if (!pentagiFlowId || pentagiFlowId.startsWith('reserving-')) return;
+  // 'reserving-'/'deterministic-' sentinel'lerinde gercek PentAGI flow'u yok -> deleteFlow cagirma.
+  if (!pentagiFlowId || pentagiFlowId.startsWith('reserving-') || pentagiFlowId.startsWith('deterministic-')) return;
   await pentagi
     .deleteFlow(pentagiFlowId)
     .catch((e) => console.error(`[worker] deleteFlow (terminal temizligi) hata (yine de devam): ${e?.message ?? e}`));
@@ -67,6 +68,21 @@ async function tick() {
 
   for (const flow of runningFlows) {
     try {
+      // (PENTAGI'SIZ) Deterministik paket (basit_tarama): PentAGI flow'u YOK (sentinel
+      // 'deterministic-'). Ajan/sandbox poll'lama; raporu backend collector'lariyla DOGRUDAN
+      // uret (generateAndStoreReport basit_tarama'da generateBasitReport'u cagirir) ve flow'u
+      // hemen bitir. Done-tail (rapor + sifre + mail) normal yol ile AYNI. Diger flow'lar
+      // asagidaki normal PentAGI yolundan gecer (DEGISMEDI).
+      if (flow.pentagiFlowId.startsWith('deterministic-')) {
+        const { accessSecret } = await generateAndStoreReport(flow.id);
+        await prisma.flow.update({ where: { id: flow.id }, data: { status: 'finished', finishedAt: new Date() } });
+        await prisma.report.update({ where: { orderId: flow.orderId }, data: { devAccessSecret: encryptSecret(accessSecret) } });
+        await sendReportReady(flow.orderId, accessSecret);
+        await recordScheduleOutcome(flow.order.scheduledScanId, true);
+        console.log(`[worker] ${flow.pentagiFlowId} — PentAGI'siz deterministik rapor uretildi (siparis ${flow.orderId}).`);
+        continue;
+      }
+
       const pkg = getPackageDef(flow.order.package.key);
       const prevCount = flow.toolCallCount;
       const toolCallCount = await pentagi.getToolCallCount(flow.pentagiFlowId);

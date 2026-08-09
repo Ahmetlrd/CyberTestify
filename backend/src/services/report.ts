@@ -275,7 +275,13 @@ export async function generateAndStoreReport(flowId: string) {
     include: { order: { include: { domain: true, package: true } } },
   });
 
-  const logs = await pentagi.getFlowLogs(flow.pentagiFlowId);
+  // (PENTAGI'SIZ) Deterministik flow'da (sentinel 'deterministic-', ör. basit_tarama) PentAGI
+  // flow'u YOK -> getFlowLogs cagirma; bulgular zaten backend collector'indan (generateBasitReport)
+  // gelir, ajan loglari kullanilmaz. Bos FlowLogs ver.
+  const noPentagi = flow.pentagiFlowId.startsWith('deterministic-');
+  const logs = noPentagi
+    ? ({ tasks: [], messageLogs: [], screenshots: [] } as pentagi.FlowLogs)
+    : await pentagi.getFlowLogs(flow.pentagiFlowId);
   const locale: Locale = flow.order.locale === 'en' ? 'en' : 'tr';
 
   // (3) Cozum onerilerini bulgulardan AYIR (ayni akista uretildi, ekstra maliyet yok).
@@ -395,9 +401,14 @@ export async function generateAndStoreReport(flowId: string) {
 
   await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scan_completed' } });
 
-  // Ham veriyi PentAGI tarafinda tutmuyoruz — rapor uretildikten hemen sonra sil.
-  await pentagi.purgeFlowRawData(flow.pentagiFlowId);
-  await prisma.flow.update({ where: { id: flow.id }, data: { rawDataPurgedAt: new Date() } });
+  // Ham veriyi PentAGI tarafinda tutmuyoruz — rapor uretildikten hemen sonra sil. (Deterministik
+  // flow'da PentAGI ham verisi YOK -> purge cagirma; sadece damgayi at.)
+  if (noPentagi) {
+    await prisma.flow.update({ where: { id: flow.id }, data: { rawDataPurgedAt: new Date() } });
+  } else {
+    await pentagi.purgeFlowRawData(flow.pentagiFlowId);
+    await prisma.flow.update({ where: { id: flow.id }, data: { rawDataPurgedAt: new Date() } });
+  }
 
   return { accessSecret };
 }
