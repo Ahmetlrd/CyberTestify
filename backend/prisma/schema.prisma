@@ -67,6 +67,7 @@ enum ScanPackageKey {
   // report/mail). bundle_surface = Dis Yuzey & Yapilandirma (5 uyeyi tek raporda birlestirir).
   bundle_surface
   bundle_compliance // kombine paket (Uyum: KVKK+PCI+ISO, tek-siparis)
+  bundle_recon // kombine paket (Keşif: subdomain+api+cms/cve, tek-siparis)
 }
 
 model Customer {

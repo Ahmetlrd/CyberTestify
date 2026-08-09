@@ -38,7 +38,8 @@ export interface ScanPackageDef {
     | 'authenticated_scan'
     | 'autonomous_pentest'
     | 'bundle_surface' // kombine paket (tek-siparis modeli)
-    | 'bundle_compliance'; // kombine paket (Uyum: KVKK+PCI+ISO, tek-siparis)
+    | 'bundle_compliance' // kombine paket (Uyum: KVKK+PCI+ISO, tek-siparis)
+    | 'bundle_recon'; // kombine paket (Keşif: subdomain+api+cms/cve, tek-siparis)
   displayName: string;
   description: string;
   priceMinorUnit: number; // kurus
@@ -796,6 +797,29 @@ PASSIVE data-collection only for the Compliance bundle (KVKK / PCI-DSS / ISO 270
 The final customer report is generated deterministically by code (no free-form report writing).
 Gather passive evidence for ${host}: TLS, HTTP security headers, cookie flags, exposed files,
 privacy/cookie policy pages, cookie-consent banner, third-party trackers, contact/VERBIS info.
+Use GET/HEAD only; never exploit, never write scripts.
+Target: ${host}
+`.trim(),
+  },
+  {
+    // KOMBINE PAKET (bundle) — Keşif Paketi (Subdomain Takeover + API/Swagger Keşfi + CMS/CVE).
+    // TEK-siparis modeli: rapor generateBundleReconReport ile 3 alani TEK dokumanda birlestirir.
+    // Tamamen KOD-uretimi (PentAGI GEREKSIZ): crt.sh + DoH CNAME + dangling imza; yaygin API
+    // yollari + OpenAPI parse; CMS parmak izi + NVD (CPE) ile BILINEN CVE. available:false.
+    key: 'bundle_recon',
+    displayName: 'Keşif Paketi',
+    description:
+      'Kombine paket: Subdomain Takeover Taraması + API & Swagger Keşfi + CMS & Bilinen CVE Taraması — ' +
+      'saldırı yüzeyinizi tek raporda haritalar. Tamamen pasif keşif (istismar yok).',
+    priceMinorUnit: 449900,
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    available: false,
+    promptTemplate: (host) => `
+PASSIVE reconnaissance only for the Discovery bundle (subdomain takeover / API discovery / CMS-CVE).
+The final customer report is generated deterministically by code (no free-form report writing).
+Gather passive evidence for ${host}: Certificate Transparency subdomains, DNS CNAME records,
+well-known API/Swagger documentation paths, CMS fingerprint (headers/meta/HTML) and version.
 Use GET/HEAD only; never exploit, never write scripts.
 Target: ${host}
 `.trim(),
