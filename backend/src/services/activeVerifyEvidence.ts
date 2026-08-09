@@ -129,65 +129,150 @@ function buildFormBody(ip: InputPoint, injectValue: string): string {
 }
 
 // ======================================================================================
+// ORTAK KESIF (depth-1 hafif crawl) — homepage-only'den daha genis kapsam.
+// Ana sayfa + ayni host'taki ic linkler + kucuk "iyi bilinen path/param" listesi taranir;
+// bulunan TUM input noktalari/ID uc noktalari/formlar birlestirilir. Devre kesici + MIN_DELAY
+// + toplam sayfa ust siniri (sinirsiz crawl YOK). 7 kontrol AYNI crawl'i paylasir (in-flight
+// cache) — hedefe 7 kez degil, TEK kez crawl istegi gider. Bu YALNIZ kapsami buyutur; hicbir
+// istek hedefin durumunu/verisini degistirmez (GET keşif).
+// ======================================================================================
+const CRAWL_MAX_PAGES = 10;        // homepage + ~9 ic sayfa (link havuzundan)
+const CRAWL_HARD_CAP = 16;         // toplam sayfa (link + iyi-bilinen path) mutlak ust siniri
+const CRAWL_ASSET_RE = /\.(css|js|mjs|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|pdf|zip|rar|mp4|webm|webp|avif|json|xml|txt)(\?|$)/i;
+const WELL_KNOWN_PATHS = ['/search?q=cybertestify', '/contact', '/login', '/register', '/api/', '/products?id=1', '/urun?id=1', '/?id=1'];
+
+export type Surface = {
+  ok: boolean;
+  pagesScanned: number;
+  homeHtml: string;
+  homeHeaders: Map<string, string>;
+  inputs: InputPoint[];
+  idEndpoints: Array<{ url: string; idParam: string; idValue: number; kind: 'query' | 'path' }>;
+  uploadForms: Array<{ action: string; fileField: string; otherFields: string[] }>;
+  massAssignForm: { action: string; fields: string[] } | null;
+};
+
+async function crawlSurface(host: string): Promise<Surface> {
+  const empty: Surface = { ok: false, pagesScanned: 0, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null };
+  const home = await collectHttp(host);
+  if (!home.ok) return empty;
+
+  // Ana sayfadaki ayni-host ic linkleri topla (asset/harici/fragment HARIC).
+  const linkSet = new Set<string>();
+  for (const m of home.html.matchAll(/href\s*=\s*["']([^"'#]+)["']/gi)) {
+    const abs = absUrl(m[1].replace(/&amp;/g, '&'), host);
+    if (!abs) continue;
+    try {
+      const u = new URL(abs);
+      if (CRAWL_ASSET_RE.test(u.pathname)) continue;
+      linkSet.add(`${u.origin}${u.pathname}${u.search}`);
+    } catch { /* atla */ }
+  }
+  const targets: string[] = [...linkSet].slice(0, CRAWL_MAX_PAGES - 1);
+  for (const p of WELL_KNOWN_PATHS) { const a = absUrl(p, host); if (a && !targets.includes(a)) targets.push(a); }
+
+  // Sayfalari cek (devre kesici + MIN_DELAY; toplam ust sinir).
+  const ctx = new ProbeCtx();
+  const pages: Array<{ url: string; html: string }> = [{ url: `https://${host}/`, html: home.html }];
+  for (const t of targets) {
+    if (ctx.stopped || pages.length >= CRAWL_HARD_CAP) break;
+    const r = await ctx.fetchOnce(t);
+    if (r && r.status === 200 && r.text.length > 0) pages.push({ url: t, html: r.text });
+  }
+
+  // Tum sayfalardan input/ID/form kesiflerini birlestir (dedup).
+  const inputs: InputPoint[] = []; const seenIn = new Set<string>();
+  const idEndpoints: Surface['idEndpoints'] = []; const seenId = new Set<string>();
+  const uploadForms: Surface['uploadForms'] = []; const seenUp = new Set<string>();
+  let massAssignForm: Surface['massAssignForm'] = null;
+  for (const pg of pages) {
+    for (const ip of discoverInputs(host, pg.html)) { const k = `${ip.method} ${ip.action} ${ip.param}`; if (!seenIn.has(k)) { seenIn.add(k); inputs.push(ip); } }
+    for (const e of discoverIdEndpoints(host, pg.html)) { const k = `${e.kind}:${e.idParam}:${(() => { try { const u = new URL(e.url); return u.origin + u.pathname; } catch { return e.url; } })()}`; if (!seenId.has(k)) { seenId.add(k); idEndpoints.push(e); } }
+    for (const f of discoverUploadForms(host, pg.html)) { const k = `${f.action}:${f.fileField}`; if (!seenUp.has(k)) { seenUp.add(k); uploadForms.push(f); } }
+    if (!massAssignForm) massAssignForm = discoverMassAssignForm(host, pg.html);
+  }
+  return { ok: true, pagesScanned: pages.length, homeHtml: home.html, homeHeaders: home.headers, inputs, idEndpoints, uploadForms, massAssignForm };
+}
+
+// In-flight cache: ayni host icin es zamanli 7 kontrol TEK crawl paylasir.
+const SURFACE_CACHE = new Map<string, { at: number; p: Promise<Surface> }>();
+const SURFACE_TTL_MS = 120_000;
+export function discoverSurface(host: string): Promise<Surface> {
+  const c = SURFACE_CACHE.get(host);
+  if (c && Date.now() - c.at < SURFACE_TTL_MS) return c.p;
+  const p = crawlSurface(host).catch(() => ({ ok: false, pagesScanned: 0, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null } as Surface));
+  SURFACE_CACHE.set(host, { at: Date.now(), p });
+  return p;
+}
+
+// ======================================================================================
 // injection_verify — SQLi (hata + zaman) + XSS (yansima)
 // ======================================================================================
 const SQL_ERROR_RE = /(SQL syntax|mysql_fetch|mysqli|you have an error in your sql|ORA-\d{4,5}|PLS-\d|PostgreSQL.*ERROR|pg_query|SQLite3?::|SQLSTATE\[|Microsoft OLE DB Provider|ODBC SQL Server|Unclosed quotation mark|quoted string not properly terminated|syntax error at or near|Warning: pg_|Warning: mysql)/i;
 
 export type InjFinding = { inputPoint: string; type: 'SQLi' | 'XSS'; technique: 'error-based' | 'time-based' | 'reflection'; evidence: string; severity: 'high' | 'medium' | 'low'; confidence: 'high' | 'medium' | 'low' };
-export type InjEvidence = { ok: boolean; baseUrl: string; inputsFound: number; inputsTested: number; probesSent: number; findings: InjFinding[]; stopped: string | null; notes: string[] };
+export type InjEvidence = { ok: boolean; baseUrl: string; pagesScanned: number; inputsFound: number; inputsTested: number; probesSent: number; payloadsSent: number; findings: InjFinding[]; stopped: string | null; notes: string[] };
+
+// Zararsiz, veri-degistirmeyen SQLi HATA-tetikleyici varyantlari (yalniz response'ta hata imzasi arar).
+const SQLI_ERROR_PAYLOADS = ["'", '"', "' OR '1'='1"];
+// Context-aware zararsiz XSS isaret payload'lari (JS CALISTIRMAZ; yalniz yansima kontrolu).
+const XSS_MARKER = 'cxt9137xmark';
+const XSS_PAYLOADS = [`${XSS_MARKER}"><cxmark>`, `${XSS_MARKER}'><cxmark>`];
+const INJ_MAX_INPUTS = 6;
 
 export async function collectInjectionEvidence(host: string): Promise<InjEvidence> {
-  const home = await collectHttp(host);
-  if (!home.ok) return { ok: false, baseUrl: `https://${host}/`, inputsFound: 0, inputsTested: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'] };
-  const inputs = discoverInputs(host, home.html);
+  const surf = await discoverSurface(host);
+  if (!surf.ok) return { ok: false, baseUrl: `https://${host}/`, pagesScanned: 0, inputsFound: 0, inputsTested: 0, probesSent: 0, payloadsSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'] };
+  const inputs = surf.inputs.slice(0, INJ_MAX_INPUTS);
   const ctx = new ProbeCtx();
   const findings: InjFinding[] = [];
   const notes: string[] = [];
   let tested = 0;
+  let payloads = 0;
 
-  // Baseline (temiz istek) — devre kesici + zaman-tabanli karsilastirma icin.
   const base = await ctx.fetchOnce(`https://${host}/`);
   if (base) ctx.baseline = base.ms;
-
-  const XSS_MARKER = 'cxt9137xmark'; // benzersiz, zararsiz; JS calistirmaz
-  const XSS_PAYLOAD = `${XSS_MARKER}"><cxmark>`;
+  const send = async (ip: InputPoint, val: string, expectSlow = false): Promise<ProbeResult | null> =>
+    ip.method === 'GET'
+      ? ctx.fetchOnce(buildGetUrl(ip, val), { expectSlow })
+      : ctx.fetchOnce(ip.action, { method: 'POST', body: buildFormBody(ip, val), contentType: 'application/x-www-form-urlencoded', expectSlow });
 
   for (const ip of inputs) {
     if (ctx.stopped) break;
     tested++;
     const label = `${ip.method} ${new URL(ip.action).pathname}?${ip.param}`;
 
-    // --- Probe 1: SQLi hata-tabanli (tek tirnak) ---
-    const q = "'";
-    let r: ProbeResult | null;
-    if (ip.method === 'GET') r = await ctx.fetchOnce(buildGetUrl(ip, q));
-    else r = await ctx.fetchOnce(ip.action, { method: 'POST', body: buildFormBody(ip, q), contentType: 'application/x-www-form-urlencoded' });
+    // --- SQLi hata-tabanli: birkac zararsiz varyant; ilk hata imzasinda dur ---
     let sqlErrorFound = false;
-    if (r && SQL_ERROR_RE.test(r.text)) {
-      sqlErrorFound = true;
-      const sig = r.text.match(SQL_ERROR_RE)?.[0] ?? 'SQL hata imzası';
-      findings.push({ inputPoint: label, type: 'SQLi', technique: 'error-based', evidence: `Yanıtta veritabanı hata imzası görüldü: "${sig.slice(0, 60)}"`, severity: 'high', confidence: 'high' });
-    }
-
-    // --- Probe 2: XSS yansima (benzersiz isaret) ---
-    if (!ctx.stopped) {
-      let xr: ProbeResult | null;
-      if (ip.method === 'GET') xr = await ctx.fetchOnce(buildGetUrl(ip, XSS_PAYLOAD));
-      else xr = await ctx.fetchOnce(ip.action, { method: 'POST', body: buildFormBody(ip, XSS_PAYLOAD), contentType: 'application/x-www-form-urlencoded' });
-      if (xr && xr.text.includes(`${XSS_MARKER}"><cxmark>`)) {
-        findings.push({ inputPoint: label, type: 'XSS', technique: 'reflection', evidence: 'Zararsız işaret dizesi yanıt HTML’inde KAÇIRILMADAN (unencoded) yansıdı — yansıyan XSS göstergesi.', severity: 'high', confidence: 'high' });
-      } else if (xr && xr.text.includes(XSS_MARKER)) {
-        findings.push({ inputPoint: label, type: 'XSS', technique: 'reflection', evidence: 'İşaret dizesi yansıdı ancak kodlanmış/kısmen kaçırılmış görünüyor — bağlama göre risk; manuel doğrulama önerilir.', severity: 'low', confidence: 'low' });
+    for (const q of SQLI_ERROR_PAYLOADS) {
+      if (ctx.stopped || sqlErrorFound) break;
+      payloads++;
+      const r = await send(ip, q);
+      if (r && SQL_ERROR_RE.test(r.text)) {
+        sqlErrorFound = true;
+        const sig = r.text.match(SQL_ERROR_RE)?.[0] ?? 'SQL hata imzası';
+        findings.push({ inputPoint: label, type: 'SQLi', technique: 'error-based', evidence: `Yanıtta veritabanı hata imzası görüldü ("${q}" payload'ı ile): "${sig.slice(0, 60)}"`, severity: 'high', confidence: 'high' });
       }
     }
 
-    // --- Probe 3 (KOSULLU): SQLi zaman-tabanli — hata bulunmadiysa blind dogrulama ---
+    // --- XSS yansima: birkac context marker ---
+    for (const xp of XSS_PAYLOADS) {
+      if (ctx.stopped) break;
+      payloads++;
+      const xr = await send(ip, xp);
+      if (xr && xr.text.includes(xp)) {
+        findings.push({ inputPoint: label, type: 'XSS', technique: 'reflection', evidence: 'Zararsız işaret dizesi yanıt HTML’inde KAÇIRILMADAN (unencoded) yansıdı — yansıyan XSS göstergesi.', severity: 'high', confidence: 'high' });
+        break;
+      } else if (xr && xr.text.includes(XSS_MARKER)) {
+        findings.push({ inputPoint: label, type: 'XSS', technique: 'reflection', evidence: 'İşaret dizesi yansıdı ancak kodlanmış/kısmen kaçırılmış görünüyor — bağlama göre risk; manuel doğrulama önerilir.', severity: 'low', confidence: 'low' });
+        break;
+      }
+    }
+
+    // --- SQLi zaman-tabanli (KOSULLU): hata bulunmadiysa blind dogrulama ---
     if (!sqlErrorFound && !ctx.stopped) {
-      const payload = `1' AND SLEEP(${TIME_PROBE_DELAY_S})-- -`;
-      let tr: ProbeResult | null;
-      if (ip.method === 'GET') tr = await ctx.fetchOnce(buildGetUrl(ip, payload), { expectSlow: true });
-      else tr = await ctx.fetchOnce(ip.action, { method: 'POST', body: buildFormBody(ip, payload), contentType: 'application/x-www-form-urlencoded', expectSlow: true });
-      // Kanit: gecikme ~ SLEEP suresi kadar (baseline + ~3s). Yanlis-pozitif riski: agir sayfa.
+      payloads++;
+      const tr = await send(ip, `1' AND SLEEP(${TIME_PROBE_DELAY_S})-- -`, true);
       if (tr && tr.status > 0 && tr.ms >= (ctx.baseline + (TIME_PROBE_DELAY_S * 1000) - 700)) {
         findings.push({ inputPoint: label, type: 'SQLi', technique: 'time-based', evidence: `Zaman-tabanlı probe (SLEEP ${TIME_PROBE_DELAY_S}s) yanıt süresini ~${(tr.ms / 1000).toFixed(1)}s'ye çıkardı (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — blind SQLi göstergesi.`, severity: 'high', confidence: 'medium' });
       }
@@ -195,15 +280,16 @@ export async function collectInjectionEvidence(host: string): Promise<InjEvidenc
   }
 
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!inputs.length) notes.push('Ana sayfada test edilebilir GET parametresi veya form alanı bulunamadı (giriş noktası yok).');
-  return { ok: true, baseUrl: `https://${host}/`, inputsFound: inputs.length, inputsTested: tested, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+  if (!inputs.length) notes.push(`Taranan ${surf.pagesScanned} sayfada test edilebilir GET parametresi veya form alanı bulunamadı (giriş noktası yok).`);
+  return { ok: true, baseUrl: `https://${host}/`, pagesScanned: surf.pagesScanned, inputsFound: inputs.length, inputsTested: tested, probesSent: ctx.sent, payloadsSent: payloads, findings, stopped: ctx.stopped, notes };
 }
 
 // ======================================================================================
 // idor_verify — kimlik-dogrulamasiz numaralandirilabilir kaynak (sinirli kapsam)
 // ======================================================================================
 export type IdorFinding = { endpoint: string; idParam: string; observation: string; differentResource: boolean; severity: 'high' | 'medium' | 'low' };
-export type IdorEvidence = { ok: boolean; candidates: number; endpointsTested: number; probesSent: number; findings: IdorFinding[]; stopped: string | null; notes: string[] };
+export type IdorEvidence = { ok: boolean; pagesScanned: number; candidates: number; endpointsTested: number; probesSent: number; findings: IdorFinding[]; stopped: string | null; notes: string[] };
+const IDOR_MAX = 8;
 
 // Ana sayfa HTML'inden sayisal/predictable ID iceren URL adaylarini bul.
 function discoverIdEndpoints(host: string, html: string): Array<{ url: string; idParam: string; idValue: number; kind: 'query' | 'path' }> {
@@ -244,9 +330,9 @@ function looksLikeNotFound(status: number, text: string): boolean {
 }
 
 export async function collectIdorEvidence(host: string): Promise<IdorEvidence> {
-  const home = await collectHttp(host);
-  if (!home.ok) return { ok: false, candidates: 0, endpointsTested: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'] };
-  const eps = discoverIdEndpoints(host, home.html);
+  const surf = await discoverSurface(host);
+  if (!surf.ok) return { ok: false, pagesScanned: 0, candidates: 0, endpointsTested: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'] };
+  const eps = surf.idEndpoints.slice(0, IDOR_MAX);
   const ctx = new ProbeCtx();
   const findings: IdorFinding[] = [];
   const notes: string[] = [];
@@ -279,8 +365,8 @@ export async function collectIdorEvidence(host: string): Promise<IdorEvidence> {
   }
 
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!eps.length) notes.push('Ana sayfada sayısal/tahmin-edilebilir ID içeren bir uç nokta (ör. `?id=123`, `/user/45`) bulunamadı.');
-  return { ok: true, candidates: eps.length, endpointsTested: tested, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+  if (!eps.length) notes.push(`Taranan ${surf.pagesScanned} sayfada sayısal/tahmin-edilebilir ID içeren bir uç nokta (ör. \`?id=123\`, \`/user/45\`) bulunamadı.`);
+  return { ok: true, pagesScanned: surf.pagesScanned, candidates: eps.length, endpointsTested: tested, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }
 
 // ======================================================================================
@@ -293,7 +379,7 @@ export type VFinding = {
   evidence: string; confidence: 'high' | 'medium' | 'low'; severity: 'high' | 'medium' | 'low';
   sideEffectRisk: SideEffectRisk;
 };
-export type ActiveCheckEvidence = { ok: boolean; inputsFound: number; probesSent: number; findings: VFinding[]; stopped: string | null; notes: string[] };
+export type ActiveCheckEvidence = { ok: boolean; pagesScanned: number; inputsFound: number; probesSent: number; findings: VFinding[]; stopped: string | null; notes: string[] };
 
 const OOB_ECHO_BASE = (process.env.PUBLIC_API_URL ?? 'https://api.cybertestify.com').replace(/\/$/, '');
 const OOB_ECHO_HOST = (() => { try { return new URL(OOB_ECHO_BASE).hostname.toLowerCase(); } catch { return 'api.cybertestify.com'; } })();
@@ -322,9 +408,9 @@ function isInternalHost(hostname: string): boolean {
 const FETCH_PARAM_RE = /(^|_)(url|uri|link|webhook|callback|image|img|src|source|dest|destination|redirect|redir|feed|proxy|fetch|load|domain|site|target|host|page|ref|next|return|continue|file|path|preview|thumb|avatar|logo)$/i;
 
 export async function collectSsrfEvidence(host: string): Promise<ActiveCheckEvidence> {
-  const home = await collectHttp(host);
-  if (!home.ok) return { ok: false, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
-  const inputs = discoverInputs(host, home.html).filter((ip) => FETCH_PARAM_RE.test(ip.param)).slice(0, 3);
+  const surf = await discoverSurface(host);
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  const inputs = surf.inputs.filter((ip) => FETCH_PARAM_RE.test(ip.param)).slice(0, 5);
   const ctx = new ProbeCtx();
   const findings: VFinding[] = [];
   const notes: string[] = [];
@@ -347,8 +433,8 @@ export async function collectSsrfEvidence(host: string): Promise<ActiveCheckEvid
     }
   }
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!inputs.length) notes.push('Sunucu-taraflı fetch tetikleyebilecek bir parametre (url/webhook/image vb.) bulunamadı.');
-  return { ok: true, inputsFound: inputs.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+  if (!inputs.length) notes.push(`Taranan ${surf.pagesScanned} sayfada sunucu-taraflı fetch tetikleyebilecek bir parametre (url/webhook/image vb.) bulunamadı.`);
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: inputs.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }
 
 // ======================================================================================
@@ -358,9 +444,9 @@ export async function collectSsrfEvidence(host: string): Promise<ActiveCheckEvid
 const RCE_SLEEP_PAYLOADS = [`; sleep ${SLEEP_S} #`, `| sleep ${SLEEP_S}`, `$(sleep ${SLEEP_S})`, `\`sleep ${SLEEP_S}\``];
 
 export async function collectRceEvidence(host: string): Promise<ActiveCheckEvidence> {
-  const home = await collectHttp(host);
-  if (!home.ok) return { ok: false, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
-  const inputs = discoverInputs(host, home.html).slice(0, 3);
+  const surf = await discoverSurface(host);
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  const inputs = surf.inputs.slice(0, 4);
   const ctx = new ProbeCtx();
   const findings: VFinding[] = [];
   const notes: string[] = [];
@@ -371,7 +457,7 @@ export async function collectRceEvidence(host: string): Promise<ActiveCheckEvide
     if (ctx.stopped) break;
     const label = `${ip.method} ${new URL(ip.action).pathname}?${ip.param}`;
     let hit = false;
-    for (const payload of RCE_SLEEP_PAYLOADS.slice(0, 2)) { // input basina en fazla 2 deneme, retry YOK
+    for (const payload of RCE_SLEEP_PAYLOADS.slice(0, 3)) { // input basina en fazla 3 zaman-tabanli deneme, retry YOK
       if (ctx.stopped || hit) break;
       const val = `1${payload}`;
       const r = ip.method === 'GET'
@@ -384,8 +470,8 @@ export async function collectRceEvidence(host: string): Promise<ActiveCheckEvide
     }
   }
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!inputs.length) notes.push('Komuta ulaşabilecek bir giriş parametresi bulunamadı.');
-  return { ok: true, inputsFound: inputs.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+  if (!inputs.length) notes.push(`Taranan ${surf.pagesScanned} sayfada komuta ulaşabilecek bir giriş parametresi bulunamadı.`);
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: inputs.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }
 
 // ======================================================================================
@@ -417,9 +503,9 @@ function buildMultipart(fileField: string, filename: string, fileType: string, f
 const UPLOAD_REJECT_RE = /(not allowed|invalid file|unsupported|desteklenmeyen|geçersiz dosya|izin veril|reddedild|file type|yalnızca|only .* allowed|hata|error)/i;
 
 export async function collectFileUploadEvidence(host: string): Promise<ActiveCheckEvidence> {
-  const home = await collectHttp(host);
-  if (!home.ok) return { ok: false, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
-  const forms = discoverUploadForms(host, home.html);
+  const surf = await discoverSurface(host);
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  const forms = surf.uploadForms.slice(0, 3);
   const ctx = new ProbeCtx();
   const findings: VFinding[] = [];
   const notes: string[] = [];
@@ -439,8 +525,8 @@ export async function collectFileUploadEvidence(host: string): Promise<ActiveChe
     }
   }
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!forms.length) notes.push('Ana sayfada dosya yükleme formu (input type=file) bulunamadı.');
-  return { ok: true, inputsFound: forms.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+  if (!forms.length) notes.push(`Taranan ${surf.pagesScanned} sayfada dosya yükleme formu (input type=file) bulunamadı.`);
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: forms.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }
 
 // ======================================================================================
@@ -451,9 +537,9 @@ const STEP_SKIP_RE = /\/(success|completed?|confirm(ation)?|thank[-_]?you|tesekk
 const PRICE_FIELD_RE = /name=["'](price|amount|total|cost|fiyat|tutar|qty|quantity|adet|miktar|discount|indirim)["']/i;
 
 export async function collectBusinessLogicEvidence(host: string): Promise<ActiveCheckEvidence> {
-  const home = await collectHttp(host);
-  if (!home.ok) return { ok: false, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
-  const html = home.html;
+  const surf = await discoverSurface(host);
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  const html = surf.homeHtml;
   const ctx = new ProbeCtx();
   const findings: VFinding[] = [];
   const notes: string[] = [];
@@ -464,12 +550,14 @@ export async function collectBusinessLogicEvidence(host: string): Promise<Active
     findings.push({ check: 'business_logic', inputPoint: 'form (hidden price/qty)', vulnerable: true, technique: 'observation (client-controllable amount)', evidence: 'Formda gizli (hidden) bir fiyat/miktar alanı gözlemlendi. Bu alan istemci tarafında değiştirilebilir; sunucu-taraflı fiyat/miktar doğrulaması yapılmıyorsa fiyat manipülasyonu riski oluşur (kesin doğrulama kimlik-doğrulamalı manuel test gerektirir).', confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
   }
 
-  // (b) Adim-atlama: success/confirm sayfalarina DOGRUDAN GET (yalniz GET; tamamlama YOK)
+  // (b) Adim-atlama: success/confirm sayfalarina DOGRUDAN GET (yalniz GET; tamamlama YOK).
+  // Linkler TUM taranan sayfalardan toplanir (surf.inputs degil, tum sayfalarin href'leri).
   const links = new Set<string>();
   for (const m of html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)) { const abs = absUrl(m[1].replace(/&amp;/g, '&'), host); if (abs && STEP_SKIP_RE.test(abs)) links.add(abs); }
+  for (const e of surf.idEndpoints) { if (STEP_SKIP_RE.test(e.url)) links.add(e.url); }
   const base = await ctx.fetchOnce(`https://${host}/`);
   if (base) ctx.baseline = base.ms;
-  for (const url of [...links].slice(0, 2)) {
+  for (const url of [...links].slice(0, 4)) {
     if (ctx.stopped) break;
     const r = await ctx.fetchOnce(url); // GET — state degistirmez
     if (r && r.status === 200 && !/oturum|login|giriş yap|unauthorized|403|yetkisiz/i.test(r.text.slice(0, 2000))) {
@@ -477,8 +565,8 @@ export async function collectBusinessLogicEvidence(host: string): Promise<Active
     }
   }
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!findings.length) notes.push('Gözlemlenebilir bir istemci-tarafı fiyat/miktar alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.');
-  return { ok: true, inputsFound: (hiddenPrice ? 1 : 0) + links.size, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+  if (!findings.length) notes.push(`Taranan ${surf.pagesScanned} sayfada gözlemlenebilir bir istemci-tarafı fiyat/miktar alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.`);
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: (hiddenPrice ? 1 : 0) + links.size, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }
 
 // ======================================================================================
@@ -504,9 +592,9 @@ function discoverMassAssignForm(host: string, html: string): { action: string; f
 }
 
 export async function collectRaceMassAssignEvidence(host: string): Promise<ActiveCheckEvidence> {
-  const home = await collectHttp(host);
-  if (!home.ok) return { ok: false, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
-  const form = discoverMassAssignForm(host, home.html);
+  const surf = await discoverSurface(host);
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  const form = surf.massAssignForm;
   const ctx = new ProbeCtx();
   const findings: VFinding[] = [];
   const notes: string[] = [];
@@ -530,6 +618,6 @@ export async function collectRaceMassAssignEvidence(host: string): Promise<Activ
   // Race yüzeyi — otomatik yıkıcı paralel yazma YAPILMAZ (güvenlik); not olarak belirtilir.
   notes.push('Race-condition (eşzamanlılık) testi, tüketilebilir bir kaynağı (kupon/stok) gerçekten değiştirme riski taşıdığından bu otomatik taramada **çalıştırılmadı**; güvenli/test edilebilir bir uç nokta ile manuel doğrulama önerilir.');
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!form) notes.push('Mass-assignment için uygun (tamamlama/ödeme dışı) kayıt/profil formu bulunamadı.');
-  return { ok: true, inputsFound: form ? 1 : 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+  if (!form) notes.push(`Taranan ${surf.pagesScanned} sayfada mass-assignment için uygun (tamamlama/ödeme dışı) kayıt/profil formu bulunamadı.`);
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: form ? 1 : 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }
