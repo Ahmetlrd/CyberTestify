@@ -66,6 +66,7 @@ enum ScanPackageKey {
   // Kombine paket (bundle) TEK-siparis modeli: bundle bir "paket" gibi davranir (1 order/flow/
   // report/mail). bundle_surface = Dis Yuzey & Yapilandirma (5 uyeyi tek raporda birlestirir).
   bundle_surface
+  bundle_compliance // kombine paket (Uyum: KVKK+PCI+ISO, tek-siparis)
 }
 
 model Customer {

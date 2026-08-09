@@ -37,7 +37,8 @@ export interface ScanPackageDef {
     | 'rce_verify'
     | 'authenticated_scan'
     | 'autonomous_pentest'
-    | 'bundle_surface'; // kombine paket (tek-siparis modeli)
+    | 'bundle_surface' // kombine paket (tek-siparis modeli)
+    | 'bundle_compliance'; // kombine paket (Uyum: KVKK+PCI+ISO, tek-siparis)
   displayName: string;
   description: string;
   priceMinorUnit: number; // kurus
@@ -774,6 +775,28 @@ generated deterministically by code (no free-form report writing needed). Gather
 evidence for ${host}: HTTP security headers, TLS certificate/protocol, DNS/email
 (SPF/DMARC/DKIM/DNSSEC), CORS and CSP. Use GET/HEAD/OPTIONS and read-only DNS only; never
 exploit, never write scripts.
+Target: ${host}
+`.trim(),
+  },
+  {
+    // KOMBINE PAKET (bundle) — Uyum Paketi (KVKK + PCI-DSS + ISO 27001 hazirlik). TEK-siparis
+    // modeli: rapor generateBundleComplianceReport ile 3 cerceveyi TEK dokumanda birlestirir.
+    // Tamamen KOD-uretimi (PentAGI GEREKSIZ). available:false + listPackages bundle_ filtresi.
+    key: 'bundle_compliance',
+    displayName: 'Uyum Paketi',
+    description:
+      'Kombine paket: KVKK Ön Uyum + PCI-DSS Hazırlık + ISO 27001 Hazırlık — dışarıdan gözlemlenebilir ' +
+      'göstergeleri ilgili ilke/maddelerle eşler (resmî uyum/sertifikasyon beyanı değildir). Tamamen pasif.',
+    priceMinorUnit: 799900,
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    available: false,
+    promptTemplate: (host) => `
+PASSIVE data-collection only for the Compliance bundle (KVKK / PCI-DSS / ISO 27001 readiness).
+The final customer report is generated deterministically by code (no free-form report writing).
+Gather passive evidence for ${host}: TLS, HTTP security headers, cookie flags, exposed files,
+privacy/cookie policy pages, cookie-consent banner, third-party trackers, contact/VERBIS info.
+Use GET/HEAD only; never exploit, never write scripts.
 Target: ${host}
 `.trim(),
   },

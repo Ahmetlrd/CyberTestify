@@ -10,6 +10,7 @@ import {
   generateSslTlsReport, generateHeaderLeakReport, generateDnsEmailReport,
   generateCorsCookieReport, generateCspReport, generateBundleSurfaceReport,
 } from './surfaceReports.js';
+import { generateBundleComplianceReport } from './complianceReports.js';
 
 // Deterministik (kod-yazimi) rapor ureten paketler: key -> uretici(hostname).
 // Hepsi { findings, fixText } | null doner (null -> ajan/ham-kanit fallback).
@@ -21,6 +22,7 @@ const DETERMINISTIC_GENERATORS: Record<string, ((host: string) => Promise<{ find
   cors_cookie: generateCorsCookieReport,
   csp_analiz: generateCspReport,
   bundle_surface: generateBundleSurfaceReport, // kombine paket -> 5 alan TEK raporda
+  bundle_compliance: generateBundleComplianceReport, // kombine paket -> KVKK+PCI+ISO TEK raporda
 };
 
 // Rapor TAMAMEN koddan uretilen (backend collector'lari) paketler -> PentAGI ajani/sandbox'i

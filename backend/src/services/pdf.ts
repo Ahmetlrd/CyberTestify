@@ -231,7 +231,9 @@ const LOGO_SVG = `
 </svg>`.trim();
 
 // Deterministik (kod-yazimi) rapor ureten paketler — rozet acik "Risk Seviyesi"den okunur.
-const DETERMINISTIC_PDF_PKGS = new Set(['basit_tarama', 'ssl_tls', 'header_leak', 'dns_email', 'cors_cookie', 'csp_analiz', 'bundle_surface']);
+const DETERMINISTIC_PDF_PKGS = new Set(['basit_tarama', 'ssl_tls', 'header_leak', 'dns_email', 'cors_cookie', 'csp_analiz', 'bundle_surface', 'bundle_compliance']);
+// Birlesik bundle raporlari: ust kutu cumlesi = GENEL DEĞERLENDİRME govde cumlesi (worst-case alana ozgu).
+const BUNDLE_COMBINED_PKGS = new Set(['bundle_surface', 'bundle_compliance']);
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
@@ -289,7 +291,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     // ozgu, koddan uretilen) — sabit/gelisiguzel "ör. sertifika/hostname" ornegi YERINE gercek
     // bulgu. Boylece kutu <-> YÖNETİCİ ÖZETİ/GENEL DEĞERLENDİRME HER ZAMAN tutarli. (Yalniz
     // bundle_surface; basit_tarama ve digerleri DEGISMEZ.)
-    if (meta.packageKey === 'bundle_surface') {
+    if (BUNDLE_COMBINED_PKGS.has(meta.packageKey ?? '')) {
       const g = effectiveMd.match(/##\s*GENEL DEĞERLENDİRME\s*\n+\*\*Risk Seviyesi:[^\n]*\*\*\s*\n+([^\n]+)/);
       if (g) risk.sentence = g[1].trim().replace(/\*\*/g, ''); // kutu duz metin — markdown ** temizle
     }

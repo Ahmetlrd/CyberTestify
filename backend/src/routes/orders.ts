@@ -15,7 +15,7 @@ import { enqueueOrStartScan } from '../services/orchestrator.js';
 import { sendOrderConfirmation } from '../services/mailer.js';
 import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
-import { COMBO_BUNDLES, getBundle, bundlePrice, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
+import { COMBO_BUNDLES, getBundle, bundlePrice, bundleMemberAmounts, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -491,43 +491,86 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
   };
   const cust = await prisma.customer.findUniqueOrThrow({ where: { id: req.customerId! }, select: { fullName: true, email: true } });
 
-  // TEK-SIPARIS MODELI: bundle bir "paket" (bundle_surface ScanPackage satiri) gibi davranir —
-  // 5 ayri Order YERINE TEK Order olusur. Boylece 1 Flow / 1 Report / 1 sifre / 1 kilit ve
-  // TEK 'tarama basladi' + TEK 'rapor hazir' maili. Uye anahtarlari yalniz fiyat/riza/rapor
-  // ICERIGI icin kullanilir; birlesik raporu generateBundleSurfaceReport uretir. Odeme (iyzico
-  // token) mekanizmasi DEGISMEDI — sadece 1 order uzerinde calisir (regresyon yok).
+  // SATIS MODELI (iki yol):
+  //  (1) KAYITLI bundle (ScanPackage satiri var: bundle_surface, bundle_compliance) -> TEK Order
+  //      (birlesik rapor generateBundle*Report). 1 Flow/Report/sifre/kilit + tek mail.
+  //  (2) KAYITSIZ bundle (ör. bundle_recon — henuz tek-rapor'a gecmedi) -> LEGACY coklu-order
+  //      (uye basina 1 order, ajan-yazimi rapor) — eski davranis KORUNUR (regresyon onleme).
+  // Odeme (iyzico token) her iki yolda AYNI: initiateBundlePayment(createdOrderIds) token'i tum
+  // order'lara yazar, callback token ile finalize eder (1 veya N fark etmez).
   const bundlePkgDb = await prisma.scanPackage.findUnique({ where: { key: bundleKey as any } });
-  if (!bundlePkgDb) {
-    console.error(`[bundle] ScanPackage satiri yok: ${bundleKey} — migration/seed eksik.`);
-    return res.status(500).json({ error: 'Paket yapılandırması eksik; lütfen destek ile iletişime geçin.' });
-  }
-  const order = await prisma.order.create({
-    data: {
-      customerId: req.customerId!,
-      domainId: domain.id,
-      packageId: bundlePkgDb.id,
-      amountMinorUnit: price.amountMinorUnit, // NIHAI bundle tutari (tek order == iyzico tutari)
-      currency: price.currency,
-      status: promoFree ? 'paid' : 'awaiting_payment',
-      paymentProvider: promoFree ? 'promo' : 'bundle-placeholder',
-      paidAt: promoFree ? new Date() : null,
-      locale: localeFor(region),
-      byokKeyEncrypted: hasAuthScan ? encryptSecret(JSON.stringify(parsed.data.authCredentials)) : null,
-      ...consent,
-    },
-  });
-  const createdOrderIds: string[] = [order.id];
-  // Tek yetkilendirme beyani (bundle active-light uye iceriyorsa) TEK order'a baglanir.
-  if (anyActiveLight) {
-    await prisma.activeTestConsent.create({
+  let createdOrderIds: string[];
+  if (bundlePkgDb) {
+    // --- (1) TEK ORDER ---
+    const order = await prisma.order.create({
       data: {
-        customerId: req.customerId!, orderId: order.id, packageKey: bundleKey as any,
-        legalName: cust.fullName?.trim() || cust.email, companyName: null,
-        riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
+        customerId: req.customerId!,
+        domainId: domain.id,
+        packageId: bundlePkgDb.id,
+        amountMinorUnit: price.amountMinorUnit, // NIHAI bundle tutari (tek order == iyzico tutari)
+        currency: price.currency,
+        status: promoFree ? 'paid' : 'awaiting_payment',
+        paymentProvider: promoFree ? 'promo' : 'bundle-placeholder',
+        paidAt: promoFree ? new Date() : null,
+        locale: localeFor(region),
+        byokKeyEncrypted: hasAuthScan ? encryptSecret(JSON.stringify(parsed.data.authCredentials)) : null,
+        ...consent,
       },
     });
+    createdOrderIds = [order.id];
+    if (anyActiveLight) {
+      await prisma.activeTestConsent.create({
+        data: {
+          customerId: req.customerId!, orderId: order.id, packageKey: bundleKey as any,
+          legalName: cust.fullName?.trim() || cust.email, companyName: null,
+          riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
+        },
+      });
+    }
+    if (promoFree) await enqueueOrStartScan(order.id);
+  } else {
+    // --- (2) LEGACY COKLU-ORDER (uye basina) — henuz tek-rapor'a gecmemis bundle'lar icin ---
+    const memberAmountMap = new Map(
+      bundleMemberAmounts(bundle, region, parsed.data.selectedModules).map((m) => [m.key, m.amountMinorUnit]),
+    );
+    const perMemberAmount = (k: string) => memberAmountMap.get(k) ?? 0;
+    const packageDbs = await prisma.scanPackage.findMany({ where: { key: { in: memberKeys as any } } });
+    const dbByKey = new Map(packageDbs.map((p) => [p.key, p]));
+    createdOrderIds = [];
+    for (const { key, profile } of memberDefs) {
+      const packageDb = dbByKey.get(key as any);
+      if (!packageDb) continue;
+      const isAL = profile === 'active-light' || profile === 'active-verify-only';
+      const { currency } = getPricing(key, region);
+      const order = await prisma.order.create({
+        data: {
+          customerId: req.customerId!,
+          domainId: domain.id,
+          packageId: packageDb.id,
+          amountMinorUnit: perMemberAmount(key),
+          currency,
+          status: promoFree ? 'paid' : 'awaiting_payment',
+          paymentProvider: promoFree ? 'promo' : 'bundle-placeholder',
+          paidAt: promoFree ? new Date() : null,
+          locale: localeFor(region),
+          byokKeyEncrypted: key === 'authenticated_scan' ? encryptSecret(JSON.stringify(parsed.data.authCredentials)) : null,
+          ...consent,
+        },
+      });
+      createdOrderIds.push(order.id);
+      if (isAL) {
+        await prisma.activeTestConsent.create({
+          data: {
+            customerId: req.customerId!, orderId: order.id, packageKey: key as any,
+            legalName: cust.fullName?.trim() || cust.email, companyName: null,
+            riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
+          },
+        });
+      }
+      if (promoFree) await enqueueOrStartScan(order.id);
+    }
+    if (!createdOrderIds.length) return res.status(400).json({ error: 'Bu paket icin gecerli uye bulunamadi.' });
   }
-  if (promoFree) await enqueueOrStartScan(order.id); // %100 promo: hemen kuyruga (concurrency=1)
 
   if (promoFree && promoApplied) {
     // Bundle icin TEK kullanim kaydi (ilk uye siparisine bagli).
