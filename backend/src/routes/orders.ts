@@ -96,6 +96,7 @@ ordersRouter.get('/bundles', async (req, res) => {
         discountPct: price.discountPct, // GERCEK indirim (nihai fiyattan turetildi)
         popular: b.popular ?? false,
         comingSoon: b.comingSoon ?? false,
+        contactOnly: b.contactOnly ?? false, // (vitrin) sabit fiyat yok -> "Kuruma özel teklif"
         selectable: !!b.selectable,
         // selectable ise musteri secer; TR disi bolgede trOnly (KVKK) havuzdan ELENIR.
         selectableModules: b.selectable

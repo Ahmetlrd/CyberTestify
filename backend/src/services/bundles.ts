@@ -36,6 +36,11 @@ export interface ComboBundle {
   popular?: boolean;
   /** true ise "Yakında" — listelenir ama satin ALINAMAZ (createBundleOrder reddeder). */
   comingSoon?: boolean;
+  /**
+   * true ise SABIT fiyat YOK; UI "Kuruma özel teklif / İletişime geçin" gosterir (self-servis DEGIL).
+   * Yalniz VITRIN placeholder'i (uyesiz olabilir). comingSoon ile birlikte kullanilir.
+   */
+  contactOnly?: boolean;
   /** Sabit uyeler. */
   memberKeys: string[];
   /** (KULLANIMDAN KALDIRILDI) Onceden Uyum paketi modul secimi; artik tum uyeler sabit dahil. */
@@ -132,6 +137,29 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     finalPriceMinorUnitTr: 2299900, // 22.999 TL (FAZ E — nihai sabit fiyat; üye order tutarları buna bölünür)
     comingSoon: false,              // (FAZ E) LANSMAN
     memberKeys: ['authenticated_scan', 'autonomous_pentest'],
+  },
+  {
+    // (VITRIN — 7. kart) SADECE pazarlama placeholder'i: comingSoon (satin ALINAMAZ) + contactOnly
+    // (sabit fiyat YOK -> "Kuruma özel teklif"). Arka plan mantigi/flow/odeme/scan motoru YOK; uyesiz.
+    // Amac: ileride kurulacak premium, gercek-otonom-PentAGI, yetkili kurumsal hizmeti simdiden vitrine koymak.
+    key: 'bundle_elite_autonomous',
+    displayName: 'Elit Otonom Pentest (Kurumsal)',
+    displayNameEn: 'Elite Autonomous Pentest (Enterprise)',
+    description:
+      'Sitenizin/uygulamanızın tüm güvenlik açıklarını, gerçek bir saldırgandan önce en derin ve kapsamlı şekilde tespit eder ve kanıtlarız — otonom yapay zekâ ajanı (PentAGI) tam kapasiteyle çalışır. ' +
+      '**“Kanıtla, istismar etme” ilkesi:** açıklar kanıtlanır; verileriniz çekilmez, sisteminiz zarar görmez veya kesintiye uğratılmaz. ' +
+      '**Yetkili, insan-onaylı** bir değerlendirmedir: kapsam ve yetkilendirme önceden birlikte belirlenir. ' +
+      '**Fiyatlandırma:** kuruma özel teklif (self-servis değildir).',
+    descriptionEn:
+      'Finds and proves every security weakness across your site/application — the deepest, most comprehensive assessment, before a real attacker does; the autonomous AI agent (PentAGI) runs at full capacity. ' +
+      '**“Prove, don’t exploit” principle:** weaknesses are proven; your data is never extracted and your system is never damaged or disrupted. ' +
+      '**Authorized, human-approved** engagement: scope and authorization are agreed in advance. ' +
+      '**Pricing:** custom enterprise quote (not self-service).',
+    category: 'active-light',
+    discountPct: 0,
+    comingSoon: true,               // VITRIN — satin ALINAMAZ
+    contactOnly: true,              // sabit fiyat yok -> "Kuruma özel teklif"
+    memberKeys: [],                 // uyesiz vitrin karti (arka plan mantigi YOK)
   },
 ];
 

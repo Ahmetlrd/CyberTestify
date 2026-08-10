@@ -9,7 +9,7 @@ type Bundle = {
   key: string; displayName: string; description: string; discountPct: number;
   members: Array<{ key: string; displayName: string }>;
   selectable: boolean; selectableModules: Array<{ key: string; displayName: string }> | null;
-  originalMinorUnit: number; amountMinorUnit: number; currency: string; comingSoon?: boolean; popular?: boolean;
+  originalMinorUnit: number; amountMinorUnit: number; currency: string; comingSoon?: boolean; popular?: boolean; contactOnly?: boolean;
 };
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -194,19 +194,32 @@ export default async function PackagesPage({ params }: { params: { region: strin
                           ? `${(b.selectableModules ?? []).map((m) => m.displayName).join(' / ')}'den istediğinizi seçin`
                           : `pick any of ${(b.selectableModules ?? []).map((m) => m.displayName).join(' / ')}`}
                       </div>
-                    ) : (
+                    ) : b.members.length > 0 ? (
                       <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
                         <span className="font-semibold">{region.code === 'tr' ? 'İçindekiler' : 'Includes'}:</span>{' '}
                         {b.members.map((m) => m.displayName).join(' · ')}
                       </div>
-                    )}
+                    ) : null}
                     <div className="mt-4 flex-1">
                       {b.comingSoon ? (
-                        <p className="text-sm text-ink-soft">
-                          {region.code === 'tr'
-                            ? 'Bu kombine paket yakında açılacak; içindeki kontroller olgunlaştıkça sunulacak.'
-                            : 'This bundle is coming soon; offered as its checks mature.'}
-                        </p>
+                        b.contactOnly ? (
+                          <div>
+                            <span className="text-xl font-extrabold text-ink">
+                              {region.code === 'tr' ? 'Kuruma özel teklif' : 'Custom enterprise quote'}
+                            </span>
+                            <p className="mt-1 text-xs text-ink-soft">
+                              {region.code === 'tr'
+                                ? 'Self-servis değildir; kapsam ve yetkilendirme önceden birlikte belirlenir.'
+                                : 'Not self-service; scope and authorization are agreed in advance.'}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-ink-soft">
+                            {region.code === 'tr'
+                              ? 'Bu kombine paket yakında açılacak; içindeki kontroller olgunlaştıkça sunulacak.'
+                              : 'This bundle is coming soon; offered as its checks mature.'}
+                          </p>
+                        )
                       ) : (
                         <>
                           <div>
