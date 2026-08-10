@@ -1,8 +1,8 @@
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { getPackageDef, securityProfileFor, METHOD_GUARD_EN, METHOD_GUARD_TR, NO_SCRIPT_HARD_EN, NO_SCRIPT_HARD_TR } from './scanPackages.js';
+import { getPackageDef, securityProfileFor, requiresTestCredentials, requiresManualReview, METHOD_GUARD_EN, METHOD_GUARD_TR, NO_SCRIPT_HARD_EN, NO_SCRIPT_HARD_TR } from './scanPackages.js';
 import { hasValidActiveTestConsent } from './activeTestConsent.js';
-import { decryptSecret } from './crypto.js';
+import { consumeTestCredential } from './testCredentials.js';
 import { isVerificationStillValid } from './verification.js';
 import { checkEgressProxyHealth } from './egressHealth.js';
 import * as pentagi from '../pentagi/client.js';
@@ -56,6 +56,22 @@ export async function enqueueOrStartScan(orderId: string) {
   await assertEgressProxyHealthy(orderId);
   const flow = await startScanForOrder(orderId);
   return { queued: false as const, flow };
+}
+
+/**
+ * (Tam Kapsamlı Pentest — FAZ A) Ödeme sonrası akış: paket YARI-MANUEL onay istiyorsa siparişi
+ * 'awaiting_review'da TUT (flow başlamaz — admin onayı bekler); istemiyorsa normal kuyruğa alır.
+ * Ödemenin TÜM yolları (finalizePaidOrder + orders.ts promo/kredi/bundle) bunu çağırır. Admin
+ * onayı (approve) doğrudan enqueueOrStartScan çağırır → kapıyı BİLEREK atlar.
+ */
+export async function enqueueUnlessReview(orderId: string): Promise<void> {
+  const o = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { package: { select: { key: true } } } });
+  if (requiresManualReview(o.package.key)) {
+    await prisma.order.update({ where: { id: orderId }, data: { status: 'awaiting_review' } });
+    console.log(`[review] Sipariş ${orderId} (${o.package.key}) yarı-manuel onay bekliyor (awaiting_review).`);
+    return;
+  }
+  await enqueueOrStartScan(orderId);
 }
 
 /**
@@ -128,28 +144,15 @@ export async function startScanForOrder(orderId: string) {
       ? `\n\nTOOL-CALL BUDGET: You have at most ${budget} tool calls. After about the ${stopAt}th call, STOP all new exploration and START writing the report (findings + '===FIX_SUGGESTIONS===' if any). Never hit the limit with an empty report.`
       : `\n\nARAC CAGRI BUTCESI: En fazla ${budget} arac cagrin var. Yaklasik ${stopAt}. cagridan sonra TUM yeni kesfi DURDUR ve raporu (bulgular + varsa '===FIX_SUGGESTIONS===') YAZMAYA BASLA. Tavana bos raporla carpma.`;
 
-  // (#5) authenticated_scan: sifreli kimlik bilgisini COZ, prompt'a login talimati olarak
-  // ekle (transient — ajanin login olabilmesi icin), sonra plaintext'i DB'den HEMEN SIL.
-  // Kimlik bilgisi ASLA loglanmaz. (LLM, login yapabilmek icin bunu flow suresince gorur —
-  // authenticated tarama dogasi geregi kacinilmaz; bkz HANDOFF.)
-  let credLine = '';
-  if (order.package.key === 'authenticated_scan') {
-    if (!order.byokKeyEncrypted) {
-      await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed' } });
-      throw new Error('authenticated_scan: kimlik bilgisi yok, tarama reddedildi.');
-    }
-    let creds: { username: string; password: string };
-    try {
-      creds = JSON.parse(decryptSecret(order.byokKeyEncrypted));
-    } catch {
-      await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed', byokKeyEncrypted: null } });
-      throw new Error('authenticated_scan: kimlik bilgisi cozulemedi.');
-    }
-    credLine =
-      `\n\nLOGIN INSTRUCTION — use these TEST credentials ONLY against ${order.domain.hostname}; NEVER send them to any other host. ` +
-      `username=${JSON.stringify(creds.username)} password=${JSON.stringify(creds.password)}`;
-    // Plaintext kaynak DB'den derhal silinir (flow'a gecti).
-    await prisma.order.update({ where: { id: orderId }, data: { byokKeyEncrypted: null } });
+  // (Tam Kapsamlı Pentest — FAZ A) KİMLİK BİLGİSİ GÜVENLİĞİ: bu paket bir TEST hesabı istiyorsa,
+  // şifreli kimlik bilgisini burada TÜKET + AYNI ANDA SİL (TestCredential.ciphertext=null). Böylece
+  // flow ilerlemeden önce plaintext kaynak kalmaz.
+  // ⚠️ FAZ A'da ajana kimlik bilgisi GÖNDERİLMEZ (credLine boş kalır) — login otomasyonu FAZ B'nin
+  // işidir; FAZ B backend-deterministik login yapıp ajana yalnız OTURUM TOKEN'ı geçecek (şifre değil),
+  // böylece kimlik bilgisi PentAGI flow log'larına HİÇ ulaşmaz. (bkz credentialRedaction.ts regresyon guard'ı.)
+  const credLine = '';
+  if (requiresTestCredentials(order.package.key)) {
+    await consumeTestCredential(order.id, 'primary').catch(() => null); // çöz+sil (kullanım FAZ B'de)
   }
 
   // (Yontem disiplini) TUM paketlere merkezi olarak eklenir — ajanin script-yazma/

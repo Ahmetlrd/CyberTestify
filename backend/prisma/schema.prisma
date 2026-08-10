@@ -24,6 +24,7 @@ enum DomainVerificationStatus {
 
 enum OrderStatus {
   awaiting_payment
+  awaiting_review  // (Tam Kapsamlı Pentest) ödendi ama YARI-MANUEL onay bekliyor: biz hedef/test hesabı/kapsamı gözden geçirip onaylayınca tarama başlar
   paid
   scan_queued
   scan_running
@@ -128,9 +129,30 @@ model ActiveTestConsent {
   textVersion  String         // kabul edilen onay metninin versiyonu
   consentIp    String?
   pdfDelivered Boolean        @default(false) // onay PDF'i uretildi/gonderildi mi
+  // (Tam Kapsamlı Pentest — FAZ A) kimlik-doğrulamalı/otonom paketler için EK 3 onay (zaman damgası = kabul).
+  credentialSharingAcceptedAt DateTime? // test hesabı kimlik bilgisi şifreli saklanır + LLM (Anthropic/ABD) iletilir + tarama sonrası silinir onayı (KVKK cross-border, ayrı)
+  testAccountDeclaredAt       DateTime? // "üretim/ana hesap değil, sınırlı yetkili, tek-kullanımlık TEST hesabı" beyanı
+  elevatedRiskAcceptedAt      DateTime? // authenticated + otonom testin yükseltilmiş riskini kabul
   createdAt    DateTime       @default(now())
 
   @@index([customerId])
+}
+
+// (Tam Kapsamlı Pentest — FAZ A) Müşterinin verdiği TEST hesabı kimlik bilgileri. SIFRELI saklanır
+// (encryptSecret / AES-256-GCM); orchestrator flow'a geçirip HEMEN siler (purgedAt + ciphertext=null),
+// EK olarak 1 saatlik purge cron güvenlik ağı vardır. Plaintext ASLA DB'de/logda durmaz. label ile
+// ileride ikinci hesap ('secondary', cross-account IDOR) desteklenir; v1 yalnız 'primary' kullanır.
+model TestCredential {
+  id         String    @id @default(uuid())
+  orderId    String
+  order      Order     @relation(fields: [orderId], references: [id])
+  label      String    @default("primary") // 'primary' | 'secondary'
+  ciphertext String?   // encryptSecret çıktısı (base64 iv|tag|ct); silinince null
+  createdAt  DateTime  @default(now())
+  purgedAt   DateTime? // kullanıldığında veya purge cron ile temizlenince damgalanır
+
+  @@unique([orderId, label])
+  @@index([orderId])
 }
 
 // (Is 2) Kredi hareketleri denetim defteri (ledger). Her +/- burada iz birakir;
@@ -255,6 +277,7 @@ model Order {
   flow   Flow?
   report Report?
   activeTestConsent ActiveTestConsent? // (Faz 3) active-light paketlerde zorunlu
+  testCredentials   TestCredential[]   // (Tam Kapsamlı Pentest — FAZ A) şifreli test hesabı kimlik bilgileri
 
   // Bu siparis bir periyodik taramadan otomatik olusturulduysa, kaynak kayit.
   scheduledScanId String?

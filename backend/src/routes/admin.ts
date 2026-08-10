@@ -6,6 +6,8 @@ import { config } from '../config.js';
 import { checkEgressProxyHealth } from '../services/egressHealth.js';
 import { sendRefundNotice } from '../services/mailer.js';
 import { createDraftsFromBulk, listAllAdmin, publishNextDraft } from '../services/blog.js';
+import { enqueueOrStartScan } from '../services/orchestrator.js';
+import { hasTestCredential } from '../services/testCredentials.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,7 +16,7 @@ const execFileAsync = promisify(execFile);
 export const adminRouter = Router();
 
 const ORDER_STATUSES = [
-  'awaiting_payment', 'paid', 'scan_queued', 'scan_running', 'scan_completed',
+  'awaiting_payment', 'awaiting_review', 'paid', 'scan_queued', 'scan_running', 'scan_completed',
   'scan_failed', 'scope_violation', 'report_delivered', 'report_purged', 'refunded',
 ] as const;
 
@@ -105,6 +107,73 @@ adminRouter.post('/orders/:id/refund', async (req, res) => {
   const mailed = await sendRefundNotice(order.id); // mailer no-throw
   console.log(`[admin] Siparis ${order.id} 'refunded' isaretlendi (mail=${mailed}).`);
   res.json({ ok: true, mailed });
+});
+
+// --- (Tam Kapsamlı Pentest — FAZ A) YARI-MANUEL ONAY KAPISI -------------------
+// Kimlik-doğrulamalı/otonom paketler ödendikten sonra 'awaiting_review'da bekler. Bu uçlar
+// SADECE bizim (admin) kullanımımız içindir (requireAdmin + IP allowlist arkasında). ŞİFRE
+// HİÇBİR ZAMAN gösterilmez — yalnız "kimlik bilgisi sağlandı mı" (varlık) bilgisi.
+adminRouter.get('/reviews', async (_req, res) => {
+  const orders = await prisma.order.findMany({
+    where: { status: 'awaiting_review' },
+    orderBy: { paidAt: 'asc' },
+    include: {
+      customer: { select: { email: true } },
+      domain: { select: { hostname: true } },
+      package: { select: { key: true, displayName: true } },
+      activeTestConsent: {
+        select: { credentialSharingAcceptedAt: true, testAccountDeclaredAt: true, elevatedRiskAcceptedAt: true, textVersion: true },
+      },
+    },
+  });
+  const items = await Promise.all(orders.map(async (o) => ({
+    orderId: o.id,
+    hostname: o.domain.hostname,
+    packageKey: o.package.key,
+    packageName: o.package.displayName,
+    customerEmail: o.customer.email,
+    paidAt: o.paidAt,
+    amountMinorUnit: o.amountMinorUnit,
+    currency: o.currency,
+    // ŞİFRE GÖSTERİLMEZ — yalnız varlık.
+    credentialProvided: await hasTestCredential(o.id, 'primary'),
+    consents: {
+      credentialSharing: !!o.activeTestConsent?.credentialSharingAcceptedAt,
+      testAccountDeclared: !!o.activeTestConsent?.testAccountDeclaredAt,
+      elevatedRisk: !!o.activeTestConsent?.elevatedRiskAcceptedAt,
+      version: o.activeTestConsent?.textVersion ?? null,
+    },
+  })));
+  res.json({ total: items.length, items });
+});
+
+// Onayla: kapıyı BİLEREK atlayıp taramayı başlat (concurrency=1; bkz orchestrator).
+adminRouter.post('/reviews/:id/approve', async (req, res) => {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, select: { id: true, status: true } });
+  if (!order) return res.status(404).json({ error: 'Siparis bulunamadi.' });
+  if (order.status !== 'awaiting_review') {
+    return res.status(409).json({ error: `Siparis 'awaiting_review' degil (mevcut: ${order.status}).` });
+  }
+  // Gate bypass: doğrudan enqueueOrStartScan (enqueueUnlessReview DEĞİL — onay verildi).
+  await prisma.order.update({ where: { id: order.id }, data: { status: 'paid' } });
+  await enqueueOrStartScan(order.id);
+  console.log(`[review] Sipariş ${order.id} ONAYLANDI → tarama kuyruğa alındı/başlatıldı.`);
+  res.json({ ok: true, approved: true });
+});
+
+// Reddet: taramayı başlatma (FAZ B: kredi/iade süreci). Şimdilik 'scan_failed' + sebep.
+adminRouter.post('/reviews/:id/reject', async (req, res) => {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, select: { id: true, status: true } });
+  if (!order) return res.status(404).json({ error: 'Siparis bulunamadi.' });
+  if (order.status !== 'awaiting_review') {
+    return res.status(409).json({ error: `Siparis 'awaiting_review' degil (mevcut: ${order.status}).` });
+  }
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 300) : 'inceleme reddedildi';
+  await prisma.order.update({ where: { id: order.id }, data: { status: 'scan_failed' } });
+  // Kimlik bilgisi kalıntısı kalmasın: reddedince de hemen temizlenmeli (purge cron ayrıca yakalar).
+  await prisma.testCredential.updateMany({ where: { orderId: order.id, ciphertext: { not: null } }, data: { ciphertext: null, purgedAt: new Date() } });
+  console.log(`[review] Sipariş ${order.id} REDDEDİLDİ (${reason}). Kredi/iade FAZ B'de. Kimlik bilgisi temizlendi.`);
+  res.json({ ok: true, rejected: true, reason });
 });
 
 // --- (SEO BLOG) admin-only yonetim -------------------------------------------

@@ -59,6 +59,11 @@ export default function OrderPage() {
   // (#5) authenticated_scan — test hesabi kimlik bilgileri.
   const [authUser, setAuthUser] = useState('');
   const [authPass, setAuthPass] = useState('');
+  // (Tam Kapsamlı Pentest — FAZ A) kimlik-doğrulamalı/otonom paketlerde 3 EK onay.
+  const [credShare, setCredShare] = useState(false);
+  const [testAcct, setTestAcct] = useState(false);
+  const [elevRisk, setElevRisk] = useState(false);
+  const authConsentsOk = credShare && testAcct && elevRisk;
 
   // Sahiplik beyani (TCK 243 — guvenlik) ayri; iyzico'nun bekledigi 2 ODEME-onay
   // checkbox'i: (1) On Bilgilendirme+Mesafeli+Iptal/Iade, (2) KVKK/Gizlilik.
@@ -134,7 +139,7 @@ export default function OrderPage() {
   // (#4) Uluslararasi odeme (Paddle) henuz canli degil — TR disi bolgede nazik "yakinda".
   const intlComingSoon = region !== 'tr';
   const needsAuthCreds = selected === 'authenticated_scan';
-  const activeConsentOk = (!isActiveLight || atRisk) && (!needsAuthCreds || (authUser.trim() && authPass));
+  const activeConsentOk = (!isActiveLight || atRisk) && (!needsAuthCreds || (authUser.trim() && authPass && authConsentsOk));
   // (Aktif Doğrulama Paketi) düşük-kapsam uyarısı gösterilecek mi (ön-kontrol düşük sinyal döndüyse).
   const showLowScopeWarning = selectedBundle?.key === 'bundle_active_verify' && scopeLow === true;
   const creditsNeeded = selectedPkg ? Math.max(1, Math.round(selectedPkg.priceMinorUnit / creditUnit)) : 0;
@@ -199,7 +204,7 @@ export default function OrderPage() {
         },
         region,
         payWithCredits,
-        isActiveLight ? { riskAccepted: atRisk } : undefined,
+        isActiveLight ? { riskAccepted: atRisk, ...(needsAuthCreds ? { credentialSharingAccepted: credShare, testAccountDeclared: testAcct, elevatedRiskAccepted: elevRisk } : {}) } : undefined,
         needsAuthCreds ? { username: authUser.trim(), password: authPass } : undefined,
         promo?.valid ? promo.code : undefined,
       );
@@ -227,6 +232,7 @@ export default function OrderPage() {
     if (isAL && !atRisk) return setError('Aktif test için risk kabul kutusunu işaretlemelisiniz.');
     const needsAuth = selectedBundle.members?.some((m: any) => m.key === 'authenticated_scan');
     if (needsAuth && (!authUser.trim() || !authPass)) return setError('Bu paket için test hesabı bilgileri gerekli.');
+    if (needsAuth && !authConsentsOk) return setError('Kimlik-doğrulamalı test için 3 ek onayı da işaretlemelisiniz.');
     if (selectedBundle.selectable && bundleModules.length === 0) return setError('En az bir modül seçin.');
     if (showLowScopeWarning && !lowScopeAck) return setError('Devam etmek için ön kontrol uyarısını onaylamalısınız.');
     setBusy(true);
@@ -241,7 +247,7 @@ export default function OrderPage() {
         withdrawalWaived: withdrawalConsent, // AYRI cayma feragati
         crossBorderTransfer: crossBorderConsent, // KVKK m.9 yurt disi acik riza
         region,
-        activeTestConsent: isAL ? { riskAccepted: atRisk } : undefined,
+        activeTestConsent: isAL ? { riskAccepted: atRisk, ...(needsAuth ? { credentialSharingAccepted: credShare, testAccountDeclared: testAcct, elevatedRiskAccepted: elevRisk } : {}) } : undefined,
         authCredentials: needsAuth ? { username: authUser.trim(), password: authPass } : undefined,
         promoCode: promo?.valid ? promo.code : undefined,
         lowScopeAcknowledged: showLowScopeWarning ? lowScopeAck : undefined,
@@ -351,6 +357,8 @@ export default function OrderPage() {
   const ctaDisabled = selectedBundle
     ? !domainId || busy || !allConsents || intlComingSoon ||
       (selectedBundle.category === 'active-light' && !atRisk) ||
+      // (FAZ A) kimlik-doğrulamalı üye varsa: 3 ek onay + kimlik bilgisi girişleri zorunlu.
+      (selectedBundle.members?.some((m: any) => m.key === 'authenticated_scan') && (!authConsentsOk || !authUser.trim() || !authPass)) ||
       (selectedBundle.selectable && bundleModules.length === 0) ||
       (selectedBundle.key === 'bundle_active_verify' && scopeChecking) || // ön-kontrol bitene kadar bekle
       (showLowScopeWarning && !lowScopeAck) // düşük-kapsam uyarısı onaylanmadan ödeme yok
@@ -398,6 +406,39 @@ export default function OrderPage() {
       </button>
     );
   };
+
+  // (Tam Kapsamlı Pentest — FAZ A) Kimlik-doğrulamalı paketlerde: "test hesabı" uyarısı + kimlik
+  // bilgisi girişleri + 3 EK onay. Kimlik-doğrulamalı üye seçiliyken gösterilir (comingSoon paket
+  // FAZ E'de açıldığında canlı olur; şimdilik hazır).
+  const authCredBlock = (
+    <div className="mt-3 space-y-3">
+      <div className="rounded-card border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+        ⚠️ <strong>Ana/üretim hesabınızı DEĞİL</strong>, yalnız bu tarama için oluşturulmuş, sınırlı yetkili,
+        tek-kullanımlık bir <strong>TEST hesabı</strong> girin. Şifresini tarama sonrası değiştirin.
+        <span className="mt-1 block text-xs text-red-700">
+          <strong>2FA’sı olmayan</strong> bir hesap verin. Kimlik bilgileriniz şifreli saklanır ve tarama sonrası silinir.
+        </span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <input placeholder="Test hesabı kullanıcı adı" value={authUser} onChange={(e) => setAuthUser(e.target.value)} className="field" autoComplete="off" />
+        <input type="password" placeholder="Test hesabı şifresi" value={authPass} onChange={(e) => setAuthPass(e.target.value)} className="field" autoComplete="new-password" />
+      </div>
+      <div className="space-y-2 text-sm text-ink-soft">
+        <label className="flex items-start gap-2">
+          <input type="checkbox" checked={credShare} onChange={(e) => setCredShare(e.target.checked)} className="mt-0.5" />
+          <span>Test hesabı kimlik bilgilerimin şifreli saklanacağını, tarama için yurt dışındaki LLM sağlayıcıya (Anthropic, PBC — ABD) iletilebileceğini ve tarama sonrası silineceğini anladım; <strong>KVKK m.9</strong> kapsamında bu yurt dışı aktarıma açıkça rıza gösteriyorum.</span>
+        </label>
+        <label className="flex items-start gap-2">
+          <input type="checkbox" checked={testAcct} onChange={(e) => setTestAcct(e.target.checked)} className="mt-0.5" />
+          <span>Sağladığım hesabın üretim/ana hesabım <strong>olmadığını</strong>; sınırlı yetkili, tek-kullanımlık bir TEST hesabı olduğunu beyan ederim.</span>
+        </label>
+        <label className="flex items-start gap-2">
+          <input type="checkbox" checked={elevRisk} onChange={(e) => setElevRisk(e.target.checked)} className="mt-0.5" />
+          <span>Kimlik doğrulamalı (login’li) ve otonom testin, pasif taramadan <strong>daha yüksek risk</strong> taşıdığını anlıyor ve kabul ediyorum.</span>
+        </label>
+      </div>
+    </div>
+  );
 
   return (
     <main className="container-page max-w-6xl py-10 pb-28 lg:py-14 lg:pb-14">
@@ -470,12 +511,7 @@ export default function OrderPage() {
               çalıştırılmasına ve ilgili riskleri kabul ettiğime dair beyanı onaylıyorum. (Tüm modüller için tek beyan.)
             </span>
           </label>
-          {selectedBundle.members.some((m: any) => m.key === 'authenticated_scan') && (
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <input placeholder="Test hesabı kullanıcı adı" value={authUser} onChange={(e) => setAuthUser(e.target.value)} className="field" />
-              <input type="password" placeholder="Test hesabı şifresi" value={authPass} onChange={(e) => setAuthPass(e.target.value)} className="field" />
-            </div>
-          )}
+          {selectedBundle.members.some((m: any) => m.key === 'authenticated_scan') && authCredBlock}
         </div>
       )}
 
@@ -629,14 +665,7 @@ export default function OrderPage() {
           {needsAuthCreds && (
             <div className="mt-4 border-t border-accent/30 pt-4">
               <p className="text-sm font-semibold text-brand">Test hesabı bilgileri (login’li tarama için)</p>
-              <p className="mt-1 text-xs text-ink-muted">
-                Bilgiler şifrelenerek saklanır, yalnızca <strong>{selectedPkg.displayName}</strong> için ve yalnızca
-                hedef domaininize karşı kullanılır, tarama başlayınca sistemden silinir.
-              </p>
-              <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                <input value={authUser} onChange={(e) => setAuthUser(e.target.value)} placeholder="Test kullanıcı adı" className="field" autoComplete="off" />
-                <input value={authPass} onChange={(e) => setAuthPass(e.target.value)} placeholder="Test şifresi" type="password" className="field" autoComplete="new-password" />
-              </div>
+              {authCredBlock}
             </div>
           )}
         </div>

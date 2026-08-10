@@ -11,12 +11,24 @@ import { prisma } from '../db.js';
  * ispat icin kaydedilir). Beyan elektronik imza YERINE gecer — kriptografik e-imza DEGIL.
  */
 
-export const ACTIVE_TEST_CONSENT_VERSION = '2026-08-03';
+export const ACTIVE_TEST_CONSENT_VERSION = '2026-08-13'; // FAZ A: kimlik-doğrulamalı/otonom onayları eklendi
 
 // Risk kabul checkbox metni (SADE — Faz 3 v2).
 export const ACTIVE_TEST_RISK_ACK =
   'Bu paketin aktif / kanıt-amaçlı test unsurları içerdiğini okudum, anladım ve riski kabul ediyorum; ' +
   'taramaya konu alan adının sahibi/yetkilisi olduğumu beyan ederim.';
+
+// (Tam Kapsamlı Pentest — FAZ A) Kimlik-doğrulamalı/otonom paketler için EK 3 onay metni (UI + PDF).
+export const CREDENTIAL_SHARING_ACK =
+  'Verdiğim test hesabı kimlik bilgilerinin şifreli saklanacağını, tarama için yurt dışındaki LLM ' +
+  'sağlayıcıya (Anthropic, PBC — ABD) iletilebileceğini ve tarama sonrası silineceğini anladım ve ' +
+  'KVKK m.9 kapsamında bu yurt dışı aktarıma açıkça rıza gösteriyorum.';
+export const TEST_ACCOUNT_DECLARATION =
+  'Sağladığım hesabın üretim/ana hesabım OLMADIĞINI; yalnız bu tarama için oluşturulmuş, sınırlı ' +
+  'yetkili ve tek-kullanımlık bir TEST hesabı olduğunu beyan ederim.';
+export const ELEVATED_RISK_ACK =
+  'Kimlik doğrulamalı (login’li) ve otonom testin, pasif taramadan daha yüksek risk taşıdığını; ' +
+  'hesabımda/uygulamamda beklenmedik durum oluşabileceğini anladım ve kabul ediyorum.';
 
 export interface ActiveTestScope {
   does: string[];
@@ -64,13 +76,32 @@ export function activeTestScope(packageKey: string): ActiveTestScope {
 
 export interface ActiveTestConsentInput {
   riskAccepted?: boolean;
+  // (FAZ A) kimlik-doğrulamalı/otonom paketlerde EK 3 onay (yalnız o paketlerde zorunlu).
+  credentialSharingAccepted?: boolean;
+  testAccountDeclared?: boolean;
+  elevatedRiskAccepted?: boolean;
 }
 
-// SADELESTIRILMIS (Faz 3 v2): tek checkbox yeterli. Ek alan (yasal ad/sirket) YOK; beyan
-// eden hesaptan (fullName/email) OTOMATIK doldurulur. Tamlik kontrolu = risk kutusu isaretli mi.
-export function validateConsentInput(input: ActiveTestConsentInput | undefined): { ok: true } | { ok: false; error: string } {
+// SADELESTIRILMIS (Faz 3 v2): tek checkbox yeterli. Ek alan (yasal ad/sirket) YOK; beyan eden
+// hesaptan (fullName/email) OTOMATIK doldurulur. Tamlik kontrolu = risk kutusu isaretli mi. FAZ A:
+// requireAuthConsents=true ise (kimlik-doğrulamalı/otonom paket) 3 ek onay da ZORUNLU.
+export function validateConsentInput(
+  input: ActiveTestConsentInput | undefined,
+  opts?: { requireAuthConsents?: boolean },
+): { ok: true } | { ok: false; error: string } {
   if (!input || input.riskAccepted !== true) {
     return { ok: false, error: 'Aktif test için risk kabul kutusunu işaretlemelisiniz.' };
+  }
+  if (opts?.requireAuthConsents) {
+    if (input.credentialSharingAccepted !== true) {
+      return { ok: false, error: 'Kimlik bilgisi paylaşımı ve yurt dışı aktarım (KVKK m.9) onayını işaretlemelisiniz.' };
+    }
+    if (input.testAccountDeclared !== true) {
+      return { ok: false, error: 'Test hesabı beyanını (üretim hesabı değil) işaretlemelisiniz.' };
+    }
+    if (input.elevatedRiskAccepted !== true) {
+      return { ok: false, error: 'Yükseltilmiş risk kabulünü işaretlemelisiniz.' };
+    }
   }
   return { ok: true };
 }

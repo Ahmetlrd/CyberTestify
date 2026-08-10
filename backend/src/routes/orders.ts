@@ -2,16 +2,17 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice, fixSuggestionListPrice, securityProfileFor } from '../services/scanPackages.js';
+import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice, fixSuggestionListPrice, securityProfileFor, requiresTestCredentials } from '../services/scanPackages.js';
 import { validateConsentInput, activeTestScope, ACTIVE_TEST_CONSENT_VERSION, ACTIVE_TEST_RISK_ACK, hasValidActiveTestConsent } from '../services/activeTestConsent.js';
+import { storeTestCredential } from '../services/testCredentials.js';
 import { renderConsentPdf } from '../services/pdf.js';
-import { encryptSecret, decryptSecret } from '../services/crypto.js';
+import { decryptSecret } from '../services/crypto.js';
 import { getPricing, currencyFor } from '../services/pricing.js';
 import { getPaymentProvider } from '../services/payment/index.js';
 import { initiateBundlePayment } from '../services/payment/iyzico.js';
 import { getSampleReportPdf } from '../services/sampleReports.js';
 import { creditsForPackagePrice, spendCredits, type CreditTx } from '../services/credits.js';
-import { enqueueOrStartScan } from '../services/orchestrator.js';
+import { enqueueUnlessReview } from '../services/orchestrator.js';
 import { sendOrderConfirmation } from '../services/mailer.js';
 import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
@@ -189,8 +190,13 @@ const createOrderSchema = z.object({
   useCredits: z.boolean().optional().default(false),
   // Promosyon/indirim kodu (opsiyonel). Gecerliyse fiyat dusurulur; %100 -> odeme atlanir.
   promoCode: z.string().trim().max(64).optional(),
-  // (Faz 3 v2) active-light: TEK checkbox — risk kabulu. Ek alan yok (yasal ad hesaptan otomatik).
-  activeTestConsent: z.object({ riskAccepted: z.boolean() }).optional(),
+  // (Faz 3 v2) active-light: risk kabulu. (FAZ A) kimlik-doğrulamalı/otonom paketlerde 3 ek onay.
+  activeTestConsent: z.object({
+    riskAccepted: z.boolean(),
+    credentialSharingAccepted: z.boolean().optional(),
+    testAccountDeclared: z.boolean().optional(),
+    elevatedRiskAccepted: z.boolean().optional(),
+  }).optional(),
   // (Faz 3 #5) authenticated_scan: test hesabi kimlik bilgileri. SIFRELI saklanir, flow'a
   // gecince SILINIR, asla loglanmaz. Yalniz authenticated_scan paketinde beklenir.
   authCredentials: z.object({ username: z.string().min(1).max(200), password: z.string().min(1).max(400) }).optional(),
@@ -250,19 +256,18 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   // OLUSTURULAMAZ. Tamlik kontrolu OTOMATIK (Vedat'in manuel onayi gerekmez).
   const profile = securityProfileFor(packageDef);
   const isActiveLight = profile === 'active-light' || profile === 'active-verify-only';
+  // (Tam Kapsamlı Pentest — FAZ A) kimlik-doğrulamalı/otonom paketlerde 3 EK onay da ZORUNLU.
+  const needsAuthConsents = requiresTestCredentials(packageKey);
   if (isActiveLight) {
-    const v = validateConsentInput(parsed.data.activeTestConsent);
+    const v = validateConsentInput(parsed.data.activeTestConsent, { requireAuthConsents: needsAuthConsents });
     if (!v.ok) return res.status(400).json({ error: v.error });
   }
 
-  // (#5) authenticated_scan: test kimlik bilgilerini SIFRELE (byokKeyEncrypted). Orchestrator
-  // flow'a gecirir + HEMEN siler. Plaintext DB'de/logda ASLA durmaz.
-  let byokKeyEncrypted: string | null = null;
-  if (packageKey === 'authenticated_scan') {
-    if (!parsed.data.authCredentials) {
-      return res.status(400).json({ error: 'Bu paket için test hesabı kullanıcı adı ve şifresi zorunludur.' });
-    }
-    byokKeyEncrypted = encryptSecret(JSON.stringify(parsed.data.authCredentials));
+  // (Tam Kapsamlı Pentest — FAZ A) TEST hesabı kimlik bilgisi: requiresTestCredentials olan paketlerde
+  // ZORUNLU. order.create'e plaintext/byok YAZILMAZ; sipariş oluşunca TestCredential'a ŞİFRELİ yazılır.
+  const authCreds = needsAuthConsents ? parsed.data.authCredentials : undefined;
+  if (needsAuthConsents && !authCreds) {
+    return res.status(400).json({ error: 'Bu paket için test hesabı kullanıcı adı ve şifresi zorunludur.' });
   }
 
   // GATE: Ham ag/port (networkLayer) paketleri, bypass-proof izolasyon
@@ -316,11 +321,16 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   const recordConsent = async (orderId: string) => {
     // Beyan eden hesaptan OTOMATIK (kullaniciya ek alan doldurtmayiz).
     const cust = await prisma.customer.findUniqueOrThrow({ where: { id: req.customerId! }, select: { fullName: true, email: true } });
+    const now = new Date();
     await prisma.activeTestConsent.create({
       data: {
         customerId: req.customerId!, orderId, packageKey,
         legalName: cust.fullName?.trim() || cust.email, companyName: null,
         riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
+        // (FAZ A) kimlik-doğrulamalı/otonom paket onayları (yalnız o paketlerde işaretlenir).
+        credentialSharingAcceptedAt: needsAuthConsents ? now : null,
+        testAccountDeclaredAt: needsAuthConsents ? now : null,
+        elevatedRiskAcceptedAt: needsAuthConsents ? now : null,
       },
     });
   };
@@ -333,7 +343,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
         data: {
           customerId: req.customerId!, domainId: domain.id, packageId: packageDb.id,
           amountMinorUnit: 0, currency, status: 'paid', paymentProvider: 'promo', paidAt: new Date(),
-          locale: localeFor(region), byokKeyEncrypted, ...consent,
+          locale: localeFor(region), ...consent,
         },
       });
       await recordPromoUsage(tx, {
@@ -343,7 +353,8 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
       return o;
     });
     if (isActiveLight) await recordConsent(order.id); // tarama baslamadan ONCE
-    await enqueueOrStartScan(order.id);
+    if (authCreds) await storeTestCredential(order.id, authCreds); // (FAZ A) test hesabı — ŞİFRELİ
+    await enqueueUnlessReview(order.id);
     await sendOrderConfirmation([order.id]); // (B) %100 promo ile odenen tekil siparis onayi
     return res.json({ orderId: order.id, paidWithPromo: true, code: promoApplied.code });
   }
@@ -362,15 +373,16 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
         data: {
           customerId: req.customerId!, domainId: domain.id, packageId: packageDb.id,
           amountMinorUnit, currency, status: 'paid', paymentProvider: 'credit', paidAt: new Date(),
-          locale: localeFor(region), byokKeyEncrypted, ...consent,
+          locale: localeFor(region), ...consent,
         },
       });
       await spendCredits(tx as unknown as CreditTx, req.customerId!, creditsNeeded, o.id);
       return o;
     });
     if (isActiveLight) await recordConsent(order.id); // tarama baslamadan ONCE
+    if (authCreds) await storeTestCredential(order.id, authCreds); // (FAZ A) test hesabı — ŞİFRELİ
     // Odeme yok — dogrudan tarama kuyruguna (concurrency=1; bkz orchestrator).
-    await enqueueOrStartScan(order.id);
+    await enqueueUnlessReview(order.id);
     await sendOrderConfirmation([order.id]); // (B) kredi ile odenen tekil siparis onayi
     return res.json({ orderId: order.id, paidWithCredits: true, creditsSpent: creditsNeeded });
   }
@@ -385,11 +397,11 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
       currency,
       status: 'awaiting_payment',
       locale: localeFor(region), // (2) cikti dili bolgeden turetilir
-      byokKeyEncrypted,
       ...consent,
     },
   });
   if (isActiveLight) await recordConsent(order.id);
+  if (authCreds) await storeTestCredential(order.id, authCreds); // (FAZ A) test hesabı — ŞİFRELİ
   if (promoApplied) {
     await recordPromoUsage(prisma, {
       code: promoApplied.code!, orderId: order.id, customerId: req.customerId!,
@@ -462,9 +474,10 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
   const anyActiveLight = memberDefs.some((m) => m.profile === 'active-light' || m.profile === 'active-verify-only');
   const hasAuthScan = memberKeys.includes('authenticated_scan');
 
-  // Tek yetkilendirme beyani TUM active-light uyeleri kapsar (ekstra adim YOK).
+  // Tek yetkilendirme beyani TUM active-light uyeleri kapsar (ekstra adim YOK). (FAZ A) kimlik-
+  // doğrulamalı üye (authenticated_scan) varsa 3 EK onay da ZORUNLU.
   if (anyActiveLight) {
-    const v = validateConsentInput(parsed.data.activeTestConsent);
+    const v = validateConsentInput(parsed.data.activeTestConsent, { requireAuthConsents: hasAuthScan });
     if (!v.ok) return res.status(400).json({ error: v.error });
   }
   if (hasAuthScan && !parsed.data.authCredentials) {
@@ -516,7 +529,6 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
         paymentProvider: promoFree ? 'promo' : 'bundle-placeholder',
         paidAt: promoFree ? new Date() : null,
         locale: localeFor(region),
-        byokKeyEncrypted: hasAuthScan ? encryptSecret(JSON.stringify(parsed.data.authCredentials)) : null,
         // (Aktif Doğrulama Paketi) düşük-kapsam uyarısı onayı — ispat için sakla.
         lowScopeWarningShown: parsed.data.lowScopeAcknowledged === true,
         lowScopeWarningAcknowledgedAt: parsed.data.lowScopeAcknowledged === true ? new Date() : null,
@@ -524,16 +536,22 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
       },
     });
     createdOrderIds = [order.id];
+    // (FAZ A) test hesabı kimlik bilgisi — ŞİFRELİ (order.create'e plaintext yazılmaz).
+    if (hasAuthScan && parsed.data.authCredentials) await storeTestCredential(order.id, parsed.data.authCredentials);
     if (anyActiveLight) {
+      const now = new Date();
       await prisma.activeTestConsent.create({
         data: {
           customerId: req.customerId!, orderId: order.id, packageKey: bundleKey as any,
           legalName: cust.fullName?.trim() || cust.email, companyName: null,
           riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
+          credentialSharingAcceptedAt: hasAuthScan ? now : null,
+          testAccountDeclaredAt: hasAuthScan ? now : null,
+          elevatedRiskAcceptedAt: hasAuthScan ? now : null,
         },
       });
     }
-    if (promoFree) await enqueueOrStartScan(order.id);
+    if (promoFree) await enqueueUnlessReview(order.id);
   } else {
     // --- (2) LEGACY COKLU-ORDER (uye basina) — henuz tek-rapor'a gecmemis bundle'lar icin ---
     const memberAmountMap = new Map(
@@ -559,21 +577,27 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
           paymentProvider: promoFree ? 'promo' : 'bundle-placeholder',
           paidAt: promoFree ? new Date() : null,
           locale: localeFor(region),
-          byokKeyEncrypted: key === 'authenticated_scan' ? encryptSecret(JSON.stringify(parsed.data.authCredentials)) : null,
           ...consent,
         },
       });
       createdOrderIds.push(order.id);
+      // (FAZ A) kimlik-doğrulamalı üye — kimlik bilgisi ŞİFRELİ saklanır (plaintext yazılmaz).
+      const memberNeedsCreds = requiresTestCredentials(key);
+      if (memberNeedsCreds && parsed.data.authCredentials) await storeTestCredential(order.id, parsed.data.authCredentials);
       if (isAL) {
+        const now = new Date();
         await prisma.activeTestConsent.create({
           data: {
             customerId: req.customerId!, orderId: order.id, packageKey: key as any,
             legalName: cust.fullName?.trim() || cust.email, companyName: null,
             riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
+            credentialSharingAcceptedAt: memberNeedsCreds ? now : null,
+            testAccountDeclaredAt: memberNeedsCreds ? now : null,
+            elevatedRiskAcceptedAt: memberNeedsCreds ? now : null,
           },
         });
       }
-      if (promoFree) await enqueueOrStartScan(order.id);
+      if (promoFree) await enqueueUnlessReview(order.id);
     }
     if (!createdOrderIds.length) return res.status(400).json({ error: 'Bu paket icin gecerli uye bulunamadi.' });
   }

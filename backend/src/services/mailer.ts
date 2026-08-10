@@ -1,6 +1,7 @@
 import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { getBundle } from './bundles.js';
+import { requiresTestCredentials } from './scanPackages.js';
 
 // Aktif Doğrulama Paketi üye kontrol anahtarları — sipariş e-postasında kapsam netliği için.
 const ACTIVE_VERIFY_KEYS = new Set(getBundle('bundle_active_verify')?.memberKeys ?? []);
@@ -143,6 +144,11 @@ export async function sendOrderConfirmation(orderIds: string[]): Promise<boolean
     const scopeNote = isActiveVerify
       ? `<p style="margin:12px 0;padding:10px 14px;background:#f3f7f6;border-left:3px solid #123F3A;border-radius:6px;color:#3a4a47;font-size:13px"><strong>Kapsam:</strong> Bu paket kimlik doğrulaması gerektirmeyen (login olmadan test edilebilen) yüzeyde çalışır. Login sonrası ortaya çıkan derin yetkilendirme/iş mantığı zafiyetleri bu paketin kapsamı dışındadır; sonuçlar hedefin yapısına göre değişir.</p>`
       : '';
+    // (Tam Kapsamlı Pentest — FAZ A) Kimlik-doğrulamalı paket: satın alma anında yazılı "test hesabı" uyarısı.
+    const isAuthenticated = orders.some((o) => requiresTestCredentials(o.package.key));
+    const credWarn = isAuthenticated
+      ? `<p style="margin:12px 0;padding:10px 14px;background:#fff5f5;border-left:3px solid #c0392b;border-radius:6px;color:#7a2018;font-size:13px"><strong>⚠️ Test hesabı:</strong> Bu paket kimlik-doğrulamalı (login’li) test içerir. Lütfen üretim/ana hesabınızı DEĞİL; sınırlı yetkili, tek-kullanımlık, 2FA’sı olmayan bir TEST hesabı kullanın ve şifresini tarama sonrası değiştirin. Kimlik bilgileriniz şifreli saklanır ve tarama sonrası silinir.</p>`
+      : '';
     const body = `<p>Siparişiniz alındı ve ödemeniz onaylandı. Teşekkür ederiz.</p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:12px 0;border:1px solid #e3e8e6;border-radius:10px">
         <tr><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;color:#8a9794">Hedef</td><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:14px;font-weight:600;text-align:right">${esc(hostname)}</td></tr>
@@ -150,7 +156,7 @@ export async function sendOrderConfirmation(orderIds: string[]): Promise<boolean
         <tr><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;color:#8a9794">Sipariş no</td><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;text-align:right">${esc(orderRef)}</td></tr>
         <tr><td style="padding:12px 14px;font-size:13px;color:#8a9794">Tutar</td><td style="padding:12px 14px;font-size:16px;font-weight:800;color:#123F3A;text-align:right">${fmtMoney(totalMinor, currency)}</td></tr>
       </table>
-      ${scopeNote}<p style="color:#3a4a47">Taramanız sıraya alındı. <strong>Başladığında</strong> size ayrıca bir e-posta göndereceğiz; durumu panelinizden de takip edebilirsiniz.</p>`;
+      ${credWarn}${scopeNote}<p style="color:#3a4a47">Taramanız sıraya alındı. <strong>Başladığında</strong> size ayrıca bir e-posta göndereceğiz; durumu panelinizden de takip edebilirsiniz.</p>`;
     const html = layout({ heading: 'Siparişiniz alındı', bodyHtml: body, cta: { label: 'Siparişimi görüntüle', url: `${config.frontendUrl}/dashboard/${orders[0].id}` } });
     return await sendMail(email, 'Siparişiniz alındı — CyberTestify', html);
   } catch (err) {

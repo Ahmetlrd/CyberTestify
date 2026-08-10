@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { config } from '../../config.js';
 import { prisma } from '../../db.js';
-import { enqueueOrStartScan } from '../orchestrator.js';
+import { enqueueUnlessReview } from '../orchestrator.js';
 import { getInvoicingProvider } from '../invoicing/index.js';
 
 export interface CreatePaymentResult {
@@ -68,6 +68,7 @@ export async function finalizePaidOrder(orderId: string) {
     console.error('[invoicing] fatura uretilemedi:', err);
   }
 
-  // Müşteri PentAGI'yi hiç görmeden taramayı başlat (concurrency=1, bkz orchestrator).
-  await enqueueOrStartScan(order.id);
+  // Müşteri PentAGI'yi hiç görmeden taramayı başlat (concurrency=1, bkz orchestrator) — ANCAK paket
+  // yarı-manuel onay istiyorsa (Tam Kapsamlı Pentest) flow başlamaz, sipariş 'awaiting_review'da bekler.
+  await enqueueUnlessReview(order.id);
 }

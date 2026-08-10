@@ -60,6 +60,11 @@ export interface ScanPackageDef {
   networkLayer?: boolean;
   fixSuggestionPriceMinorUnit?: number;       // NIHAI (satis) fiyat — verilmezse taban fiyatin %50'si
   fixSuggestionListMinorUnit?: number;        // "indirimli gibi" gosterilen ustu-cizili anchor (opsiyonel)
+  // (Tam Kapsamlı Pentest — FAZ A) Yarı-manuel onay kapısı: ödeme sonrası flow OTOMATİK başlamaz;
+  // biz hedef/test hesabı/kapsamı gözden geçirip onaylayınca başlar (awaiting_review).
+  requiresManualReview?: boolean;
+  // Bu paket müşteriden TEST hesabı kimlik bilgisi ister (şifreli saklanır; bkz testCredentials.ts).
+  requiresTestCredentials?: boolean;
   // false ise musteriye SATILMAZ: paket listesinden gizlenir + siparis reddedilir.
   // iso27001/pci su an GEÇİCİ gizli — ajan yasaga ragmen POST deniyor, tarama
   // guvenlik geregi durduruluyor (rapor cikmiyor). Kalici cozum: PentAGI tool-level
@@ -85,6 +90,15 @@ export function fixSuggestionPrice(def: ScanPackageDef): number {
 export function fixSuggestionListPrice(def: ScanPackageDef): number | null {
   if (def.fixSuggestionListMinorUnit == null) return null;
   return def.fixSuggestionListMinorUnit > fixSuggestionPrice(def) ? def.fixSuggestionListMinorUnit : null;
+}
+
+// (Tam Kapsamlı Pentest — FAZ A) Bu paket ödeme sonrası YARI-MANUEL onay bekler mi?
+export function requiresManualReview(packageKey: string): boolean {
+  try { return getPackageDef(packageKey).requiresManualReview === true; } catch { return false; }
+}
+// Bu paket müşteriden TEST hesabı kimlik bilgisi ister mi?
+export function requiresTestCredentials(packageKey: string): boolean {
+  try { return getPackageDef(packageKey).requiresTestCredentials === true; } catch { return false; }
 }
 
 export type SecurityProfile = 'passive' | 'active-light' | 'active-verify-only';
@@ -1231,6 +1245,8 @@ Target: ${host}
     securityProfile: 'active-light',
     available: true,
     comingSoon: true,
+    requiresManualReview: true,      // (FAZ A) yarı-manuel onay kapısı
+    requiresTestCredentials: true,   // (FAZ A) test hesabı kimlik bilgisi ister
     promptTemplate: (host) => `
 Run an ACTIVE-LIGHT AUTHENTICATED scan on the SINGLE target below using the TEST-ACCOUNT credentials that
 will be provided in a separate login instruction appended below. HARD CONSTRAINTS: log in ONLY against
@@ -1266,6 +1282,7 @@ Target: ${host}
     securityProfile: 'active-light',
     available: true,
     comingSoon: true,
+    requiresManualReview: true,      // (FAZ A) otonom/yüksek-risk → yarı-manuel onay kapısı
     promptTemplate: (host) => `
 Run an AUTONOMOUS, MULTI-STEP, chained security assessment on the SINGLE target below. Unlike the narrow
 packages, you MAY plan across MULTIPLE steps, keep context/memory, and chain discovery → verification. BUT the

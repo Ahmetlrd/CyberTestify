@@ -7,6 +7,7 @@ import { sendReportReady } from './services/mailer.js';
 import { publishDailyIfDue } from './services/blog.js';
 import { findOutOfScope, findForbiddenMethods, forbiddenMethodsForProfile, detectScriptDebugLoop, detectRepeatedFetch } from './services/scope.js';
 import { encryptSecret } from './services/crypto.js';
+import { purgeExpiredCredentials } from './services/testCredentials.js';
 import { buildActivityFeed } from './services/activityFeed.js';
 import { promoteQueued } from './services/orchestrator.js';
 import { checkEgressProxyHealth } from './services/egressHealth.js';
@@ -361,6 +362,14 @@ async function main() {
       await purgeExpiredReports();
     } catch (err) {
       console.error('[worker] Rapor saklama temizligi sirasinda hata:', err);
+    }
+    try {
+      // (Tam Kapsamlı Pentest — FAZ A) Kimlik bilgisi güvenlik ağı: flow başlamasa/patlasa bile
+      // 1 saatten eski test kimlik bilgilerini temizle (ciphertext=null). Normal yolda orchestrator
+      // zaten kullanır kullanmaz siler; bu, o silme atlanırsa devreye giren yedek katmandır.
+      await purgeExpiredCredentials();
+    } catch (err) {
+      console.error('[worker] Test kimlik bilgisi temizligi sirasinda hata:', err);
     }
     try {
       // (SEO BLOG) Gunde 1: bugun (TR) henuz yayin yoksa en eski draft'i yayinla (restart-guvenli).
