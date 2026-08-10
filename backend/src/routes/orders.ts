@@ -440,7 +440,14 @@ const bundleOrderSchema = z.object({
   withdrawalWaived: z.literal(true),
   crossBorderTransfer: z.literal(true), // KVKK m.9 yurt disi (Anthropic/ABD) acik riza
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
-  activeTestConsent: z.object({ riskAccepted: z.boolean() }).optional(),
+  // (FAZ A/E) kimlik-doğrulamalı bundle (bundle_full_pentest) için 3 EK onay da taşınır (yoksa Zod
+  // bilinmeyen alanları kırpar -> backend "credentialSharingAccepted yok" der; canlı bug buydu).
+  activeTestConsent: z.object({
+    riskAccepted: z.boolean(),
+    credentialSharingAccepted: z.boolean().optional(),
+    testAccountDeclared: z.boolean().optional(),
+    elevatedRiskAccepted: z.boolean().optional(),
+  }).optional(),
   authCredentials: z.object({ username: z.string().min(1).max(200), password: z.string().min(1).max(400) }).optional(),
   promoCode: z.string().trim().max(64).optional(),
   // (Aktif Doğrulama Paketi) Ödeme öncesi "düşük kapsam" uyarısı gösterildiyse müşteri onayı.
