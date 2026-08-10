@@ -17,7 +17,11 @@ import { discoverSurface, type Surface } from './activeVerifyEvidence.js';
 import { consumeTestCredential, type TestCredentialInput } from './testCredentials.js';
 import { grantCredits, creditsForPackagePrice } from './credits.js';
 import { sendAuthLoginFailed } from './mailer.js';
+import { type AuthSession, type CookieFlag, applyAuthHeaders, parseSetCookie } from './authSession.js';
 import { prisma } from '../db.js';
+
+export { applyAuthHeaders } from './authSession.js';
+export type { AuthSession } from './authSession.js';
 
 const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
 const LOGIN_TIMEOUT_MS = 12_000;
@@ -31,13 +35,6 @@ const AUTH_COOKIE_RE = /(token|jwt|session|sid|auth|connect\.sid|_session)/i;
 const TWO_FACTOR_RE = /(two[- ]?factor|2fa|otp\b|one[- ]?time|authenticator|totp|verification code|doğrulama kodu|tek kullanımlık)/i;
 const WELL_KNOWN_LOGIN = ['/rest/user/login', '/api/auth/login', '/api/login', '/api/sessions', '/auth/login', '/login', '/user/login', '/users/sign_in', '/api/v1/auth/login'];
 
-export type AuthSession = {
-  method: 'api' | 'form';
-  loginUrl: string;
-  cookie?: string;    // "name=value; name2=value2" (Cookie header)
-  bearer?: string;    // Authorization: Bearer <...>
-  acquiredAt: number;
-};
 export type AuthResult =
   | { ok: true; session: AuthSession; attempts: number }
   | { ok: false; reason: 'bad_credentials' | 'two_factor' | 'no_login_endpoint' | 'error'; attempts: number };
@@ -89,12 +86,14 @@ async function tryApiLogin(url: string, creds: TestCredentialInput): Promise<{ s
     const text = (await res.text()).slice(0, 20_000);
     const twoFactor = TWO_FACTOR_RE.test(text);
     if (res.status < 200 || res.status >= 400) return { twoFactor };
-    // (a) Set-Cookie
+    // (a) Set-Cookie — hem Cookie header değeri hem güvenlik-bayrağı analizi (FAZ C).
     const setCookies = (res.headers as any).getSetCookie?.() ?? [];
     const authCookies: string[] = [];
+    const cookieFlags: CookieFlag[] = [];
     for (const c of setCookies as string[]) {
       const nv = c.split(';')[0];
       const name = nv.split('=')[0];
+      cookieFlags.push(parseSetCookie(c));
       if (AUTH_COOKIE_RE.test(name)) authCookies.push(nv);
     }
     // (b) JSON body'de token alanı (Juice Shop: {authentication:{token}})
@@ -111,7 +110,7 @@ async function tryApiLogin(url: string, creds: TestCredentialInput): Promise<{ s
       scan(j);
     } catch { /* JSON değil */ }
     if (bearer || authCookies.length) {
-      return { session: { method: 'api', loginUrl: url, cookie: authCookies.join('; ') || undefined, bearer, acquiredAt: Date.now() }, twoFactor };
+      return { session: { method: 'api', loginUrl: url, cookie: authCookies.join('; ') || undefined, bearer, cookieFlags: cookieFlags.length ? cookieFlags : undefined, acquiredAt: Date.now() }, twoFactor };
     }
     return { twoFactor };
   } catch { return null; }
@@ -166,9 +165,10 @@ async function tryFormLogin(host: string, creds: TestCredentialInput): Promise<{
         });
         const cookies = await page.cookies();
         const authCookies = cookies.filter((c) => AUTH_COOKIE_RE.test(c.name)).map((c) => `${c.name}=${c.value}`);
+        const cookieFlags: CookieFlag[] = cookies.map((c) => ({ name: c.name, secure: !!c.secure, httpOnly: !!c.httpOnly, sameSite: (c as any).sameSite ?? null }));
         await page.close().catch(() => {});
         if (bearer || authCookies.length) {
-          return { session: { method: 'form', loginUrl: url, cookie: authCookies.join('; ') || undefined, bearer: bearer || undefined, acquiredAt: Date.now() }, twoFactor };
+          return { session: { method: 'form', loginUrl: url, cookie: authCookies.join('; ') || undefined, bearer: bearer || undefined, cookieFlags: cookieFlags.length ? cookieFlags : undefined, acquiredAt: Date.now() }, twoFactor };
         }
         return { twoFactor };
       } catch { await page.close().catch(() => {}); }
@@ -227,14 +227,6 @@ export function getAuthSession(host: string, creds: TestCredentialInput): Promis
 export function __resetAuthState(host?: string): void {
   if (host) { SESSION_CACHE.delete(host); loginAttemptsByHost.delete(host); }
   else { SESSION_CACHE.clear(); loginAttemptsByHost.clear(); }
-}
-
-/** İsteklere oturumu uygula (Cookie/Authorization) — kontroller bunu kullanır (FAZ C). */
-export function applyAuthHeaders(headers: Record<string, string>, s: AuthSession): Record<string, string> {
-  const h = { ...headers };
-  if (s.cookie) h['cookie'] = s.cookie;
-  if (s.bearer) h['authorization'] = `Bearer ${s.bearer}`;
-  return h;
 }
 
 /**

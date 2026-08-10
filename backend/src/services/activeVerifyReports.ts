@@ -12,9 +12,9 @@ import {
   type ActiveCheckEvidence, discoverSurface, spaHint, discoveryMethodNote,
 } from './activeVerifyEvidence.js';
 
-const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
-type Level = 'low' | 'medium' | 'medium-high' | 'high';
-function levelRank(l: Level): number { return l === 'high' ? 3 : l === 'medium-high' ? 2 : l === 'medium' ? 1 : 0; }
+export const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
+export type Level = 'low' | 'medium' | 'medium-high' | 'high';
+export function levelRank(l: Level): number { return l === 'high' ? 3 : l === 'medium-high' ? 2 : l === 'medium' ? 1 : 0; }
 
 function assemble(level: Level, summaryBullets: string[], genelSentence: string, sections: string): string {
   return (
@@ -193,7 +193,7 @@ const ACTIVE_BUNDLE_MEMBERS: ActiveMember[] = [
   { key: 'rce_verify', title: 'RCE / Komut Enjeksiyonu Doğrulama', conf: 'Orta', run: async (h) => { const ev = await collectRceEvidence(h); return { rep: buildActiveCheckReport(ev, RCE_CFG), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
 ];
 
-function extractLevel(findings: string): Level {
+export function extractLevel(findings: string): Level {
   const m = findings.match(/Risk Seviyesi:\s*(Orta[-\s]?Y[uü]ksek|Y[uü]ksek|Orta|D[uü][sş][uü]k)/i);
   if (!m) return 'low';
   const w = m[1].toLocaleLowerCase('tr');
@@ -202,12 +202,12 @@ function extractLevel(findings: string): Level {
   if (/orta/.test(w)) return 'medium';
   return 'low';
 }
-function headlineOf(findings: string): string {
+export function headlineOf(findings: string): string {
   const m = findings.match(/Genel risk seviyesi:\s*[^\n]+?\s[—–-]\s([^\n]+)/i);
   return m ? m[1].trim().replace(/\*\*/g, '') : '';
 }
 // YÖNETİCİ ÖZETİ + GENEL DEĞERLENDİRME'yi cikar, detay bolumlerini dondur (## -> ### indir).
-function detailOnly(findings: string): string {
+export function detailOnly(findings: string): string {
   const parts = findings.split(/(?=^## )/m);
   return parts.slice(2).join('').replace(/^## /gm, '### ').trim();
 }

@@ -18,6 +18,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import puppeteer from 'puppeteer-core';
 import { collectHttp } from './surfaceEvidence.js';
 import { requestAgentScenarios, type AgentSuggestion } from './agentAdvisor.js';
+import { type AuthSession, applyAuthHeaders } from './authSession.js';
 
 // Headless render (SPA keşfi) — PDF üretimiyle AYNI sistem Chromium'unu kullanır (ek kurulum yok).
 const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
@@ -38,11 +39,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---- Probe motoru + devre kesici ---------------------------------------------------
 type ProbeResult = { status: number; ms: number; text: string; len: number };
-class ProbeCtx {
+export class ProbeCtx {
   baseline = 0;
   consec5xx = 0;
   stopped: string | null = null;
   sent = 0;
+  // (FAZ C) authenticated bağlam: verilirse HER probe'a Cookie/Authorization eklenir (session-aware).
+  authHeaders?: Record<string, string>;
   private last = 0;
   async fetchOnce(url: string, opts: { method?: 'GET' | 'POST'; body?: string; contentType?: string; expectSlow?: boolean } = {}): Promise<ProbeResult | null> {
     if (this.stopped) return null;
@@ -56,6 +59,7 @@ class ProbeCtx {
     try {
       const headers: Record<string, string> = { 'user-agent': 'CyberTestify-ActiveVerify/1.0', accept: 'text/html,*/*' };
       if (opts.contentType) headers['content-type'] = opts.contentType;
+      if (this.authHeaders) Object.assign(headers, this.authHeaders); // (FAZ C) authenticated probe
       const res = await fetch(url, { method: opts.method ?? 'GET', body: opts.body, headers, redirect: 'manual', signal: ctrl.signal });
       const ms = Date.now() - t0;
       this.sent++;
@@ -266,7 +270,7 @@ function releaseHeadless(): void {
 }
 let chromiumUnavailable = false; // bir kez basarisiz olursa tekrar deneme (perf)
 
-async function crawlHeadless(host: string): Promise<Surface | null> {
+async function crawlHeadless(host: string, session?: AuthSession): Promise<Surface | null> {
   if (chromiumUnavailable) return null;
   const homeUrl = `https://${host}/`;
   await acquireHeadless();
@@ -295,6 +299,18 @@ async function crawlHeadless(host: string): Promise<Surface | null> {
       const page = await browser!.newPage();
       try {
         await page.setUserAgent('CyberTestify-ActiveVerify/1.0');
+        // (FAZ C) authenticated crawl: oturumu tarayıcıya enjekte et (login-arkası içerik render olsun).
+        if (session) {
+          if (session.bearer) {
+            await page.setExtraHTTPHeaders({ authorization: `Bearer ${session.bearer}` }).catch(() => {});
+            // SPA'lar token'ı localStorage'dan okur (ör. Juice Shop 'token'); yükleme öncesi yaz.
+            await page.evaluateOnNewDocument((t: string) => { try { localStorage.setItem('token', t); localStorage.setItem('access_token', t); } catch { /* erişilemez */ } }, session.bearer).catch(() => {});
+          }
+          if (session.cookie) {
+            const cookies = session.cookie.split(';').map((kv) => { const i = kv.indexOf('='); return { name: kv.slice(0, i).trim(), value: kv.slice(i + 1).trim(), url: `https://${host}/` }; }).filter((c) => c.name);
+            if (cookies.length) await page.setCookie(...cookies).catch(() => {});
+          }
+        }
         await page.setRequestInterception(true);
         page.on('request', (req) => {
           const rt = req.resourceType();
@@ -406,7 +422,13 @@ async function crawlHeadless(host: string): Promise<Surface | null> {
 }
 
 // HIBRIT: once hizli statik kesif; SPA supheli + statik input BULAMADIYSA headless'e dus.
-async function buildSurface(host: string): Promise<Surface> {
+// (FAZ C) session verilirse -> DOĞRUDAN authenticated headless crawl (login-arkası yüzey).
+async function buildSurface(host: string, session?: AuthSession): Promise<Surface> {
+  if (session) {
+    const hl = await crawlHeadless(host, session).catch(() => null);
+    if (hl && hl.ok) return hl;      // authenticated render sonucu
+    return await crawlSurface(host); // headless yok/başarısız -> statik (unauth) fallback
+  }
   const stat = await crawlSurface(host);
   const staticSurfaceCount = stat.inputs.length + stat.idEndpoints.length + stat.uploadForms.length + (stat.massAssignForm ? 1 : 0);
   // Statik zaten input buldu -> headless GEREKSIZ (perf). Yalniz SPA supheli + 0 input -> headless.
@@ -417,14 +439,17 @@ async function buildSurface(host: string): Promise<Surface> {
   return stat;
 }
 
-// In-flight cache: ayni host icin es zamanli 7 kontrol TEK crawl paylasir.
+// In-flight cache: ayni host icin es zamanli 7 kontrol TEK crawl paylasir. (FAZ C) authenticated crawl
+// AYRI cache anahtarı (host + '#auth') kullanır — unauth ve auth yüzeyler karışmaz.
 const SURFACE_CACHE = new Map<string, { at: number; p: Promise<Surface> }>();
 const SURFACE_TTL_MS = 120_000;
-export function discoverSurface(host: string): Promise<Surface> {
-  const c = SURFACE_CACHE.get(host);
+const EMPTY_SURFACE: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [] };
+export function discoverSurface(host: string, session?: AuthSession): Promise<Surface> {
+  const key = session ? `${host}#auth` : host;
+  const c = SURFACE_CACHE.get(key);
   if (c && Date.now() - c.at < SURFACE_TTL_MS) return c.p;
-  const p = buildSurface(host).catch(() => ({ ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [] } as Surface));
-  SURFACE_CACHE.set(host, { at: Date.now(), p });
+  const p = buildSurface(host, session).catch(() => ({ ...EMPTY_SURFACE, homeHeaders: new Map() } as Surface));
+  SURFACE_CACHE.set(key, { at: Date.now(), p });
   return p;
 }
 
@@ -566,11 +591,12 @@ const XSS_MARKER = 'cxt9137xmark';
 const XSS_PAYLOADS = [`${XSS_MARKER}"><cxmark>`, `${XSS_MARKER}'><cxmark>`, `${XSS_MARKER}" cxa=x`, `${XSS_MARKER}');cx//`];
 const INJ_MAX_INPUTS = 10; // API-tabanli input'lar eklendigi icin arttirildi
 
-export async function collectInjectionEvidence(host: string): Promise<InjEvidence> {
-  const surf = await discoverSurface(host);
+export async function collectInjectionEvidence(host: string, session?: AuthSession): Promise<InjEvidence> {
+  const surf = await discoverSurface(host, session);
   if (!surf.ok) return { ok: false, baseUrl: `https://${host}/`, pagesScanned: 0, inputsFound: 0, inputsTested: 0, probesSent: 0, payloadsSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'] };
   const inputs = surf.inputs.slice(0, INJ_MAX_INPUTS);
   const ctx = new ProbeCtx();
+  if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
   const findings: InjFinding[] = [];
   const notes: string[] = [];
   let tested = 0;
@@ -712,11 +738,12 @@ function looksLikeNotFound(status: number, text: string): boolean {
   return /not found|bulunamadı|404|access denied|erişim engellendi|oturum aç|login required/i.test(text.slice(0, 2000));
 }
 
-export async function collectIdorEvidence(host: string): Promise<IdorEvidence> {
-  const surf = await discoverSurface(host);
+export async function collectIdorEvidence(host: string, session?: AuthSession): Promise<IdorEvidence> {
+  const surf = await discoverSurface(host, session);
   if (!surf.ok) return { ok: false, pagesScanned: 0, candidates: 0, endpointsTested: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'] };
   const eps = surf.idEndpoints.slice(0, IDOR_MAX);
   const ctx = new ProbeCtx();
+  if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
   const findings: IdorFinding[] = [];
   const notes: string[] = [];
   let tested = 0;
@@ -857,11 +884,12 @@ function isInternalHost(hostname: string): boolean {
 // ======================================================================================
 const FETCH_PARAM_RE = /(^|_)(url|uri|link|webhook|callback|image|img|src|source|dest|destination|redirect|redir|feed|proxy|fetch|load|domain|site|target|host|page|ref|next|return|continue|file|path|preview|thumb|avatar|logo)$/i;
 
-export async function collectSsrfEvidence(host: string): Promise<ActiveCheckEvidence> {
-  const surf = await discoverSurface(host);
+export async function collectSsrfEvidence(host: string, session?: AuthSession): Promise<ActiveCheckEvidence> {
+  const surf = await discoverSurface(host, session);
   if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
   const inputs = surf.inputs.filter((ip) => FETCH_PARAM_RE.test(ip.param)).slice(0, 6);
   const ctx = new ProbeCtx();
+  if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
   const findings: VFinding[] = [];
   const notes: string[] = [];
   const base = await ctx.fetchOnce(`https://${host}/`);
@@ -893,11 +921,12 @@ export async function collectSsrfEvidence(host: string): Promise<ActiveCheckEvid
 // HARD-GUARD: yalniz bu sabit, zararsiz gecikme payload'lari. Dosya/ag/komut YOK.
 const RCE_SLEEP_PAYLOADS = [`; sleep ${SLEEP_S} #`, `| sleep ${SLEEP_S}`, `$(sleep ${SLEEP_S})`, `\`sleep ${SLEEP_S}\``];
 
-export async function collectRceEvidence(host: string): Promise<ActiveCheckEvidence> {
-  const surf = await discoverSurface(host);
+export async function collectRceEvidence(host: string, session?: AuthSession): Promise<ActiveCheckEvidence> {
+  const surf = await discoverSurface(host, session);
   if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
   const inputs = surf.inputs.slice(0, 4);
   const ctx = new ProbeCtx();
+  if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
   const findings: VFinding[] = [];
   const notes: string[] = [];
   const base = await ctx.fetchOnce(`https://${host}/`);
