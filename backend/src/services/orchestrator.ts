@@ -1,8 +1,7 @@
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { getPackageDef, securityProfileFor, requiresTestCredentials, requiresManualReview, METHOD_GUARD_EN, METHOD_GUARD_TR, NO_SCRIPT_HARD_EN, NO_SCRIPT_HARD_TR } from './scanPackages.js';
+import { getPackageDef, securityProfileFor, requiresManualReview, METHOD_GUARD_EN, METHOD_GUARD_TR, NO_SCRIPT_HARD_EN, NO_SCRIPT_HARD_TR } from './scanPackages.js';
 import { hasValidActiveTestConsent } from './activeTestConsent.js';
-import { consumeTestCredential } from './testCredentials.js';
 import { isVerificationStillValid } from './verification.js';
 import { checkEgressProxyHealth } from './egressHealth.js';
 import * as pentagi from '../pentagi/client.js';
@@ -144,16 +143,11 @@ export async function startScanForOrder(orderId: string) {
       ? `\n\nTOOL-CALL BUDGET: You have at most ${budget} tool calls. After about the ${stopAt}th call, STOP all new exploration and START writing the report (findings + '===FIX_SUGGESTIONS===' if any). Never hit the limit with an empty report.`
       : `\n\nARAC CAGRI BUTCESI: En fazla ${budget} arac cagrin var. Yaklasik ${stopAt}. cagridan sonra TUM yeni kesfi DURDUR ve raporu (bulgular + varsa '===FIX_SUGGESTIONS===') YAZMAYA BASLA. Tavana bos raporla carpma.`;
 
-  // (Tam Kapsamlı Pentest — FAZ A) KİMLİK BİLGİSİ GÜVENLİĞİ: bu paket bir TEST hesabı istiyorsa,
-  // şifreli kimlik bilgisini burada TÜKET + AYNI ANDA SİL (TestCredential.ciphertext=null). Böylece
-  // flow ilerlemeden önce plaintext kaynak kalmaz.
-  // ⚠️ FAZ A'da ajana kimlik bilgisi GÖNDERİLMEZ (credLine boş kalır) — login otomasyonu FAZ B'nin
-  // işidir; FAZ B backend-deterministik login yapıp ajana yalnız OTURUM TOKEN'ı geçecek (şifre değil),
-  // böylece kimlik bilgisi PentAGI flow log'larına HİÇ ulaşmaz. (bkz credentialRedaction.ts regresyon guard'ı.)
+  // (Tam Kapsamlı Pentest) Kimlik bilgisi ARTIK burada TÜKETİLMEZ. Ajana ASLA gönderilmez (credLine boş).
+  // Şifre, RAPOR ÜRETİM anında backend-deterministik login için gerekir: report.ts -> generateAndStoreReport
+  // -> authenticateOrder oturumu alırken kimlik bilgisini TÜKETİR + SİLER (tek kullanım). Orchestrator burada
+  // tüketirse (eski FAZ A davranışı) rapor üretimi kimlik bilgisini boş bulurdu (canlı bug: no_login_endpoint).
   const credLine = '';
-  if (requiresTestCredentials(order.package.key)) {
-    await consumeTestCredential(order.id, 'primary').catch(() => null); // çöz+sil (kullanım FAZ B'de)
-  }
 
   // (Yontem disiplini) TUM paketlere merkezi olarak eklenir — ajanin script-yazma/
   // debug dongusune sapmasini onler (bkz METHOD_GUARD_* ve scanPackages.ts yorumu).
