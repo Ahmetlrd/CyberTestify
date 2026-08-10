@@ -833,9 +833,10 @@ Target: ${host}
     key: 'bundle_active_verify',
     displayName: 'Aktif Doğrulama Paketi',
     description:
-      'Kombine paket: Aktif-hafif zafiyet doğrulama. Enjeksiyon (SQLi/XSS) + IDOR tam işlevsel; ' +
-      'kalan 5 kontrol aşamalı devreye alınıyor. Zafiyeti kanıtlar, istismar etmez.',
-    priceMinorUnit: 2699475,
+      'Kombine paket: Yedi aktif-hafif zafiyet doğrulama kontrolü (Enjeksiyon/IDOR/SSRF/Dosya Yükleme/' +
+      'İş Mantığı/Race-Mass-Assignment/RCE). Zafiyeti kanıtlar, istismar etmez. Kimlik doğrulaması ' +
+      'olmadan (login’siz) test edilebilen yüzeyde çalışır; login sonrası derin zafiyetler kapsam dışıdır.',
+    priceMinorUnit: 1499900,
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     available: false,

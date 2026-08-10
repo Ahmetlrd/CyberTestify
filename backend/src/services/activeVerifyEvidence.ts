@@ -167,10 +167,14 @@ export type Surface = {
   homeHeaders: Map<string, string>;
   inputs: InputPoint[];
   idEndpoints: Array<{ url: string; idParam: string; idValue: number; kind: 'query' | 'path' }>;
-  uploadForms: Array<{ action: string; fileField: string; otherFields: string[] }>;
+  uploadForms: Array<{ action: string; fileField: string; otherFields: string[]; source?: 'dom' | 'network' }>;
   massAssignForm: { action: string; fields: string[] } | null;
   apiWrites: string[];        // GOZLEMLENEN durum-degistiren API uclari ("POST /rest/user/login") — PROBE EDILMEZ
 };
+
+// Ağ-trafiğinde dosya-yükleme uç noktası işareti: path'te upload/file/avatar/image/attachment vb.
+// (multipart/form-data content-type ile birlikte değerlendirilir — bkz crawlHeadless apiReqs işleme).
+const UPLOAD_PATH_RE = /(upload|\bfile\b|avatar|attachment|\bimage\b|\bimg\b|\bphoto\b|\bmedia\b|profile[-_]?pic)/i;
 
 async function crawlSurface(host: string): Promise<Surface> {
   const empty: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [] };
@@ -274,7 +278,7 @@ async function crawlHeadless(host: string): Promise<Surface | null> {
     let stopped = false;
     // PASIF DINLEME: sayfanin organik olarak attigi ayni-host XHR/fetch istekleri (gercek API yuzeyi).
     // Biz EKSTRA istek/etkilesim TETIKLEMIYORUZ — sadece gozlemliyoruz.
-    const apiReqs: Array<{ method: string; url: string }> = [];
+    const apiReqs: Array<{ method: string; url: string; ctype: string }> = [];
 
     // Tek sayfayi render edip render-edilmis HTML'i dondur. HARD-GUARD: yalniz ayni host, ic-ag ASLA.
     const renderOne = async (url: string): Promise<string | null> => {
@@ -291,7 +295,7 @@ async function crawlHeadless(host: string): Promise<Surface | null> {
           try { if (isInternalHost(new URL(rurl).hostname)) block = true; } catch { /* yoksay */ }
           // PASIF YAKALA: ayni-host XHR/fetch (gercek API yuzeyi). Bloklamiyoruz, sadece kaydediyoruz.
           if (!block && (rt === 'xhr' || rt === 'fetch')) {
-            try { if (new URL(rurl).hostname.toLowerCase() === host.toLowerCase()) apiReqs.push({ method: req.method(), url: rurl }); } catch { /* yoksay */ }
+            try { if (new URL(rurl).hostname.toLowerCase() === host.toLowerCase()) apiReqs.push({ method: req.method(), url: rurl, ctype: (req.headers()['content-type'] || '').toLowerCase() }); } catch { /* yoksay */ }
           }
           if (block) req.abort().catch(() => {}); else req.continue().catch(() => {});
         });
@@ -353,6 +357,16 @@ async function crawlHeadless(host: string): Promise<Surface | null> {
       if (API_NOISE_PATH_RE.test(u.pathname)) continue;
       const base = `${u.origin}${u.pathname}`;
       if (API_WRITE_METHODS.has(r.method.toUpperCase())) {
+        // DOSYA YUKLEME ucu mu? (multipart/form-data content-type VEYA path'te upload/file/avatar/...).
+        // Odeme/tamamlama uclari HARIC (guvenlik). Boyle bir uc -> Dosya Yukleme kontrolune BESLE
+        // (mevcut DOM <input type=file> taramasina EK). Mevcut kural: tek seferlik zararsiz/inert dosya.
+        const isUpload = (/multipart\/form-data/.test(r.ctype) || UPLOAD_PATH_RE.test(u.pathname)) && !COMPLETION_BLOCKLIST_RE.test(u.pathname);
+        if (isUpload) {
+          const base = `${u.origin}${u.pathname}`;
+          const key = `${base}:file`;
+          if (!seenUp.has(key)) { seenUp.add(key); uploadForms.push({ action: base, fileField: 'file', otherFields: [], source: 'network' }); }
+          continue;
+        }
         // Durum-degistiren API ucu — PROBE EDILMEZ, sadece raporda gozlem notu.
         apiWrites.add(`${r.method.toUpperCase()} ${u.pathname}`);
         continue;
@@ -641,6 +655,29 @@ function discoverIdEndpoints(host: string, html: string): Array<{ url: string; i
   }
   return out.slice(0, MAX_INPUTS);
 }
+// Koleksiyon-benzeri uçtan sıralı sayısal ID TÜRETME (item 1). /rest/products/search gibi liste
+// uçlarından /rest/products/{1..N} türetilir; ardışık ID'ler aynı JSON yapısında FARKLI içerik
+// döndürürse numaralandırılabilir kaynak (olası IDOR) göstergesi. GET-only, content-diff.
+const IDOR_DERIVE_MAX_BASES = 3;   // türetilecek en fazla koleksiyon bazı
+const DERIVE_IDS_PER_BASE = 3;     // her baz için denenen ardışık ID sayısı (1..N; makul, 1-5 arası)
+const COLLECTION_LAST_SEG_RE = /^(products?|users?|accounts?|orders?|items?|invoices?|customers?|articles?|posts?|comments?|messages?|files?|photos?|images?|feedbacks?|reviews?|baskets?|cards?|addresses?|profiles?|memories?|complaints?)$/i;
+// Kesfedilen yuzeyden (input action'lari + idEndpoint URL'leri) koleksiyon bazlari cikar.
+function collectionBasesFrom(surf: Surface): string[] {
+  const bases = new Set<string>();
+  const consider = (rawUrl: string) => {
+    let u: URL; try { u = new URL(rawUrl); } catch { return; }
+    const path = u.pathname.replace(/\/+$/, '').replace(/\/(search|list|all|index|find|query)$/i, '').replace(/\/\d{1,9}$/, '');
+    if (!path || CRAWL_ASSET_RE.test(path)) return;
+    const segs = path.split('/').filter(Boolean);
+    if (segs.length < 2) return;                                  // tek-segment generic sayfalari ele
+    if (!COLLECTION_LAST_SEG_RE.test(segs[segs.length - 1])) return; // cogul/liste-anlamli son segment sarti
+    bases.add(`${u.origin}${path}`);
+  };
+  for (const ip of surf.inputs) consider(ip.action);
+  for (const e of surf.idEndpoints) consider(e.url);
+  return [...bases];
+}
+
 function withId(url: string, kind: 'query' | 'path', idParam: string, newVal: number): string {
   const u = new URL(url);
   if (kind === 'query') u.searchParams.set(idParam, String(newVal));
@@ -713,9 +750,40 @@ export async function collectIdorEvidence(host: string): Promise<IdorEvidence> {
     }
   }
 
+  // --- (2) KOLEKSIYON-BENZERI UCLARDAN TURETILMIS sirali ID denemesi (GET-only, content-diff) ---
+  // /rest/products/search gibi liste uclarindan /rest/products/{1..N} TURETILIR; ardisik ID'ler ayni
+  // JSON YAPIsinda FARKLI icerik dondururse -> numaralandirilabilir kaynak (olasi IDOR) gostergesi.
+  // Tum istekler ayni ProbeCtx uzerinden -> circuit breaker + 130 prob tavanina DAHIL. Veri SAKLANMAZ.
+  const md5f = (s: string) => createHash('md5').update(s).digest('hex');
+  const epsPathBases = new Set(eps.filter((e) => e.kind === 'path').map((e) => { try { const u = new URL(e.url); return u.origin + u.pathname.replace(/\/\d{1,9}\/?$/, ''); } catch { return ''; } }));
+  const derivedBases = collectionBasesFrom(surf).filter((b) => !epsPathBases.has(b)).slice(0, IDOR_DERIVE_MAX_BASES);
+  for (const base of derivedBases) {
+    if (ctx.stopped) break;
+    tested++;
+    const got: Array<{ id: number; shape: string | null; hash: string; len: number; ok: boolean }> = [];
+    for (let id = 1; id <= DERIVE_IDS_PER_BASE; id++) {
+      if (ctx.stopped) break;
+      const r = await ctx.fetchOnce(`${base}/${id}`);
+      if (!r || r.status === 0) continue;
+      got.push({ id, shape: tryJsonShape(r.text), hash: md5f(r.text), len: r.len, ok: r.status === 200 && !looksLikeNotFound(r.status, r.text) });
+    }
+    const ok200 = got.filter((g) => g.ok);
+    // Ayni JSON YAPIsi + >=2 farkli hash => farkli kayitlar (guclu gosterge). Aksi: kaba uzunluk farki.
+    const byShape = new Map<string, Set<string>>();
+    for (const g of ok200) if (g.shape) { if (!byShape.has(g.shape)) byShape.set(g.shape, new Set()); byShape.get(g.shape)!.add(g.hash); }
+    const shapeEnum = [...byShape.values()].some((hs) => hs.size >= 2);
+    const lenEnum = !shapeEnum && ok200.length >= 2 && new Set(ok200.map((g) => g.hash)).size >= 2 && (Math.max(...ok200.map((g) => g.len)) - Math.min(...ok200.map((g) => g.len)) > 64);
+    if (shapeEnum || lenEnum) {
+      const path = (() => { try { return new URL(base).pathname; } catch { return base; } })();
+      findings.push({ endpoint: `${path}/{id}`, idParam: 'path-id', observation: `Koleksiyon-benzeri uçtan türetilen sıralı ID'ler (${ok200.map((g) => g.id).join(', ')}) kimlik doğrulaması olmadan 200 döndürdü ve ${shapeEnum ? 'aynı YAPIDA (JSON iskeleti) FARKLI İÇERİKLİ' : 'farklı boyutlu/içerikli'} yanıtlar üretti — numaralandırılabilir kaynak erişimi (olası IDOR) göstergesi (dönen veri raporda gösterilmez).`, differentResource: true, severity: shapeEnum ? 'medium' : 'low' });
+    }
+  }
+
+  const totalCandidates = eps.length + derivedBases.length;
+  if (derivedBases.length) notes.push(`Ayrıca **${derivedBases.length}** koleksiyon-benzeri uçtan (ör. \`${(() => { try { return new URL(derivedBases[0]).pathname; } catch { return derivedBases[0]; } })()}\`) sıralı sayısal ID'ler (\`/{1..${DERIVE_IDS_PER_BASE}}\`) türetilip GET ile içerik-farkı yöntemiyle test edildi.`);
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!eps.length) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada sayısal/tahmin-edilebilir ID içeren bir uç nokta (ör. \`?id=123\`, \`/user/45\`) bulunamadı.` + spaHint(surf));
-  return { ok: true, pagesScanned: surf.pagesScanned, candidates: eps.length, endpointsTested: tested, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+  if (!totalCandidates) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada sayısal/tahmin-edilebilir ID içeren bir uç nokta (ör. \`?id=123\`, \`/user/45\`) veya sıralı ID türetilebilecek koleksiyon ucu bulunamadı.` + spaHint(surf));
+  return { ok: true, pagesScanned: surf.pagesScanned, candidates: totalCandidates, endpointsTested: tested, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }
 
 // ======================================================================================
@@ -851,8 +919,8 @@ export async function collectRceEvidence(host: string): Promise<ActiveCheckEvide
 // ======================================================================================
 // FAZ C — file_upload_verify: tek zararsiz/inert dosya yukleme probu; geri cagirma YOK
 // ======================================================================================
-function discoverUploadForms(host: string, html: string): Array<{ action: string; fileField: string; otherFields: string[] }> {
-  const out: Array<{ action: string; fileField: string; otherFields: string[] }> = [];
+function discoverUploadForms(host: string, html: string): Array<{ action: string; fileField: string; otherFields: string[]; source: 'dom' }> {
+  const out: Array<{ action: string; fileField: string; otherFields: string[]; source: 'dom' }> = [];
   for (const fm of html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)) {
     const inner = fm[2];
     const fileField = inner.match(/<input\b[^>]*type=["']file["'][^>]*\bname=["']([^"']+)["']/i)?.[1]
@@ -862,7 +930,7 @@ function discoverUploadForms(host: string, html: string): Array<{ action: string
     if (!action) continue;
     const others: string[] = [];
     for (const im of inner.matchAll(/<input\b[^>]*\bname=["']([^"']+)["']/gi)) if (im[1] !== fileField && !/^(csrf|_token|authenticity_token)/i.test(im[1])) others.push(im[1]);
-    out.push({ action, fileField, otherFields: others.slice(0, 8) });
+    out.push({ action, fileField, otherFields: others.slice(0, 8), source: 'dom' });
   }
   return out.slice(0, 2);
 }
@@ -898,8 +966,10 @@ export async function collectFileUploadEvidence(host: string): Promise<ActiveChe
       findings.push({ check: 'file_upload', inputPoint: label, vulnerable: true, technique: 'inert file accepted (double-extension)', evidence: `Çift uzantılı (.php.txt) zararsız test dosyası, açık bir doğrulama reddi olmadan kabul edilmiş görünüyor (HTTP ${r.status}). Yükleme filtresi zayıf olabilir; kesin doğrulama için manuel test gerekir (dosya GERİ ÇAĞIRILMADI/çalıştırılmadı).`, confidence: 'low', severity: 'medium', sideEffectRisk: 'possible' });
     }
   }
+  const netForms = forms.filter((f) => f.source === 'network').length;
+  if (netForms > 0) notes.push(`Bu kontrolde, DOM'daki \`<input type=file>\` formlarına **ek olarak**, JS render sırasında gözlemlenen ağ trafiğinden (multipart/form-data veya upload/file/avatar gibi yollar) **${netForms}** dosya-yükleme ucu keşfedilip test edildi.`);
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!forms.length) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada dosya yükleme formu (input type=file) bulunamadı.` + spaHint(surf));
+  if (!forms.length) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada dosya yükleme formu (input type=file) veya ağ trafiğinde dosya-yükleme ucu bulunamadı.` + spaHint(surf));
   return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: forms.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }
 

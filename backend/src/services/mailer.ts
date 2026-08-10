@@ -1,5 +1,9 @@
 import { prisma } from '../db.js';
 import { config } from '../config.js';
+import { getBundle } from './bundles.js';
+
+// Aktif Doğrulama Paketi üye kontrol anahtarları — sipariş e-postasında kapsam netliği için.
+const ACTIVE_VERIFY_KEYS = new Set(getBundle('bundle_active_verify')?.memberKeys ?? []);
 
 /**
  * Transactional e-posta (Brevo REST API — POST /v3/smtp/email).
@@ -124,7 +128,7 @@ export async function sendOrderConfirmation(orderIds: string[]): Promise<boolean
     if (!ids.length) return false;
     const orders = await prisma.order.findMany({
       where: { id: { in: ids } },
-      include: { customer: { select: { email: true } }, package: { select: { displayName: true } }, domain: { select: { hostname: true } } },
+      include: { customer: { select: { email: true } }, package: { select: { displayName: true, key: true } }, domain: { select: { hostname: true } } },
     });
     if (!orders.length) return false;
     const email = orders[0].customer.email;
@@ -134,6 +138,11 @@ export async function sendOrderConfirmation(orderIds: string[]): Promise<boolean
     const isBundle = orders.length > 1;
     const items = orders.map((o) => `<li style="margin:2px 0">${esc(o.package.displayName)}</li>`).join('');
     const orderRef = orders.map((o) => o.id.slice(0, 8)).join(', ');
+    // Aktif Doğrulama Paketi ise: satın alma ANINDA yazılı kapsam netliği (login’siz yüzey).
+    const isActiveVerify = orders.some((o) => ACTIVE_VERIFY_KEYS.has(o.package.key));
+    const scopeNote = isActiveVerify
+      ? `<p style="margin:12px 0;padding:10px 14px;background:#f3f7f6;border-left:3px solid #123F3A;border-radius:6px;color:#3a4a47;font-size:13px"><strong>Kapsam:</strong> Bu paket kimlik doğrulaması gerektirmeyen (login olmadan test edilebilen) yüzeyde çalışır. Login sonrası ortaya çıkan derin yetkilendirme/iş mantığı zafiyetleri bu paketin kapsamı dışındadır; sonuçlar hedefin yapısına göre değişir.</p>`
+      : '';
     const body = `<p>Siparişiniz alındı ve ödemeniz onaylandı. Teşekkür ederiz.</p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:12px 0;border:1px solid #e3e8e6;border-radius:10px">
         <tr><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;color:#8a9794">Hedef</td><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:14px;font-weight:600;text-align:right">${esc(hostname)}</td></tr>
@@ -141,7 +150,7 @@ export async function sendOrderConfirmation(orderIds: string[]): Promise<boolean
         <tr><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;color:#8a9794">Sipariş no</td><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;text-align:right">${esc(orderRef)}</td></tr>
         <tr><td style="padding:12px 14px;font-size:13px;color:#8a9794">Tutar</td><td style="padding:12px 14px;font-size:16px;font-weight:800;color:#123F3A;text-align:right">${fmtMoney(totalMinor, currency)}</td></tr>
       </table>
-      <p style="color:#3a4a47">Taramanız sıraya alındı. <strong>Başladığında</strong> size ayrıca bir e-posta göndereceğiz; durumu panelinizden de takip edebilirsiniz.</p>`;
+      ${scopeNote}<p style="color:#3a4a47">Taramanız sıraya alındı. <strong>Başladığında</strong> size ayrıca bir e-posta göndereceğiz; durumu panelinizden de takip edebilirsiniz.</p>`;
     const html = layout({ heading: 'Siparişiniz alındı', bodyHtml: body, cta: { label: 'Siparişimi görüntüle', url: `${config.frontendUrl}/dashboard/${orders[0].id}` } });
     return await sendMail(email, 'Siparişiniz alındı — CyberTestify', html);
   } catch (err) {

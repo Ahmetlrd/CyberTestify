@@ -251,7 +251,7 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
     if (!r || !r.rep) return 'Veri toplanamadı';
     if (r.fc > 0 && lv === 'high') return '⚠ Zafiyet göstergesi';
     if (r.fc > 0) return '⚠ Sınırlı gösterge';
-    if (r.inputs === 0) return 'Test edilebilir giriş noktası bulunamadı';
+    if (r.inputs === 0) return 'Giriş noktası yok (Kapsam dışı)';
     return '✓ Zafiyet kanıtı yok';
   };
   const confCell = (r: MemberRun | null, conf: string): string => (r && r.rep && r.inputs > 0 ? conf : 'Kapsam dışı');
@@ -264,6 +264,15 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
     worst === 'low'
       ? `- **Genel risk seviyesi: Düşük** — 7 kontrol kategorisinin tamamı değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`
       : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`,
+  );
+  // DÜRÜSTLÜK (dinamik — gerçek en yüksek ciddiyetli kontrolden türer): bu paketin kimlik-doğrulamasız
+  // kapsam sınırını AÇIKÇA belirt + en güçlü sonucu (bulgu varsa) veya "zafiyet bulunamadı"yı bildir.
+  const anyFinding = runs.some((r) => r?.fc && r.fc > 0);
+  const strongest = anyFinding && worstTitle
+    ? `Bu taramada en güçlü sonuç **${worstTitle}** alanında tespit edilmiştir.`
+    : 'Bu taramada doğrulanmış bir zafiyet tespit edilmemiştir.';
+  summary.push(
+    `- **Kapsam dürüstlüğü:** Bu paket kimlik doğrulaması olmadan (login yapılmadan) çalışır. Login gerektiren derin IDOR, iş mantığı ve yetki yükseltme senaryoları bu paketin kapsamı dışındadır. ${strongest}`,
   );
   ACTIVE_BUNDLE_MEMBERS.forEach((m, i) => {
     const r = runs[i]; const lv = levels[i];

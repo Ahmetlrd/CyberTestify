@@ -479,6 +479,17 @@ export default function OrderPage() {
         </div>
       )}
 
+      {/* KAPSAM NETLIGI — Aktif Doğrulama Paketi seçiliyken HER müşteri, ÖDEME ÖNCESİ görür
+          (düşük-sinyal ön-kontrol uyarısından bağımsız; o uyarı ek olarak gösterilir). */}
+      {selectedBundle?.key === 'bundle_active_verify' && (
+        <div className="mt-3 rounded-card border border-line bg-brand-50/50 px-4 py-3 text-sm text-ink-soft">
+          <strong className="text-ink">Kapsam:</strong> Bu paket kimlik doğrulaması gerektirmeyen
+          (login olmadan test edilebilen) yüzeyde çalışır. Login sonrası ortaya çıkan derin
+          yetkilendirme/iş mantığı zafiyetleri bu paketin kapsamı dışındadır; sonuçlar hedefin
+          yapısına göre değişir.
+        </div>
+      )}
+
       {/* Onaylar */}
       <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">2 · Onaylar</h2>
       <div className="mt-3 space-y-2.5">

@@ -97,12 +97,13 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     displayNameEn: 'Active Verification Bundle',
     description:
       'Yedi aktif-hafif zafiyet doğrulama kontrolünün tümü tek pakette: Enjeksiyon, IDOR, SSRF, Dosya Yükleme, İş Mantığı, Race/Mass-Assignment ve RCE. Zafiyeti kanıtlar, istismar etmez; tek yetkilendirme beyanı yeterli. Tekil toplamdan belirgin indirimli. ' +
-      'Not: Bu paketin bazı kontrolleri (Enjeksiyon, IDOR) tam işlevseldir; kalan kontroller aşamalı olarak devreye alınmaktadır.',
+      'Kapsam: Bu paket kimlik doğrulaması gerektirmeyen (login olmadan test edilebilen) yüzeyde çalışır. Login sonrası ortaya çıkan derin yetkilendirme/iş mantığı zafiyetleri bu paketin kapsamı dışındadır; sonuçlar hedefin yapısına göre değişir.',
     descriptionEn:
       'All seven active-light verification checks in one bundle: Injection, IDOR, SSRF, File Upload, Business Logic, Race/Mass-Assignment and RCE. Proves presence, never exploits; a single authorization declaration covers all. Strongly discounted vs buying separately. ' +
-      'Note: some checks (Injection, IDOR) are fully functional; the remaining checks are being rolled out progressively.',
+      'Scope: this bundle tests the unauthenticated (no-login) surface. Deep authorization/business-logic vulnerabilities that only appear after login are out of scope; results depend on the target’s structure.',
     category: 'active-light',
     discountPct: 25,
+    finalPriceMinorUnitTr: 1499900, // 14.999 TL (Vedat — nihai indirimli sabit fiyat; uye order tutarlari buna bolunur)
     comingSoon: false,
     memberKeys: [
       'injection_verify',
