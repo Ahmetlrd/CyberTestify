@@ -10,6 +10,7 @@ import { collectInjectionEvidence, collectIdorEvidence } from './activeVerifyEvi
 import {
   collectCookieFlagsEvidence, collectSessionFixationEvidence, collectLogoutEvidence, collectForcedBrowsingEvidence,
 } from './authenticatedChecks.js';
+import { collectPrivilegeEscalationEvidence, collectMultiStepBusinessLogicEvidence } from './authAgentChecks.js';
 import {
   buildActiveCheckReport, buildInjectionReport, buildIdorReport,
   RISK_WORD, levelRank, extractLevel, headlineOf, detailOnly, type Level,
@@ -61,6 +62,31 @@ const FORCED_CFG = {
   cleanGenel: 'Düşük yetkili oturumla erişilebilen bir admin/yönetim uç noktası gözlemlenmedi.',
 };
 
+const PRIVESC_CFG = {
+  title: 'Yetki Yükseltme (Privilege Escalation)', whatChecked: [
+    'Keşfedilen authenticated yüzeyden **PentAGI ajanı** (yalnız JSON öneri; doğrudan HTTP atmaz) yetki-alanı içeren form/API seçti.',
+    'Backend, öneriyi **güvenli, authenticated-light** fonksiyonundan geçirip TEK gözlemsel mass-assignment probu (`role/isAdmin` ek alan) uyguladı.',
+    '⚠️ Gerçek yükseltme TAMAMLANMADI; yükseltilmiş yetkiyle tekrar giriş yapılmadı; oturum dışına çıkılmadı; hesap-değiştiren/checkout hedeflerine **yazılmadı** (kod-seviyesi blocklist).',
+  ],
+  confidenceNote: 'Mass-assignment göstergesi yalnızca ilk yanıttan çıkarılmıştır (düşük güven); kesin doğrulama manuel test gerektirir.',
+  fixTitle: 'Yetki Yükseltme / Mass-Assignment',
+  fixFound: ['Model bağlamada **allowlist** ile yalnız izin verilen alanları bağlayın; `role/isAdmin` gibi alanları ASLA istemciden almayın.', 'Sunucu tarafında rol atamasını yalnız yetkili akışlarda yapın.'],
+  fixClean: ['Mass-assignment koruması (alan allowlist) uygulayın; rol/yetki alanlarını istemciden kabul etmeyin (proaktif).'],
+  cleanGenel: 'Uygun bir kayıt/profil formu bulunamadı veya `role/isAdmin` mass-assignment probu kabul edilmedi.',
+};
+const MULTISTEP_CFG = {
+  title: 'Çok-Adımlı İş Mantığı', whatChecked: [
+    '**PentAGI ajanı** (yalnız JSON öneri) çok-adımlı akış/fiyat-kupon alanı seçti; backend YALNIZ **GET-gözlem** yaptı.',
+    'İstemci-değiştirilebilir gizli fiyat/miktar/kupon alanı + ön koşulsuz erişilebilen "onay" adımı gözlemlendi.',
+    '⚠️ Yalnız sepete/forma kadar; **ödeme/checkout TAMAMLANMADI** (kod-seviyesi blocklist); hiçbir kaynak tüketilmedi.',
+  ],
+  confidenceNote: 'İş mantığı zafiyetleri bağlama özeldir; bu kontrol yüzey/gösterge seviyesindedir.',
+  fixTitle: 'Çok-Adımlı İş Mantığı',
+  fixFound: ['Fiyat/miktar/indirim/kupon değerlerini **asla** istemciden gelenle işlemeyin; sunucuda yeniden hesaplayın/doğrulayın.', 'Çok-adımlı akışlarda her adımın ön koşulunu sunucu tarafında zorunlu kılın; kuponu tek-kullanımlık atomik tüketin.'],
+  fixClean: ['Kritik değerleri sunucuda doğrulayın; adım sırası + kupon tekrar-kullanım kontrolü uygulayın (proaktif).'],
+  cleanGenel: 'Gözlemlenebilir bir istemci-tarafı fiyat/kupon alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.',
+};
+
 type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
@@ -78,6 +104,11 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   runs.push({ title: 'Authenticated Enjeksiyon (SQLi/XSS)', conf: 'Yüksek', rep: injEv ? buildInjectionReport(injEv) : null, inputs: injEv?.inputsFound ?? 0, probes: injEv?.probesSent ?? 0, fc: injEv?.findings.length ?? 0 });
   const idorEv = await collectIdorEvidence(host, session).catch(() => null);
   runs.push({ title: 'Authenticated IDOR (kendi kaynakları)', conf: 'Orta', rep: idorEv ? buildIdorReport(idorEv) : null, inputs: idorEv?.candidates ?? 0, probes: idorEv?.probesSent ?? 0, fc: idorEv?.findings.length ?? 0 });
+  // (FAZ D) SINIRLI/KONTROLLÜ AJAN KATMANI — priv-esc + çok-adımlı iş mantığı (ajan öneri, backend uygular).
+  const privEv = await collectPrivilegeEscalationEvidence(host, session).catch(() => null);
+  runs.push({ title: 'Yetki Yükseltme (Privilege Escalation)', conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, PRIVESC_CFG) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0 });
+  const multiEv = await collectMultiStepBusinessLogicEvidence(host, session).catch(() => null);
+  runs.push({ title: 'Çok-Adımlı İş Mantığı', conf: 'Düşük', rep: multiEv ? buildActiveCheckReport(multiEv, MULTISTEP_CFG) : null, inputs: multiEv?.inputsFound ?? 0, probes: multiEv?.probesSent ?? 0, fc: multiEv?.findings.length ?? 0 });
 
   if (runs.every((r) => !r.rep)) return null;
 
@@ -114,7 +145,7 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
       : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — en yüksek risk **${worstTitle}** alanında.`,
   );
   summary.push(
-    `- **Kapsam:** Bu bölüm **kimlik-doğrulamalı (login’li)** bağlamda çalışır; login sonrası ortaya çıkan çerez/oturum/yetki ve authenticated enjeksiyon/IDOR sınıflarını kapsar. Yetki yükseltme, çok-adımlı iş mantığı ve cross-account (başka kullanıcının verisi) IDOR bu bölümün kapsamı dışındadır.`,
+    `- **Kapsam:** Bu bölüm **kimlik-doğrulamalı (login’li)** bağlamda çalışır; çerez/oturum/yetki, authenticated enjeksiyon/IDOR ve **sınırlı-otonom ajan katmanıyla** yetki yükseltme + çok-adımlı iş mantığı göstergelerini kapsar (ajan yalnız öneri verir; backend güvenli uygular; ödeme/hesap-değişikliği tamamlama YOK). Cross-account (başka kullanıcının verisi) IDOR bu sürümün kapsamı dışındadır.`,
   );
   runs.forEach((r, i) => {
     const lv = levels[i];

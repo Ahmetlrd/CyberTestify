@@ -56,7 +56,7 @@ export interface ScanPackageDef {
   //  - 'active-verify-only' : RCE/komut-enjeksiyonu KANITI icin EN SIKI — active-light'in
   //                     tumu + gercek komut calistirma payload'lari (ters kabuk, hassas
   //                     dosya, fetch|sh, yikim) da bloklu; yalniz kor kanit (sleep/canary).
-  securityProfile?: 'passive' | 'active-light' | 'active-verify-only';
+  securityProfile?: 'passive' | 'active-light' | 'active-verify-only' | 'authenticated-light';
   networkLayer?: boolean;
   fixSuggestionPriceMinorUnit?: number;       // NIHAI (satis) fiyat — verilmezse taban fiyatin %50'si
   fixSuggestionListMinorUnit?: number;        // "indirimli gibi" gosterilen ustu-cizili anchor (opsiyonel)
@@ -101,7 +101,7 @@ export function requiresTestCredentials(packageKey: string): boolean {
   try { return getPackageDef(packageKey).requiresTestCredentials === true; } catch { return false; }
 }
 
-export type SecurityProfile = 'passive' | 'active-light' | 'active-verify-only';
+export type SecurityProfile = 'passive' | 'active-light' | 'active-verify-only' | 'authenticated-light';
 
 // Paketin guvenlik profili — belirtilmezse GUVENLI varsayilan 'passive'.
 export function securityProfileFor(def: ScanPackageDef): SecurityProfile {
@@ -302,6 +302,26 @@ SKIP. Report ONLY evidence of PRESENCE — never include any extracted/sensitive
 NO INSTALLS: do NOT install or attempt to install ANY tool/package (apt/pip/npm/go install/git clone/
 curl|bash/downloading binaries). Use ONLY tools already present in the container; if a tool is missing,
 SKIP that check ("not reviewed (tool unavailable)") — never install.`.trim();
+
+// === AUTHENTICATED-LIGHT (Tam Kapsamlı Pentest FAZ D) — active-light + hesap-durumu koruması.
+// Ajan-katmanı (yetki yükseltme + çok-adımlı iş mantığı) için. Ajan YALNIZ yapılandırılmış JSON
+// döndürür; DOĞRUDAN HTTP ATMAZ (backend güvenli fonksiyonlardan uygular). Tool-seviyesi karşılığı:
+// passive_guard.go 'authenticated-light' profili (account-change/checkout POST bloklu).
+export const SAFETY_AUTHENTICATED_EN = `
+${SAFETY_ACTIVE_LIGHT_EN}
+
+ADDITIONAL RULES (AUTHENTICATED agent-assist layer — you ONLY suggest; the backend applies safely):
+- You do NOT send any HTTP request yourself. You ONLY return a structured JSON suggestion; the backend
+  runs it through its own SAFE, single-attempt functions (authenticated-light tool profile).
+- PRIVILEGE ESCALATION: only gather an INDICATOR (e.g. "is a role/isAdmin field accepted on this form?").
+  NEVER complete a real escalation, NEVER re-login with elevated rights, NEVER leave the current session.
+- CROSS-ACCOUNT data access (if any): PRESENCE proof ONLY via content-diff; the returned content is NEVER
+  shown or stored (same principle as the IDOR content-diff check).
+- MULTI-STEP BUSINESS LOGIC (coupon reuse, price tampering): only up to the cart/form stage — NEVER
+  complete payment/checkout (blocked at tool level too).
+- Account-state-changing writes are FORBIDDEN: password/email change, account deletion, order/payment
+  completion, subscribe/refund — even as POST (blocked at tool level).
+- NO free-form / no Turkish prose EVER — output ONLY the JSON object. Single attempt, NO retry.`.trim();
 
 // RCE/komut-enjeksiyonu KANITI — EN SIKI. Yalniz KOR kanit; gercek komut ASLA calistirilmaz.
 const SAFETY_RCE_VERIFY_EN = `

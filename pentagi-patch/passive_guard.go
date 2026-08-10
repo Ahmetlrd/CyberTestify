@@ -106,6 +106,8 @@ func SecurityProfileFromEnv() string {
 		return "active-light"
 	case "active-verify-only":
 		return "active-verify-only"
+	case "authenticated-light":
+		return "authenticated-light"
 	default:
 		return "passive"
 	}
@@ -143,7 +145,7 @@ func ActiveSecurityProfile() string {
 					SecurityProfile string `json:"securityProfile"`
 				}
 				if json.Unmarshal(body, &data) == nil && data.Active {
-					if data.SecurityProfile == "active-light" || data.SecurityProfile == "active-verify-only" {
+					if data.SecurityProfile == "active-light" || data.SecurityProfile == "active-verify-only" || data.SecurityProfile == "authenticated-light" {
 						prof = data.SecurityProfile
 					}
 				}
@@ -170,6 +172,18 @@ func IsBlockedHTTPCommand(command string, profile string) (bool, string) {
 			if m := re.FindString(command); m != "" {
 				return true, m
 			}
+		}
+		return false, ""
+	}
+	if profile == "authenticated-light" {
+		// active-light TÜMÜ + hesap-durumu değiştiren POST'lar (parola/e-posta/hesap-silme/checkout) bloklu.
+		for _, re := range activeLightBlockedPatterns {
+			if m := re.FindString(command); m != "" {
+				return true, m
+			}
+		}
+		if blocked, m := AuthLightExtraBlocked(command); blocked {
+			return true, m
 		}
 		return false, ""
 	}

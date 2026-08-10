@@ -1,0 +1,149 @@
+/**
+ * (Tam Kapsamlı Pentest — FAZ D) AJAN-KATMANI KONTROLLERİ: yetki yükseltme + çok-adımlı iş mantığı.
+ *
+ * Ajan (authAgentAdvisor) YALNIZ yapılandırılmış JSON önerir; DOĞRUDAN HTTP ATMAZ. Backend, öneriyi
+ * kendi GÜVENLİ fonksiyonundan geçirip GERÇEKTEN uygular — ama:
+ *  - AUTH_WRITE_BLOCKLIST: hesap-durumu değiştiren / checkout hedeflerine ASLA yazma (backend-birincil,
+ *    Go authenticated-light profili defense-in-depth).
+ *  - Yetki yükseltme: tek, gözlemsel mass-assignment probu (role/isAdmin eklenince kabul mü) — gerçek
+ *    yükseltme TAMAMLANMAZ, oturum dışına çıkılmaz, retry YOK.
+ *  - Çok-adımlı iş mantığı: yalnız GET-gözlem (adım-atlama + istemci-değiştirilebilir fiyat alanı) —
+ *    sepete/forma kadar; ödeme/checkout TAMAMLAMA YOK.
+ *  - Ajan null/timeout/tavan -> deterministik FAZ C sinyaline DÜŞER (paket çökmez).
+ */
+import { randomBytes } from 'node:crypto';
+import { ProbeCtx, discoverSurface, type ActiveCheckEvidence, type VFinding, type Surface } from './activeVerifyEvidence.js';
+import { type AuthSession, applyAuthHeaders } from './authSession.js';
+import { requestAuthAgentScenarios, type AuthAgentSuggestion } from './authAgentAdvisor.js';
+
+// Backend-birincil güvenlik: hesap-durumu değiştiren / tamamlama hedeflerine ASLA yazma
+// (Go authLightBlockedPaths ile AYNI aile; ajan bir bu tür hedef önerse bile backend UYGULAMAZ).
+export const AUTH_WRITE_BLOCKLIST_RE = /(change[-_/]?password|reset[-_/]?password|update[-_/]?password|password[-_/]?(change|update|reset)|delete[-_/]?account|account[-_/]?delet|remove[-_/]?account|close[-_/]?account|deregister|change[-_/]?email|update[-_/]?email|email[-_/]?(change|update)|pay(ment)?|checkout|charge|billing|order[-_/]?(complete|confirm|place)|purchase|subscribe|refund)/i;
+const STEP_SKIP_RE = /\/(success|completed?|confirm(ation)?|thank[-_]?you|tesekkur|onay|basarili|receipt|invoice)\b/i;
+const PRICE_FIELD_RE = /name=["'](price|amount|total|cost|fiyat|tutar|qty|quantity|adet|miktar|discount|indirim|coupon|kupon)["']/i;
+const rand = () => randomBytes(8).toString('hex');
+
+function absUrl(host: string, raw: string): string | null {
+  try { const u = raw.startsWith('http') ? new URL(raw) : new URL(raw, `https://${host}/`); return u.hostname.toLowerCase() === host.toLowerCase() ? u.toString() : null; } catch { return null; }
+}
+
+// Ajan önerileri host başına TEK createFlow ile alınır (iki kontrol PAYLAŞIR). Cache.
+const AUTH_AGENT_CACHE = new Map<string, { at: number; p: Promise<AuthAgentSuggestion[] | null> }>();
+function getScenarios(host: string, surf: Surface): Promise<AuthAgentSuggestion[] | null> {
+  const c = AUTH_AGENT_CACHE.get(host);
+  if (c && Date.now() - c.at < 180_000) return c.p;
+  const forms = [...(surf.massAssignForm ? [surf.massAssignForm.action] : []), ...surf.uploadForms.map((f) => f.action)];
+  const p = requestAuthAgentScenarios(host, { inputs: surf.inputs.map((i) => ({ method: i.method, action: i.action, param: i.param })), forms, apiWrites: surf.apiWrites }).catch(() => null);
+  AUTH_AGENT_CACHE.set(host, { at: Date.now(), p });
+  return p;
+}
+export function __resetAuthAgentCache(host?: string): void { if (host) AUTH_AGENT_CACHE.delete(host); else AUTH_AGENT_CACHE.clear(); }
+
+// ======================================================================================
+// D.1 — YETKİ YÜKSELTME (privilege escalation) DOĞRULAMA
+// ======================================================================================
+async function massAssignObservation(ctx: ProbeCtx, host: string, action: string, fields: string[]): Promise<VFinding | null> {
+  // BACKEND-BİRİNCİL GUARD: hesap-değiştiren/checkout hedefine ASLA yazma.
+  if (AUTH_WRITE_BLOCKLIST_RE.test(action)) return null;
+  const usp = new URLSearchParams();
+  for (const f of fields) usp.set(f, /email/i.test(f) ? `cybertestify-probe+${rand()}@example.com` : 'cybertestify-test');
+  usp.set('role', 'admin'); usp.set('isAdmin', 'true'); usp.set('is_admin', 'true');
+  const r = await ctx.fetchOnce(action, { method: 'POST', body: usp.toString(), contentType: 'application/x-www-form-urlencoded' }); // tek deneme, retry YOK
+  if (r && (r.status === 200 || r.status === 201 || r.status === 302) && !/(error|hata|invalid|geçersiz|reddedil|not allowed|zorunlu|required)/i.test(r.text.slice(0, 3000))) {
+    return {
+      check: 'privilege_escalation', inputPoint: new URL(action).pathname, vulnerable: true,
+      technique: 'mass-assignment (role/isAdmin ek alan)',
+      evidence: `Kayıt/profil benzeri forma fazladan \`role/isAdmin\` alanları eklendiğinde istek açık bir reddedilme olmadan kabul edildi (HTTP ${r.status}). Yetki yükseltme GÖSTERGESİ; gerçek yükseltme DOĞRULANMADI (tamamlama yapılmadı, yükseltilmiş yetkiyle tekrar giriş yapılmadı, oturum dışına çıkılmadı).`,
+      confidence: 'low', severity: 'medium', sideEffectRisk: 'possible',
+    };
+  }
+  return null;
+}
+
+export async function collectPrivilegeEscalationEvidence(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+  const surf = await discoverSurface(host, session);
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  const ctx = new ProbeCtx();
+  ctx.authHeaders = applyAuthHeaders({}, session);
+  const findings: VFinding[] = [];
+  const notes: string[] = [];
+  let agentUsed = false;
+
+  const scenarios = await getScenarios(host, surf).catch(() => null);
+  if (scenarios !== null) {
+    agentUsed = true;
+    // Ajanın seçtiği priv-esc hedeflerini GÜVENLİ mass-assignment gözlemiyle uygula.
+    for (const s of scenarios.filter((x) => x.check === 'privilege_escalation').slice(0, 3)) {
+      if (ctx.stopped) break;
+      const action = absUrl(host, s.inputPoint.replace(/^\w+\s+/, '').split('?')[0]);
+      if (!action || AUTH_WRITE_BLOCKLIST_RE.test(action)) continue; // guard
+      const fields = surf.massAssignForm && surf.massAssignForm.action === action ? surf.massAssignForm.fields : ['email', 'username'];
+      const f = await massAssignObservation(ctx, host, action, fields);
+      if (f) { f.technique = 'PentAGI ajanı seçti + backend güvenli uyguladı: ' + f.technique; findings.push(f); }
+    }
+    notes.push('Bu kontrol, keşfedilen authenticated yüzey üzerinde **PentAGI ajanı ile analiz edilmiştir** (ajan yalnız yapılandırılmış JSON öneri üretir; tüm istekler backend’in güvenli, authenticated-light fonksiyonlarından geçer; ajan doğrudan HTTP atmaz).');
+  } else {
+    // FALLBACK (ajan yok/timeout/tavan) -> deterministik: bilinen mass-assignment formu.
+    notes.push('PentAGI ajan analizi tamamlanamadı (timeout/hata/bütçe) — bu kontrol **deterministik göstergeyle sınırlıdır** (keşfedilen kayıt/profil formu, ajan muhakemesi olmadan).');
+    if (surf.massAssignForm) {
+      const f = await massAssignObservation(ctx, host, surf.massAssignForm.action, surf.massAssignForm.fields);
+      if (f) findings.push(f);
+    }
+  }
+  if (ctx.stopped) notes.push(ctx.stopped);
+  if (!findings.length && !surf.massAssignForm) notes.push('Uygun (tamamlama/ödeme dışı) bir kayıt/profil formu bulunamadı — yetki yükseltme gözlemi için hedef yok.');
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: surf.massAssignForm ? 1 : 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed };
+}
+
+// ======================================================================================
+// D.2 — ÇOK-ADIMLI İŞ MANTIĞI (GET-only gözlem; ödeme/checkout TAMAMLAMA YOK)
+// ======================================================================================
+export async function collectMultiStepBusinessLogicEvidence(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+  const surf = await discoverSurface(host, session);
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  const ctx = new ProbeCtx();
+  ctx.authHeaders = applyAuthHeaders({}, session);
+  const findings: VFinding[] = [];
+  const notes: string[] = [];
+  let agentUsed = false;
+
+  // (a) İstemci-değiştirilebilir fiyat/miktar/kupon alanı — GÖZLEM (istek yok).
+  const html = surf.homeHtml;
+  const hiddenPrice = html.match(new RegExp(`<input[^>]*type=["']hidden["'][^>]*${PRICE_FIELD_RE.source}`, 'i')) || html.match(new RegExp(`<input[^>]*${PRICE_FIELD_RE.source}[^>]*type=["']hidden["']`, 'i'));
+  if (hiddenPrice) {
+    findings.push({ check: 'business_logic_multistep', inputPoint: 'form (hidden price/qty/coupon)', vulnerable: true, technique: 'observation (client-controllable amount)', evidence: 'Formda gizli (hidden) bir fiyat/miktar/kupon alanı gözlemlendi; istemci tarafında değiştirilebilir. Sunucu-taraflı doğrulama yoksa fiyat manipülasyonu riski (kesin doğrulama sepet/ödeme adımı gerektirir — TAMAMLANMADI).', confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
+  }
+
+  // (b) Adım-atlama adayları (success/confirm sayfaları) + ajan seçimi.
+  const stepLinks = new Set<string>();
+  for (const m of html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)) { const a = absUrl(host, m[1].replace(/&amp;/g, '&')); if (a && STEP_SKIP_RE.test(a)) stepLinks.add(a); }
+  for (const e of surf.idEndpoints) { if (STEP_SKIP_RE.test(e.url)) stepLinks.add(e.url); }
+
+  const scenarios = await getScenarios(host, surf).catch(() => null);
+  const agentPicks: string[] = [];
+  if (scenarios !== null) {
+    agentUsed = true;
+    for (const s of scenarios.filter((x) => x.check === 'business_logic_multistep').slice(0, 4)) {
+      const a = absUrl(host, s.inputPoint.replace(/^\w+\s+/, '').split('?')[0]);
+      if (a && !AUTH_WRITE_BLOCKLIST_RE.test(a)) agentPicks.push(a);
+    }
+    notes.push('Bu kontrol, keşfedilen authenticated yüzey üzerinde **PentAGI ajanı ile analiz edilmiştir** (ajan yalnız JSON öneri üretir; backend YALNIZ GET-gözlem yapar; ödeme/checkout TAMAMLANMAZ; ajan doğrudan HTTP atmaz).');
+  } else {
+    notes.push('PentAGI ajan analizi tamamlanamadı (timeout/hata/bütçe) — bu kontrol **deterministik göstergeyle sınırlıdır** (gözlemsel adım-atlama/fiyat alanı, ajan muhakemesi olmadan).');
+  }
+
+  // GET-only gözlem: adım-atlama (ön koşul olmadan erişilebilir "onay" sayfası mı).
+  const targets = [...new Set([...agentPicks, ...stepLinks])].slice(0, 4);
+  for (const url of targets) {
+    if (ctx.stopped) break;
+    if (AUTH_WRITE_BLOCKLIST_RE.test(url)) continue;
+    const r = await ctx.fetchOnce(url); // GET — state değiştirmez
+    if (r && r.status === 200 && !/oturum|login|giriş yap|unauthorized|403|yetkisiz/i.test(r.text.slice(0, 2000))) {
+      findings.push({ check: 'business_logic_multistep', inputPoint: new URL(url).pathname, vulnerable: true, technique: 'observation (step-skip, GET only)', evidence: `Bir "başarılı/onay" adımı sayfası (${new URL(url).pathname}) ön koşul olmadan doğrudan GET ile erişilebilir göründü — çok-adımlı iş mantığı (adım-atlama) göstergesi; kesin doğrulama manuel test gerektirir (ödeme TAMAMLANMADI).`, confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
+    }
+  }
+
+  if (ctx.stopped) notes.push(ctx.stopped);
+  if (!findings.length) notes.push('Gözlemlenebilir bir istemci-tarafı fiyat/miktar alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.');
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: (hiddenPrice ? 1 : 0) + targets.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed };
+}
