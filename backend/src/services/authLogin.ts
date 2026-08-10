@@ -241,21 +241,22 @@ export async function authenticateOrder(orderId: string): Promise<AuthResult> {
   });
   const creds = await consumeTestCredential(orderId, 'primary');
   if (!creds) {
-    await failOrder(order.id, order.customerId, order.amountMinorUnit, false);
+    // Kimlik bilgisi yok (tüketilmiş/purge edilmiş/hiç saklanmamış) — 'credentials-missing' ayrı sebep.
+    await failOrder(order.id, order.customerId, order.amountMinorUnit, false, 'no_login_endpoint');
     return { ok: false, reason: 'no_login_endpoint', attempts: 0 };
   }
   const result = await getAuthSession(order.domain.hostname, creds);
   if (!result.ok) {
-    await failOrder(order.id, order.customerId, order.amountMinorUnit, result.reason === 'two_factor');
+    await failOrder(order.id, order.customerId, order.amountMinorUnit, result.reason === 'two_factor', result.reason);
   }
   return result;
 }
 
-async function failOrder(orderId: string, customerId: string, amountMinorUnit: number, twoFactor: boolean): Promise<void> {
+async function failOrder(orderId: string, customerId: string, amountMinorUnit: number, twoFactor: boolean, reason: string): Promise<void> {
   await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed' } });
   // KREDİ (nakit iade DEĞİL): ödenen tutar kadar, ileride kullanılabilir bakiye.
   const credits = creditsForPackagePrice(amountMinorUnit);
   await grantCredits(customerId, credits, 'auth_login_failed', orderId).catch((e) => console.error('[authLogin] kredi tanımlanamadı:', e));
   await sendAuthLoginFailed(orderId, twoFactor).catch(() => {});
-  console.log(`[authLogin] Sipariş ${orderId} login başarısız (${twoFactor ? '2FA' : 'bad_credentials'}) → scan_failed + ${credits} kredi tanımlandı.`);
+  console.log(`[authLogin] Sipariş ${orderId} login başarısız (reason=${reason}) → scan_failed + ${credits} kredi tanımlandı.`);
 }

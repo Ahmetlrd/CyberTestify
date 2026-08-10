@@ -68,12 +68,35 @@ export async function hasTestCredential(orderId: string, label: CredentialLabel 
  * PURGE GÜVENLİK AĞI: CREDENTIAL_MAX_AGE_MS'ten eski, hâlâ ciphertext taşıyan tüm kayıtları null'la.
  * Flow hiç başlamasa/patlasa bile kimlik bilgisi kalıcı kalmasın. Silinen kayıt sayısını döndürür.
  */
+// KRİTİK: Tam Kapsamlı Pentest siparişi ödeme sonrası 'awaiting_review'da (yarı-manuel onay; SLA ~24 saat)
+// bekler; kimlik bilgisi taramaya (onay sonrası) kadar GEREKLİDİR. Bu yüzden 1 saatlik purge, HÂLÂ tarama
+// bekleyen siparişleri (awaiting_review/paid/scan_queued/scan_running) ATLAR — yalnız terk edilmiş
+// (awaiting_payment) / bitmiş siparişlerin kalıntısını temizler. 7 günlük MUTLAK üst sınır (takılma koruması)
+// durumdan bağımsız temizler. Normal yolda orchestrator zaten kullanır kullanmaz siler; bu yedek katman.
+const CREDENTIAL_HARD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 gün mutlak üst sınır
+const PENDING_SCAN_STATUSES = ['awaiting_review', 'paid', 'scan_queued', 'scan_running'] as const;
+
 export async function purgeExpiredCredentials(now: Date = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - CREDENTIAL_MAX_AGE_MS);
+  const hardCutoff = new Date(now.getTime() - CREDENTIAL_HARD_MAX_AGE_MS);
+  // updateMany ilişki-filtresi desteklemez -> önce aday id'leri bul (findMany ilişki-filtresi destekler).
+  const candidates = await prisma.testCredential.findMany({
+    where: {
+      ciphertext: { not: null },
+      OR: [
+        // (a) 1 saatten eski VE artık tarama beklemeyen sipariş (terk/terminal) -> temizle
+        { createdAt: { lt: cutoff }, order: { status: { notIn: [...PENDING_SCAN_STATUSES] } } },
+        // (b) 7 günden eski -> durumdan BAĞIMSIZ mutlak temizle (takılma koruması)
+        { createdAt: { lt: hardCutoff } },
+      ],
+    },
+    select: { id: true },
+  });
+  if (!candidates.length) return 0;
   const res = await prisma.testCredential.updateMany({
-    where: { ciphertext: { not: null }, createdAt: { lt: cutoff } },
+    where: { id: { in: candidates.map((c) => c.id) } },
     data: { ciphertext: null, purgedAt: now },
   });
-  if (res.count > 0) console.log(`[worker] ${res.count} adet süresi dolmuş test kimlik bilgisi temizlendi (ciphertext null).`);
+  if (res.count > 0) console.log(`[worker] ${res.count} adet süresi dolmuş/terk edilmiş test kimlik bilgisi temizlendi (ciphertext null; tarama bekleyen siparişler korunur).`);
   return res.count;
 }
