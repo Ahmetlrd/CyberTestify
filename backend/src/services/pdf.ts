@@ -262,7 +262,13 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   // Genel Degerlendirme (banner altina) — risk seviyesi (ek LLM YOK).
   const isKvkk = meta.packageKey === 'kvkk_hazirlik';
   let assessBox: string;
-  if (isKvkk) {
+  if (meta.packageKey === 'bundle_full_pentest') {
+    // (Tam Kapsamlı Pentest — blocker fix) Authenticated rapor KENDİ dinamik "Değerlendirme Özeti
+    // (Authenticated)" kutusunu + "## GENEL DEĞERLENDİRME" (doğru risk) içerir. Üstte AYRICA bir
+    // risk-rozeti kutusu RENDER ETME — aksi halde assessRisk bu formatı yanlış okuyup "Düşük Risk"
+    // statik metnini basıyordu (SQLi/Yüksek içeren raporda "Düşük" yazıyordu). Tek, doğru kutu kalsın.
+    assessBox = '';
+  } else if (isKvkk) {
     // (KVKK PILOTU) Durum sayimindan DETERMINISTIK risk + notr "Kontrol Ozeti" kutusu.
     const k = assessKvkk(effectiveMd, t);
     const needImprove = k.eksik + k.dikkat;

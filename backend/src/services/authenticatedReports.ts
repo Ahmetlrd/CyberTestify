@@ -87,7 +87,23 @@ const MULTISTEP_CFG = {
   cleanGenel: 'Gözlemlenebilir bir istemci-tarafı fiyat/kupon alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.',
 };
 
-type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number };
+// (blocker fix — part 2) Aktif Doğrulama'nın (login'siz) şablonundan MİRAS kalan "kimlik doğrulaması
+// olmadan / kapsam dışı" cümlelerini authenticated bağlama çevirir. buildInjection/Idor/ActiveCheckReport
+// DİĞER paketlerde AYNEN kalır — bu yalnız authenticated raporu POST-İŞLER (kaynak şablonlara dokunmaz).
+function toAuthenticatedContext(md: string): string {
+  return md
+    .replace(
+      /(#{2,3}) KAPSAM SINIRI \(ÖNEMLİ\)[\s\S]*?\(\*\*İnceleme gerekli \/ Kapsam Dışı\*\*\)\.\n\n/,
+      '$1 KAPSAM SINIRI (ÖNEMLİ)\n\nBu bölüm, sağladığınız TEST hesabının **oturumuyla (login’li)** çalıştırılmıştır ve hesabın **kendi** numaralandırılabilir kaynaklarına yetkisiz erişimi test eder. **Cross-account** (başka bir kullanıcının verisine erişim) testi bu sürümün kapsamı dışındadır (iki ayrı hesap gerektirir). Bulgu olmaması, tüm kimlik-doğrulamalı akışlarda IDOR olmadığını kanıtlamaz.\n\n',
+    )
+    .replace(
+      /Kimlik doğrulama gerektiren alanlar ve iç mantık bu paketin kapsamı dışındadır\./g,
+      'Bu bölüm, sağladığınız TEST hesabının oturumuyla kimlik-doğrulamalı (login’li) bağlamda çalıştırılmıştır; ödeme/hesap-durumu değişikliği tamamlama kod seviyesinde engellidir.',
+    )
+    .replace(/kimlik doğrulaması olmadan/g, 'kimlik-doğrulamalı oturumla');
+}
+
+type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
 export async function generateAuthenticatedReport(host: string, session: AuthSession): Promise<{ findings: string; fixText: string } | null> {
@@ -106,9 +122,9 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   runs.push({ title: 'Authenticated IDOR (kendi kaynakları)', conf: 'Orta', rep: idorEv ? buildIdorReport(idorEv) : null, inputs: idorEv?.candidates ?? 0, probes: idorEv?.probesSent ?? 0, fc: idorEv?.findings.length ?? 0 });
   // (FAZ D) SINIRLI/KONTROLLÜ AJAN KATMANI — priv-esc + çok-adımlı iş mantığı (ajan öneri, backend uygular).
   const privEv = await collectPrivilegeEscalationEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Yetki Yükseltme (Privilege Escalation)', conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, PRIVESC_CFG) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0 });
+  runs.push({ title: 'Yetki Yükseltme (Privilege Escalation)', conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, PRIVESC_CFG) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0, agentCheck: true, agentUsed: privEv?.agentUsed ?? false });
   const multiEv = await collectMultiStepBusinessLogicEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Çok-Adımlı İş Mantığı', conf: 'Düşük', rep: multiEv ? buildActiveCheckReport(multiEv, MULTISTEP_CFG) : null, inputs: multiEv?.inputsFound ?? 0, probes: multiEv?.probesSent ?? 0, fc: multiEv?.findings.length ?? 0 });
+  runs.push({ title: 'Çok-Adımlı İş Mantığı', conf: 'Düşük', rep: multiEv ? buildActiveCheckReport(multiEv, MULTISTEP_CFG) : null, inputs: multiEv?.inputsFound ?? 0, probes: multiEv?.probesSent ?? 0, fc: multiEv?.findings.length ?? 0, agentCheck: true, agentUsed: multiEv?.agentUsed ?? false });
 
   if (runs.every((r) => !r.rep)) return null;
 
@@ -131,10 +147,17 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
     if (!r.rep) return 'Veri toplanamadı';
     if (r.fc > 0 && lv === 'high') return '⚠ Zafiyet göstergesi';
     if (r.fc > 0) return '⚠ Sınırlı gösterge';
-    if (r.inputs === 0) return 'Uygulanabilir değil (Kapsam dışı)';
+    // (part 3) AJAN kontrolü ve ajan analizi TAMAMLANAMADI (timeout/bütçe/hata) -> "Kapsam dışı" DEĞİL;
+    // "gerçekten giriş noktası yoktu" ile "ajan tamamlanamadı"yı NET AYIR (dürüstlük).
+    if (r.agentCheck && r.agentUsed === false) return 'Ajan analizi tamamlanamadı (deterministik göstergeyle sınırlı)';
+    if (r.inputs === 0) return 'Uygulanabilir giriş noktası yok (Kapsam dışı)';
     return '✓ Zafiyet kanıtı yok';
   };
-  const confCell = (r: Run): string => (r.rep && r.inputs > 0 ? r.conf : 'Kapsam dışı');
+  const confCell = (r: Run): string => {
+    if (!r.rep) return 'Kapsam dışı';
+    if (r.agentCheck && r.agentUsed === false) return 'Sınırlı';
+    return r.inputs > 0 ? r.conf : 'Kapsam dışı';
+  };
   const tableRows = runs.map((r, i) => `| ${r.title} | ${statusOf(r, levels[i])} | ${confCell(r)} |`).join('\n');
   const controlTable = `## KONTROL ÖZETİ\n\n| Kontrol | Sonuç | Güven |\n|---------|-------|-------|\n${tableRows}\n\n> Güven yalnızca gerçekten uygulanabilen (giriş/çerez/uç bulunan) kontroller için gösterilir; uygulanamayan kontroller **Kapsam dışı**dır (ör. çerez yerine token kullanan oturumda çerez-bayrağı/fixation).\n`;
 
@@ -166,15 +189,16 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
     return `## ${r.title}\n\n${detailOnly(r.rep.findings)}\n`;
   }).join('\n');
 
-  const findings =
+  const findingsRaw =
     `${box}\n\n` +
     `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
     `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${genel}\n\n` +
     `${controlTable}\n${sections}`;
 
   const fixParts = runs.map((r) => (r.rep && r.rep.fixText.trim() ? `### ${r.title}\n\n${r.rep.fixText.trim()}` : '')).filter(Boolean);
-  const fixText = `Bu bölüm, çalıştırılan authenticated kontrollerde tespit edilen bulgular için düzeltme önerileri içerir.\n\n${fixParts.join('\n\n')}`;
+  const fixTextRaw = `Bu bölüm, çalıştırılan authenticated kontrollerde tespit edilen bulgular için düzeltme önerileri içerir.\n\n${fixParts.join('\n\n')}`;
 
   void dataOk;
-  return { findings, fixText };
+  // (part 2) MİRAS login'siz cümleleri authenticated bağlama çevir (kaynak şablonlara dokunmadan).
+  return { findings: toAuthenticatedContext(findingsRaw), fixText: toAuthenticatedContext(fixTextRaw) };
 }
