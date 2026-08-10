@@ -176,6 +176,15 @@ export type Surface = {
 // (multipart/form-data content-type ile birlikte değerlendirilir — bkz crawlHeadless apiReqs işleme).
 const UPLOAD_PATH_RE = /(upload|\bfile\b|avatar|attachment|\bimage\b|\bimg\b|\bphoto\b|\bmedia\b|profile[-_]?pic)/i;
 
+// Yakalanan bir ağ isteği DOSYA-YÜKLEME ucu mu? (item 4) SAF fonksiyon (testlenebilir):
+// yalnız yazma-metodu (POST/PUT/PATCH/DELETE) + (multipart/form-data VEYA upload-benzeri path) +
+// ödeme/tamamlama DEĞİL. crawlHeadless bunu DOM taramasına EK giriş noktası üretmek için kullanır.
+export function isNetworkUploadCandidate(method: string, ctype: string, pathname: string): boolean {
+  if (!API_WRITE_METHODS.has((method || '').toUpperCase())) return false;
+  if (COMPLETION_BLOCKLIST_RE.test(pathname)) return false;
+  return /multipart\/form-data/.test(ctype || '') || UPLOAD_PATH_RE.test(pathname);
+}
+
 async function crawlSurface(host: string): Promise<Surface> {
   const empty: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [] };
   const home = await collectHttp(host);
@@ -360,8 +369,7 @@ async function crawlHeadless(host: string): Promise<Surface | null> {
         // DOSYA YUKLEME ucu mu? (multipart/form-data content-type VEYA path'te upload/file/avatar/...).
         // Odeme/tamamlama uclari HARIC (guvenlik). Boyle bir uc -> Dosya Yukleme kontrolune BESLE
         // (mevcut DOM <input type=file> taramasina EK). Mevcut kural: tek seferlik zararsiz/inert dosya.
-        const isUpload = (/multipart\/form-data/.test(r.ctype) || UPLOAD_PATH_RE.test(u.pathname)) && !COMPLETION_BLOCKLIST_RE.test(u.pathname);
-        if (isUpload) {
+        if (isNetworkUploadCandidate(r.method, r.ctype, u.pathname)) {
           const base = `${u.origin}${u.pathname}`;
           const key = `${base}:file`;
           if (!seenUp.has(key)) { seenUp.add(key); uploadForms.push({ action: base, fileField: 'file', otherFields: [], source: 'network' }); }
