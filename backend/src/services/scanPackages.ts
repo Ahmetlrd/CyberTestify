@@ -40,7 +40,7 @@ export interface ScanPackageDef {
     | 'bundle_surface' // kombine paket (tek-siparis modeli)
     | 'bundle_compliance' // kombine paket (Uyum: KVKK+PCI+ISO, tek-siparis)
     | 'bundle_recon' // kombine paket (Keşif: subdomain+api+cms/cve, tek-siparis)
-    | 'bundle_active_verify'; // kombine paket (Aktif Doğrulama: injection+idor gerçek, 5 kontrol olgunlaşıyor)
+    | 'bundle_active_verify'; // kombine paket (Aktif Doğrulama: 7 aktif-hafif kontrol, login'siz yüzey; ₺14.999)
   displayName: string;
   description: string;
   priceMinorUnit: number; // kurus
