@@ -57,11 +57,13 @@ export async function callAdvisoryLlm(userContent: string): Promise<string | nul
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model: DEFAULT_MODEL, max_tokens: 1024, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: userContent }] }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) { console.log(`[advisory] LLM cagrildi model=${DEFAULT_MODEL} HTTP=${res.status} -> null (fallback)`); return null; }
     const j: any = await res.json();
     const text = Array.isArray(j?.content) ? j.content.filter((c: any) => c?.type === 'text').map((c: any) => c.text).join('\n') : '';
+    console.log(`[advisory] LLM cagrildi model=${DEFAULT_MODEL} HTTP=200 textLen=${(text || '').length}`);
     return text && text.trim() ? text : null;
-  } catch {
+  } catch (e: any) {
+    console.log(`[advisory] LLM cagrisi HATA (${e?.name || 'err'}) -> null (fallback)`);
     return null;
   } finally {
     clearTimeout(timer);

@@ -950,7 +950,10 @@ export type VFinding = {
   evidence: string; confidence: 'high' | 'medium' | 'low'; severity: 'high' | 'medium' | 'low';
   sideEffectRisk: SideEffectRisk;
 };
-export type ActiveCheckEvidence = { ok: boolean; pagesScanned: number; inputsFound: number; probesSent: number; findings: VFinding[]; stopped: string | null; notes: string[]; agentUsed?: boolean };
+// agentStatus (ajan kontrolleri icin): 'analyzed' = advisory GERCEKTEN cagrildi (aday vardi) ;
+// 'no_candidate' = pasif kesifle hic aday yuzey yoktu, advisory CAGRILMADI ; 'unavailable' = advisory
+// cagrildi ama tamamlanamadi (anahtar yok/timeout/hata). Rapor bu ucunu NET ayirir (dururstluk).
+export type ActiveCheckEvidence = { ok: boolean; pagesScanned: number; inputsFound: number; probesSent: number; findings: VFinding[]; stopped: string | null; notes: string[]; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' };
 
 // (İş Mantığı + Race) SINIRLI PentAGI ajan onerileri — host basina TEK cagri, iki kontrol PAYLASIR.
 const AGENT_CACHE = new Map<string, { at: number; p: Promise<AgentSuggestion[] | null> }>();
@@ -1182,7 +1185,7 @@ export async function collectBusinessLogicEvidence(host: string): Promise<Active
   }
 
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (agentUsed) notes.push('Bu kontrol, keşfedilen yüzey üzerinde **PentAGI ajanı ile analiz edilmiştir** (ajan yalnızca yapılandırılmış öneri üretir; tüm istekler backend’in güvenli GET fonksiyonlarından geçer).');
+  if (agentUsed) notes.push('Bu kontrol, keşfedilen yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnızca yapılandırılmış öneri üretir; tüm istekler backend’in güvenli GET fonksiyonlarından geçer; advisory doğrudan HTTP atmaz).');
   if (!findings.length) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada gözlemlenebilir bir istemci-tarafı fiyat/miktar alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.` + spaHint(surf));
   return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: (hiddenPrice ? 1 : 0) + links.size, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed };
 }
@@ -1252,7 +1255,7 @@ export async function collectRaceMassAssignEvidence(host: string): Promise<Activ
 
   // Race yüzeyi — otomatik yıkıcı paralel yazma YAPILMAZ (güvenlik); not olarak belirtilir.
   notes.push('Race-condition (eşzamanlılık) testi, tüketilebilir bir kaynağı (kupon/stok) gerçekten değiştirme riski taşıdığından bu otomatik taramada **çalıştırılmadı**; güvenli/test edilebilir bir uç nokta ile manuel doğrulama önerilir.');
-  if (agentUsed) notes.push('Bu kontrol, keşfedilen yüzey üzerinde **PentAGI ajanı ile analiz edilmiştir** (ajan yalnızca yapılandırılmış öneri üretir; hiçbir yıkıcı/state-değiştiren istek ajan tarafından tetiklenmez, tüm istekler backend’in güvenli fonksiyonlarından geçer).');
+  if (agentUsed) notes.push('Bu kontrol, keşfedilen yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnızca yapılandırılmış öneri üretir; hiçbir yıkıcı/state-değiştiren istek advisory tarafından tetiklenmez, tüm istekler backend’in güvenli fonksiyonlarından geçer).');
   if (ctx.stopped) notes.push(ctx.stopped);
   if (!form) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada mass-assignment için uygun (tamamlama/ödeme dışı) kayıt/profil formu bulunamadı.` + spaHint(surf));
   return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: form ? 1 : 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed };

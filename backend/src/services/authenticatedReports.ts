@@ -103,7 +103,7 @@ function toAuthenticatedContext(md: string): string {
     .replace(/kimlik doğrulaması olmadan/g, 'kimlik-doğrulamalı oturumla');
 }
 
-type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean };
+type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
 export async function generateAuthenticatedReport(host: string, session: AuthSession): Promise<{ findings: string; fixText: string } | null> {
@@ -122,9 +122,9 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   runs.push({ title: 'Authenticated IDOR (kendi kaynakları)', conf: 'Orta', rep: idorEv ? buildIdorReport(idorEv) : null, inputs: idorEv?.candidates ?? 0, probes: idorEv?.probesSent ?? 0, fc: idorEv?.findings.length ?? 0 });
   // (FAZ D) SINIRLI/KONTROLLÜ AJAN KATMANI — priv-esc + çok-adımlı iş mantığı (ajan öneri, backend uygular).
   const privEv = await collectPrivilegeEscalationEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Yetki Yükseltme (Privilege Escalation)', conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, PRIVESC_CFG) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0, agentCheck: true, agentUsed: privEv?.agentUsed ?? false });
+  runs.push({ title: 'Yetki Yükseltme (Privilege Escalation)', conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, PRIVESC_CFG) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0, agentCheck: true, agentUsed: privEv?.agentUsed ?? false, agentStatus: privEv?.agentStatus });
   const multiEv = await collectMultiStepBusinessLogicEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Çok-Adımlı İş Mantığı', conf: 'Düşük', rep: multiEv ? buildActiveCheckReport(multiEv, MULTISTEP_CFG) : null, inputs: multiEv?.inputsFound ?? 0, probes: multiEv?.probesSent ?? 0, fc: multiEv?.findings.length ?? 0, agentCheck: true, agentUsed: multiEv?.agentUsed ?? false });
+  runs.push({ title: 'Çok-Adımlı İş Mantığı', conf: 'Düşük', rep: multiEv ? buildActiveCheckReport(multiEv, MULTISTEP_CFG) : null, inputs: multiEv?.inputsFound ?? 0, probes: multiEv?.probesSent ?? 0, fc: multiEv?.findings.length ?? 0, agentCheck: true, agentUsed: multiEv?.agentUsed ?? false, agentStatus: multiEv?.agentStatus });
 
   if (runs.every((r) => !r.rep)) return null;
 
@@ -143,19 +143,29 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
     (anyFinding ? `En yüksek risk **${worstTitle}** alanında (aşağıda detaylı).` : `Doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`) +
     `\n>\n> _Şifre hiçbir aşamada ajana/PentAGI’ye gönderilmedi; backend deterministik login yapıp yalnız oturumu (cookie/token) kullandı._`;
 
+  // AJAN kontrolleri için 3 durum NET ayrılır (dürüstlük): 'unavailable' = advisory tamamlanamadı;
+  // 'analyzed' = advisory GERÇEKTEN çalıştı (bulgu varsa gösterge, yoksa "AI analiz etti, vektör yok");
+  // 'no_candidate' = pasif keşifle aday yoktu, advisory çağrılmadı (gerçek "kapsam dışı"). Böylece
+  // "AI çalıştı ama temiz" ile "hiç uygulanamadı" birbirine KARIŞMAZ.
   const statusOf = (r: Run, lv: Level | null): string => {
     if (!r.rep) return 'Veri toplanamadı';
     if (r.fc > 0 && lv === 'high') return '⚠ Zafiyet göstergesi';
     if (r.fc > 0) return '⚠ Sınırlı gösterge';
-    // (part 3) AJAN kontrolü ve ajan analizi TAMAMLANAMADI (timeout/bütçe/hata) -> "Kapsam dışı" DEĞİL;
-    // "gerçekten giriş noktası yoktu" ile "ajan tamamlanamadı"yı NET AYIR (dürüstlük).
-    if (r.agentCheck && r.agentUsed === false) return 'Ajan analizi tamamlanamadı (deterministik göstergeyle sınırlı)';
+    if (r.agentCheck) {
+      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return 'Ajan analizi tamamlanamadı (deterministik göstergeyle sınırlı)';
+      if (r.agentStatus === 'analyzed') return '✓ AI advisory analiz etti — vektör yok';
+      return 'Uygulanabilir giriş noktası yok (advisory çalıştırılmadı)'; // no_candidate
+    }
     if (r.inputs === 0) return 'Uygulanabilir giriş noktası yok (Kapsam dışı)';
     return '✓ Zafiyet kanıtı yok';
   };
   const confCell = (r: Run): string => {
     if (!r.rep) return 'Kapsam dışı';
-    if (r.agentCheck && r.agentUsed === false) return 'Sınırlı';
+    if (r.agentCheck) {
+      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return 'Sınırlı';
+      if (r.agentStatus === 'analyzed') return r.conf; // AI gerçekten çalıştı -> güven göster
+      return 'Kapsam dışı'; // no_candidate
+    }
     return r.inputs > 0 ? r.conf : 'Kapsam dışı';
   };
   // (blocker fix) YÖNETİCİ ÖZETİ satırı, KONTROL ÖZETİ tablosuyla AYNI kaynaktan/mantıktan türer —
@@ -164,7 +174,11 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
     if (!r.rep || !lv) return 'veri toplanamadı';
     const hl = headlineOf(r.rep.findings);
     if (r.fc > 0) return `${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`;                       // bulgu var -> seviye + başlık
-    if (r.agentCheck && r.agentUsed === false) return 'Ajan analizi tamamlanamadı — deterministik göstergeyle sınırlı';
+    if (r.agentCheck) {
+      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return 'Ajan analizi tamamlanamadı — deterministik göstergeyle sınırlı';
+      if (r.agentStatus === 'analyzed') return 'Yapay zekâ destekli advisory analiz etti — uygulanabilir vektör tespit edilmedi';
+      return 'Kapsam dışı — pasif keşifle uygulanabilir giriş noktası yok (advisory çalıştırılmadı)'; // no_candidate
+    }
     if (r.inputs === 0) return 'Kapsam dışı — uygulanabilir giriş noktası yok';
     return `${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`;                                      // temiz çalıştı -> seviye + başlık
   };

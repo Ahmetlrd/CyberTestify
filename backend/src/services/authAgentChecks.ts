@@ -56,6 +56,18 @@ function getScenarios(host: string, surf: Surface): Promise<AuthAgentSuggestion[
 }
 export function __resetAuthAgentCache(host?: string): void { if (host) AUTH_AGENT_CACHE.delete(host); else AUTH_AGENT_CACHE.clear(); }
 
+// Ajana gidebilecek aday yüzey sayısı (requestAuthAgentScenarios'un allowed-set'iyle AYNI kaynaklar).
+// 0 ise advisory ÇAĞRILMAZ (kısa devre) -> "aday yok"; >0 ise advisory GERÇEKTEN çağrılır.
+function candidateCount(surf: Surface): number {
+  return surf.inputs.length + (surf.massAssignForm ? 1 : 0) + surf.uploadForms.length + surf.domForms.length + surf.apiWrites.length + surf.apiReads.length;
+}
+// advisory'nin gerçekten çalışıp çalışmadığını 3 duruma ayır (rapor bunu net gösterir).
+function deriveAgentStatus(surf: Surface, scenarios: AuthAgentSuggestion[] | null): 'analyzed' | 'no_candidate' | 'unavailable' {
+  if (scenarios === null) return 'unavailable';          // LLM çağrıldı ama tamamlanamadı (anahtar/timeout/hata)
+  if (candidateCount(surf) === 0) return 'no_candidate'; // aday yoktu -> LLM hiç çağrılmadı (kısa devre [])
+  return 'analyzed';                                      // aday vardı -> LLM gerçekten çağrıldı
+}
+
 // ======================================================================================
 // D.1 — YETKİ YÜKSELTME (privilege escalation) DOĞRULAMA
 // ======================================================================================
@@ -84,11 +96,12 @@ export async function collectPrivilegeEscalationEvidence(host: string, session: 
   ctx.authHeaders = applyAuthHeaders({}, session);
   const findings: VFinding[] = [];
   const notes: string[] = [];
-  let agentUsed = false;
 
   const scenarios = await getScenarios(host, surf).catch(() => null);
+  const agentStatus = deriveAgentStatus(surf, scenarios);
+  console.log(`[advisory] priv-esc host=${host} candidates=${candidateCount(surf)} agentStatus=${agentStatus} scenarios=${scenarios === null ? 'null' : scenarios.length}`);
+
   if (scenarios !== null) {
-    agentUsed = true;
     // Ajanın seçtiği priv-esc hedeflerini uygula:
     //  (a) domForm seçimi (İŞ 2) -> SALT-OKUNUR gözlem (submit YOK; yalnız DOM'da açığa çıkan yetki alanı).
     //  (b) klasik form action (gerçek POST ucu) -> GÜVENLİ tek-deneme mass-assignment gözlemi.
@@ -102,7 +115,14 @@ export async function collectPrivilegeEscalationEvidence(host: string, session: 
       const f = await massAssignObservation(ctx, host, action, fields);
       if (f) { f.technique = 'AI advisory seçti + backend güvenli uyguladı: ' + f.technique; findings.push(f); }
     }
-    notes.push('Bu kontrol, keşfedilen authenticated yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnız yapılandırılmış JSON öneri üretir; tüm istekler backend’in güvenli, authenticated-light fonksiyonlarından geçer; advisory doğrudan HTTP atmaz).');
+    // (İŞ 2) advisory bir şey seçmese bile DOM'da AÇIĞA ÇIKMIŞ yetki alanı varsa gözlemle (deterministik, istek yok).
+    for (const dom of surf.domForms) { if (findings.some((x) => x.technique?.includes('client-exposed'))) break; const f = domFormPrivObservation(dom); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) findings.push(f); }
+    if (agentStatus === 'analyzed') {
+      notes.push('Bu kontrol, keşfedilen authenticated yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnız yapılandırılmış JSON öneri üretir; tüm istekler backend’in güvenli, authenticated-light fonksiyonlarından geçer; advisory doğrudan HTTP atmaz).');
+      if (!findings.length) notes.push('Yapay zekâ destekli advisory bu yüzeyi analiz etti; uygulanabilir bir yetki-yükseltme vektörü tespit edilmedi (temiz sonuç — uydurma bulgu yok).');
+    } else { // no_candidate
+      notes.push('Bu hedefte pasif keşifle uygulanabilir bir yetki-yükseltme giriş noktası (kayıt/profil formu, yetki-alanı içeren API) bulunamadığından advisory çalıştırılmadı. Not: bazı açıklar (ör. kayıtta gizli `role` alanının API’de kabul edilmesi) UI/DOM’da görünmez ve pasif keşifle tespit edilemez; kesin sonuç manuel test gerektirir.');
+    }
   } else {
     // FALLBACK (advisory anahtarı yok / timeout / hata) -> deterministik: bilinen mass-assignment formu +
     // (İŞ 2) DOM'da açığa çıkan yetki alanları (salt-okunur), advisory muhakemesi olmadan.
@@ -114,8 +134,8 @@ export async function collectPrivilegeEscalationEvidence(host: string, session: 
     for (const dom of surf.domForms) { const f = domFormPrivObservation(dom); if (f) findings.push(f); }
   }
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!findings.length && !surf.massAssignForm && !surf.domForms.length) notes.push('Uygun (tamamlama/ödeme dışı) bir kayıt/profil formu bulunamadı — yetki yükseltme gözlemi için hedef yok.');
-  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: surf.massAssignForm ? 1 : 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed };
+  const inputsFound = (surf.massAssignForm ? 1 : 0) + surf.domForms.length;
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed: scenarios !== null, agentStatus };
 }
 
 // ======================================================================================
@@ -128,7 +148,6 @@ export async function collectMultiStepBusinessLogicEvidence(host: string, sessio
   ctx.authHeaders = applyAuthHeaders({}, session);
   const findings: VFinding[] = [];
   const notes: string[] = [];
-  let agentUsed = false;
 
   // (a) İstemci-değiştirilebilir fiyat/miktar/kupon alanı — GÖZLEM (istek yok).
   const html = surf.homeHtml;
@@ -152,14 +171,19 @@ export async function collectMultiStepBusinessLogicEvidence(host: string, sessio
   for (const e of surf.idEndpoints) { if (STEP_SKIP_RE.test(e.url)) stepLinks.add(e.url); }
 
   const scenarios = await getScenarios(host, surf).catch(() => null);
+  const agentStatus = deriveAgentStatus(surf, scenarios);
+  console.log(`[advisory] multistep host=${host} candidates=${candidateCount(surf)} agentStatus=${agentStatus} scenarios=${scenarios === null ? 'null' : scenarios.length}`);
   const agentPicks: string[] = [];
   if (scenarios !== null) {
-    agentUsed = true;
     for (const s of scenarios.filter((x) => x.check === 'business_logic_multistep').slice(0, 4)) {
       const a = absUrl(host, s.inputPoint.replace(/^\w+\s+/, '').split('?')[0]);
       if (a && !AUTH_WRITE_BLOCKLIST_RE.test(a)) agentPicks.push(a);
     }
-    notes.push('Bu kontrol, keşfedilen authenticated yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnız JSON öneri üretir; backend YALNIZ GET-gözlem yapar; ödeme/checkout TAMAMLANMAZ; advisory doğrudan HTTP atmaz).');
+    if (agentStatus === 'analyzed') {
+      notes.push('Bu kontrol, keşfedilen authenticated yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnız JSON öneri üretir; backend YALNIZ GET-gözlem yapar; ödeme/checkout TAMAMLANMAZ; advisory doğrudan HTTP atmaz).');
+    } else { // no_candidate
+      notes.push('Bu hedefte pasif keşifle gözlemlenebilir bir çok-adımlı iş-mantığı giriş noktası (istemci-tarafı fiyat/miktar/kupon alanı, ön-koşulsuz "onay" adımı) bulunamadığından advisory çalıştırılmadı. İş mantığı zafiyetleri bağlama özeldir; kesin sonuç manuel test gerektirir.');
+    }
   } else {
     notes.push('AI advisory (LLM) analizi tamamlanamadı (anahtar yok/timeout/hata) — bu kontrol **deterministik göstergeyle sınırlıdır** (gözlemsel adım-atlama/fiyat alanı, advisory muhakemesi olmadan).');
   }
@@ -176,6 +200,7 @@ export async function collectMultiStepBusinessLogicEvidence(host: string, sessio
   }
 
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!findings.length) notes.push('Gözlemlenebilir bir istemci-tarafı fiyat/miktar alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.');
-  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: (hiddenPrice ? 1 : 0) + targets.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed };
+  if (!findings.length && agentStatus === 'analyzed') notes.push('Yapay zekâ destekli advisory bu yüzeyi analiz etti; uygulanabilir bir çok-adımlı iş-mantığı vektörü tespit edilmedi (temiz sonuç — uydurma bulgu yok).');
+  const inputsFound = (hiddenPrice ? 1 : 0) + targets.length + surf.domForms.length;
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed: scenarios !== null, agentStatus };
 }
