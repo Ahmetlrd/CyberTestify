@@ -17,7 +17,11 @@ const PROVIDER = process.env.PENTAGI_PROVIDER ?? 'cybertestify-anthropic';
 // oluyordu (teşhis: gerçek çağrı 75s'de NULL döndü). Süre OPERASYONEL bir parametre (güvenlik sınırı
 // DEĞİL) — flow'un gerçekten sonuç üretebilmesi için makul artış. Tool-call tavanı (25) ve tüm güvenlik
 // sınırları AYNEN korunur. Yine autonomous_pentest'ten (90 tool-call, ~dakikalarca) çok daha dardır.
-const AUTH_AGENT_TIMEOUT_MS = 120_000;  // 2 dk — flow'un çıktı üretmesine yeterli, taramayı gereksiz uzatmaz
+// GERÇEK KOŞU BULGUSU: PentAGI flow'u (çok-adımlı otonom mimari) pratik sürede parse-edilebilir JSON
+// sonucu ÜRETMİYOR (2 gerçek koşu: 195s ve 135s -> null, timeout artırmak fayda vermedi). Backend'de
+// hafif/doğrudan LLM ucu YOK. Bu yüzden uzun timeout yalnız TARAMAYI UZATIR; kısa tutup dürüst
+// deterministik fallback'e HIZLI geç (rapor bunu "Ajan analizi tamamlanamadı" diye şeffaf gösterir).
+const AUTH_AGENT_TIMEOUT_MS = 45_000;   // kısa: flow'a bir şans ver, sonra deterministik fallback
 const AUTH_AGENT_POLL_MS = 6_000;
 export const AUTH_AGENT_MAX_TOOLCALLS = 25; // düşük tool-call tavanı (aşılırsa stopFlow + fallback)
 const MAX_SUGGESTIONS = 4;
