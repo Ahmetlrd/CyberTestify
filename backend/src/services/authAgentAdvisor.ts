@@ -17,7 +17,7 @@ const PROVIDER = process.env.PENTAGI_PROVIDER ?? 'cybertestify-anthropic';
 // oluyordu (teşhis: gerçek çağrı 75s'de NULL döndü). Süre OPERASYONEL bir parametre (güvenlik sınırı
 // DEĞİL) — flow'un gerçekten sonuç üretebilmesi için makul artış. Tool-call tavanı (25) ve tüm güvenlik
 // sınırları AYNEN korunur. Yine autonomous_pentest'ten (90 tool-call, ~dakikalarca) çok daha dardır.
-const AUTH_AGENT_TIMEOUT_MS = 180_000;  // 3 dk — gerçek PentAGI flow'unun JSON öneri üretmesine yeterli süre
+const AUTH_AGENT_TIMEOUT_MS = 120_000;  // 2 dk — flow'un çıktı üretmesine yeterli, taramayı gereksiz uzatmaz
 const AUTH_AGENT_POLL_MS = 6_000;
 export const AUTH_AGENT_MAX_TOOLCALLS = 25; // düşük tool-call tavanı (aşılırsa stopFlow + fallback)
 const MAX_SUGGESTIONS = 4;
@@ -92,10 +92,16 @@ function buildPrompt(surfaceJson: string): string {
   ].join('\n');
 }
 
+// KRİTİK (SORUN 2 kök neden): YALNIZ SONUÇ (result = ajanın ÇIKTISI) alanları okunur; message
+// (= ajana verilen TALİMAT/prompt echo'su) ASLA okunmaz. Prompt, JSON şema ÖRNEĞİNİ (geçersiz JSON,
+// "check":"a"|"b" union) içerdiğinden, message dahil edilince: (a) /findings/ yanlış-pozitif eşleşir,
+// (b) parseAuthAgentSuggestions "ilk { → son }" aralığında bu geçersiz örneği kapsayıp JSON.parse
+// BAŞARISIZ olur -> ajanın gerçek çıktısı hiç okunamaz -> daima null -> "tamamlanamadı". (bkz report.ts
+// aynı ders: message=ATAMA KULLANMA, result=TAMAMLAMA KULLAN.)
 function extractText(logs: Awaited<ReturnType<typeof getFlowLogs>>): string {
   const parts: string[] = [];
   for (const t of logs.tasks ?? []) { if (t.result) parts.push(t.result); for (const s of t.subtasks ?? []) if (s.result) parts.push(s.result); }
-  for (const m of logs.messageLogs ?? []) { if (m.result) parts.push(m.result); if (m.message) parts.push(m.message); }
+  for (const m of logs.messageLogs ?? []) { if (m.result) parts.push(m.result); }
   return parts.join('\n');
 }
 
