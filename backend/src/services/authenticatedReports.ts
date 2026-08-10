@@ -158,6 +158,16 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
     if (r.agentCheck && r.agentUsed === false) return 'Sınırlı';
     return r.inputs > 0 ? r.conf : 'Kapsam dışı';
   };
+  // (blocker fix) YÖNETİCİ ÖZETİ satırı, KONTROL ÖZETİ tablosuyla AYNI kaynaktan/mantıktan türer —
+  // ayrı statik "Düşük — bulunamadı" şablonu YOK. statusOf ile birebir tutarlı (her satır tek doğru durum).
+  const statusSummary = (r: Run, lv: Level | null): string => {
+    if (!r.rep || !lv) return 'veri toplanamadı';
+    const hl = headlineOf(r.rep.findings);
+    if (r.fc > 0) return `${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`;                       // bulgu var -> seviye + başlık
+    if (r.agentCheck && r.agentUsed === false) return 'Ajan analizi tamamlanamadı — deterministik göstergeyle sınırlı';
+    if (r.inputs === 0) return 'Kapsam dışı — uygulanabilir giriş noktası yok';
+    return `${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`;                                      // temiz çalıştı -> seviye + başlık
+  };
   const tableRows = runs.map((r, i) => `| ${r.title} | ${statusOf(r, levels[i])} | ${confCell(r)} |`).join('\n');
   const controlTable = `## KONTROL ÖZETİ\n\n| Kontrol | Sonuç | Güven |\n|---------|-------|-------|\n${tableRows}\n\n> Güven yalnızca gerçekten uygulanabilen (giriş/çerez/uç bulunan) kontroller için gösterilir; uygulanamayan kontroller **Kapsam dışı**dır (ör. çerez yerine token kullanan oturumda çerez-bayrağı/fixation).\n`;
 
@@ -171,10 +181,7 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
     `- **Kapsam:** Bu bölüm **kimlik-doğrulamalı (login’li)** bağlamda çalışır; çerez/oturum/yetki, authenticated enjeksiyon/IDOR ve **sınırlı-otonom ajan katmanıyla** yetki yükseltme + çok-adımlı iş mantığı göstergelerini kapsar (ajan yalnız öneri verir; backend güvenli uygular; ödeme/hesap-değişikliği tamamlama YOK). Cross-account (başka kullanıcının verisi) IDOR bu sürümün kapsamı dışındadır.`,
   );
   runs.forEach((r, i) => {
-    const lv = levels[i];
-    if (!r.rep || !lv) { summary.push(`- **${r.title}:** veri toplanamadı.`); return; }
-    const hl = headlineOf(r.rep.findings);
-    summary.push(`- **${r.title}:** ${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`);
+    summary.push(`- **${r.title}:** ${statusSummary(r, levels[i])}`);
   });
   summary.push('- **Önerilen ilk adım:** Çalıştırılan kontrollerdeki bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.');
 
