@@ -78,6 +78,15 @@ export async function purchaseBundleMock(customerId: string, bundleKey: string):
   return { balance, credits: bundle.credits };
 }
 
+/**
+ * (Tam Kapsamlı Pentest — FAZ B) Kredi TANIMLA (nakit iade DEĞİL): login başarısız olduğunda
+ * müşteriye, başka bir pakette/tekrar denemede kullanılabilir bakiye ver. Ledger'a iz bırakır.
+ */
+export async function grantCredits(customerId: string, credits: number, reason: string, orderId?: string): Promise<number> {
+  if (credits <= 0) return (await prisma.customer.findUniqueOrThrow({ where: { id: customerId }, select: { creditBalance: true } })).creditBalance;
+  return prisma.$transaction((tx) => applyDelta(tx as unknown as Tx, customerId, credits, reason, { orderId }));
+}
+
 // Tarama icin kredi harca. Yeterli degilse throw. AYNI transaction icinde cagrilabilir.
 export async function spendCredits(tx: Tx, customerId: string, credits: number, orderId: string): Promise<number> {
   const c = await tx.customer.findUniqueOrThrow({ where: { id: customerId }, select: { creditBalance: true } });

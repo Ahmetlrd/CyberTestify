@@ -165,6 +165,31 @@ export async function sendOrderConfirmation(orderIds: string[]): Promise<boolean
   }
 }
 
+// --- (Tam Kapsamlı Pentest — FAZ B) Login başarısız bildirimi (+ kredi) ------
+export async function sendAuthLoginFailed(orderId: string, twoFactor: boolean): Promise<boolean> {
+  try {
+    const o = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { customer: { select: { email: true } }, domain: { select: { hostname: true } } },
+    });
+    if (!o) return false;
+    const twoFa = twoFactor
+      ? '<p style="color:#7a2018"><strong>2FA’sı olmayan</strong> bir test hesabı gerekir; hesabınızda iki-adımlı doğrulama açık görünüyor.</p>'
+      : '';
+    const body = `<p><strong>${esc(o.domain.hostname)}</strong> için kimlik-doğrulamalı taramada, verdiğiniz test hesabıyla <strong>giriş yapılamadı</strong>.</p>
+      <p>Lütfen kullanıcı adı/şifreyi kontrol edin (ve varsa 2FA’yı kapatın), sonra tekrar deneyin.</p>
+      ${twoFa}
+      <p style="margin-top:12px;padding:10px 14px;background:#f3f7f6;border-left:3px solid #123F3A;border-radius:6px;color:#3a4a47;font-size:13px">
+        Ödemeniz için hesabınıza <strong>kredi</strong> tanımlandı (nakit iade değil); bu bakiyeyi başka bir pakette veya bu taramayı yeniden başlatırken kullanabilirsiniz.
+      </p>`;
+    const html = layout({ heading: 'Girişi yapılamadı', bodyHtml: body, cta: { label: 'Siparişimi görüntüle', url: `${config.frontendUrl}/dashboard/${o.id}` } });
+    return await sendMail(o.customer.email, 'Kimlik-doğrulamalı tarama — giriş yapılamadı', html);
+  } catch (err) {
+    console.error('[mail] sendAuthLoginFailed hata:', err);
+    return false;
+  }
+}
+
 // --- (C) Tarama basladi (flow gercekten 'scan_running' oldugunda) -------------
 export async function sendScanStarted(orderId: string): Promise<boolean> {
   try {
