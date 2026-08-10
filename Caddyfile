@@ -55,3 +55,14 @@ admin.cybertestify.com {
 	redir @root /admin/login permanent
 	reverse_proxy frontend:3000
 }
+
+# test.cybertestify.com -> OWASP Juice Shop (KENDI barindirdigimiz KALICI test/QA hedefi).
+# Bu, uygulamamiza ENTEGRE DEGIL; bagimsiz "juice-shop" container'i (docker run, restart:
+# unless-stopped, ayni "cybertestify" agi). SADECE Aktif Doğrulama Paketi'ni test etmek icin.
+# Halka acilmiyor/pazarlanmiyor. sec_headers BILEREK yok (Juice Shop kasitli zafiyetli;
+# HSTS gibi baslikleri eklemek testin dogasini bozabilir). NOT: test.cybertestify.com A kaydi
+# (-> 164.92.223.208) DNS'te olmali ki Caddy Let's Encrypt sertifikasini alabilsin.
+test.cybertestify.com {
+	encode gzip zstd
+	reverse_proxy juice-shop:3000
+}
