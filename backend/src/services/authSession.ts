@@ -27,10 +27,20 @@ export function parseSetCookie(line: string): CookieFlag {
   };
 }
 
-/** İsteklere oturumu uygula (Cookie/Authorization). Kontroller (FAZ C) probe'larında bunu kullanır. */
+/**
+ * İsteklere oturumu uygula (Cookie/Authorization). Kontroller (FAZ C) probe'larında bunu kullanır.
+ * Bearer varsa hem `Authorization: Bearer` hem de `token=` cookie eklenir — bazı uygulamalar token'ı
+ * Authorization yerine cookie'den okur (ör. Juice Shop whoami cookie, basket Authorization). Böylece
+ * her iki mekanizmalı endpoint de authenticated olur.
+ */
 export function applyAuthHeaders(headers: Record<string, string>, s: AuthSession): Record<string, string> {
   const h = { ...headers };
-  if (s.cookie) h['cookie'] = s.cookie;
-  if (s.bearer) h['authorization'] = `Bearer ${s.bearer}`;
+  const cookies: string[] = [];
+  if (s.cookie) cookies.push(s.cookie);
+  if (s.bearer) {
+    h['authorization'] = `Bearer ${s.bearer}`;
+    if (!/(^|;\s*)token=/i.test(s.cookie ?? '')) cookies.push(`token=${s.bearer}`);
+  }
+  if (cookies.length) h['cookie'] = cookies.join('; ');
   return h;
 }
