@@ -184,6 +184,10 @@ export type Surface = {
   massAssignForm: { action: string; fields: string[] } | null;
   apiWrites: string[];        // GOZLEMLENEN durum-degistiren API uclari ("POST /rest/user/login") — PROBE EDILMEZ
   apiReads: string[];         // (FAZ C+) GOZLEMLENEN authenticated OKUMA API uclari ("GET /api/Addresss") — ajan ADAYI + IDOR turetme
+  // (İŞ 2) SPA formlari <form action> tasimaz + XHR ile submit eder (biz yazmalari abort ederiz) -> klasik
+  // form kesfi bos kalir. Cozum: SUBMIT ETMEDEN render-edilmis DOM'dan form alanlarini (input/select/
+  // textarea) OKU; ozellikle ilginc alanlari (role/isAdmin/price/coupon/gizli) isaretle. SALT-GOZLEM.
+  domForms: Array<{ url: string; fields: string[]; interesting: string[] }>;
 };
 
 // Ağ-trafiğinde dosya-yükleme uç noktası işareti: path'te upload/file/avatar/image/attachment vb.
@@ -199,8 +203,46 @@ export function isNetworkUploadCandidate(method: string, ctype: string, pathname
   return /multipart\/form-data/.test(ctype || '') || UPLOAD_PATH_RE.test(pathname);
 }
 
+// (İŞ 2) Ilginc alan adlari — yetki-yukseltme (priv) ve is-mantigi/fiyat (price) icin.
+const DOMFORM_PRIV_RE = /^(role|roles|isadmin|is[_-]?admin|admin|privilege|privileges|priv|usergroup|user[_-]?group|group|grade|accesslevel|access[_-]?level|perm|permission|permissions)$/i;
+const DOMFORM_PRICE_RE = /^(price|amount|total|cost|fiyat|tutar|qty|quantity|adet|discount|indirim|coupon|kupon|miktar|balance|credit|bakiye)$/i;
+const DOMFORM_FIELD_TAG_RE = /<(input|select|textarea)\b([^>]*)>/gi;
+const DOMFORM_ATTR_RE = (name: string) => new RegExp(`\\b${name}\\s*=\\s*["']([^"']+)["']`, 'i');
+
+/**
+ * (İŞ 2) SALT-OKUNUR DOM form-alani cikarimi. Render-edilmis HTML'den input/select/textarea alan
+ * adlarini (name, yoksa id) toplar; gizli (type=hidden) + ilginc (priv/price) alanlari isaretler.
+ * HICBIR submit/yazma YOK — yalniz yapisal gozlem. SAF fonksiyon (testlenebilir).
+ * Anlamli form yoksa (ör. tek arama kutusu) null doner.
+ */
+export function discoverDomFormFields(html: string): { fields: string[]; interesting: string[] } | null {
+  if (!html) return null;
+  const fields: string[] = []; const seen = new Set<string>();
+  const interesting = new Set<string>();
+  const nameRe = DOMFORM_ATTR_RE('name'); const idRe = DOMFORM_ATTR_RE('id');
+  const typeRe = DOMFORM_ATTR_RE('type');
+  for (const m of html.matchAll(DOMFORM_FIELD_TAG_RE)) {
+    const attrs = m[2] || '';
+    const nm = (attrs.match(nameRe)?.[1] || attrs.match(idRe)?.[1] || '').trim();
+    if (!nm || nm.length > 40) continue;
+    const type = (attrs.match(typeRe)?.[1] || '').toLowerCase();
+    if (type === 'submit' || type === 'button' || type === 'reset' || type === 'file') continue; // dosya=upload kesfi
+    if (!seen.has(nm)) { seen.add(nm); fields.push(nm); }
+    if (DOMFORM_PRIV_RE.test(nm) || DOMFORM_PRICE_RE.test(nm)) interesting.add(nm);
+    if (type === 'hidden') interesting.add(nm); // gizli alan istemciden degistirilebilir -> ilginc
+  }
+  // Anlamli form: >=2 alan VEYA en az 1 ilginc alan (register/profil/checkout formu).
+  if (fields.length < 2 && interesting.size === 0) return null;
+  return { fields: fields.slice(0, 20), interesting: [...interesting].slice(0, 12) };
+}
+
+/** (İŞ 2) domForm etiketi — ajana aday olarak verilir; allowed-list'te BIREBIR yer alir (parse guard). */
+export function domFormLabel(d: { url: string; fields: string[] }): string {
+  return `form ${d.url} [${d.fields.slice(0, 12).join(',')}]`;
+}
+
 async function crawlSurface(host: string): Promise<Surface> {
-  const empty: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [], apiReads: [] };
+  const empty: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [], apiReads: [], domForms: [] };
   const home = await collectHttp(host);
   if (!home.ok) return empty;
 
@@ -253,13 +295,15 @@ async function crawlSurface(host: string): Promise<Surface> {
   const idEndpoints: Surface['idEndpoints'] = []; const seenId = new Set<string>();
   const uploadForms: Surface['uploadForms'] = []; const seenUp = new Set<string>();
   let massAssignForm: Surface['massAssignForm'] = null;
+  const domForms: Surface['domForms'] = []; const seenDf = new Set<string>();
   for (const pg of pages) {
     for (const ip of discoverInputs(host, pg.html)) { const k = `${ip.method} ${ip.action} ${ip.param}`; if (!seenIn.has(k)) { seenIn.add(k); inputs.push(ip); } }
     for (const e of discoverIdEndpoints(host, pg.html)) { const k = `${e.kind}:${e.idParam}:${(() => { try { const u = new URL(e.url); return u.origin + u.pathname; } catch { return e.url; } })()}`; if (!seenId.has(k)) { seenId.add(k); idEndpoints.push(e); } }
     for (const f of discoverUploadForms(host, pg.html)) { const k = `${f.action}:${f.fileField}`; if (!seenUp.has(k)) { seenUp.add(k); uploadForms.push(f); } }
     if (!massAssignForm) massAssignForm = discoverMassAssignForm(host, pg.html);
+    const df = discoverDomFormFields(pg.html); if (df) { const k = df.fields.join(','); if (!seenDf.has(k)) { seenDf.add(k); domForms.push({ url: pg.url, fields: df.fields, interesting: df.interesting }); } }
   }
-  return { ok: true, method: 'static', pagesScanned: pages.length, urlsFetched, jsRendered, homeHtml: home.html, homeHeaders: home.headers, inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [], apiReads: [] };
+  return { ok: true, method: 'static', pagesScanned: pages.length, urlsFetched, jsRendered, homeHtml: home.html, homeHeaders: home.headers, inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [], apiReads: [], domForms: domForms.slice(0, 10) };
 }
 
 // ======================================================================================
@@ -400,11 +444,14 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
     const idEndpoints: Surface['idEndpoints'] = []; const seenId = new Set<string>();
     const uploadForms: Surface['uploadForms'] = []; const seenUp = new Set<string>();
     let massAssignForm: Surface['massAssignForm'] = null;
+    const domForms: Surface['domForms'] = []; const seenDf = new Set<string>();
     for (const pg of pages) {
       for (const ip of discoverInputs(host, pg.html)) { const k = `${ip.method} ${ip.action} ${ip.param}`; if (!seenIn.has(k)) { seenIn.add(k); inputs.push(ip); } }
       for (const e of discoverIdEndpoints(host, pg.html)) { const k = `${e.kind}:${e.idParam}:${(() => { try { const u = new URL(e.url); return u.origin + u.pathname; } catch { return e.url; } })()}`; if (!seenId.has(k)) { seenId.add(k); idEndpoints.push(e); } }
       for (const f of discoverUploadForms(host, pg.html)) { const k = `${f.action}:${f.fileField}`; if (!seenUp.has(k)) { seenUp.add(k); uploadForms.push(f); } }
       if (!massAssignForm) massAssignForm = discoverMassAssignForm(host, pg.html);
+      // (İŞ 2) SALT-OKUNUR DOM form-alani kesfi (SPA formlari icin — submit YOK).
+      const df = discoverDomFormFields(pg.html); if (df) { const k = df.fields.join(','); if (!seenDf.has(k)) { seenDf.add(k); domForms.push({ url: pg.url, fields: df.fields, interesting: df.interesting }); } }
     }
 
     // 5) YAKALANAN API YUZEYI -> input havuzuna EKLE (gercek SPA API'leri: /rest/products/search?q= gibi).
@@ -453,7 +500,7 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
       }
     }
 
-    return { ok: true, method: 'headless', pagesScanned: pages.length, urlsFetched: seenUrl.size, jsRendered: true, homeHtml, homeHeaders: new Map(), inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [...apiWrites].slice(0, 20), apiReads: [...apiReads].slice(0, 30) };
+    return { ok: true, method: 'headless', pagesScanned: pages.length, urlsFetched: seenUrl.size, jsRendered: true, homeHtml, homeHeaders: new Map(), inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [...apiWrites].slice(0, 20), apiReads: [...apiReads].slice(0, 30), domForms: domForms.slice(0, 10) };
   } catch {
     return null;
   } finally {
@@ -511,7 +558,7 @@ async function buildSurface(host: string, session?: AuthSession): Promise<Surfac
 // AYRI cache anahtarı (host + '#auth') kullanır — unauth ve auth yüzeyler karışmaz.
 const SURFACE_CACHE = new Map<string, { at: number; p: Promise<Surface> }>();
 const SURFACE_TTL_MS = 120_000;
-const EMPTY_SURFACE: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [], apiReads: [] };
+const EMPTY_SURFACE: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [], apiReads: [], domForms: [] };
 // TEST hook — ardışık TAZE crawl'ları doğrulamak için (SORUN 1 tutarlılık testi).
 export function __clearSurfaceCache(host?: string): void {
   if (host) { SURFACE_CACHE.delete(host); SURFACE_CACHE.delete(`${host}#auth`); } else SURFACE_CACHE.clear();
