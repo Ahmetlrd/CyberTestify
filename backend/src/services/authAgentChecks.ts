@@ -33,7 +33,7 @@ function getScenarios(host: string, surf: Surface): Promise<AuthAgentSuggestion[
   const c = AUTH_AGENT_CACHE.get(host);
   if (c && Date.now() - c.at < 180_000) return c.p;
   const forms = [...(surf.massAssignForm ? [surf.massAssignForm.action] : []), ...surf.uploadForms.map((f) => f.action)];
-  const p = requestAuthAgentScenarios(host, { inputs: surf.inputs.map((i) => ({ method: i.method, action: i.action, param: i.param })), forms, apiWrites: surf.apiWrites }).catch(() => null);
+  const p = requestAuthAgentScenarios(host, { inputs: surf.inputs.map((i) => ({ method: i.method, action: i.action, param: i.param })), forms, apiWrites: surf.apiWrites, apiReads: surf.apiReads }).catch(() => null);
   AUTH_AGENT_CACHE.set(host, { at: Date.now(), p });
   return p;
 }

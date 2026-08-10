@@ -67,7 +67,10 @@ function buildPrompt(surfaceJson: string): string {
     'TASK: Identify inputs interesting for (1) PRIVILEGE ESCALATION (role/isAdmin/privilege/group fields on',
     'a registration/profile-like form or API) or (2) MULTI-STEP BUSINESS LOGIC (client-controllable price/',
     'quantity/amount/discount/coupon fields; multi-step cart/checkout flows). For each, propose a single',
-    'HARMLESS OBSERVATION the BACKEND can run.',
+    'HARMLESS OBSERVATION the BACKEND can run. The "readApis" list contains AUTHENTICATED (logged-in) API',
+    'endpoints the app called organically (e.g. address/basket/profile/order endpoints) — a read collection',
+    'often has a matching create/update where a role field may be mass-assignable; pick these as inputPoint',
+    'when relevant.',
     '',
     'STRICT OUTPUT RULES (follow EXACTLY):',
     '- Output ONLY a single JSON object. No prose, no explanation, no markdown, no comments.',
@@ -99,12 +102,13 @@ export function __setAuthAgentAdvisorForTest(fn: ((host: string, surface: unknow
 /** Ajanı çalıştır (DÜŞÜK bütçe/timeout). Öneri listesi döndürür; her hata/timeout/tavan -> null (fallback). */
 export async function requestAuthAgentScenarios(
   host: string,
-  surface: { inputs: Array<{ method: string; action: string; param: string }>; forms: string[]; apiWrites: string[] },
+  surface: { inputs: Array<{ method: string; action: string; param: string }>; forms: string[]; apiWrites: string[]; apiReads?: string[] },
 ): Promise<AuthAgentSuggestion[] | null> {
   if (_override) return _override(host, surface);
   const inputLabels = surface.inputs.slice(0, 40).map((i) => `${i.method} ${i.action}?${i.param}`);
-  const allowed = new Set<string>([...inputLabels, ...surface.forms, ...surface.apiWrites]);
-  const surfaceJson = JSON.stringify({ inputs: inputLabels, forms: surface.forms.slice(0, 20), stateChangingApis: surface.apiWrites.slice(0, 20) });
+  const apiReads = surface.apiReads ?? [];
+  const allowed = new Set<string>([...inputLabels, ...surface.forms, ...surface.apiWrites, ...apiReads]);
+  const surfaceJson = JSON.stringify({ inputs: inputLabels, forms: surface.forms.slice(0, 20), stateChangingApis: surface.apiWrites.slice(0, 20), readApis: apiReads.slice(0, 30) });
   if (allowed.size === 0) return [];
 
   let flowId: string | null = null;

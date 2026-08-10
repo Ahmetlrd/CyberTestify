@@ -156,6 +156,15 @@ const CRAWL_MAX_PAGES = 10;        // homepage + ~9 ic sayfa (link havuzundan)
 const CRAWL_HARD_CAP = 16;         // toplam sayfa (link + iyi-bilinen path) mutlak ust siniri
 const CRAWL_ASSET_RE = /\.(css|js|mjs|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|pdf|zip|rar|mp4|webm|webp|avif|json|xml|txt)(\?|$)/i;
 const WELL_KNOWN_PATHS = ['/search?q=cybertestify', '/contact', '/login', '/register', '/api/', '/products?id=1', '/urun?id=1', '/?id=1'];
+// (FAZ C+) GENEL authenticated SPA hash-route listesi — herhangi bir SPA'da login sonrası tipik hesap
+// alanları (Juice-Shop'a ÖZEL değil; yaygın rota adları). Yalnız oturum varken gezilir; olmayan rotalar
+// SPA shell döndürüp benzersiz-içerik dedup ile elenir. Login-arkası form/API'ler ancak bu rotalar
+// render edilince DOM'a/trafiğe gelir (aksi halde ana sayfa + login-öncesi linkler sığ kalır).
+const AUTH_SPA_HASH_ROUTES = [
+  '#/profile', '#/account', '#/settings', '#/orders', '#/order-history', '#/address', '#/addresses',
+  '#/saved-address', '#/basket', '#/cart', '#/wishlist', '#/wallet', '#/payment', '#/saved-payment-methods',
+  '#/security', '#/privacy-security', '#/2fa', '#/dashboard', '#/me', '#/user/profile',
+];
 // Yakalanan XHR/fetch trafiginde gurultu (socket/analytics/i18n) + degersiz cache-buster param'lar.
 const API_NOISE_PATH_RE = /(\/socket\.io\/|\/sockjs|__webpack|hot-update|\/assets\/|\/i18n\/|analytics|gtag|\/collect\b|\/rum\b|\/beacon\b)/i;
 const API_NOISE_PARAM_RE = /^(_|t|ts|v|ver|cb|cache|rand|nonce|sid|eio|transport|timestamp|__.*|hash|token|jwt|key)$/i;
@@ -174,6 +183,7 @@ export type Surface = {
   uploadForms: Array<{ action: string; fileField: string; otherFields: string[]; source?: 'dom' | 'network' }>;
   massAssignForm: { action: string; fields: string[] } | null;
   apiWrites: string[];        // GOZLEMLENEN durum-degistiren API uclari ("POST /rest/user/login") — PROBE EDILMEZ
+  apiReads: string[];         // (FAZ C+) GOZLEMLENEN authenticated OKUMA API uclari ("GET /api/Addresss") — ajan ADAYI + IDOR turetme
 };
 
 // Ağ-trafiğinde dosya-yükleme uç noktası işareti: path'te upload/file/avatar/image/attachment vb.
@@ -190,7 +200,7 @@ export function isNetworkUploadCandidate(method: string, ctype: string, pathname
 }
 
 async function crawlSurface(host: string): Promise<Surface> {
-  const empty: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [] };
+  const empty: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [], apiReads: [] };
   const home = await collectHttp(host);
   if (!home.ok) return empty;
 
@@ -249,7 +259,7 @@ async function crawlSurface(host: string): Promise<Surface> {
     for (const f of discoverUploadForms(host, pg.html)) { const k = `${f.action}:${f.fileField}`; if (!seenUp.has(k)) { seenUp.add(k); uploadForms.push(f); } }
     if (!massAssignForm) massAssignForm = discoverMassAssignForm(host, pg.html);
   }
-  return { ok: true, method: 'static', pagesScanned: pages.length, urlsFetched, jsRendered, homeHtml: home.html, homeHeaders: home.headers, inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [] };
+  return { ok: true, method: 'static', pagesScanned: pages.length, urlsFetched, jsRendered, homeHtml: home.html, homeHeaders: home.headers, inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [], apiReads: [] };
 }
 
 // ======================================================================================
@@ -318,9 +328,17 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
           // Perf: gorsel/font/media/stylesheet blokla. Guvenlik: ic-ag isteklerini blokla.
           let block = rt === 'image' || rt === 'font' || rt === 'media' || rt === 'stylesheet';
           try { if (isInternalHost(new URL(rurl).hostname)) block = true; } catch { /* yoksay */ }
-          // PASIF YAKALA: ayni-host XHR/fetch (gercek API yuzeyi). Bloklamiyoruz, sadece kaydediyoruz.
+          // PASIF YAKALA: ayni-host XHR/fetch (gercek API yuzeyi). SADECE gozlemliyoruz.
           if (!block && (rt === 'xhr' || rt === 'fetch')) {
-            try { if (new URL(rurl).hostname.toLowerCase() === host.toLowerCase()) apiReqs.push({ method: req.method(), url: rurl, ctype: (req.headers()['content-type'] || '').toLowerCase() }); } catch { /* yoksay */ }
+            try {
+              if (new URL(rurl).hostname.toLowerCase() === host.toLowerCase()) {
+                apiReqs.push({ method: req.method(), url: rurl, ctype: (req.headers()['content-type'] || '').toLowerCase() });
+                // GUVENLIK (kesif PASIF kalmali): SPA'nin organik olarak attigi YAZMA (POST/PUT/PATCH/DELETE)
+                // istegini GOZLE (kaydet) ama SUNUCUYA ULASTIRMA -> abort. Boylece kesif sirasinda hicbir
+                // yazma gerceklesmez; endpoint yalnizca ADAY olarak kaydedilir. Okuma (GET) render icin gecer.
+                if (API_WRITE_METHODS.has(req.method().toUpperCase())) block = true;
+              }
+            } catch { /* yoksay */ }
           }
           if (block) req.abort().catch(() => {}); else req.continue().catch(() => {});
         });
@@ -347,12 +365,27 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
       if (!abs) continue;
       try { const u = new URL(abs); if (CRAWL_ASSET_RE.test(u.pathname)) continue; const norm = `${u.origin}${u.pathname}${u.search}`; if (norm !== homeUrl) linkSet.add(norm); } catch { /* atla */ }
     }
-    const targets = [...linkSet].slice(0, HEADLESS_MAX_PAGES - 1);
+    // (FAZ C+) AUTHENTICATED SPA: login-arkası içerik hash-route'larda olur (#/basket, #/address ...).
+    // Eski crawl bunları DIŞLIYORDU (href regex #'i eliyordu + fragment dedup ile ana sayfaya çöküyordu)
+    // -> authenticated yüzey SIĞ kalıyordu. Artık: DOM'daki #/... linkleri + GENEL authenticated route
+    // wordlist'i (Juice-Shop'a özel DEĞİL) fragment KORUNARAK gezilir. Oturum yoksa bu adım atlanır.
+    const hashTargets: string[] = [];
+    if (session) {
+      const seenH = new Set<string>();
+      const addHash = (route: string) => { if (!/^#\//.test(route)) return; const full = `${homeUrl}${route}`; if (!seenH.has(full)) { seenH.add(full); hashTargets.push(full); } };
+      for (const m of homeHtml.matchAll(/href\s*=\s*["'](#\/[^"'\s]+)["']/gi)) addHash(m[1]);
+      for (const r of AUTH_SPA_HASH_ROUTES) addHash(r);
+    }
+    const maxPages = session ? 20 : HEADLESS_MAX_PAGES;   // authenticated crawl daha geniş (hash-route'lar)
+    const hardCap = session ? 26 : CRAWL_HARD_CAP;
+    const targets = [...linkSet].slice(0, maxPages - 1);
     for (const p of WELL_KNOWN_PATHS) { const a = absUrl(p, host); if (a && a !== homeUrl && !targets.includes(a)) targets.push(a); }
+    for (const h of hashTargets) if (!targets.includes(h)) targets.push(h);
 
-    // 3) Sayfalari render et (benzersiz icerik + sayfa ust siniri)
+    // 3) Sayfalari render et (benzersiz icerik + sayfa ust siniri). Hash-route'lar farkli icerik dondururse
+    // benzersiz sayilir; var-olmayan route SPA shell'i (ana sayfa) dondurup icerik-hash dedup ile elenir.
     for (const t of targets) {
-      if (stopped || pages.length >= HEADLESS_MAX_PAGES || seenUrl.size >= CRAWL_HARD_CAP) break;
+      if (stopped || pages.length >= maxPages || seenUrl.size >= hardCap) break;
       if (seenUrl.has(t)) continue; seenUrl.add(t);
       const html = await renderOne(t);
       if (!html) continue;
@@ -376,6 +409,9 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
 
     // 5) YAKALANAN API YUZEYI -> input havuzuna EKLE (gercek SPA API'leri: /rest/products/search?q= gibi).
     const apiWrites = new Set<string>();
+    const apiReads = new Set<string>();
+    // Okuma-API gurultusu (surekli/altyapi cagrilari — yuzey degeri yok).
+    const API_READ_NOISE_RE = /(whoami|languages?|application-(version|configuration)|challenges?|captcha|health\b|status\b|\/version\b|config(uration)?\b|metrics|i18n|socket|sockjs|\/rest\/languages|quantitys?)/i;
     for (const r of apiReqs) {
       let u: URL;
       try { u = new URL(r.url); } catch { continue; }
@@ -410,9 +446,14 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
         const key = `p:path-id:${u.origin}${pm[1]}`;
         if (!seenId.has(key)) { seenId.add(key); idEndpoints.push({ url: `${u.origin}${u.pathname}`, idParam: 'path-id', idValue: parseInt(pm[2], 10), kind: 'path' }); }
       }
+      // (c) (FAZ C+) authenticated OKUMA API ucu (api/rest/graphql-benzeri) -> apiReads (ajan ADAYI + IDOR
+      // turetme). Gozlemsel: uygulamanin KENDI trafigi; biz yazma istegi ATMAYIZ.
+      if (!API_READ_NOISE_RE.test(u.pathname) && (/^\/(api|rest|graphql|v\d+)\//i.test(u.pathname) || u.pathname.split('/').filter(Boolean).length >= 2)) {
+        apiReads.add(`${r.method.toUpperCase()} ${u.pathname}`);
+      }
     }
 
-    return { ok: true, method: 'headless', pagesScanned: pages.length, urlsFetched: seenUrl.size, jsRendered: true, homeHtml, homeHeaders: new Map(), inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [...apiWrites].slice(0, 20) };
+    return { ok: true, method: 'headless', pagesScanned: pages.length, urlsFetched: seenUrl.size, jsRendered: true, homeHtml, homeHeaders: new Map(), inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [...apiWrites].slice(0, 20), apiReads: [...apiReads].slice(0, 30) };
   } catch {
     return null;
   } finally {
@@ -443,7 +484,7 @@ async function buildSurface(host: string, session?: AuthSession): Promise<Surfac
 // AYRI cache anahtarı (host + '#auth') kullanır — unauth ve auth yüzeyler karışmaz.
 const SURFACE_CACHE = new Map<string, { at: number; p: Promise<Surface> }>();
 const SURFACE_TTL_MS = 120_000;
-const EMPTY_SURFACE: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [] };
+const EMPTY_SURFACE: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [], apiReads: [] };
 export function discoverSurface(host: string, session?: AuthSession): Promise<Surface> {
   const key = session ? `${host}#auth` : host;
   const c = SURFACE_CACHE.get(key);
