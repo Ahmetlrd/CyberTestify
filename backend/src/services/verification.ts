@@ -31,6 +31,7 @@ const KNOWN_PUBLIC_TEST_TARGETS = new Set<string>([
   'demo.testfire.net',        // IBM AltoroMutual demo
   'ginandjuice.shop',         // PortSwigger resmi demo
   'google-gruyere.appspot.com', // Google Gruyere — resmî web güvenliği codelab (kasıtlı zafiyetli)
+  'test.cybertestify.com',    // KENDİ barındırdığımız OWASP Juice Shop (iç test/QA hedefi) — bkz Caddyfile
 ]);
 
 export function isKnownPublicTestTarget(hostname: string): boolean {
