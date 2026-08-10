@@ -289,9 +289,17 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
                   <div className="mt-3 rounded-card border border-line bg-brand-50/40 px-4 py-3 text-sm text-ink-soft">
                     🔒 Bu içerik kilitli.{' '}
                     {order.report.fixSuggestionPriceMinorUnit != null && (
-                      <strong>
-                        {(order.report.fixSuggestionPriceMinorUnit / 100).toLocaleString('tr-TR')} {order.currency}
-                      </strong>
+                      <>
+                        {order.report.fixSuggestionListMinorUnit != null &&
+                          order.report.fixSuggestionListMinorUnit > order.report.fixSuggestionPriceMinorUnit && (
+                            <span className="mr-1 text-ink-muted line-through">
+                              {(order.report.fixSuggestionListMinorUnit / 100).toLocaleString('tr-TR')} {order.currency}
+                            </span>
+                          )}
+                        <strong>
+                          {(order.report.fixSuggestionPriceMinorUnit / 100).toLocaleString('tr-TR')} {order.currency}
+                        </strong>
+                      </>
                     )}{' '}
                     karşılığında açılır.
                   </div>

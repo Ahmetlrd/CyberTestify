@@ -58,7 +58,8 @@ export interface ScanPackageDef {
   //                     dosya, fetch|sh, yikim) da bloklu; yalniz kor kanit (sleep/canary).
   securityProfile?: 'passive' | 'active-light' | 'active-verify-only';
   networkLayer?: boolean;
-  fixSuggestionPriceMinorUnit?: number;
+  fixSuggestionPriceMinorUnit?: number;       // NIHAI (satis) fiyat — verilmezse taban fiyatin %50'si
+  fixSuggestionListMinorUnit?: number;        // "indirimli gibi" gosterilen ustu-cizili anchor (opsiyonel)
   // false ise musteriye SATILMAZ: paket listesinden gizlenir + siparis reddedilir.
   // iso27001/pci su an GEÇİCİ gizli — ajan yasaga ragmen POST deniyor, tarama
   // guvenlik geregi durduruluyor (rapor cikmiyor). Kalici cozum: PentAGI tool-level
@@ -75,9 +76,15 @@ export function localeFor(region: string | undefined | null): 'tr' | 'en' {
   return region === 'tr' ? 'tr' : 'en';
 }
 
-// Eklenti (fix suggestions) fiyati — PLACEHOLDER: taban fiyatin %50'si (Vedat onayina kadar).
+// Eklenti (AI Çözüm Önerileri) NIHAI fiyati. Acikca verilmisse O; yoksa taban fiyatin %50'si.
 export function fixSuggestionPrice(def: ScanPackageDef): number {
   return def.fixSuggestionPriceMinorUnit ?? Math.round(def.priceMinorUnit * 0.5);
+}
+// "indirimli gibi" gosterim icin ustu-cizili ANCHOR (liste) fiyati. YALNIZ acikca tanimlanmis
+// paketlerde gosterilir (uydurma indirim yok); anchor nihai fiyattan buyuk degilse null doner.
+export function fixSuggestionListPrice(def: ScanPackageDef): number | null {
+  if (def.fixSuggestionListMinorUnit == null) return null;
+  return def.fixSuggestionListMinorUnit > fixSuggestionPrice(def) ? def.fixSuggestionListMinorUnit : null;
 }
 
 export type SecurityProfile = 'passive' | 'active-light' | 'active-verify-only';
@@ -353,6 +360,7 @@ export const SCAN_PACKAGES: ScanPackageDef[] = [
       'Hizli, pasif on-kontrol: ana sayfanin guvenlik basliklari, TLS gecerliligi ve ' +
       'sunucu banner ozeti. Birkac dakikada biten en ucuz giris paketi.',
     priceMinorUnit: 49900,
+    fixSuggestionPriceMinorUnit: 29900, fixSuggestionListMinorUnit: 49900, // AI Çözüm: 299 TL (~%40 indirimli göster)
     modelProvider: PROVIDER,
     maxToolCalls: 25,
     promptTemplate: (host) => `This is a FAST, PASSIVE and SHORT pre-check package (Basit Tarama) — NOT a deep scan.
@@ -768,6 +776,7 @@ Target: ${host}
       'Kombine paket: SSL/TLS, güvenlik başlıkları & bilgi sızıntısı, DNS/e-posta, CORS/çerez ve ' +
       'CSP yapılandırmasını TEK raporda birleştirir. Tamamen pasif.',
     priceMinorUnit: 399900,
+    fixSuggestionPriceMinorUnit: 149900, fixSuggestionListMinorUnit: 249900, // AI Çözüm: 1.499 TL (~%40 indirimli göster)
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     available: false,
@@ -790,6 +799,7 @@ Target: ${host}
       'Kombine paket: KVKK Ön Uyum + PCI-DSS Hazırlık + ISO 27001 Hazırlık — dışarıdan gözlemlenebilir ' +
       'göstergeleri ilgili ilke/maddelerle eşler (resmî uyum/sertifikasyon beyanı değildir). Tamamen pasif.',
     priceMinorUnit: 799900,
+    fixSuggestionPriceMinorUnit: 279900, fixSuggestionListMinorUnit: 469900, // AI Çözüm: 2.799 TL (~%40 indirimli göster)
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     available: false,
@@ -813,6 +823,7 @@ Target: ${host}
       'Kombine paket: Subdomain Takeover Taraması + API & Swagger Keşfi + CMS & Bilinen CVE Taraması — ' +
       'saldırı yüzeyinizi tek raporda haritalar. Tamamen pasif keşif (istismar yok).',
     priceMinorUnit: 449900,
+    fixSuggestionPriceMinorUnit: 169900, fixSuggestionListMinorUnit: 279900, // AI Çözüm: 1.699 TL (~%40 indirimli göster)
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     available: false,
@@ -837,6 +848,7 @@ Target: ${host}
       'İş Mantığı/Race-Mass-Assignment/RCE). Zafiyeti kanıtlar, istismar etmez. Kimlik doğrulaması ' +
       'olmadan (login’siz) test edilebilen yüzeyde çalışır; login sonrası derin zafiyetler kapsam dışıdır.',
     priceMinorUnit: 1499900,
+    fixSuggestionPriceMinorUnit: 449900, fixSuggestionListMinorUnit: 749900, // AI Çözüm: 4.499 TL (~%40 indirimli göster)
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     available: false,

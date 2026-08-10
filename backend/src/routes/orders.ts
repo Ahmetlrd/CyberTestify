@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice, securityProfileFor } from '../services/scanPackages.js';
+import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice, fixSuggestionListPrice, securityProfileFor } from '../services/scanPackages.js';
 import { validateConsentInput, activeTestScope, ACTIVE_TEST_CONSENT_VERSION, ACTIVE_TEST_RISK_ACK, hasValidActiveTestConsent } from '../services/activeTestConsent.js';
 import { renderConsentPdf } from '../services/pdf.js';
 import { encryptSecret, decryptSecret } from '../services/crypto.js';
@@ -54,8 +54,9 @@ ordersRouter.get('/packages', async (req, res) => {
           // Bolge satiri yoksa TR tabanina guvenli dusus.
           priceMinorUnit: row?.amountMinorUnit ?? p.priceMinorUnit,
           currency: row?.currency ?? currencyFor(region),
-          // (3) Ucretli "AI Cozum Onerileri" eklentisi fiyati (PLACEHOLDER).
+          // (3) Ucretli "AI Cozum Onerileri" eklentisi fiyati + ustu-cizili anchor ("indirimli gibi").
           fixSuggestionPriceMinorUnit: fixSuggestionPrice(p),
+          fixSuggestionListMinorUnit: fixSuggestionListPrice(p),
           // "Yakında": listelenir ama satin ALINAMAZ (frontend CTA pasif + rozet).
           comingSoon: p.comingSoon ?? false,
           // SATIS MODELI: bundle-uyesi paketler tekil SATILAMAZ (basit_tarama HARIC). Frontend
@@ -742,6 +743,7 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
         hasFixSuggestions: r.fixSuggestionsIv != null,
         fixSuggestionsUnlocked: r.fixSuggestionsUnlockedAt != null,
         fixSuggestionPriceMinorUnit: fixSuggestionPrice(getPackageDef(order.package.key)),
+        fixSuggestionListMinorUnit: fixSuggestionListPrice(getPackageDef(order.package.key)),
       }
     : null;
 
