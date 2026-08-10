@@ -13,7 +13,11 @@ import { createFlow, getFlowStatus, getFlowLogs, getToolCallCount, stopFlow, del
 import { SAFETY_AUTHENTICATED_EN } from './scanPackages.js';
 
 const PROVIDER = process.env.PENTAGI_PROVIDER ?? 'cybertestify-anthropic';
-const AUTH_AGENT_TIMEOUT_MS = 60_000;   // autonomous'tan (~90 tc) DÜŞÜK — risk/adım oranı yüksek
+// (SORUN 2 fix) Gerçek PentAGI advisory flow'u 60s'de çıktı üretemeyip TIMEOUT->null->"tamamlanamadı"
+// oluyordu (teşhis: gerçek çağrı 75s'de NULL döndü). Süre OPERASYONEL bir parametre (güvenlik sınırı
+// DEĞİL) — flow'un gerçekten sonuç üretebilmesi için makul artış. Tool-call tavanı (25) ve tüm güvenlik
+// sınırları AYNEN korunur. Yine autonomous_pentest'ten (90 tool-call, ~dakikalarca) çok daha dardır.
+const AUTH_AGENT_TIMEOUT_MS = 180_000;  // 3 dk — gerçek PentAGI flow'unun JSON öneri üretmesine yeterli süre
 const AUTH_AGENT_POLL_MS = 6_000;
 export const AUTH_AGENT_MAX_TOOLCALLS = 25; // düşük tool-call tavanı (aşılırsa stopFlow + fallback)
 const MAX_SUGGESTIONS = 4;

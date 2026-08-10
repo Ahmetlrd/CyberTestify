@@ -153,6 +153,7 @@ export async function sendOrderConfirmation(orderIds: string[]): Promise<boolean
     const isReview = orders.some((o) => requiresManualReview(o.package.key));
     const reviewNote = isReview
       ? `<p style="margin:12px 0;padding:10px 14px;background:#f3f7f6;border-left:3px solid #123F3A;border-radius:6px;color:#3a4a47;font-size:13px"><strong>ℹ️ İnceleme süreci:</strong> Bu paket, güvenlik nedeniyle sipariş sonrası kısa bir <strong>manuel inceleme</strong> sürecinden geçer; taramanız hemen değil, genellikle <strong>24 saat içinde</strong> başlar. Ayrıca <strong>sınırlı/kontrollü otonom ajan</strong> analizi kullanır (tam-otonom sınırsız pentest değildir).</p>`
+        + `<p style="margin:12px 0;padding:10px 14px;background:#f3f7f6;border-left:3px solid #123F3A;border-radius:6px;color:#3a4a47;font-size:13px"><strong>Kapsam & beklenti:</strong> Cross-account (başka bir kullanıcının verisine erişim) IDOR bu sürümün kapsamı dışındadır. Otonom ajan katmanı bazı hedeflerde/durumlarda analizi tamamlayamayabilir; bu durumda sonuçlar deterministik authenticated kontrollerle sınırlı kalır — bu normaldir ve rapor bunu şeffaf gösterir.</p>`
       : '';
     const body = `<p>Siparişiniz alındı ve ödemeniz onaylandı. Teşekkür ederiz.</p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:12px 0;border:1px solid #e3e8e6;border-radius:10px">

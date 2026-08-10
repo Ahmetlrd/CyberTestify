@@ -462,22 +462,49 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
   }
 }
 
+// (SORUN 1 fix) Input ENJEKSİYON-DEĞERİ önceliklendirmesi. Kök neden: yüksek-değerli enjekte edilebilir
+// uç (ör. /rest/products/search?q) düşük-değerli gürültü (redirect/ref/login param'ları) tarafından
+// INJ_MAX_INPUTS tavanının DIŞINA itilip test edilmiyordu; sıra da run-to-run değişince sonuç tutarsızdı.
+// Bu STABİL (deterministik) sıralama, yüksek-değerli input'ları ÖNE alır -> her taramada aynı, tutarlı test.
+function inputInjectionRank(ip: InputPoint): number {
+  let s = 0;
+  let path = '';
+  try { path = new URL(ip.action).pathname.toLowerCase(); } catch { /* yoksay */ }
+  const p = ip.param.toLowerCase();
+  if (/\/(rest|api|graphql|v\d+)\//.test(path)) s += 5;                                   // API ucu
+  if (/search|query|find|list|products?|users?|orders?|items?|accounts?|feedbacks?/.test(path)) s += 3;
+  if (/^(q|query|search|s|id|name|user|email|cat|category|sort|filter|order|term|keyword)$/.test(p)) s += 4; // klasik enjekte param
+  if (ip.source === 'url') s += 1;                                                          // GET query -> enjeksiyona açık
+  if (/^(to|url|uri|return|return_to|redirect|redir|ref|ref_cta|ref_loc|ref_page|source|source_repo|utm_[a-z]+|next|continue|file|callback|cb)$/.test(p)) s -= 4; // gürültü
+  if (/redirect|signup|signin|\/login|logout|oauth|auth\/callback/.test(path)) s -= 2;
+  return s;
+}
+// Kararlı sıralama (rank desc, esitlikte path+param alfabetik) -> deterministik + önceliklendirilmiş.
+function prioritizeInputs<T extends Surface>(surf: T): T {
+  surf.inputs = [...surf.inputs].sort((a, b) => {
+    const d = inputInjectionRank(b) - inputInjectionRank(a);
+    if (d !== 0) return d;
+    return `${a.action} ${a.param}`.localeCompare(`${b.action} ${b.param}`);
+  });
+  return surf;
+}
+
 // HIBRIT: once hizli statik kesif; SPA supheli + statik input BULAMADIYSA headless'e dus.
 // (FAZ C) session verilirse -> DOĞRUDAN authenticated headless crawl (login-arkası yüzey).
 async function buildSurface(host: string, session?: AuthSession): Promise<Surface> {
   if (session) {
     const hl = await crawlHeadless(host, session).catch(() => null);
-    if (hl && hl.ok) return hl;      // authenticated render sonucu
-    return await crawlSurface(host); // headless yok/başarısız -> statik (unauth) fallback
+    if (hl && hl.ok) return prioritizeInputs(hl);      // authenticated render sonucu
+    return prioritizeInputs(await crawlSurface(host)); // headless yok/başarısız -> statik (unauth) fallback
   }
   const stat = await crawlSurface(host);
   const staticSurfaceCount = stat.inputs.length + stat.idEndpoints.length + stat.uploadForms.length + (stat.massAssignForm ? 1 : 0);
   // Statik zaten input buldu -> headless GEREKSIZ (perf). Yalniz SPA supheli + 0 input -> headless.
   if (stat.ok && staticSurfaceCount === 0 && stat.jsRendered) {
     const hl = await crawlHeadless(host).catch(() => null);
-    if (hl && hl.ok) return hl; // render sonucu (input bulsa da bulmasa da) — daha guclu kapsam bilgisi
+    if (hl && hl.ok) return prioritizeInputs(hl); // render sonucu (input bulsa da bulmasa da) — daha guclu kapsam bilgisi
   }
-  return stat;
+  return prioritizeInputs(stat);
 }
 
 // In-flight cache: ayni host icin es zamanli 7 kontrol TEK crawl paylasir. (FAZ C) authenticated crawl

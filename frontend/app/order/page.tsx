@@ -534,11 +534,16 @@ export default function OrderPage() {
           kısa bir <strong>manuel inceleme</strong> sürecinden geçer; taramanız hemen değil, genellikle
           <strong> 24 saat içinde</strong> başlar.</p>
           <p><strong className="text-ink">Test hesabı:</strong> Kimlik doğrulamalı test için bir <strong>TEST hesabı</strong>
-          (2FA’sız, sınırlı yetkili) gerekir. Kimlik bilgileriniz <strong>şifreli/geçici</strong> saklanır ve tarama
-          sonrası silinir.</p>
+          (ana/üretim hesabınız DEĞİL; 2FA’sız, sınırlı yetkili, tek-kullanımlık) vermelisiniz. Kimlik bilgileriniz
+          <strong> şifreli/geçici</strong> saklanır ve tarama sonrası silinir.</p>
           <p><strong className="text-ink">Yöntem:</strong> Diğer paketlerden farklı olarak <strong>sınırlı/kontrollü otonom
           ajan</strong> analizi kullanır. Gerçek veri/hesap değişikliği ve ödeme tamamlama <strong>kod seviyesinde
           engellidir</strong> — bu bir “tam-otonom sınırsız pentest” değildir.</p>
+          <p><strong className="text-ink">Kapsam:</strong> <strong>Cross-account</strong> (başka bir kullanıcının verisine
+          erişim) IDOR bu sürümün kapsamı dışındadır.</p>
+          <p><strong className="text-ink">Beklenti:</strong> Otonom ajan katmanı bazı hedeflerde/durumlarda analizi
+          tamamlayamayabilir; bu durumda sonuçlar deterministik authenticated kontrollerle sınırlı kalır — bu
+          normal bir davranıştır ve rapor bunu şeffaf gösterir.</p>
         </div>
       )}
 
