@@ -512,6 +512,10 @@ async function buildSurface(host: string, session?: AuthSession): Promise<Surfac
 const SURFACE_CACHE = new Map<string, { at: number; p: Promise<Surface> }>();
 const SURFACE_TTL_MS = 120_000;
 const EMPTY_SURFACE: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [], apiReads: [] };
+// TEST hook — ardışık TAZE crawl'ları doğrulamak için (SORUN 1 tutarlılık testi).
+export function __clearSurfaceCache(host?: string): void {
+  if (host) { SURFACE_CACHE.delete(host); SURFACE_CACHE.delete(`${host}#auth`); } else SURFACE_CACHE.clear();
+}
 export function discoverSurface(host: string, session?: AuthSession): Promise<Surface> {
   const key = session ? `${host}#auth` : host;
   const c = SURFACE_CACHE.get(key);
