@@ -27,7 +27,8 @@ const HEADLESS_PRECHECK_TIMEOUT_MS = 6000; // odeme-oncesi TEK-sayfa on-kontrol 
 
 const MIN_DELAY_MS = 1200;         // istekler arasi min bekleme (hedefi yormamak)
 const REQ_TIMEOUT_MS = 10000;
-const MAX_INPUTS = 6;              // taranacak input noktasi ust siniri
+const MAX_INPUTS = 6;              // taranacak input noktasi ust siniri (statik kesif ic havuz)
+const MAX_PROBES_PER_CHECK = 130;  // kontrol basina TOPLAM prob tavani (API-input'larla genisleyen kapsam icin; sinirsiz DEGIL)
 const SLOW_FACTOR = 3;             // baseline * 3'u asan yanit -> devre kesici (zaman-tabanli haric)
 const SLOW_FLOOR_MS = 2500;        // baseline cok kucukse gurultuden kacinmak icin taban
 const TIME_PROBE_DELAY_S = 3;      // zaman-tabanli SQLi gecikme saniyesi
@@ -44,6 +45,7 @@ class ProbeCtx {
   private last = 0;
   async fetchOnce(url: string, opts: { method?: 'GET' | 'POST'; body?: string; contentType?: string; expectSlow?: boolean } = {}): Promise<ProbeResult | null> {
     if (this.stopped) return null;
+    if (this.sent >= MAX_PROBES_PER_CHECK) { this.stopped = `Toplam prob üst sınırına (${MAX_PROBES_PER_CHECK}) ulaşıldı — otomatik durduruldu.`; return null; }
     const wait = MIN_DELAY_MS - (Date.now() - this.last);
     if (wait > 0) await sleep(wait);
     this.last = Date.now();
@@ -149,6 +151,10 @@ const CRAWL_MAX_PAGES = 10;        // homepage + ~9 ic sayfa (link havuzundan)
 const CRAWL_HARD_CAP = 16;         // toplam sayfa (link + iyi-bilinen path) mutlak ust siniri
 const CRAWL_ASSET_RE = /\.(css|js|mjs|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|pdf|zip|rar|mp4|webm|webp|avif|json|xml|txt)(\?|$)/i;
 const WELL_KNOWN_PATHS = ['/search?q=cybertestify', '/contact', '/login', '/register', '/api/', '/products?id=1', '/urun?id=1', '/?id=1'];
+// Yakalanan XHR/fetch trafiginde gurultu (socket/analytics/i18n) + degersiz cache-buster param'lar.
+const API_NOISE_PATH_RE = /(\/socket\.io\/|\/sockjs|__webpack|hot-update|\/assets\/|\/i18n\/|analytics|gtag|\/collect\b|\/rum\b|\/beacon\b)/i;
+const API_NOISE_PARAM_RE = /^(_|t|ts|v|ver|cb|cache|rand|nonce|sid|eio|transport|timestamp|__.*|hash|token|jwt|key)$/i;
+const API_WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export type Surface = {
   ok: boolean;
@@ -162,10 +168,11 @@ export type Surface = {
   idEndpoints: Array<{ url: string; idParam: string; idValue: number; kind: 'query' | 'path' }>;
   uploadForms: Array<{ action: string; fileField: string; otherFields: string[] }>;
   massAssignForm: { action: string; fields: string[] } | null;
+  apiWrites: string[];        // GOZLEMLENEN durum-degistiren API uclari ("POST /rest/user/login") — PROBE EDILMEZ
 };
 
 async function crawlSurface(host: string): Promise<Surface> {
-  const empty: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null };
+  const empty: Surface = { ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [] };
   const home = await collectHttp(host);
   if (!home.ok) return empty;
 
@@ -224,7 +231,7 @@ async function crawlSurface(host: string): Promise<Surface> {
     for (const f of discoverUploadForms(host, pg.html)) { const k = `${f.action}:${f.fileField}`; if (!seenUp.has(k)) { seenUp.add(k); uploadForms.push(f); } }
     if (!massAssignForm) massAssignForm = discoverMassAssignForm(host, pg.html);
   }
-  return { ok: true, method: 'static', pagesScanned: pages.length, urlsFetched, jsRendered, homeHtml: home.html, homeHeaders: home.headers, inputs, idEndpoints, uploadForms, massAssignForm };
+  return { ok: true, method: 'static', pagesScanned: pages.length, urlsFetched, jsRendered, homeHtml: home.html, homeHeaders: home.headers, inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [] };
 }
 
 // ======================================================================================
@@ -264,6 +271,9 @@ async function crawlHeadless(host: string): Promise<Surface | null> {
     const md5 = (s: string) => createHash('md5').update(s).digest('hex');
     let consec5xx = 0;
     let stopped = false;
+    // PASIF DINLEME: sayfanin organik olarak attigi ayni-host XHR/fetch istekleri (gercek API yuzeyi).
+    // Biz EKSTRA istek/etkilesim TETIKLEMIYORUZ — sadece gozlemliyoruz.
+    const apiReqs: Array<{ method: string; url: string }> = [];
 
     // Tek sayfayi render edip render-edilmis HTML'i dondur. HARD-GUARD: yalniz ayni host, ic-ag ASLA.
     const renderOne = async (url: string): Promise<string | null> => {
@@ -274,9 +284,14 @@ async function crawlHeadless(host: string): Promise<Surface | null> {
         await page.setRequestInterception(true);
         page.on('request', (req) => {
           const rt = req.resourceType();
+          const rurl = req.url();
           // Perf: gorsel/font/media/stylesheet blokla. Guvenlik: ic-ag isteklerini blokla.
           let block = rt === 'image' || rt === 'font' || rt === 'media' || rt === 'stylesheet';
-          try { if (isInternalHost(new URL(req.url()).hostname)) block = true; } catch { /* yoksay */ }
+          try { if (isInternalHost(new URL(rurl).hostname)) block = true; } catch { /* yoksay */ }
+          // PASIF YAKALA: ayni-host XHR/fetch (gercek API yuzeyi). Bloklamiyoruz, sadece kaydediyoruz.
+          if (!block && (rt === 'xhr' || rt === 'fetch')) {
+            try { if (new URL(rurl).hostname.toLowerCase() === host.toLowerCase()) apiReqs.push({ method: req.method(), url: rurl }); } catch { /* yoksay */ }
+          }
           if (block) req.abort().catch(() => {}); else req.continue().catch(() => {});
         });
         const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: HEADLESS_PAGE_TIMEOUT_MS });
@@ -328,7 +343,37 @@ async function crawlHeadless(host: string): Promise<Surface | null> {
       for (const f of discoverUploadForms(host, pg.html)) { const k = `${f.action}:${f.fileField}`; if (!seenUp.has(k)) { seenUp.add(k); uploadForms.push(f); } }
       if (!massAssignForm) massAssignForm = discoverMassAssignForm(host, pg.html);
     }
-    return { ok: true, method: 'headless', pagesScanned: pages.length, urlsFetched: seenUrl.size, jsRendered: true, homeHtml, homeHeaders: new Map(), inputs, idEndpoints, uploadForms, massAssignForm };
+
+    // 5) YAKALANAN API YUZEYI -> input havuzuna EKLE (gercek SPA API'leri: /rest/products/search?q= gibi).
+    const apiWrites = new Set<string>();
+    for (const r of apiReqs) {
+      let u: URL;
+      try { u = new URL(r.url); } catch { continue; }
+      if (API_NOISE_PATH_RE.test(u.pathname)) continue;
+      const base = `${u.origin}${u.pathname}`;
+      if (API_WRITE_METHODS.has(r.method.toUpperCase())) {
+        // Durum-degistiren API ucu — PROBE EDILMEZ, sadece raporda gozlem notu.
+        apiWrites.add(`${r.method.toUpperCase()} ${u.pathname}`);
+        continue;
+      }
+      // GET/HEAD/OPTIONS (okuma) — test edilebilir input.
+      // (a) query param'lar -> GET InputPoint (injection/ssrf/rce test eder)
+      const params: Record<string, string> = {};
+      u.searchParams.forEach((v, k) => { params[k] = v; });
+      for (const k of Object.keys(params)) {
+        if (API_NOISE_PARAM_RE.test(k)) continue;
+        const key = `GET ${base} ${k}`;
+        if (!seenIn.has(key)) { seenIn.add(key); inputs.push({ method: 'GET', action: base, param: k, params: { ...params }, source: 'url' }); }
+      }
+      // (b) sayisal path segmenti -> idEndpoint (IDOR yalniz GET okur — guvenli)
+      const pm = u.pathname.match(/^(.*\/)(\d{1,9})(\/?)$/);
+      if (pm) {
+        const key = `p:path-id:${u.origin}${pm[1]}`;
+        if (!seenId.has(key)) { seenId.add(key); idEndpoints.push({ url: `${u.origin}${u.pathname}`, idParam: 'path-id', idValue: parseInt(pm[2], 10), kind: 'path' }); }
+      }
+    }
+
+    return { ok: true, method: 'headless', pagesScanned: pages.length, urlsFetched: seenUrl.size, jsRendered: true, homeHtml, homeHeaders: new Map(), inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [...apiWrites].slice(0, 20) };
   } catch {
     return null;
   } finally {
@@ -355,7 +400,7 @@ const SURFACE_TTL_MS = 120_000;
 export function discoverSurface(host: string): Promise<Surface> {
   const c = SURFACE_CACHE.get(host);
   if (c && Date.now() - c.at < SURFACE_TTL_MS) return c.p;
-  const p = buildSurface(host).catch(() => ({ ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null } as Surface));
+  const p = buildSurface(host).catch(() => ({ ok: false, method: 'static', pagesScanned: 0, urlsFetched: 0, jsRendered: false, homeHtml: '', homeHeaders: new Map(), inputs: [], idEndpoints: [], uploadForms: [], massAssignForm: null, apiWrites: [] } as Surface));
   SURFACE_CACHE.set(host, { at: Date.now(), p });
   return p;
 }
@@ -485,17 +530,18 @@ export function discoveryMethodNote(surf: Surface): string {
 // ======================================================================================
 // injection_verify — SQLi (hata + zaman) + XSS (yansima)
 // ======================================================================================
-const SQL_ERROR_RE = /(SQL syntax|mysql_fetch|mysqli|you have an error in your sql|ORA-\d{4,5}|PLS-\d|PostgreSQL.*ERROR|pg_query|SQLite3?::|SQLSTATE\[|Microsoft OLE DB Provider|ODBC SQL Server|Unclosed quotation mark|quoted string not properly terminated|syntax error at or near|Warning: pg_|Warning: mysql)/i;
+const SQL_ERROR_RE = /(SQL syntax|mysql_fetch|mysqli|you have an error in your sql|ORA-\d{4,5}|PLS-\d|PostgreSQL.*ERROR|pg_query|SQLite3?::|SQLITE_ERROR|SQLITE_CONSTRAINT|no such column|near ".{0,40}": syntax error|unrecognized token|SQLSTATE\[|Microsoft OLE DB Provider|ODBC SQL Server|Unclosed quotation mark|quoted string not properly terminated|syntax error at or near|Warning: pg_|Warning: mysql|Sequelize\w*Error)/i;
 
 export type InjFinding = { inputPoint: string; type: 'SQLi' | 'XSS'; technique: 'error-based' | 'time-based' | 'reflection'; evidence: string; severity: 'high' | 'medium' | 'low'; confidence: 'high' | 'medium' | 'low' };
 export type InjEvidence = { ok: boolean; baseUrl: string; pagesScanned: number; inputsFound: number; inputsTested: number; probesSent: number; payloadsSent: number; findings: InjFinding[]; stopped: string | null; notes: string[] };
 
 // Zararsiz, veri-degistirmeyen SQLi HATA-tetikleyici varyantlari (yalniz response'ta hata imzasi arar).
-const SQLI_ERROR_PAYLOADS = ["'", '"', "' OR '1'='1"];
-// Context-aware zararsiz XSS isaret payload'lari (JS CALISTIRMAZ; yalniz yansima kontrolu).
+const SQLI_ERROR_PAYLOADS = ["'", '"', "' OR '1'='1", "')", "';"];
+// Context-aware zararsiz XSS isaret payload'lari (JS CALISTIRMAZ; yalniz kacirilmadan yansima kontrolu).
+// tag-context, single-quote-attr, double-quote-attr, URL/js-context marker'lari.
 const XSS_MARKER = 'cxt9137xmark';
-const XSS_PAYLOADS = [`${XSS_MARKER}"><cxmark>`, `${XSS_MARKER}'><cxmark>`];
-const INJ_MAX_INPUTS = 6;
+const XSS_PAYLOADS = [`${XSS_MARKER}"><cxmark>`, `${XSS_MARKER}'><cxmark>`, `${XSS_MARKER}" cxa=x`, `${XSS_MARKER}');cx//`];
+const INJ_MAX_INPUTS = 10; // API-tabanli input'lar eklendigi icin arttirildi
 
 export async function collectInjectionEvidence(host: string): Promise<InjEvidence> {
   const surf = await discoverSurface(host);
@@ -566,7 +612,7 @@ export async function collectInjectionEvidence(host: string): Promise<InjEvidenc
 // ======================================================================================
 export type IdorFinding = { endpoint: string; idParam: string; observation: string; differentResource: boolean; severity: 'high' | 'medium' | 'low' };
 export type IdorEvidence = { ok: boolean; pagesScanned: number; candidates: number; endpointsTested: number; probesSent: number; findings: IdorFinding[]; stopped: string | null; notes: string[] };
-const IDOR_MAX = 8;
+const IDOR_MAX = 10;
 
 // Ana sayfa HTML'inden sayisal/predictable ID iceren URL adaylarini bul.
 function discoverIdEndpoints(host: string, html: string): Array<{ url: string; idParam: string; idValue: number; kind: 'query' | 'path' }> {
@@ -600,6 +646,20 @@ function withId(url: string, kind: 'query' | 'path', idParam: string, newVal: nu
   else u.pathname = u.pathname.replace(/(\d{1,9})(\/?)$/, `${newVal}$2`);
   return u.toString();
 }
+// JSON YAPI (shape) imzasi — anahtar iskeletini (degerleri DEGIL) ozetler. Iki yanit ayni yapida ama
+// farkli icerikli mi anlamak icin. Veri SAKLANMAZ; yalniz yapisal imza + icerik hash'i karsilastirilir.
+function jsonKeyShape(v: unknown, depth = 0): string {
+  if (depth > 5) return '~';
+  if (Array.isArray(v)) return '[' + (v.length ? jsonKeyShape(v[0], depth + 1) : '') + ']';
+  if (v && typeof v === 'object') return '{' + Object.keys(v as object).sort().map((k) => k + ':' + jsonKeyShape((v as any)[k], depth + 1)).join(',') + '}';
+  return typeof v;
+}
+function tryJsonShape(text: string): string | null {
+  const t = text.trim();
+  if (!(t.startsWith('{') || t.startsWith('['))) return null;
+  try { return jsonKeyShape(JSON.parse(t)); } catch { return null; }
+}
+
 // Genel 404/hata sayfasi mi? (icerik saklamadan, sadece kaba isaret)
 function looksLikeNotFound(status: number, text: string): boolean {
   if (status === 404 || status === 403 || status === 401) return true;
@@ -632,10 +692,21 @@ export async function collectIdorEvidence(host: string): Promise<IdorEvidence> {
     const nb = await ctx.fetchOnce(nUrl);
     if (!nb || ctx.stopped) continue;
     const nbNF = looksLikeNotFound(nb.status, nb.text);
-    // Kanit (VERI SAKLANMADAN): komsu 200 + genel-404 DEGIL + orijinalden FARKLI uzunluk => farkli kaynak.
-    const different = nb.status === 200 && !nbNF && Math.abs(nb.len - orig.len) > 64;
+    // ICERIK KARSILASTIRMA (VERI SAKLANMADAN): sadece boyut degil.
+    //  - JSON ise: ayni YAPI (key iskeleti) ama farkli ICERIK (hash) => guclu IDOR gostergesi
+    //    (ayni boyutta olsa bile baska bir kaydin verisi olabilir).
+    //  - Aksi halde: kaba uzunluk farki.
+    const md5 = (s: string) => createHash('md5').update(s).digest('hex');
+    const oShape = tryJsonShape(orig.text); const nShape = tryJsonShape(nb.text);
+    // Ayni JSON yapisi + farkli hash => ayni boyutta olsa bile farkli kayit (guclu gosterge).
+    const sameShapeDiffContent = oShape !== null && nShape !== null && oShape === nShape && md5(orig.text) !== md5(nb.text) && orig.text.trim().length > 2;
+    const lenDiff = Math.abs(nb.len - orig.len) > 64; // HTML'de dinamik token/zaman gurultusune karsi kaba esik
+    const different = nb.status === 200 && !nbNF && (sameShapeDiffContent || lenDiff);
     if (different && !origNF) {
-      findings.push({ endpoint: epLabel, idParam: ep.idParam, observation: `Kimlik doğrulaması olmadan komşu ID (${neighborVal}) için 200 yanıt ve orijinalden farklı içerik döndü (uzunluk farkı). Numaralandırılabilir kaynak erişimi göstergesi.`, differentResource: true, severity: 'medium' });
+      const how = sameShapeDiffContent
+        ? 'aynı YAPIDA (JSON iskeleti) ancak FARKLI İÇERİKLİ yanıt döndü — büyük olasılıkla başka bir kaydın verisi (dönen veri raporda gösterilmez)'
+        : lenDiff ? 'orijinalden farklı boyutta/içerikli yanıt döndü' : 'orijinalden farklı içerikli yanıt döndü';
+      findings.push({ endpoint: epLabel, idParam: ep.idParam, observation: `Kimlik doğrulaması olmadan komşu ID (${neighborVal}) için 200 yanıt ve ${how}. Numaralandırılabilir kaynak erişimi (olası IDOR) göstergesi.`, differentResource: true, severity: sameShapeDiffContent ? 'medium' : 'low' });
     } else if (nb.status === 200 && !nbNF && origNF) {
       findings.push({ endpoint: epLabel, idParam: ep.idParam, observation: `Komşu ID (${neighborVal}) için 200 yanıt döndü; orijinal ID erişilebilir bir kaynak vermemişti — numaralandırma ile erişilebilir kayıt göstergesi (manuel doğrulama önerilir).`, differentResource: true, severity: 'low' });
     }
@@ -687,7 +758,7 @@ const FETCH_PARAM_RE = /(^|_)(url|uri|link|webhook|callback|image|img|src|source
 export async function collectSsrfEvidence(host: string): Promise<ActiveCheckEvidence> {
   const surf = await discoverSurface(host);
   if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
-  const inputs = surf.inputs.filter((ip) => FETCH_PARAM_RE.test(ip.param)).slice(0, 5);
+  const inputs = surf.inputs.filter((ip) => FETCH_PARAM_RE.test(ip.param)).slice(0, 6);
   const ctx = new ProbeCtx();
   const findings: VFinding[] = [];
   const notes: string[] = [];
