@@ -17,6 +17,7 @@
 import { randomBytes, createHash } from 'node:crypto';
 import puppeteer from 'puppeteer-core';
 import { collectHttp } from './surfaceEvidence.js';
+import { requestAgentScenarios, type AgentSuggestion } from './agentAdvisor.js';
 
 // Headless render (SPA keşfi) — PDF üretimiyle AYNI sistem Chromium'unu kullanır (ek kurulum yok).
 const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
@@ -727,7 +728,32 @@ export type VFinding = {
   evidence: string; confidence: 'high' | 'medium' | 'low'; severity: 'high' | 'medium' | 'low';
   sideEffectRisk: SideEffectRisk;
 };
-export type ActiveCheckEvidence = { ok: boolean; pagesScanned: number; inputsFound: number; probesSent: number; findings: VFinding[]; stopped: string | null; notes: string[] };
+export type ActiveCheckEvidence = { ok: boolean; pagesScanned: number; inputsFound: number; probesSent: number; findings: VFinding[]; stopped: string | null; notes: string[]; agentUsed?: boolean };
+
+// (İş Mantığı + Race) SINIRLI PentAGI ajan onerileri — host basina TEK cagri, iki kontrol PAYLASIR.
+const AGENT_CACHE = new Map<string, { at: number; p: Promise<AgentSuggestion[] | null> }>();
+function getAgentScenarios(host: string, surf: Surface): Promise<AgentSuggestion[] | null> {
+  const c = AGENT_CACHE.get(host);
+  if (c && Date.now() - c.at < 180_000) return c.p;
+  const forms = [...(surf.massAssignForm ? [surf.massAssignForm.action] : []), ...surf.uploadForms.map((f) => f.action)];
+  const p = requestAgentScenarios(host, {
+    inputs: surf.inputs.map((i) => ({ method: i.method, action: i.action, param: i.param })),
+    forms, apiWrites: surf.apiWrites,
+  }).catch(() => null);
+  AGENT_CACHE.set(host, { at: Date.now(), p });
+  return p;
+}
+// Ajanin sectigi inputPoint etiketini GUVENLI bir GET URL'sine cevir (ayni host + ic-ag ASLA).
+function agentInputToUrl(label: string, host: string): string | null {
+  const m = label.match(/^(?:GET|POST|HEAD|PUT|PATCH|DELETE)\s+(.+)$/i);
+  let rest = (m ? m[1] : label).trim().replace(/\?$/, '');
+  if (rest.includes('?') && !/=/.test(rest.split('?')[1] || '')) rest = rest + '=1'; // "path?param" -> "path?param=1"
+  try {
+    const u = rest.startsWith('http') ? new URL(rest) : new URL(rest.startsWith('/') ? rest : `/${rest}`, `https://${host}/`);
+    if (u.hostname.toLowerCase() !== host.toLowerCase() || isInternalHost(u.hostname)) return null;
+    return u.toString();
+  } catch { return null; }
+}
 
 const OOB_ECHO_BASE = (process.env.PUBLIC_API_URL ?? 'https://api.cybertestify.com').replace(/\/$/, '');
 const OOB_ECHO_HOST = (() => { try { return new URL(OOB_ECHO_BASE).hostname.toLowerCase(); } catch { return 'api.cybertestify.com'; } })();
@@ -912,9 +938,27 @@ export async function collectBusinessLogicEvidence(host: string): Promise<Active
       findings.push({ check: 'business_logic', inputPoint: new URL(url).pathname, vulnerable: true, technique: 'observation (step-skip, GET only)', evidence: `Bir "başarılı/onay" adımı sayfası (${new URL(url).pathname}) ön koşul olmadan doğrudan GET ile erişilebilir göründü — adım-atlama (business logic) göstergesi olabilir; manuel doğrulama önerilir.`, confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
     }
   }
+  // (c) SINIRLI PentAGI AJAN: bulunan yuzeyden is-mantigi acisindan ilginc GET uclarini SECER (JSON).
+  // Ajan HTTP ATMAZ — backend onerilen inputPoint'i GUVENLI GET ile dogrular. Basarisiz -> fallback.
+  let agentUsed = false;
+  const scenarios = await getAgentScenarios(host, surf).catch(() => null);
+  if (scenarios !== null) {
+    agentUsed = true;
+    for (const s of scenarios.filter((x) => x.check === 'business_logic').slice(0, 4)) {
+      if (ctx.stopped) break;
+      const url = agentInputToUrl(s.inputPoint, host); // ayni-host + ic-ag guard
+      if (!url) continue;
+      const r = await ctx.fetchOnce(url); // GET-only (state degistirmez)
+      if (r && r.status > 0 && r.status < 500 && !/oturum|login|giriş yap|unauthorized|403|yetkisiz/i.test(r.text.slice(0, 1500))) {
+        findings.push({ check: 'business_logic', inputPoint: (() => { try { return new URL(url).pathname; } catch { return s.inputPoint; } })(), vulnerable: true, technique: 'PentAGI ajanı seçti + backend GET ile doğruladı', evidence: `PentAGI ajanı bu uç noktayı iş-mantığı açısından ilginç seçti; backend GET ile erişilebilirliğini doğruladı (HTTP ${r.status}). Fiyat/miktar/rol gibi alanların sunucu-taraflı doğrulaması manuel test gerektirir (dönen veri gösterilmez).`, confidence: s.confidence === 'high' ? 'medium' : s.confidence, severity: s.severity === 'high' ? 'medium' : s.severity, sideEffectRisk: 'none' });
+      }
+    }
+  }
+
   if (ctx.stopped) notes.push(ctx.stopped);
+  if (agentUsed) notes.push('Bu kontrol, keşfedilen yüzey üzerinde **PentAGI ajanı ile analiz edilmiştir** (ajan yalnızca yapılandırılmış öneri üretir; tüm istekler backend’in güvenli GET fonksiyonlarından geçer).');
   if (!findings.length) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada gözlemlenebilir bir istemci-tarafı fiyat/miktar alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.` + spaHint(surf));
-  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: (hiddenPrice ? 1 : 0) + links.size, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: (hiddenPrice ? 1 : 0) + links.size, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed };
 }
 
 // ======================================================================================
@@ -963,9 +1007,27 @@ export async function collectRaceMassAssignEvidence(host: string): Promise<Activ
       }
     }
   }
+  // SINIRLI PentAGI AJAN: race/mass-assign acisindan ilginc uclari SECER (JSON). Ajan HTTP ATMAZ;
+  // backend YALNIZ GET-gozlem yapar (yeni POST/yikici paralel yazma YOK — mevcut tek-POST deterministik).
+  let agentUsed = false;
+  const scenarios = await getAgentScenarios(host, surf).catch(() => null);
+  if (scenarios !== null) {
+    agentUsed = true;
+    for (const s of scenarios.filter((x) => x.check === 'race_massassign').slice(0, 4)) {
+      if (ctx.stopped) break;
+      const url = agentInputToUrl(s.inputPoint, host);
+      if (!url) continue;
+      const r = await ctx.fetchOnce(url); // GET-only gozlem
+      if (r && r.status > 0 && r.status < 500 && !/oturum|login|giriş yap|unauthorized|403|yetkisiz/i.test(r.text.slice(0, 1500))) {
+        findings.push({ check: 'race_massassign', inputPoint: (() => { try { return new URL(url).pathname; } catch { return s.inputPoint; } })(), vulnerable: true, technique: 'PentAGI ajanı seçti + backend GET ile gözlemledi', evidence: `PentAGI ajanı bu uç noktayı over-posting/eşzamanlılık açısından ilginç seçti; backend GET ile erişilebilirliğini gözlemledi (HTTP ${r.status}). Kesin doğrulama (yetki değişikliği/kupon tüketimi) yıkıcı olduğundan otomatik yapılmadı — manuel test önerilir.`, confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
+      }
+    }
+  }
+
   // Race yüzeyi — otomatik yıkıcı paralel yazma YAPILMAZ (güvenlik); not olarak belirtilir.
   notes.push('Race-condition (eşzamanlılık) testi, tüketilebilir bir kaynağı (kupon/stok) gerçekten değiştirme riski taşıdığından bu otomatik taramada **çalıştırılmadı**; güvenli/test edilebilir bir uç nokta ile manuel doğrulama önerilir.');
+  if (agentUsed) notes.push('Bu kontrol, keşfedilen yüzey üzerinde **PentAGI ajanı ile analiz edilmiştir** (ajan yalnızca yapılandırılmış öneri üretir; hiçbir yıkıcı/state-değiştiren istek ajan tarafından tetiklenmez, tüm istekler backend’in güvenli fonksiyonlarından geçer).');
   if (ctx.stopped) notes.push(ctx.stopped);
   if (!form) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada mass-assignment için uygun (tamamlama/ödeme dışı) kayıt/profil formu bulunamadı.` + spaHint(surf));
-  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: form ? 1 : 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: form ? 1 : 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed };
 }
