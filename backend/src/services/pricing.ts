@@ -23,8 +23,11 @@ const USD_CENTS: Record<string, number> = {
   business_logic_verify: 12600, // $126
   race_massassign_verify: 12600, // $126
   rce_verify: 14700, // $147
-  authenticated_scan: 17800, // $178
-  autonomous_pentest: 33600, // $336
+  // (Fiyat karari — bkz scanPackages) bundle_full_pentest'in degeri kimlik-dogrulamali bilesende;
+  // AI/otonom bilesen hafif advisory oldugu icin ucuz. TR ile AYNI yon (authenticated pahali, autonomous
+  // ucuz) korunur ki hicbir bolgede AI bileseni pahali gorunmesin. Uyeler bundle-only (standalone satilmaz).
+  authenticated_scan: 39900, // $399 (bundle degerinin tasiyicisi)
+  autonomous_pentest: 10900, // $109 (hafif advisory — dusuk etiket)
 };
 
 const TRY_PER_USD = 47.5; // yaklasik kur — USD turetimi icin

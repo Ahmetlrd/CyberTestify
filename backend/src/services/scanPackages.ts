@@ -1287,7 +1287,11 @@ Target: ${host}
     description:
       'Verdiginiz bir TEST hesabinin oturumuyla aktif-hafif tarama. Kimlik bilgileri SIFRELI saklanir, ' +
       'yalniz sizin domaininize karsi kullanilir ve tarama bitince SILINIR. Yetkilendirme beyani gerektirir.',
-    priceMinorUnit: 849900,
+    // (Fiyat karari) bundle_full_pentest'in ASIL degeri kimlik-dogrulamali derin kontrollerde (logout,
+    // forced browsing, authenticated SQLi/IDOR) -> deger BU uyeye tasindi. autonomous_pentest ise artik
+    // hafif advisory oldugundan ucuzladi. Uyeler bundle-only (standalone SATILMAZ); bu fiyat yalniz
+    // bundle anchor/indirim gosterimini ve ic bolusumu besler; musteri toplam ₺22.999 oder (sabit).
+    priceMinorUnit: 1999900, // ₺19.999 (bundle degerinin tasiyicisi)
     modelProvider: PROVIDER,
     maxToolCalls: 40,
     securityProfile: 'active-light',
@@ -1323,7 +1327,10 @@ Target: ${host}
       'PentAGI’nin cok-adimli, hafiza tutan, zincirleme otonom moduna en yakin paket. Zincirleme kesif ' +
       'serbest AMA istismar/exfil/DoS/auth-bypass/veri-degistirme YINE YASAK (aktif-hafif sinirlar). ' +
       'Yetkilendirme beyani gerektirir.',
-    priceMinorUnit: 1599900,
+    // (Fiyat karari) AI/otonom bilesen artik AGIR otonom PentAGI flow'u DEGIL, hafif bir advisory (tek
+    // LLM cagrisi) — bu yuzden fiyat etiketi ₺15.999'dan ₺5.499'a dusuruldu. bundle-only (standalone
+    // SATILMAZ); yalniz bundle anchor/indirim/ic-bolusumu etkiler, toplam ₺22.999 SABIT.
+    priceMinorUnit: 549900, // ₺5.499 (hafif advisory — dusuk etiket)
     modelProvider: PROVIDER,
     // Cok-adimli/zincirleme -> yuksek tavan (dar paketlerin aksine planlama serbest).
     maxToolCalls: 90,
