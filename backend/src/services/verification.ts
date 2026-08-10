@@ -34,9 +34,26 @@ const KNOWN_PUBLIC_TEST_TARGETS = new Set<string>([
   'test.cybertestify.com',    // KENDİ barındırdığımız OWASP Juice Shop (iç test/QA hedefi) — bkz Caddyfile
 ]);
 
+/**
+ * Kullanıcı alan adını serbest biçimde girebilir: "https://www.ornek.com/path?x=1", "ORNEK.COM/",
+ * "ornek.com:443" vb. Hepsini ÇIPLAK host'a indir: şema, kullanıcı-bilgisi, port, path/query/fragment
+ * ve baştaki "www." atılır; küçük harfe çevrilir; sondaki nokta silinir. Doğrulama (HOSTNAME_RE) ve
+ * whitelist eşleşmesi HEP bu normalize edilmiş değer üzerinden yapılır ki "https://"/"www." yüzünden
+ * "Ekle ve doğrula" reddedilmesin ve yanlış DNS-TXT adı istenmesin.
+ */
+export function normalizeHostname(input: string): string {
+  let h = (input ?? '').trim().toLowerCase();
+  h = h.replace(/^[a-z][a-z0-9+.-]*:\/\//, ''); // şema (http:// https:// vs.)
+  h = h.replace(/^[^/@]*@/, '');                // user:pass@ (varsa)
+  h = h.replace(/[/?#].*$/, '');                // path / query / fragment
+  h = h.replace(/:\d+$/, '');                   // :port
+  h = h.replace(/^www\./, '');                  // baştaki www.
+  h = h.replace(/\.+$/, '');                    // sondaki nokta(lar) (FQDN)
+  return h;
+}
+
 export function isKnownPublicTestTarget(hostname: string): boolean {
-  const h = hostname.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
-  return KNOWN_PUBLIC_TEST_TARGETS.has(h);
+  return KNOWN_PUBLIC_TEST_TARGETS.has(normalizeHostname(hostname));
 }
 
 export function generateVerificationToken(): string {
@@ -45,7 +62,7 @@ export function generateVerificationToken(): string {
 }
 
 export async function createDomainVerification(customerId: string, hostname: string) {
-  const normalizedHost = hostname.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const normalizedHost = normalizeHostname(hostname);
   const token = generateVerificationToken();
 
   return prisma.domain.upsert({

@@ -5,6 +5,7 @@ import {
   createDomainVerification,
   checkDomainVerification,
   isVerificationStillValid,
+  normalizeHostname,
 } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 import { quickScopeSignal } from '../services/activeVerifyEvidence.js';
@@ -12,14 +13,15 @@ import { quickScopeSignal } from '../services/activeVerifyEvidence.js';
 export const domainsRouter = Router();
 
 // Gecerli bir alan adi olmali (rastgele metin degil): en az bir nokta, gecerli
-// etiketler, protokol/path yok. Ornek: ornek.com, alt.ornek.com.tr
+// etiketler. Kullanici "https://", "www.", sondaki "/" vb. girebilir -> ONCE normalizeHostname
+// ile CIPLAK host'a indiriyoruz, SONRA bu regex ile dogruluyoruz (aksi halde sema/www yuzunden
+// gecerli alan adi bile reddedilir ve "Ekle ve dogrula" calismaz).
 const HOSTNAME_RE = /^(?=.{4,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))+$/;
 const createSchema = z.object({
   hostname: z
     .string()
-    .trim()
-    .toLowerCase()
-    .regex(HOSTNAME_RE, 'Gecerli bir alan adi girin (ornek: ornek.com).'),
+    .transform(normalizeHostname)
+    .refine((h) => HOSTNAME_RE.test(h), 'Gecerli bir alan adi girin (ornek: ornek.com).'),
 });
 
 // Musterinin daha once ekledigi domainler + guncel gecerlilik + DNS talimatlari.

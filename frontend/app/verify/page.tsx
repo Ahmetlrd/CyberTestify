@@ -37,6 +37,21 @@ const ORDER_STATUS_LABEL: Record<string, string> = {
 
 const HISTORY_PREVIEW = 3;
 
+// Kullanıcı "https://www.ornek.com/path" gibi girebilir; backend'le AYNI kuralla çıplak host'a
+// indir (şema/www/port/path at) ki kullanıcı ne ekleneceğini önceden görsün. (Asıl doğrulama
+// backend'de normalizeHostname ile tekrar yapılır — bu yalnız önizleme/UX.)
+function previewHostname(input: string): string {
+  return (input ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+    .replace(/^[^/@]*@/, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/:\d+$/, '')
+    .replace(/^www\./, '')
+    .replace(/\.+$/, '');
+}
+
 export default function VerifyHub() {
   const router = useRouter();
   // Satın-alma akışı: paketler sayfasından "Satın Al" ile gelindiyse paket/bundle taşınır.
@@ -286,6 +301,28 @@ export default function VerifyHub() {
                 {busy ? 'Ekleniyor…' : 'Ekle ve doğrula'}
               </button>
             </div>
+            {(() => {
+              const raw = newHostname.trim();
+              const host = previewHostname(newHostname);
+              // "https://", "www.", sondaki "/" vb. yazıldıysa hangi çıplak alan adının
+              // ekleneceğini göster (kafa karışıklığını önler).
+              if (host && raw.toLowerCase() !== host) {
+                return (
+                  <p className="mt-2 text-xs text-ink-muted">
+                    Şu alan adı eklenecek: <span className="font-mono font-semibold text-ink">{host}</span>
+                    <br />
+                    <span className="text-ink-muted">
+                      (<code>https://</code>, <code>www.</code> ve yol kısımları otomatik atılır.)
+                    </span>
+                  </p>
+                );
+              }
+              return (
+                <p className="mt-2 text-xs text-ink-muted">
+                  <code>https://</code> veya <code>www.</code> yazsan da olur — otomatik temizlenir.
+                </p>
+              );
+            })()}
           </form>
         )}
       </section>
