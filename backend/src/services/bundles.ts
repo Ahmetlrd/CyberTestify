@@ -120,12 +120,15 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     displayName: 'Tam Kapsamlı Pentest Paketi',
     displayNameEn: 'Full-Scope Pentest Bundle',
     description:
-      'Kimlik doğrulamalı (login’li) tarama + tam otonom çok-adımlı pentest bir arada. Aktif-hafif sınırlar korunur (istismar/exfil/DoS yok); yetkilendirme beyanı gerekir. Tekil toplamdan indirimli.',
+      'Kimlik doğrulamalı (login’li) tarama + **sınırlı/kontrollü otonom ajan** analizi bir arada. Sağladığınız bir TEST hesabıyla login sonrası çerez/oturum/yetki, authenticated enjeksiyon/IDOR, yetki yükseltme ve çok-adımlı iş mantığı göstergeleri incelenir. Aktif-hafif sınırlar korunur; gerçek veri/hesap değişikliği ve ödeme tamamlama **kod seviyesinde engellidir** (tam-otonom sınırsız pentest DEĞİLDİR). ' +
+      '**Önemli:** Bu paket güvenlik nedeniyle sipariş sonrası kısa bir manuel inceleme sürecinden geçer; tarama genellikle **24 saat içinde** başlar. Bir **TEST hesabı** (2FA’sız, sınırlı yetkili) gerekir; kimlik bilgileriniz **şifreli/geçici** saklanır ve tarama sonrası silinir. Yetkilendirme beyanı gerekir.',
     descriptionEn:
-      'Authenticated (logged-in) scan + fully autonomous multi-step pentest together. Active-light limits preserved (no exploit/exfil/DoS); authorization declaration required. Discounted vs buying separately.',
+      'Authenticated (logged-in) scan + a LIMITED/CONTROLLED autonomous agent analysis. Using a TEST account you provide, it reviews post-login cookie/session/authorization, authenticated injection/IDOR, privilege escalation and multi-step business-logic indicators. Active-light limits preserved; real data/account changes and payment completion are BLOCKED at the code level (this is NOT unlimited full-autonomous pentest). ' +
+      'Note: for safety this package goes through a short manual review after ordering; scanning usually starts within 24 hours. Requires a dedicated TEST account (no 2FA, least-privilege); credentials are stored encrypted/temporarily and deleted after the scan.',
     category: 'active-light',
     discountPct: 20,
-    comingSoon: true,
+    finalPriceMinorUnitTr: 2299900, // 22.999 TL (FAZ E — nihai sabit fiyat; üye order tutarları buna bölünür)
+    comingSoon: false,              // (FAZ E) LANSMAN
     memberKeys: ['authenticated_scan', 'autonomous_pentest'],
   },
 ];

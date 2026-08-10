@@ -75,8 +75,16 @@ async function tick() {
       // hemen bitir. Done-tail (rapor + sifre + mail) normal yol ile AYNI. Diger flow'lar
       // asagidaki normal PentAGI yolundan gecer (DEGISMEDI).
       if (flow.pentagiFlowId.startsWith('deterministic-')) {
-        const { accessSecret } = await generateAndStoreReport(flow.id);
+        const res = await generateAndStoreReport(flow.id);
         await prisma.flow.update({ where: { id: flow.id }, data: { status: 'finished', finishedAt: new Date() } });
+        if (!res) {
+          // (FAZ E) Tam Kapsamlı Pentest: login başarısız -> rapor YOK (sipariş zaten scan_failed +
+          // kredi + müşteri maili). Flow bitirildi; rapor-hazır maili GÖNDERME.
+          await recordScheduleOutcome(flow.order.scheduledScanId, false);
+          console.log(`[worker] ${flow.pentagiFlowId} — login başarısız; rapor üretilmedi (sipariş ${flow.orderId}).`);
+          continue;
+        }
+        const { accessSecret } = res;
         await prisma.report.update({ where: { orderId: flow.orderId }, data: { devAccessSecret: encryptSecret(accessSecret) } });
         await sendReportReady(flow.orderId, accessSecret);
         await recordScheduleOutcome(flow.order.scheduledScanId, true);
@@ -292,10 +300,15 @@ async function tick() {
         }
 
         // Rapor uret (siparisi scan_completed yapar, ham veriyi PentAGI'den siler).
-        const { accessSecret } = await generateAndStoreReport(flow.id);
+        const res = await generateAndStoreReport(flow.id);
         // generateAndStoreReport flow.status'u degistirmez; burada 'finished'
         // yapiyoruz ki bir sonraki tick'te tekrar islenmesin.
         await prisma.flow.update({ where: { id: flow.id }, data: { status: 'finished', finishedAt: new Date() } });
+        if (!res) { // savunma (bu yolda normalde null olmaz — full-pentest deterministik yoldan geçer)
+          console.warn(`[worker] ${flow.orderId}: rapor null döndü, atlandı.`);
+          continue;
+        }
+        const { accessSecret } = res;
 
         // ERISIM SIFRESINI HER ZAMAN sakla — ama PEPPER ile SIFRELI (encryptSecret).
         // Neden: e-posta servisi henuz yok; giris yapmis SAHIP musteri kendi raporunu

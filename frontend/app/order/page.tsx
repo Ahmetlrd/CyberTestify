@@ -526,6 +526,22 @@ export default function OrderPage() {
         </div>
       )}
 
+      {/* (FAZ E) TAM KAPSAMLI PENTEST — bu paket diğerlerinden DAVRANIŞ olarak farklı; müşteri
+          ödeme öncesi NET bilsin: inceleme süreci + test hesabı + sınırlı-otonom ajan. */}
+      {selectedBundle?.key === 'bundle_full_pentest' && (
+        <div className="mt-3 space-y-2 rounded-card border border-brand-200 bg-brand-50/50 px-4 py-3 text-sm text-ink-soft">
+          <p><strong className="text-ink">ℹ️ İnceleme süreci:</strong> Bu paket, güvenlik nedeniyle sipariş sonrası
+          kısa bir <strong>manuel inceleme</strong> sürecinden geçer; taramanız hemen değil, genellikle
+          <strong> 24 saat içinde</strong> başlar.</p>
+          <p><strong className="text-ink">Test hesabı:</strong> Kimlik doğrulamalı test için bir <strong>TEST hesabı</strong>
+          (2FA’sız, sınırlı yetkili) gerekir. Kimlik bilgileriniz <strong>şifreli/geçici</strong> saklanır ve tarama
+          sonrası silinir.</p>
+          <p><strong className="text-ink">Yöntem:</strong> Diğer paketlerden farklı olarak <strong>sınırlı/kontrollü otonom
+          ajan</strong> analizi kullanır. Gerçek veri/hesap değişikliği ve ödeme tamamlama <strong>kod seviyesinde
+          engellidir</strong> — bu bir “tam-otonom sınırsız pentest” değildir.</p>
+        </div>
+      )}
+
       {/* Onaylar */}
       <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">2 · Onaylar</h2>
       <div className="mt-3 space-y-2.5">

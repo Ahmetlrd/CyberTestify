@@ -40,7 +40,8 @@ export interface ScanPackageDef {
     | 'bundle_surface' // kombine paket (tek-siparis modeli)
     | 'bundle_compliance' // kombine paket (Uyum: KVKK+PCI+ISO, tek-siparis)
     | 'bundle_recon' // kombine paket (Keşif: subdomain+api+cms/cve, tek-siparis)
-    | 'bundle_active_verify'; // kombine paket (Aktif Doğrulama: 7 aktif-hafif kontrol, login'siz yüzey; ₺14.999)
+    | 'bundle_active_verify' // kombine paket (Aktif Doğrulama: 7 aktif-hafif kontrol, login'siz yüzey; ₺14.999)
+    | 'bundle_full_pentest'; // kombine paket (Tam Kapsamlı Pentest: login'li + sınırlı-otonom ajan; ₺22.999)
   displayName: string;
   description: string;
   priceMinorUnit: number; // kurus
@@ -893,6 +894,33 @@ remaining checks report an explicit "not yet matured" note. Target: ${host}
 `.trim(),
   },
   {
+    // KOMBINE PAKET (bundle) — Tam Kapsamlı Pentest Paketi. TEK-siparis modeli (bundle_active_verify
+    // deseni): sentetik ScanPackage + TEK Order + TEK Report. Rapor generateAuthenticatedReport ile
+    // (FAZ B backend login + FAZ C deterministik authenticated kontroller + FAZ D sınırlı/kontrollü
+    // ajan). requiresManualReview + requiresTestCredentials (FAZ A). available:false (bundle_ filtresi;
+    // satış bundles.ts comingSoon ile). securityProfile authenticated-light -> Go guard (FAZ D).
+    key: 'bundle_full_pentest',
+    displayName: 'Tam Kapsamlı Pentest Paketi',
+    description:
+      'Kombine paket: Kimlik doğrulamalı (login’li) tarama + sınırlı/kontrollü otonom ajan analizi. ' +
+      'Sağladığınız TEST hesabıyla login sonrası çerez/oturum/yetki, authenticated enjeksiyon/IDOR, ' +
+      'yetki yükseltme ve çok-adımlı iş mantığı göstergeleri. Ödeme/hesap-değişikliği tamamlama kod ' +
+      'seviyesinde engellidir. Sipariş sonrası kısa manuel inceleme sürecinden geçer.',
+    priceMinorUnit: 2299900,
+    modelProvider: PROVIDER,
+    maxToolCalls: 30,
+    securityProfile: 'authenticated-light',
+    requiresManualReview: true,
+    requiresTestCredentials: true,
+    available: false,
+    comingSoon: false,
+    promptTemplate: (host) => `
+AUTHENTICATED bundle; the final report is generated deterministically by backend code (backend login +
+session-aware checks) plus a limited/controlled advisory agent (structured JSON only). No free-form
+report writing. Target: ${host}
+`.trim(),
+  },
+  {
     key: 'csp_analiz',
     displayName: 'CSP (İçerik Güvenlik Politikası) Analizi',
     description:
@@ -1264,7 +1292,7 @@ Target: ${host}
     maxToolCalls: 40,
     securityProfile: 'active-light',
     available: true,
-    comingSoon: true,
+    comingSoon: false,               // (FAZ E) lansman
     requiresManualReview: true,      // (FAZ A) yarı-manuel onay kapısı
     requiresTestCredentials: true,   // (FAZ A) test hesabı kimlik bilgisi ister
     promptTemplate: (host) => `
@@ -1301,7 +1329,7 @@ Target: ${host}
     maxToolCalls: 90,
     securityProfile: 'active-light',
     available: true,
-    comingSoon: true,
+    comingSoon: false,               // (FAZ E) lansman
     requiresManualReview: true,      // (FAZ A) otonom/yüksek-risk → yarı-manuel onay kapısı
     promptTemplate: (host) => `
 Run an AUTONOMOUS, MULTI-STEP, chained security assessment on the SINGLE target below. Unlike the narrow

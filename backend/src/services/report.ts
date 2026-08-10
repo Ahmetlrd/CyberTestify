@@ -17,6 +17,12 @@ import {
   generateSsrfVerifyReport, generateRceVerifyReport, generateFileUploadVerifyReport,
   generateBusinessLogicVerifyReport, generateRaceMassAssignVerifyReport,
 } from './activeVerifyReports.js';
+import { generateAuthenticatedReport } from './authenticatedReports.js';
+import { authenticateOrder } from './authLogin.js';
+
+// (Tam Kapsamlı Pentest) AUTHENTICATED bundle — rapor (host) DEĞİL, ÖNCE login (order kimlik bilgisi)
+// gerektirir; DETERMINISTIC_GENERATORS (host-imzalı) yerine generateAndStoreReport'ta özel dallanır.
+const AUTH_BUNDLE_KEY = 'bundle_full_pentest';
 
 // Deterministik (kod-yazimi) rapor ureten paketler: key -> uretici(hostname).
 // Hepsi { findings, fixText } | null doner (null -> ajan/ham-kanit fallback).
@@ -44,7 +50,7 @@ const DETERMINISTIC_GENERATORS: Record<string, ((host: string) => Promise<{ find
 // GEREKSIZ. Orchestrator bunlar icin createFlow'u atlar (pentagiFlowId 'deterministic-' sentinel);
 // worker + generateAndStoreReport zaten sentinel'e gore PentAGI cagrilarini atliyor. TEK KAYNAK.
 export function isDeterministicPackage(key: string): boolean {
-  return DETERMINISTIC_GENERATORS[key] !== undefined;
+  return DETERMINISTIC_GENERATORS[key] !== undefined || key === AUTH_BUNDLE_KEY;
 }
 
 type Locale = 'tr' | 'en';
@@ -319,6 +325,24 @@ export async function generateAndStoreReport(flowId: string) {
   // KOD yaz. Formattan BAGIMSIZ, her zaman tutarli. Hedefe ulasilamazsa null -> ajan/ham-kanit
   // yoluna dusulur. basit_tarama + bundle_surface uyeleri (ssl_tls/header_leak/dns_email/
   // cors_cookie/csp_analiz) bu yolla uretilir.
+  // (Tam Kapsamlı Pentest) AUTHENTICATED bundle: ÖNCE backend deterministik LOGIN (FAZ B), sonra FAZ C/D
+  // authenticated rapor. Login başarısız -> authenticateOrder zaten scan_failed + KREDİ + mail yaptı -> çık
+  // (rapor üretme, scan_completed'a geçme).
+  if (flow.order.package.key === AUTH_BUNDLE_KEY) {
+    const authRes = await authenticateOrder(flow.orderId);
+    if (!authRes.ok) {
+      console.log(`[report][FULL] ${flow.orderId}: login başarısız (${authRes.reason}) -> rapor üretilmedi (kredi tanımlandı, müşteri bilgilendirildi).`);
+      return null; // worker: null -> flow'u bitir, rapor-hazır maili GÖNDERME (login-fail maili zaten gitti).
+    }
+    try {
+      const built = await generateAuthenticatedReport(flow.order.domain.hostname, authRes.session);
+      if (built) { findings = built.findings; fixText = built.fixText; console.log(`[report][FULL] ${flow.orderId}: authenticated (login'li) rapor DETERMINISTIK üretildi.`); }
+      else console.warn(`[report][FULL] ${flow.orderId}: authenticated rapor üretilemedi (hedefe ulaşılamadı).`);
+    } catch (err) {
+      console.error(`[report][FULL] ${flow.orderId}: authenticated rapor hatası:`, err);
+    }
+  }
+
   const detGen = DETERMINISTIC_GENERATORS[flow.order.package.key];
   if (detGen) {
     try {
@@ -473,6 +497,21 @@ const KVKK_LEGAL = [
   '**Resmi değildir:** Bu rapor bir uyum beyanı/denetimi değildir; nihai değerlendirme için KVKK uzmanı/avukat gereklidir.',
 ];
 
+// (Tam Kapsamlı Pentest) AYRI, DOĞRU disclaimer — bu paket TAM OLARAK kimlik doğrulamalı test yapar;
+// diğer 6 paketin "pasif / authenticated KAPSAM DIŞI" cümlesi burada YANLIŞ olurdu. Diğer paketler DEĞİŞMEZ.
+const FULL_PENTEST_LEGAL_TR = [
+  '**Yapay zeka destekli:** Bu rapor, backend deterministik kontroller + sınırlı/kontrollü otonom ajan analiziyle üretilmiştir; olgusal ifadeler bağımsız doğrulanmadan kullanılmamalıdır.',
+  '**Kapsam:** Bu tarama, sağladığınız TEST hesabıyla **kimlik doğrulamalı (login’li)** bağlamda ve **sınırlı/kontrollü otonom ajan** analiziyle yapılmıştır. Gerçek veri değişikliği, hesap durumu değişikliği, ödeme/sipariş tamamlama veya üçüncü taraf hesaplarına erişim **KAPSAM DIŞIDIR ve kod seviyesinde engellenmiştir**.',
+  '**Resmi değildir:** Bu rapor resmi bir sızma testi/uyum denetimi (ASV/QSA vb.) yerine geçmez.',
+  '**Sorumluluk:** Bulguların doğrulanması ve giderilmesi müşterinin sorumluluğundadır.',
+];
+const FULL_PENTEST_LEGAL_EN = [
+  '**AI-assisted:** This report was produced by backend deterministic checks plus a limited/controlled autonomous agent analysis; factual statements must be independently verified before acting on them.',
+  '**Scope:** This scan was performed in an **authenticated (logged-in)** context using the TEST account you provided, with a **limited/controlled autonomous agent** analysis. Real data modification, account-state changes, payment/order completion, and access to third-party accounts are **OUT OF SCOPE and blocked at the code level**.',
+  '**Not official:** This report is not a substitute for an official penetration test / compliance audit (ASV/QSA, etc.).',
+  '**Responsibility:** Verifying and remediating findings is the customer’s responsibility.',
+];
+
 export function renderReportMarkdown(
   hostname: string,
   packageName: string,
@@ -494,8 +533,10 @@ export function renderReportMarkdown(
   const bodyBlock = isKvkk
     ? `${findingsMd.trim() || t.noFindings}`
     : `## ${t.findings}\n\n${findingsMd.trim() || t.noFindings}`;
+  const isFullPentest = packageKey === 'bundle_full_pentest';
   const legalTitle = isKvkk ? 'Yasal Uyarı ve Kapsam' : t.legalTitle;
-  const legal = isKvkk ? KVKK_LEGAL : t.legal;
+  // (Tam Kapsamlı Pentest) AYRI, DOĞRU disclaimer (authenticated); diğer paketlerin metni DEĞİŞMEZ.
+  const legal = isFullPentest ? (locale === 'en' ? FULL_PENTEST_LEGAL_EN : FULL_PENTEST_LEGAL_TR) : isKvkk ? KVKK_LEGAL : t.legal;
   return `# ${isKvkk ? 'KVKK Ön Uyum Kontrol Raporu' : t.title}
 
 **${t.target}:** ${hostname}
