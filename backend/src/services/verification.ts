@@ -30,6 +30,7 @@ const KNOWN_PUBLIC_TEST_TARGETS = new Set<string>([
   'rest.vulnweb.com',         // Acunetix test sitesi (REST)
   'demo.testfire.net',        // IBM AltoroMutual demo
   'ginandjuice.shop',         // PortSwigger resmi demo
+  'google-gruyere.appspot.com', // Google Gruyere — resmî web güvenliği codelab (kasıtlı zafiyetli)
 ]);
 
 export function isKnownPublicTestTarget(hostname: string): boolean {
