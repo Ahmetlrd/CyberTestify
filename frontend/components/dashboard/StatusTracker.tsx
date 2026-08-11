@@ -1,6 +1,6 @@
 const STEPS = [
   { key: 'verify', label: 'Sahiplik doğrulandı', hint: 'Alan adınızın sizin olduğu teyit edildi' },
-  { key: 'scan', label: 'Tarama çalışıyor', hint: 'AI ajanı sitenizi güvenli şekilde inceliyor' },
+  { key: 'scan', label: 'Tarama çalışıyor', hint: 'Yapay zekâ destekli tarama sitenizi güvenli şekilde inceliyor' },
   { key: 'analyze', label: 'Bulgular değerlendiriliyor', hint: 'Sonuçlar önem derecesine göre sıralanıyor' },
   { key: 'report', label: 'Rapor hazır', hint: 'Şifreli raporunuz oluşturuldu' },
 ];

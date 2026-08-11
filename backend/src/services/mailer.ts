@@ -1,7 +1,7 @@
 import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { getBundle } from './bundles.js';
-import { requiresTestCredentials, requiresManualReview } from './scanPackages.js';
+import { requiresTestCredentials } from './scanPackages.js';
 
 // Aktif Doğrulama Paketi üye kontrol anahtarları — sipariş e-postasında kapsam netliği için.
 const ACTIVE_VERIFY_KEYS = new Set(getBundle('bundle_active_verify')?.memberKeys ?? []);
@@ -149,11 +149,11 @@ export async function sendOrderConfirmation(orderIds: string[]): Promise<boolean
     const credWarn = isAuthenticated
       ? `<p style="margin:12px 0;padding:10px 14px;background:#fff5f5;border-left:3px solid #c0392b;border-radius:6px;color:#7a2018;font-size:13px"><strong>⚠️ Test hesabı:</strong> Bu paket kimlik-doğrulamalı (login’li) test içerir. Lütfen üretim/ana hesabınızı DEĞİL; sınırlı yetkili, tek-kullanımlık, 2FA’sı olmayan bir TEST hesabı kullanın ve şifresini tarama sonrası değiştirin. Kimlik bilgileriniz şifreli saklanır ve tarama sonrası silinir.</p>`
       : '';
-    // (FAZ E) Yarı-manuel onay: bu paket ödeme sonrası ANINDA başlamaz — kısa inceleme sonrası (~24 saat).
-    const isReview = orders.some((o) => requiresManualReview(o.package.key));
-    const reviewNote = isReview
-      ? `<p style="margin:12px 0;padding:10px 14px;background:#f3f7f6;border-left:3px solid #123F3A;border-radius:6px;color:#3a4a47;font-size:13px"><strong>ℹ️ İnceleme süreci:</strong> Bu paket, güvenlik nedeniyle sipariş sonrası kısa bir <strong>manuel inceleme</strong> sürecinden geçer; taramanız hemen değil, genellikle <strong>24 saat içinde</strong> başlar. Ayrıca <strong>sınırlı/kontrollü otonom ajan</strong> analizi kullanır (tam-otonom sınırsız pentest değildir).</p>`
-        + `<p style="margin:12px 0;padding:10px 14px;background:#f3f7f6;border-left:3px solid #123F3A;border-radius:6px;color:#3a4a47;font-size:13px"><strong>Kapsam & beklenti:</strong> Cross-account (başka bir kullanıcının verisine erişim) IDOR bu sürümün kapsamı dışındadır. Otonom ajan katmanı bazı hedeflerde/durumlarda analizi tamamlayamayabilir; bu durumda sonuçlar deterministik authenticated kontrollerle sınırlı kalır — bu normaldir ve rapor bunu şeffaf gösterir.</p>`
+    // (İŞ 4/5) full_pentest artık ödeme sonrası DİREKT başlar (manuel inceleme kalktı). Alıcıya yalnız
+    // dürüst kapsam/beklenti notu: yapay zekâ destekli analiz katmanı + cross-account kapsam dışı.
+    const isFullPentest = orders.some((o) => o.package.key === 'bundle_full_pentest');
+    const reviewNote = isFullPentest
+      ? `<p style="margin:12px 0;padding:10px 14px;background:#f3f7f6;border-left:3px solid #123F3A;border-radius:6px;color:#3a4a47;font-size:13px"><strong>Kapsam & beklenti:</strong> Bu paket deterministik kimlik-doğrulamalı kontroller + iki kontrolde <strong>yapay zekâ destekli analiz</strong> kullanır (tek LLM danışma çağrısı; otonom/sınırsız pentest değildir). Cross-account (başka bir kullanıcının verisine erişim) IDOR bu sürümün kapsamı dışındadır. Yapay zekâ destekli analiz katmanı bazı hedeflerde uygulanabilir bir gösterge bulamayabilir; bu durumda sonuçlar deterministik authenticated kontrollerle sınırlı kalır — bu normaldir ve rapor bunu şeffaf gösterir.</p>`
       : '';
     const body = `<p>Siparişiniz alındı ve ödemeniz onaylandı. Teşekkür ederiz.</p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:12px 0;border:1px solid #e3e8e6;border-radius:10px">

@@ -59,29 +59,29 @@ export interface Dict {
 const tr: Dict = {
   nav: { how: 'Nasıl Çalışır', why: 'Neden Biz', packages: 'Paketler', login: 'Giriş', cta: 'Ücretsiz Doğrula', panel: 'Panelim', logout: 'Çıkış' },
   hero: {
-    badge: 'Tamamen otonom AI · İnsan pentester beklemeyin',
+    badge: 'Yapay zekâ destekli otomasyon · İnsan pentester beklemeyin',
     titleA: 'Sitenizin güvenliğini,',
     titleHi: 'dakikalar içinde',
-    titleB: 'otonom yapay zeka ile başlatın',
+    titleB: 'yapay zekâ destekli taramayla başlatın',
     subtitle:
       'Web siteniz için yapay zeka destekli, hızlı ve uygun fiyatlı güvenlik ön değerlendirmesi. Resmi pentest/denetim yerine geçmez; dakikalar içinde aksiyon alınabilir bir rapor üretir. Alan adınızı doğrulayın, paketinizi seçin, şifreli raporunuzu alın.',
     ctaPrimary: 'Ücretsiz Doğrula ve Başla',
     ctaSecondary: 'Nasıl Çalışır?',
-    trust: ['KVKK Uyumlu', 'Uçtan Uca Şifreli Rapor', 'Sadece Doğrulanmış Alan Adları'],
+    trust: ['KVKK’ya Uygun Veri İşleme', 'Uçtan Uca Şifreli Rapor', 'Sadece Doğrulanmış Alan Adları'],
   },
   auto: {
-    eyebrow: 'Tamamen Otonom AI · Asıl Farkımız',
+    eyebrow: 'Yapay Zekâ Destekli Otomasyon · Asıl Farkımız',
     titleA: 'Haftalarca beklemeyin.',
     titleHi: 'Dakikalar',
     titleB: 'içinde başlayın.',
     subtitle:
-      'Rakiplerimiz insan pentester ekipleriyle çalışır — bu yüzden pahalı ve yavaştır. Biz tamamen otonom yapay zekayız: hem çok daha ucuz, hem çok daha hızlı.',
+      'Rakiplerimiz insan pentester ekipleriyle çalışır — bu yüzden pahalı ve yavaştır. Biz yapay zekâ destekli, tamamen otomatik bir platformuz: hem çok daha ucuz, hem çok daha hızlı.',
     tradTitle: 'Geleneksel Pentest',
     trad: ['2–4 hafta bekleme süresi', '$2.000 – $6.000 arası maliyet', 'İnsan ekibiyle randevu / demo', 'Yılda yalnızca 1–2 kez'],
     oursTitle: 'CyberTestify',
-    ours: ['Dakikalar içinde başlar', 'Saatler içinde biter', 'Tamamen otonom AI ajanları', 'İstediğiniz an, sınırsız tekrar'],
+    ours: ['Dakikalar içinde başlar', 'Saatler içinde biter', 'Yapay zekâ destekli otomatik kontroller', 'İstediğiniz an, sınırsız tekrar'],
     ribbon: 'SİZİN İÇİN',
-    demo: 'Gerçek zamanlı — ajan çalışırken:',
+    demo: 'Gerçek zamanlı — tarama çalışırken:',
   },
   steps: {
     eyebrow: 'Nasıl Çalışır',
@@ -90,7 +90,7 @@ const tr: Dict = {
     items: [
       { t: 'Alan adınızı doğrulayın', d: 'DNS TXT kaydıyla sahipliğinizi kanıtlayın — dakikalar sürer.' },
       { t: 'Paketinizi seçin', d: 'Sabit kapsam, sabit fiyat. Sürpriz maliyet yok.' },
-      { t: 'Otonom AI taraması', d: 'Yapay zeka ajanları saniyeler içinde başlar, arka planda çalışır.' },
+      { t: 'Otomatik güvenlik taraması', d: 'Yapay zekâ destekli tarama saniyeler içinde başlar, arka planda çalışır.' },
       { t: 'Şifreli raporunuzu indirin', d: 'Uçtan uca şifreli, size özel tek kullanımlık kodla açılır.' },
     ],
   },
@@ -112,7 +112,7 @@ const tr: Dict = {
   },
   footer: {
     tagline:
-      'Yalnızca sahipliğini doğruladığınız alan adına karşı, tamamen otonom yapay zeka ile güvenlik ön-değerlendirmesi. Resmi denetim/sertifikasyon yerine geçmez.',
+      'Yalnızca sahipliğini doğruladığınız alan adına karşı, yapay zekâ destekli otomatik güvenlik ön-değerlendirmesi. Resmi denetim/sertifikasyon yerine geçmez.',
     questions: 'Sorularınız mı var?',
     legal: 'Yasal',
     disclaimer: 'Güvenlik ön-değerlendirme hizmeti.',
@@ -120,7 +120,7 @@ const tr: Dict = {
   pkg: {
     metaTitle: 'Fiyatlar — Web Sitesi Güvenlik Tarama Paketleri | CyberTestify',
     metaDesc:
-      'Sabit kapsam, sabit fiyat, sürpriz maliyet yok. Otonom yapay zeka ile web sitesi güvenlik tarama paketleri ve fiyatları.',
+      'Sabit kapsam, sabit fiyat, sürpriz maliyet yok. Yapay zekâ destekli otomatik web sitesi güvenlik tarama paketleri ve fiyatları.',
     eyebrow: 'Fiyatlar',
     title: 'Şeffaf, sabit fiyatlandırma',
     subtitle: 'Kapsam sabit, fiyat sabit, sürpriz maliyet yok. Tüm fiyatlar vergiler dahildir.',
@@ -144,9 +144,9 @@ const tr: Dict = {
 const en: Dict = {
   nav: { how: 'How It Works', why: 'Why Us', packages: 'Pricing', login: 'Log in', cta: 'Verify Free', panel: 'My Panel', logout: 'Log out' },
   hero: {
-    badge: 'Fully autonomous AI · No waiting for a human pentester',
+    badge: 'AI-assisted automation · No waiting for a human pentester',
     titleA: 'Test your website’s security with',
-    titleHi: 'autonomous AI',
+    titleHi: 'AI-assisted scanning',
     titleB: 'starting in minutes',
     subtitle:
       'AI-powered, fast and affordable security pre-assessment for your website. Not a substitute for a formal pentest/audit; it produces an actionable report in minutes. Verify your domain, pick a package, get your encrypted report.',
@@ -155,18 +155,18 @@ const en: Dict = {
     trust: ['Privacy-First', 'End-to-End Encrypted Report', 'Verified Domains Only'],
   },
   auto: {
-    eyebrow: 'Fully Autonomous AI · Our Real Difference',
+    eyebrow: 'AI-Assisted Automation · Our Real Difference',
     titleA: 'Don’t wait for weeks.',
     titleHi: 'Start in minutes.',
     titleB: '',
     subtitle:
-      'Competitors rely on human pentester teams — so they’re expensive and slow. We’re fully autonomous AI: far cheaper and far faster.',
+      'Competitors rely on human pentester teams — so they’re expensive and slow. We’re a fully automated, AI-assisted platform: far cheaper and far faster.',
     tradTitle: 'Traditional Pentest',
     trad: ['2–4 weeks lead time', '$2,000 – $6,000 cost', 'Scheduling with a human team', 'Only 1–2 times a year'],
     oursTitle: 'CyberTestify',
-    ours: ['Starts in minutes', 'Finishes in hours', 'Fully autonomous AI agents', 'Anytime, unlimited re-runs'],
+    ours: ['Starts in minutes', 'Finishes in hours', 'AI-assisted automated checks', 'Anytime, unlimited re-runs'],
     ribbon: 'FOR YOU',
-    demo: 'Real-time — the agent at work:',
+    demo: 'Real-time — the scan at work:',
   },
   steps: {
     eyebrow: 'How It Works',
@@ -175,7 +175,7 @@ const en: Dict = {
     items: [
       { t: 'Verify your domain', d: 'Prove ownership with a DNS TXT record — takes minutes.' },
       { t: 'Pick your package', d: 'Fixed scope, fixed price. No surprise costs.' },
-      { t: 'Autonomous AI scan', d: 'AI agents start in seconds and run in the background.' },
+      { t: 'Automated security scan', d: 'The AI-assisted scan starts in seconds and runs in the background.' },
       { t: 'Download your encrypted report', d: 'End-to-end encrypted, opened with your one-time code.' },
     ],
   },
@@ -197,7 +197,7 @@ const en: Dict = {
   },
   footer: {
     tagline:
-      'A fully autonomous AI security pre-assessment, run only against a domain you have verified. Not a substitute for a formal audit/certification.',
+      'An AI-assisted, automated security pre-assessment, run only against a domain you have verified. Not a substitute for a formal audit/certification.',
     questions: 'Have questions?',
     legal: 'Legal',
     disclaimer: 'Security pre-assessment service.',
@@ -205,11 +205,11 @@ const en: Dict = {
   pkg: {
     metaTitle: 'Pricing — Website Security Scan Packages | CyberTestify',
     metaDesc:
-      'Fixed scope, fixed price, no surprise costs. Autonomous AI website security scan packages and pricing.',
+      'Fixed scope, fixed price, no surprise costs. AI-assisted automated website security scan packages and pricing.',
     eyebrow: 'Pricing',
     title: 'Transparent, fixed pricing',
     subtitle: 'Fixed scope, fixed price, no surprise costs.',
-    trust: ['⚡ Autonomous AI', '💬 Fast support', '🧾 Invoiced', '🔒 End-to-end encrypted report'],
+    trust: ['⚡ AI-assisted automation', '💬 Fast support', '🧾 Invoiced', '🔒 End-to-end encrypted report'],
     popular: 'Popular',
     perScan: '/ scan',
     taxIncl: 'taxes included',

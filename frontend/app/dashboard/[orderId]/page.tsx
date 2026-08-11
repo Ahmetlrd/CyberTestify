@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '../../../lib/api';
 import { StatusTracker } from '../../../components/dashboard/StatusTracker';
+import { LiveScanPhases } from '../../../components/dashboard/LiveScanPhases';
 import { ScopeCertificate } from '../../../components/dashboard/ScopeCertificate';
 
 const TERMINAL = new Set(['scan_completed', 'scan_failed', 'scope_violation', 'report_purged']);
@@ -188,25 +189,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               <span className="h-3 w-3 rounded-full bg-emerald-400/70" />
               <span className="ml-3 text-xs font-medium text-white/40">cybertestify — live scan</span>
             </div>
-            <div className="min-h-[180px] p-5 font-mono text-[13px] leading-7">
-              <div className="text-white/45" dir="ltr">$ cybertestify scan {hostname}</div>
-              <div className="text-emerald-300" dir="ltr">✓ Alan adı sahipliği doğrulandı</div>
-              {feed.length === 0 ? (
-                <div className="text-white/80" dir="ltr">
-                  → Tarama başlatılıyor…
-                  <span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" />
-                </div>
-              ) : (
-                feed.map((it, i) => (
-                  <div key={it.seq} className="text-white/80" dir="ltr">
-                    → {it.text}
-                    {i === feed.length - 1 && (
-                      <span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" />
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
+            <LiveScanPhases hostname={hostname} feed={feed} />
             <div className="border-t border-white/10 px-5 py-3 text-xs text-white/40">
               Teknik loglar güvenlik ve gizlilik nedeniyle gizlenmiştir; yalnızca genel aktivite gösterilir.
             </div>

@@ -17,7 +17,7 @@ const ORGANIZATION_LD = {
   logo: `${SITE}/logo.svg`,
   email: 'support@cybertestify.com',
   description:
-    'Web siteleri için otonom, yapay zeka destekli güvenlik ön-değerlendirme hizmeti; yalnızca doğrulanmış alan adlarında pasif ve kontrollü kontroller.',
+    'Web siteleri için yapay zekâ destekli, otomatik güvenlik ön-değerlendirme hizmeti; yalnızca doğrulanmış alan adlarında pasif ve kontrollü kontroller.',
   contactPoint: {
     '@type': 'ContactPoint',
     email: 'support@cybertestify.com',
@@ -35,9 +35,9 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata = {
-  title: 'CyberTestify — Dakikalar İçinde Başlayan Otonom Güvenlik Taraması',
+  title: 'CyberTestify — Dakikalar İçinde Başlayan Otomatik Güvenlik Taraması',
   description:
-    'Sitenizin güvenliğini tamamen otonom yapay zeka ile dakikalar içinde başlatın; süre pakete/kapsama göre değişir. KVKK uyumlu, şifreli raporlama, yalnızca doğrulanmış alan adları.',
+    'Sitenizin güvenliğini yapay zekâ destekli otomatik taramayla dakikalar içinde başlatın; süre pakete/kapsama göre değişir. KVKK’ya uygun veri işleme, şifreli raporlama, yalnızca doğrulanmış alan adları.',
   // Google Search Console dogrulamasi — ENV'den (GOOGLE_SITE_VERIFICATION). Env BOSSA etiket
   // HIC render edilmez (site bozulmaz). Doldurulunca her sayfanin <head>'ine basilir.
   ...(process.env.GOOGLE_SITE_VERIFICATION

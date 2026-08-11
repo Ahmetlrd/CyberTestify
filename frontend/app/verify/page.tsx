@@ -72,6 +72,8 @@ export default function VerifyHub() {
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // (İŞ 2) Panel sekmeleri — dağınık iç içe bölümler yerine net ayrım.
+  const [tab, setTab] = useState<'domains' | 'history'>('domains');
 
   const refresh = useCallback(async () => {
     const [list, ord] = await Promise.all([api.listDomains(), api.listOrders(false)]);
@@ -395,40 +397,67 @@ export default function VerifyHub() {
         </>
       ) : (
         <>
-          {/* Katman 1 — DOMAIN seçimi/ekleme (üstte) */}
-          {domainSection}
+          {/* (İŞ 2) SEKME NAVİGASYONU — Alan Adları · Geçmiş Taramalar · Zamanlanmış (net ayrım). */}
+          <nav className="mt-6 flex flex-wrap gap-1.5 border-b border-line">
+            {([
+              ['domains', 'Alan Adları', validDomains.length],
+              ['history', 'Geçmiş Taramalar', orders.length],
+            ] as const).map(([key, label, count]) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`-mb-px rounded-t-card border-b-2 px-3.5 py-2 text-sm font-semibold transition ${
+                  tab === key ? 'border-brand text-brand' : 'border-transparent text-ink-muted hover:text-ink'
+                }`}
+              >
+                {label}
+                {count > 0 && <span className="ml-1.5 rounded-pill bg-brand-50 px-1.5 py-0.5 text-[10px] font-bold text-brand">{count}</span>}
+              </button>
+            ))}
+            <a
+              href="/schedules"
+              className="-mb-px rounded-t-card border-b-2 border-transparent px-3.5 py-2 text-sm font-semibold text-ink-muted transition hover:text-ink"
+            >
+              Zamanlanmış ↗
+            </a>
+          </nav>
 
-          {/* Katman 2 — GEÇMİŞ TARAMALARIM (altta, önizleme + tümünü gör) */}
-          {orders.length > 0 && (
-            <section className="mt-12 border-t border-line pt-8">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">Geçmiş Taramalarım</h2>
-                <button onClick={toggleArchived} className="text-xs font-medium text-accent-600 hover:underline">
-                  {showArchived ? 'Arşivlenenleri gizle' : 'Arşivlenenler'}
-                  {archivedOrders && archivedOrders.length > 0 ? ` (${archivedOrders.length})` : ''}
-                </button>
-              </div>
-              <div className="mt-3 space-y-2.5">{shownHistory.map((o) => orderCard(o, false))}</div>
-              {orders.length > HISTORY_PREVIEW && (
-                <button
-                  onClick={() => setShowAllHistory((v) => !v)}
-                  className="mt-3 text-sm font-medium text-accent-600 hover:underline"
-                >
-                  {showAllHistory ? 'Daha az göster' : `Tümünü gör (${orders.length})`}
-                </button>
-              )}
+          {tab === 'domains' && domainSection}
 
-              {showArchived && (
-                <div className="mt-6">
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-ink-muted">Arşivlenenler</h3>
-                  {archivedOrders && archivedOrders.length > 0 ? (
-                    <div className="mt-2 space-y-2.5">{archivedOrders.map((o) => orderCard(o, true))}</div>
-                  ) : (
-                    <p className="mt-2 text-sm text-ink-muted">Arşivlenmiş tarama yok.</p>
-                  )}
+          {tab === 'history' && (
+            orders.length > 0 ? (
+              <section className="mt-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">Geçmiş Taramalarım</h2>
+                  <button onClick={toggleArchived} className="text-xs font-medium text-accent-600 hover:underline">
+                    {showArchived ? 'Arşivlenenleri gizle' : 'Arşivlenenler'}
+                    {archivedOrders && archivedOrders.length > 0 ? ` (${archivedOrders.length})` : ''}
+                  </button>
                 </div>
-              )}
-            </section>
+                <div className="mt-3 space-y-2.5">{shownHistory.map((o) => orderCard(o, false))}</div>
+                {orders.length > HISTORY_PREVIEW && (
+                  <button
+                    onClick={() => setShowAllHistory((v) => !v)}
+                    className="mt-3 text-sm font-medium text-accent-600 hover:underline"
+                  >
+                    {showAllHistory ? 'Daha az göster' : `Tümünü gör (${orders.length})`}
+                  </button>
+                )}
+
+                {showArchived && (
+                  <div className="mt-6 border-t border-line pt-6">
+                    <h3 className="text-xs font-bold uppercase tracking-wide text-ink-muted">Arşivlenenler</h3>
+                    {archivedOrders && archivedOrders.length > 0 ? (
+                      <div className="mt-2 space-y-2.5">{archivedOrders.map((o) => orderCard(o, true))}</div>
+                    ) : (
+                      <p className="mt-2 text-sm text-ink-muted">Arşivlenmiş tarama yok.</p>
+                    )}
+                  </div>
+                )}
+              </section>
+            ) : (
+              <p className="mt-8 text-sm text-ink-muted">Henüz bir taramanız yok. “Alan Adları” sekmesinden bir tarama başlatın.</p>
+            )
           )}
         </>
       )}

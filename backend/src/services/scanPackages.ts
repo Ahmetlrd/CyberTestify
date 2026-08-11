@@ -129,7 +129,7 @@ const PACKAGE_I18N: Partial<Record<ScanPackageDef['key'], { displayName: string;
   race_massassign_verify: { displayName: 'Vulnerability Verification — Race / Mass Assignment', description: 'Active-light check: a few parallel requests to detect race conditions, and observation of unexpected fields (e.g. isAdmin) being accepted. Never corrupts data or completes privilege escalation. Requires an authorization declaration.' },
   rce_verify: { displayName: 'Vulnerability Verification — RCE / Command Injection', description: 'Strictest active check: proves command injection ONLY via blind time-based or harmless canary evidence. NEVER runs a real command. Requires an authorization declaration.' },
   authenticated_scan: { displayName: 'Authenticated Scan (logged-in)', description: 'Active-light scan performed with a test-account session you provide. Credentials are encrypted, used only against your domain, and deleted after the scan. Requires an authorization declaration.' },
-  autonomous_pentest: { displayName: 'Autonomous Multi-Step Pentest', description: 'The closest to a full autonomous, multi-step, chained-discovery engagement — within the same non-exploit limits (no exfil/DoS/auth-bypass/data change). Requires an authorization declaration.' },
+  autonomous_pentest: { displayName: 'AI-Assisted Analysis (Privilege & Business Logic)', description: 'AI-assisted analysis (a single LLM advisory call) over the discovered authenticated surface: privilege-escalation and multi-step business-logic indicators. Observation only; no exploit/exfil/DoS/auth-bypass/data change (active-light limits). Requires an authorization declaration.' },
 };
 
 // kvkk_hazirlik EN sozlukte YOK — global menude gosterilmez (bkz orders.ts filtresi).
@@ -897,20 +897,22 @@ remaining checks report an explicit "not yet matured" note. Target: ${host}
     // KOMBINE PAKET (bundle) — Tam Kapsamlı Pentest Paketi. TEK-siparis modeli (bundle_active_verify
     // deseni): sentetik ScanPackage + TEK Order + TEK Report. Rapor generateAuthenticatedReport ile
     // (FAZ B backend login + FAZ C deterministik authenticated kontroller + FAZ D sınırlı/kontrollü
-    // ajan). requiresManualReview + requiresTestCredentials (FAZ A). available:false (bundle_ filtresi;
-    // satış bundles.ts comingSoon ile). securityProfile authenticated-light -> Go guard (FAZ D).
+    // advisory). (İŞ 5) Paket PentAGI'siz (deterministik + hafif LLM advisory), öngörülebilir ve
+    // guard'lı olduğundan yarı-manuel onay kapısı KALDIRILDI: requiresManualReview=false -> ödeme sonrası
+    // DİREKT başlar (diğer paketler gibi). requiresTestCredentials + DNS sahiplik + consent + kimlik
+    // şifreleme/purge + authenticated-light guard'lar AYNEN korunur. available:false (bundle_ filtresi).
     key: 'bundle_full_pentest',
     displayName: 'Tam Kapsamlı Pentest Paketi',
     description:
-      'Kombine paket: Kimlik doğrulamalı (login’li) tarama + sınırlı/kontrollü otonom ajan analizi. ' +
+      'Kombine paket: Kimlik doğrulamalı (login’li) tarama + AI-destekli otomatik güvenlik kontrolleri. ' +
       'Sağladığınız TEST hesabıyla login sonrası çerez/oturum/yetki, authenticated enjeksiyon/IDOR, ' +
       'yetki yükseltme ve çok-adımlı iş mantığı göstergeleri. Ödeme/hesap-değişikliği tamamlama kod ' +
-      'seviyesinde engellidir. Sipariş sonrası kısa manuel inceleme sürecinden geçer.',
+      'seviyesinde engellidir.',
     priceMinorUnit: 2299900,
     modelProvider: PROVIDER,
     maxToolCalls: 30,
     securityProfile: 'authenticated-light',
-    requiresManualReview: true,
+    requiresManualReview: false,     // (İŞ 5) yarı-manuel onay kapısı kaldırıldı — ödeme sonrası direkt başlar
     requiresTestCredentials: true,
     available: false,
     comingSoon: false,
@@ -1322,11 +1324,11 @@ Target: ${host}
   },
   {
     key: 'autonomous_pentest',
-    displayName: 'Tam Otonom, Çok Adımlı Pentest',
+    displayName: 'Yapay Zekâ Destekli Analiz (Yetki & İş Mantığı)',
     description:
-      'PentAGI’nin cok-adimli, hafiza tutan, zincirleme otonom moduna en yakin paket. Zincirleme kesif ' +
-      'serbest AMA istismar/exfil/DoS/auth-bypass/veri-degistirme YINE YASAK (aktif-hafif sinirlar). ' +
-      'Yetkilendirme beyani gerektirir.',
+      'Keşfedilen kimlik-doğrulamalı yüzey üzerinde yapay zekâ destekli analiz (tek LLM danışma çağrısı): ' +
+      'yetki yükseltme ve çok-adımlı iş mantığı göstergeleri. Yalnız gözlem; istismar/exfil/DoS/auth-bypass/ ' +
+      'veri-değiştirme YASAK (aktif-hafif sınırlar). Yetkilendirme beyanı gerektirir.',
     // (Fiyat karari) AI/otonom bilesen artik AGIR otonom PentAGI flow'u DEGIL, hafif bir advisory (tek
     // LLM cagrisi) — bu yuzden fiyat etiketi ₺15.999'dan ₺5.499'a dusuruldu. bundle-only (standalone
     // SATILMAZ); yalniz bundle anchor/indirim/ic-bolusumu etkiler, toplam ₺22.999 SABIT.

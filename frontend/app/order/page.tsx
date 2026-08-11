@@ -140,6 +140,25 @@ export default function OrderPage() {
   const intlComingSoon = region !== 'tr';
   const needsAuthCreds = selected === 'authenticated_scan';
   const activeConsentOk = (!isActiveLight || atRisk) && (!needsAuthCreds || (authUser.trim() && authPass && authConsentsOk));
+
+  // (İŞ 3) Onay GRUPLAMA — UI'da ≤3 checkbox. Sunucu-tarafı zorunluluk DEĞİŞMEZ: her grup, altındaki
+  // TÜM bireysel onay state'lerini birlikte set eder (ownership/contract/kvkk/atRisk/testAcct/elevRisk/
+  // crossBorder/credShare/withdrawal). En hassas iki AÇIK RIZA (KVKK m.9 yurt dışı + cayma feragati)
+  // hukuken AYRI checkbox olarak kalır; kalanlar tek "genel kabul" altında gruplanır.
+  const isActiveLightSel = isActiveLight || selectedBundle?.category === 'active-light';
+  const needsAuthSel = needsAuthCreds || !!selectedBundle?.members?.some((m: any) => m.key === 'authenticated_scan');
+  // Grup 1 — Genel kabul (ownership + mesafeli/ön-bilgi + KVKK aydınlatma + [aktif-test riski] + [test hesabı beyanı]).
+  const groupGeneralChecked =
+    authConsent && contractConsent && kvkkConsent && (!isActiveLightSel || atRisk) && (!needsAuthSel || (testAcct && elevRisk));
+  const setGroupGeneral = (v: boolean) => {
+    setAuthConsent(v); setContractConsent(v); setKvkkConsent(v);
+    if (isActiveLightSel) setAtRisk(v);
+    if (needsAuthSel) { setTestAcct(v); setElevRisk(v); }
+  };
+  // Grup 2 — AYRI: KVKK m.9 yurt dışı açık rıza (tarama verileri + [test hesabı kimlik bilgileri]).
+  const groupCrossBorderChecked = crossBorderConsent && (!needsAuthSel || credShare);
+  const setGroupCrossBorder = (v: boolean) => { setCrossBorderConsent(v); if (needsAuthSel) setCredShare(v); };
+  // Grup 3 — AYRI: mesafeli satış cayma hakkı feragati (withdrawalConsent) — doğrudan.
   // (Aktif Doğrulama Paketi) düşük-kapsam uyarısı gösterilecek mi (ön-kontrol düşük sinyal döndüyse).
   const showLowScopeWarning = selectedBundle?.key === 'bundle_active_verify' && scopeLow === true;
   const creditsNeeded = selectedPkg ? Math.max(1, Math.round(selectedPkg.priceMinorUnit / creditUnit)) : 0;
@@ -273,67 +292,53 @@ export default function OrderPage() {
     }
   }
 
-  const consents: Array<[boolean, (v: boolean) => void, React.ReactNode]> = [
-    [
-      authConsent,
-      setAuthConsent,
-      isActiveLight ? (
+  // (İŞ 3) 3 GRUPLU onay — her label birden fazla bireysel state'i birlikte set eder (sunucu payload'ı
+  // AYNEN korunur). Grup 1 = genel kabul; Grup 2/3 = hukuken AYRI açık rızalar (KVKK m.9 + cayma feragati).
+  const consentGroups: Array<{ checked: boolean; set: (v: boolean) => void; node: React.ReactNode }> = [
+    {
+      checked: groupGeneralChecked,
+      set: setGroupGeneral,
+      node: (
         <>
-          Bu alan adının <strong>ve altyapısının</strong> sahibi veya yetkilisiyim; bu hedefe
-          <strong> aktif-hafif doğrulama testi</strong> yapılmasına rıza gösteriyorum.
-        </>
-      ) : (
-        <>
-          Bu alan adının <strong>ve altyapısının</strong> sahibi veya yetkilisiyim; yalnızca bu hedefe
-          <strong> pasif</strong> tarama yapılmasına rıza gösteriyorum.
+          <strong>Okudum, onaylıyorum:</strong> Bu alan adının <strong>ve altyapısının</strong> sahibi/yetkilisiyim ve
+          bu hedefe {isActiveLightSel ? <>bir <strong>aktif-hafif doğrulama testi</strong></> : <><strong>pasif</strong> tarama</>} yapılmasına
+          rıza gösteriyorum;{' '}
+          <Link href="/legal/on-bilgilendirme" target="_blank" className="font-semibold text-accent-600 underline">Ön Bilgilendirme</Link>,{' '}
+          <Link href="/legal/mesafeli-satis" target="_blank" className="font-semibold text-accent-600 underline">Mesafeli Satış</Link>,{' '}
+          <Link href="/legal/iptal-iade" target="_blank" className="font-semibold text-accent-600 underline">İptal/İade</Link>{' '}
+          koşullarını ve{' '}
+          <Link href="/legal/gizlilik" target="_blank" className="font-semibold text-accent-600 underline">Gizlilik Politikası</Link> /{' '}
+          <Link href="/legal/kvkk-aydinlatma" target="_blank" className="font-semibold text-accent-600 underline">KVKK Aydınlatma Metni</Link>’ni
+          okudum, kabul ediyorum.
+          {isActiveLightSel && <> Bu paketin <strong>daha yüksek risk</strong> taşıyan aktif test istekleri gönderdiğini kabul ediyorum.</>}
+          {needsAuthSel && <> Vereceğim hesabın üretim/ana hesabım <strong>olmadığını</strong>, sınırlı yetkili tek-kullanımlık bir <strong>TEST hesabı</strong> olduğunu beyan ederim.</>}
         </>
       ),
-    ],
-    [
-      contractConsent,
-      setContractConsent,
-      <>
-        <Link href="/legal/on-bilgilendirme" target="_blank" className="font-semibold text-accent-600 underline">Ön Bilgilendirme</Link>,{' '}
-        <Link href="/legal/mesafeli-satis" target="_blank" className="font-semibold text-accent-600 underline">Mesafeli Satış</Link> ve{' '}
-        <Link href="/legal/iptal-iade" target="_blank" className="font-semibold text-accent-600 underline">İptal/İade</Link>{' '}
-        koşullarını okudum, kabul ediyorum.
-      </>,
-    ],
-    [
-      // AYRI, spesifik cayma hakki feragati onayi (sozlesme onayindan bagimsiz — Mesafeli
-      // Sozlesmeler Yon. m.15/ğ; iptal-iade metniyle uyumlu).
-      withdrawalConsent,
-      setWithdrawalConsent,
-      <>
-        Hizmetin cayma süresi dolmadan, <strong>onayımla derhal başlatılmasını</strong> istiyorum ve
-        bu durumda <strong>cayma hakkımı kaybedeceğimi</strong> kabul ediyorum.
-      </>,
-    ],
-    [
-      kvkkConsent,
-      setKvkkConsent,
-      <>
-        Kişisel verilerimin{' '}
-        <Link href="/legal/gizlilik" target="_blank" className="text-accent-600 underline">
-          Gizlilik Politikası
-        </Link>{' '}
-        ve{' '}
-        <Link href="/legal/kvkk-aydinlatma" target="_blank" className="text-accent-600 underline">
-          KVKK Aydınlatma Metni
-        </Link>{' '}
-        kapsamında işlenmesini kabul ediyorum.
-      </>,
-    ],
-    [
-      // KVKK m.9 — yurt disi (Anthropic/ABD) veri aktarimi ACIK RIZA (ayri, bagimsiz checkbox).
-      crossBorderConsent,
-      setCrossBorderConsent,
-      <>
-        Tarama komutlarımın işlenmesi amacıyla kişisel verilerimin{' '}
-        <strong>yurt dışına (Anthropic, PBC — ABD)</strong> aktarılmasına{' '}
-        <strong>KVKK m. 9 kapsamında açıkça rıza</strong> gösteriyorum.
-      </>,
-    ],
+    },
+    {
+      // AYRI (hukuken): KVKK m.9 yurt dışı açık rıza — tarama verileri + (varsa) test hesabı kimlik bilgileri.
+      checked: groupCrossBorderChecked,
+      set: setGroupCrossBorder,
+      node: (
+        <>
+          <strong>KVKK m. 9 — Yurt dışı aktarım (açık rıza):</strong> Tarama/analiz komutlarımın işlenmesi amacıyla
+          kişisel verilerimin{needsAuthSel && <> ve sağladığım <strong>test hesabı kimlik bilgilerimin</strong></>}{' '}
+          <strong>yurt dışına (Anthropic, PBC — ABD)</strong> aktarılmasına açıkça rıza gösteriyorum.
+          {needsAuthSel && ' Kimlik bilgilerim şifreli saklanır ve tarama sonrası silinir.'}
+        </>
+      ),
+    },
+    {
+      // AYRI (hukuken): mesafeli satış cayma hakkı feragati (Mesafeli Sözleşmeler Yön. m.15/ğ).
+      checked: withdrawalConsent,
+      set: setWithdrawalConsent,
+      node: (
+        <>
+          <strong>Cayma hakkı:</strong> Hizmetin cayma süresi dolmadan <strong>onayımla derhal başlatılmasını</strong> istiyorum
+          ve bu durumda <strong>cayma hakkımı kaybedeceğimi</strong> kabul ediyorum.
+        </>
+      ),
+    },
   ];
 
   // --- Ozet/CTA (sabit kenar karti + mobil alt cubuk) icin turetilmis degerler ---
@@ -373,6 +378,19 @@ export default function OrderPage() {
           ? 'Taramayı Zamanla'
           : 'Taramayı Başlat';
   const onCta = () => (selectedBundle ? handleBundleStart() : handleStart());
+
+  // (İŞ 3 · Sorun A) "Satın Al" neden pasif? Müşteri tahmin etmesin — net sebep + onaylara kaydırma.
+  const scrollToConsents = () => document.getElementById('onaylar')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const allGroupsChecked = groupGeneralChecked && groupCrossBorderChecked && withdrawalConsent;
+  const disabledHint: { text: string; scroll: boolean } | null = (() => {
+    if (!(selected || selectedBundle) || busy) return null;
+    if (!domainId) return { text: 'Önce site sahipliğinizi doğrulayın.', scroll: false };
+    if (selectedBundle?.selectable && bundleModules.length === 0) return { text: 'Paket içeriğini seçin.', scroll: false };
+    if (needsAuthSel && (!authUser.trim() || !authPass)) return { text: 'Test hesabı kullanıcı adı ve şifresini girin.', scroll: false };
+    if (!allGroupsChecked) return { text: 'Devam etmek için aşağıdaki onayları işaretleyin →', scroll: true };
+    if (showLowScopeWarning && !lowScopeAck) return { text: 'Düşük-kapsam uyarısını onaylayın.', scroll: false };
+    return null;
+  })();
 
   // Tek paket kart bileseni (basit + aktif bundle'lar ortak gorunum)
   const bundleCard = (b: any) => {
@@ -423,20 +441,11 @@ export default function OrderPage() {
         <input placeholder="Test hesabı kullanıcı adı" value={authUser} onChange={(e) => setAuthUser(e.target.value)} className="field" autoComplete="off" />
         <input type="password" placeholder="Test hesabı şifresi" value={authPass} onChange={(e) => setAuthPass(e.target.value)} className="field" autoComplete="new-password" />
       </div>
-      <div className="space-y-2 text-sm text-ink-soft">
-        <label className="flex items-start gap-2">
-          <input type="checkbox" checked={credShare} onChange={(e) => setCredShare(e.target.checked)} className="mt-0.5" />
-          <span>Test hesabı kimlik bilgilerimin şifreli saklanacağını, tarama için yurt dışındaki LLM sağlayıcıya (Anthropic, PBC — ABD) iletilebileceğini ve tarama sonrası silineceğini anladım; <strong>KVKK m.9</strong> kapsamında bu yurt dışı aktarıma açıkça rıza gösteriyorum.</span>
-        </label>
-        <label className="flex items-start gap-2">
-          <input type="checkbox" checked={testAcct} onChange={(e) => setTestAcct(e.target.checked)} className="mt-0.5" />
-          <span>Sağladığım hesabın üretim/ana hesabım <strong>olmadığını</strong>; sınırlı yetkili, tek-kullanımlık bir TEST hesabı olduğunu beyan ederim.</span>
-        </label>
-        <label className="flex items-start gap-2">
-          <input type="checkbox" checked={elevRisk} onChange={(e) => setElevRisk(e.target.checked)} className="mt-0.5" />
-          <span>Kimlik doğrulamalı (login’li) ve otonom testin, pasif taramadan <strong>daha yüksek risk</strong> taşıdığını anlıyor ve kabul ediyorum.</span>
-        </label>
-      </div>
+      {/* (İŞ 3) Test-hesabı beyanı + kimlik-bilgisi yurt dışı açık rıza + yüksek-risk kabulü artık aşağıdaki
+          "2 · Onaylar" bölümündeki gruplu checkbox'lara taşındı (sunucu-tarafı alanlar AYNEN korunur). */}
+      <p className="text-xs text-ink-muted">
+        Bu bilgilerle ilgili beyan/rıza (test hesabı, yurt dışı aktarım, yüksek risk) aşağıdaki <strong>“2 · Onaylar”</strong> bölümünde tek bir grupta toplanmıştır.
+      </p>
     </div>
   );
 
@@ -502,16 +511,12 @@ export default function OrderPage() {
           </div>
         </div>
       )}
-      {selectedBundle && selectedBundle.category === 'active-light' && (
+      {/* (İŞ 3) Aktif-hafif risk kabulü aşağıdaki gruplu onaya taşındı; burada YALNIZ (varsa) test-hesabı
+          giriş alanları gösterilir (kimlik-doğrulamalı bundle üyesi için). */}
+      {selectedBundle?.members?.some((m: any) => m.key === 'authenticated_scan') && (
         <div className="mt-3 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm">
-          <label className="flex items-start gap-2">
-            <input type="checkbox" checked={atRisk} onChange={(e) => setAtRisk(e.target.checked)} className="mt-0.5" />
-            <span>
-              Bu paket aktif-hafif doğrulama kontrolleri içerir; yalnızca sahibi/yetkilisi olduğum hedefe karşı
-              çalıştırılmasına ve ilgili riskleri kabul ettiğime dair beyanı onaylıyorum. (Tüm modüller için tek beyan.)
-            </span>
-          </label>
-          {selectedBundle.members.some((m: any) => m.key === 'authenticated_scan') && authCredBlock}
+          <p className="text-sm font-semibold text-brand">Test hesabı bilgileri (login’li tarama için)</p>
+          {authCredBlock}
         </div>
       )}
 
@@ -531,28 +536,32 @@ export default function OrderPage() {
       {selectedBundle?.key === 'bundle_full_pentest' && (
         <div className="mt-3 space-y-2 rounded-card border border-brand-200 bg-brand-50/50 px-4 py-3 text-sm text-ink-soft">
           <p><strong className="text-ink">ℹ️ İnceleme süreci:</strong> Bu paket, güvenlik nedeniyle sipariş sonrası
-          kısa bir <strong>manuel inceleme</strong> sürecinden geçer; taramanız hemen değil, genellikle
-          <strong> 24 saat içinde</strong> başlar.</p>
+          <strong>ödeme onaylanınca hemen</strong> başlar.</p>
           <p><strong className="text-ink">Test hesabı:</strong> Kimlik doğrulamalı test için bir <strong>TEST hesabı</strong>
           (ana/üretim hesabınız DEĞİL; 2FA’sız, sınırlı yetkili, tek-kullanımlık) vermelisiniz. Kimlik bilgileriniz
           <strong> şifreli/geçici</strong> saklanır ve tarama sonrası silinir.</p>
-          <p><strong className="text-ink">Yöntem:</strong> Diğer paketlerden farklı olarak <strong>sınırlı/kontrollü otonom
-          ajan</strong> analizi kullanır. Gerçek veri/hesap değişikliği ve ödeme tamamlama <strong>kod seviyesinde
-          engellidir</strong> — bu bir “tam-otonom sınırsız pentest” değildir.</p>
+          <p><strong className="text-ink">Yöntem:</strong> Deterministik kimlik-doğrulamalı kontroller + iki kontrolde
+          <strong> yapay zekâ destekli analiz</strong> (tek LLM danışma çağrısı) kullanır. Gerçek veri/hesap değişikliği ve
+          ödeme tamamlama <strong>kod seviyesinde engellidir</strong> — bu bir otonom/sınırsız pentest değildir.</p>
           <p><strong className="text-ink">Kapsam:</strong> <strong>Cross-account</strong> (başka bir kullanıcının verisine
           erişim) IDOR bu sürümün kapsamı dışındadır.</p>
-          <p><strong className="text-ink">Beklenti:</strong> Otonom ajan katmanı bazı hedeflerde/durumlarda analizi
-          tamamlayamayabilir; bu durumda sonuçlar deterministik authenticated kontrollerle sınırlı kalır — bu
+          <p><strong className="text-ink">Beklenti:</strong> Yapay zekâ destekli analiz katmanı bazı hedeflerde uygulanabilir
+          bir gösterge bulamayabilir; bu durumda sonuçlar deterministik authenticated kontrollerle sınırlı kalır — bu
           normal bir davranıştır ve rapor bunu şeffaf gösterir.</p>
         </div>
       )}
 
-      {/* Onaylar */}
-      <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">2 · Onaylar</h2>
+      {/* Onaylar — (İŞ 3) ≤3 gruplu checkbox; sunucu-tarafı bireysel zorunluluk korunur. */}
+      <h2 id="onaylar" className="mt-8 scroll-mt-24 text-sm font-bold uppercase tracking-wide text-ink-muted">2 · Onaylar</h2>
+      {(selected || selectedBundle) && !allConsents && (
+        <p className="mt-2 rounded-card border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-800">
+          Devam etmek için aşağıdaki {consentGroups.length} onayı işaretleyin.
+        </p>
+      )}
       <div className="mt-3 space-y-2.5">
-        {consents.map(([val, setVal, node], i) => (
-          <label key={i} className="flex items-start gap-3 rounded-card border border-line bg-brand-50/50 p-3.5 text-sm text-ink-soft">
-            <input type="checkbox" checked={val} onChange={(e) => setVal(e.target.checked)} className="mt-0.5 h-4 w-4 accent-brand" />
+        {consentGroups.map(({ checked, set, node }, i) => (
+          <label key={i} className={`flex items-start gap-3 rounded-card border p-3.5 text-sm text-ink-soft transition ${checked ? 'border-brand-200 bg-brand-50/50' : 'border-amber-300 bg-amber-50/40'}`}>
+            <input type="checkbox" checked={checked} onChange={(e) => set(e.target.checked)} className="mt-0.5 h-4 w-4 accent-brand" />
             <span>{node}</span>
           </label>
         ))}
@@ -675,10 +684,8 @@ export default function OrderPage() {
               </ul>
             </div>
           </div>
-          <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm font-medium text-ink">
-            <input type="checkbox" checked={atRisk} onChange={(e) => setAtRisk(e.target.checked)} className="mt-0.5" />
-            <span>{selectedPkg.activeTest.riskText}</span>
-          </label>
+          {/* (İŞ 3) Risk kabulü aşağıdaki "2 · Onaylar" gruplu checkbox'ına taşındı. */}
+          <p className="mt-3 rounded-card bg-white/70 p-3 text-xs text-ink-soft">{selectedPkg.activeTest.riskText}</p>
           <p className="mt-2 text-xs text-ink-muted">
             Onayınız; hesabınız, zaman damgası, IP ve metin sürümü ile birlikte otomatik olarak kayıt altına alınır
             (ek bilgi girmenize gerek yoktur). İsterseniz bir yetkilendirme PDF’i olarak siparişinize bağlanır.
@@ -836,11 +843,21 @@ export default function OrderPage() {
               <button onClick={onCta} disabled={ctaDisabled} className="btn-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-50">
                 {ctaLabel}
               </button>
-              <p className="mt-2 text-center text-[11px] text-ink-muted">
-                {recurring || startMode === 'later'
-                  ? 'Zamanlanmış taramalarım ekranından yönetebilirsiniz.'
-                  : 'Ödeme onaylanınca tarama otomatik başlar.'}
-              </p>
+              {disabledHint ? (
+                disabledHint.scroll ? (
+                  <button type="button" onClick={scrollToConsents} className="mt-2 w-full rounded-card border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs font-semibold text-amber-800 hover:bg-amber-100">
+                    {disabledHint.text}
+                  </button>
+                ) : (
+                  <p className="mt-2 text-center text-[11px] font-semibold text-amber-700">{disabledHint.text}</p>
+                )
+              ) : (
+                <p className="mt-2 text-center text-[11px] text-ink-muted">
+                  {recurring || startMode === 'later'
+                    ? 'Zamanlanmış taramalarım ekranından yönetebilirsiniz.'
+                    : 'Ödeme onaylanınca tarama otomatik başlar.'}
+                </p>
+              )}
             </div>
 
             {/* Güven şeridi — DÜRÜST sinyaller (uydurma istatistik/puan YOK) */}
@@ -856,7 +873,7 @@ export default function OrderPage() {
                 </li>
                 <li className="flex items-center gap-2">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1C6B60" strokeWidth="2" className="shrink-0" aria-hidden><circle cx="12" cy="12" r="9"/><path d="M8 12l2.5 2.5L16 9" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  KVKK uyumlu · veriler şifreli saklanır
+                  KVKK’ya uygun · veriler şifreli saklanır
                 </li>
               </ul>
               <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -878,10 +895,19 @@ export default function OrderPage() {
               <span className="ml-1 text-[10px] font-normal text-ink-muted">KDV dahil</span>
             </p>
           </div>
-          <button onClick={onCta} disabled={ctaDisabled} className="btn-primary shrink-0 px-5 disabled:cursor-not-allowed disabled:opacity-50">
-            {ctaLabel}
-          </button>
+          {disabledHint?.scroll ? (
+            <button type="button" onClick={scrollToConsents} className="shrink-0 rounded-pill border border-amber-400 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800">
+              Onayları işaretle →
+            </button>
+          ) : (
+            <button onClick={onCta} disabled={ctaDisabled} className="btn-primary shrink-0 px-5 disabled:cursor-not-allowed disabled:opacity-50">
+              {ctaLabel}
+            </button>
+          )}
         </div>
+        {disabledHint && !disabledHint.scroll && (
+          <p className="mx-auto mt-1 max-w-6xl text-[11px] font-semibold text-amber-700">{disabledHint.text}</p>
+        )}
       </div>
     </main>
   );
