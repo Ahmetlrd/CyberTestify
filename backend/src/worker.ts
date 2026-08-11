@@ -46,6 +46,30 @@ async function teardownFlowContainer(pentagiFlowId: string) {
     .catch((e) => console.error(`[worker] deleteFlow (terminal temizligi) hata (yine de devam): ${e?.message ?? e}`));
 }
 
+// Sipariş henüz terminal DEĞİLSE net biçimde başarısız işaretle (kimlik bilgisi tüketilmiş olabilir).
+const TERMINAL_ORDER = new Set(['scan_failed', 'scan_completed', 'report_delivered', 'report_purged', 'scope_violation', 'refunded']);
+async function failOrderIfPending(orderId: string, reason: string): Promise<void> {
+  const o = await prisma.order.findUnique({ where: { id: orderId }, select: { status: true } });
+  if (!o || TERMINAL_ORDER.has(o.status)) return;
+  await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed', failureReason: reason } }).catch(() => {});
+}
+
+// (Fix) Açılışta: bir önceki worker rapor üretimi SIRASINDA çöktü/yeniden başladıysa, o flow
+// 'running' + reportGenStartedAt DOLU kalır (ORPHAN). Tek-kullanımlık kimlik bilgisi tüketilmiş
+// olabileceğinden TEKRAR İŞLENMEZ (no_login_endpoint üretirdi) — net başarısız yapılır.
+async function sweepOrphanReportGen(): Promise<void> {
+  const orphans = await prisma.flow.findMany({
+    where: { status: 'running', reportGenStartedAt: { not: null } },
+    select: { id: true, orderId: true, pentagiFlowId: true, order: { select: { scheduledScanId: true } } },
+  });
+  for (const f of orphans) {
+    await prisma.flow.update({ where: { id: f.id }, data: { status: 'error', finishedAt: new Date(), errorMessage: 'worker yeniden başladı; rapor üretimi kesildi' } }).catch(() => {});
+    await failOrderIfPending(f.orderId, 'scan_interrupted');
+    await recordScheduleOutcome(f.order.scheduledScanId, false).catch(() => {});
+    console.warn(`[worker] Orphan rapor-üretim flow'u temizlendi -> sipariş ${f.orderId} scan_failed (tarama kesildi).`);
+  }
+}
+
 async function tick() {
   // Once takilan flow'lari basa al (slotu serbest birak) — PentAGI'ye ULASILAMASA
   // bile calisir, cunku sadece DB'deki startedAt'e bakar. Ana poll dongusunun
@@ -75,11 +99,31 @@ async function tick() {
       // hemen bitir. Done-tail (rapor + sifre + mail) normal yol ile AYNI. Diger flow'lar
       // asagidaki normal PentAGI yolundan gecer (DEGISMEDI).
       if (flow.pentagiFlowId.startsWith('deterministic-')) {
-        const res = await generateAndStoreReport(flow.id);
+        // (Fix) ATOMİK CLAIM: bu flow'u işleme almadan önce reportGenStartedAt damgasını koy.
+        // Authenticated (full_pentest) rapor üretimi DAKİKALAR sürer; worker bu sırada YENİDEN
+        // BAŞLARSA yeni worker aynı 'running' flow'u TEKRAR işleyip tek-kullanımlık kimlik bilgisini
+        // ikinci kez tüketiyor -> no_login_endpoint. Claim (koşullu update) yalnız BİR işlemin
+        // devam etmesini sağlar; ikinci işleme count!==1 ile elenir. Status 'running' kalır (eş-
+        // zamanlılık=1 korunur); orphan claim'ler açılışta sweepOrphanReportGen ile temizlenir.
+        const claim = await prisma.flow.updateMany({
+          where: { id: flow.id, status: 'running', reportGenStartedAt: null },
+          data: { reportGenStartedAt: new Date() },
+        });
+        if (claim.count !== 1) continue; // zaten üretimde/işlendi -> tekrar tüketme
+        let res: Awaited<ReturnType<typeof generateAndStoreReport>>;
+        try {
+          res = await generateAndStoreReport(flow.id);
+        } catch (genErr) {
+          console.error(`[worker] deterministik rapor üretimi hata (sipariş ${flow.orderId}):`, genErr);
+          await prisma.flow.update({ where: { id: flow.id }, data: { status: 'error', finishedAt: new Date(), errorMessage: String((genErr as Error)?.message ?? genErr).slice(0, 300) } }).catch(() => {});
+          await failOrderIfPending(flow.orderId, 'report_generation_error');
+          await recordScheduleOutcome(flow.order.scheduledScanId, false);
+          continue;
+        }
         await prisma.flow.update({ where: { id: flow.id }, data: { status: 'finished', finishedAt: new Date() } });
         if (!res) {
           // (FAZ E) Tam Kapsamlı Pentest: login başarısız -> rapor YOK (sipariş zaten scan_failed +
-          // kredi + müşteri maili). Flow bitirildi; rapor-hazır maili GÖNDERME.
+          // müşteri maili). Flow bitirildi; rapor-hazır maili GÖNDERME.
           await recordScheduleOutcome(flow.order.scheduledScanId, false);
           console.log(`[worker] ${flow.pentagiFlowId} — login başarısız; rapor üretilmedi (sipariş ${flow.orderId}).`);
           continue;
@@ -359,6 +403,9 @@ async function purgeExpiredReports() {
 
 async function main() {
   console.log('[worker] Baslatildi, PentAGI flow durumlari izleniyor...');
+  // (Fix) Önceki worker rapor üretimi sırasında yeniden başladıysa orphan flow'ları temizle
+  // (tek-kullanımlık kimlik bilgisi tüketilmiş olabilir; TEKRAR işleme no_login_endpoint üretir).
+  await sweepOrphanReportGen().catch((e) => console.error('[worker] orphan sweep hata:', e));
   // Acilista egress proxy sagligini kontrol et (loud uyari — proxy'siz tarama yok).
   if (await checkEgressProxyHealth()) console.log('[worker] Egress proxy (kapsam kilidi) SAGLIKLI.');
   else console.warn('[worker] ⚠️  UYARI: Egress proxy AYAKTA DEGIL! `npm run egress-proxy` calistirin.');

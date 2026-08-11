@@ -332,6 +332,11 @@ model Flow {
   // adimlar-arasi kisa molada YANLISLIKLA erken bitirmemek icin (bkz worker idle grace).
   idleSince       DateTime?
   errorMessage    String?
+  // (Deterministik/authenticated rapor) generateAndStoreReport CLAIM damgasi. Kimlik-dogrulamali
+  // (full_pentest) rapor uretimi DAKIKALAR surer + test kimlik bilgisi TEK KULLANIMLIK. Worker bu
+  // sirada YENIDEN BASLARSA, ayni 'running' flow TEKRAR islenip kimligi ikinci kez tuketiyordu ->
+  // no_login_endpoint. Bu damga set edilince flow "uretimde"; ikinci isleme reddedilir (bkz worker).
+  reportGenStartedAt DateTime?
   // Kapsam ihlali tespit edilirse, izin disi hedef(ler) buraya audit icin yazilir.
   scopeViolationTarget String?
   // Musteriye gosterilen DOSTANE aktivite akisi (JSON ActivityItem[]) — ham log
