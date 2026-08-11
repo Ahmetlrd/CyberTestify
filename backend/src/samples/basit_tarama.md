@@ -50,34 +50,6 @@ Hedefin temel taşıma güvenliği (TLS/HTTPS) sağlam durumda ve teknoloji imza
 | 3 | Content-Security-Policy eksik | Orta | XSS ve içerik enjeksiyonuna karşı azaltma katmanı yok |
 | 4 | Referrer-Policy eksik | Düşük | Dış bağlantılara referrer bilgisi sızabilir |
 
-## 7. AI Çözüm Önerileri (Eklenti)
-
-> Bu bölüm **AI Çözüm Önerileri** eklentisiyle açılır. Aşağıda örnek içerik, eklentinin sunduğu somut düzeltme rehberinin formatını gösterir.
-
-**1. X-Frame-Options ekleyin**
-nginx yapılandırmanıza şu satırı ekleyin:
-```
-add_header X-Frame-Options "SAMEORIGIN" always;
-```
-
-**2. X-Content-Type-Options ekleyin**
-```
-add_header X-Content-Type-Options "nosniff" always;
-```
-
-**3. Content-Security-Policy tanımlayın**
-Sitenize uygun temel bir politika ile başlayın, sonra sıkılaştırın:
-```
-add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'" always;
-```
-
-**4. Referrer-Policy ekleyin**
-```
-add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-```
-
-Değişikliklerden sonra `nginx -t` ile doğrulayıp yeniden yükleyin (`systemctl reload nginx`).
-
 ---
 
 ## Yasal Uyari ve Kapsam
