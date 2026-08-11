@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { applyConsent, getStoredConsent, GA_ID, OPEN_PREFS_EVENT } from '../lib/consent';
+import { applyConsent, getStoredConsent, loadClarity, GA_ID, CLARITY_ID, OPEN_PREFS_EVENT } from '../lib/consent';
 
 /**
  * (KVKK) Çerez onay banner'ı + Google Consent Mode v2.
@@ -16,7 +16,9 @@ export function CookieBanner() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (!getStoredConsent()) setShow(true); // seçim yoksa göster
+    const stored = getStoredConsent();
+    if (!stored) setShow(true);            // seçim yoksa göster
+    if (stored === 'granted') loadClarity(); // geri dönen kullanıcı: onay verdiyse Clarity'yi yükle
     const reopen = () => setShow(true);
     window.addEventListener(OPEN_PREFS_EVENT, reopen);
     return () => window.removeEventListener(OPEN_PREFS_EVENT, reopen);
@@ -26,8 +28,8 @@ export function CookieBanner() {
 
   const choose = (state: 'granted' | 'denied') => { applyConsent(state); setShow(false); };
 
-  // GA hiç kurulmadıysa yalnız teknik çerez vardır — kısa bilgilendirme (izleme onayı gerekmez).
-  const analyticsEnabled = !!GA_ID;
+  // GA/Clarity hiç kurulmadıysa yalnız teknik çerez vardır — kısa bilgilendirme (izleme onayı gerekmez).
+  const analyticsEnabled = !!GA_ID || !!CLARITY_ID;
 
   return (
     <div
