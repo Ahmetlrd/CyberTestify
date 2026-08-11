@@ -186,11 +186,6 @@ export default function VerifyHub() {
     }
   }
 
-  function logout() {
-    window.localStorage.removeItem('token');
-    router.push('/');
-  }
-
   const validDomains = domains.filter((d) => d.valid);
   const pendingDomains = domains.filter((d) => !d.valid);
   const shownHistory = showAllHistory ? orders : orders.slice(0, HISTORY_PREVIEW);
@@ -367,21 +362,11 @@ export default function VerifyHub() {
 
   return (
     <main className="container-page max-w-2xl py-14">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="eyebrow">Panelim</p>
-          <h1 className="mt-1 text-2xl font-extrabold text-brand">
-            {purchaseMode ? 'Alan adı seçin' : 'Taramaya Başla'}
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <a href="/schedules" className="text-sm font-medium text-accent-600 hover:underline">
-            Zamanlanmış taramalarım
-          </a>
-          <button type="button" onClick={logout} className="btn-ghost text-sm">
-            Çıkış
-          </button>
-        </div>
+      <div>
+        <p className="eyebrow">Panelim</p>
+        <h1 className="mt-1 text-2xl font-extrabold text-brand">
+          {purchaseMode ? 'Alan adı seçin' : 'Taramaya Başla'}
+        </h1>
       </div>
 
       {loading ? (
