@@ -1,13 +1,12 @@
-// (GA4 + KVKK) Çerez onayı + Google Consent Mode v2 yardımcıları.
-// Onay ÖNCESİ hiçbir izleme çerezi YAZILMAZ (Consent Mode default = denied; bkz Analytics.tsx).
+// (Analitik) GA4 + Microsoft Clarity — HER ZAMAN AÇIK (site sahibinin kararıyla çerez onayı gating'i
+// kaldırıldı). Banner yalnızca BİLGİLENDİRME amaçlıdır; hiçbir izlemeyi engellemez/koşula bağlamaz.
 
 export const GA_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || '';
-// (Microsoft Clarity) oturum kaydı/ısı haritası — KVKK: YALNIZ onay verilince yüklenir (aşağıda loadClarity).
 export const CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID || '';
-export const CONSENT_KEY = 'cookieConsent'; // değer: 'granted' | 'denied'
+export const NOTICE_KEY = 'cookieNotice'; // '1' = bilgilendirme kapatıldı
 export const OPEN_PREFS_EVENT = 'open-cookie-prefs';
 
-// Clarity tag'ini SADECE onay sonrası, bir kez enjekte et (onay öncesi hiç yüklenmez -> çerez/kayıt yok).
+// Clarity tag'ini bir kez enjekte et (her zaman; onay gerektirmez).
 let clarityInjected = false;
 export function loadClarity(): void {
   if (typeof window === 'undefined' || !CLARITY_ID || clarityInjected) return;
@@ -20,29 +19,15 @@ export function loadClarity(): void {
   })(window, document, 'clarity', 'script', CLARITY_ID);
 }
 
-export type ConsentState = 'granted' | 'denied';
-
-export function getStoredConsent(): ConsentState | null {
-  if (typeof window === 'undefined') return null;
-  const v = window.localStorage.getItem(CONSENT_KEY);
-  return v === 'granted' || v === 'denied' ? v : null;
+export function noticeDismissed(): boolean {
+  if (typeof window === 'undefined') return true;
+  return window.localStorage.getItem(NOTICE_KEY) === '1';
+}
+export function dismissNotice(): void {
+  if (typeof window !== 'undefined') window.localStorage.setItem(NOTICE_KEY, '1');
 }
 
-// Consent Mode v2 — 4 anahtar birlikte güncellenir (analytics + ads). Onay verilince Clarity de yüklenir.
-export function applyConsent(state: ConsentState): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(CONSENT_KEY, state);
-  const g: 'granted' | 'denied' = state;
-  (window as any).gtag?.('consent', 'update', {
-    ad_storage: g,
-    analytics_storage: g,
-    ad_user_data: g,
-    ad_personalization: g,
-  });
-  if (state === 'granted') loadClarity(); // KVKK: yalnız onay sonrası
-}
-
-// Footer "Çerez tercihleri" -> banner'ı yeniden aç.
+// Footer "Çerez tercihleri" -> bilgilendirme notunu yeniden aç.
 export function openCookiePrefs(): void {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(OPEN_PREFS_EVENT));
 }

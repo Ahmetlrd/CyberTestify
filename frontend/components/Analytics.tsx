@@ -3,27 +3,20 @@
 import Script from 'next/script';
 import { useEffect } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { GA_ID, getStoredConsent } from '../lib/consent';
+import { GA_ID, loadClarity } from '../lib/consent';
 
 /**
- * (GA4 + Google Consent Mode v2) gtag.js — YALNIZ NEXT_PUBLIC_GA_MEASUREMENT_ID setliyse yüklenir
- * (boşsa hiç render edilmez, site hata vermez). KVKK: Consent Mode VARSAYILAN = denied → onay öncesi
- * hiçbir izleme çerezi yazılmaz (yalnız çerezsiz/modellenmiş sinyal). Onay verilince CookieBanner
- * gtag('consent','update','granted') çağırır. SPA route değişiminde manuel page_view atılır.
+ * (GA4 + Microsoft Clarity) — HER ZAMAN AÇIK. Site sahibinin kararıyla çerez onayı gating'i KALDIRILDI:
+ * analitik/ölçüm (GA + Clarity) kabul/ret fark etmeksizin çalışır (Consent Mode varsayılan = granted).
+ * GA yalnız NEXT_PUBLIC_GA_MEASUREMENT_ID setliyse yüklenir (boşsa render yok). SPA route değişiminde
+ * manuel page_view. Clarity mount'ta yüklenir.
  */
 export function Analytics() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Geri dönen kullanıcı: daha önce 'granted' seçtiyse consent'i erkenden yükselt.
-  useEffect(() => {
-    if (!GA_ID) return;
-    if (getStoredConsent() === 'granted') {
-      (window as any).gtag?.('consent', 'update', {
-        ad_storage: 'granted', analytics_storage: 'granted', ad_user_data: 'granted', ad_personalization: 'granted',
-      });
-    }
-  }, []);
+  // Clarity'yi her zaman yükle (onay gerektirmez).
+  useEffect(() => { loadClarity(); }, []);
 
   // SPA istemci-tarafı navigasyonda page_view (ilk yükleme config ile otomatik gelir).
   useEffect(() => {
@@ -40,8 +33,7 @@ export function Analytics() {
 
   return (
     <>
-      {/* Consent Mode default DENIED — İLK HTML'de (beforeInteractive), gtag.js'ten ÖNCE çalışır.
-          KVKK: onay öncesi hiçbir izleme çerezi yazılmaz. */}
+      {/* Consent Mode default GRANTED — analitik/reklam çerezleri baştan açık (onay gating'i yok). */}
       <Script
         id="ga-consent-init"
         strategy="beforeInteractive"
@@ -50,9 +42,9 @@ export function Analytics() {
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             window.gtag = gtag;
-            gtag('consent','default',{ad_storage:'denied',analytics_storage:'denied',ad_user_data:'denied',ad_personalization:'denied',wait_for_update:500});
+            gtag('consent','default',{ad_storage:'granted',analytics_storage:'granted',ad_user_data:'granted',ad_personalization:'granted'});
             gtag('js', new Date());
-            gtag('config','${GA_ID}',{anonymize_ip:true});
+            gtag('config','${GA_ID}');
           `,
         }}
       />

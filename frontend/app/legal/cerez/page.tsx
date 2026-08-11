@@ -18,21 +18,20 @@ export default function Page() {
           gereklidir ve rıza gerektirmez.
         </li>
         <li>
-          <strong>Analitik/ölçüm (rızaya bağlı):</strong> Deneyimi ölçüp iyileştirmek ve reklam
-          performansını değerlendirmek için <strong>Google Analytics 4</strong> ve <strong>Microsoft
-          Clarity</strong> kullanılır. Bu çerezler <strong>yalnızca açık rızanız (banner’dan “Kabul Et”)
-          sonrasında</strong> çalışır; rıza vermezseniz veya “Reddet” derseniz yüklenmez. Google Consent
-          Mode ile onay öncesi izleme çerezi yazılmaz.
+          <strong>Analitik/ölçüm:</strong> Deneyimi ölçüp iyileştirmek ve reklam performansını
+          değerlendirmek için <strong>Google Analytics 4</strong> ve <strong>Microsoft Clarity</strong>
+          (oturum kaydı/ısı haritası) kullanılır. Bu araçlar sayfa görüntülemeleri, tıklamalar ve genel
+          kullanım verilerini toplar. Kişisel bilgi girdiğiniz alanlar (ör. kimlik bilgileri) bu araçlara
+          gönderilmez; hedef verileri güvenlik/gizlilik nedeniyle maskelenir.
         </li>
       </ul>
       <p style={{ fontSize: 13 }}>
         Bu araçlar için veriler yurt dışındaki sağlayıcılara (Google LLC, Microsoft Corporation — ABD)
-        aktarılabilir. Rızanızı istediğiniz zaman sayfa altındaki <strong>“Çerez tercihleri”</strong>
-        bağlantısından değiştirebilirsiniz.
+        aktarılabilir. Çerezleri tarayıcı ayarlarınızdan silebilir veya engelleyebilirsiniz.
       </p>
 
       <h3>Çerezleri Yönetme</h3>
-      <p>Analitik/ölçüm çerezleri için onayınızı, sayfa altındaki <strong>“Çerez tercihleri”</strong> bağlantısıyla dilediğiniz an geri alabilir veya değiştirebilirsiniz. Ayrıca tarayıcı ayarlarınızdan çerezleri/yerel depolamayı silebilir veya engelleyebilirsiniz; ancak zorunlu çerezler engellenirse oturum açma gibi işlevler çalışmayabilir.</p>
+      <p>Tarayıcı ayarlarınızdan çerezleri/yerel depolamayı silebilir veya engelleyebilirsiniz; ayrıca analitik araçları tarayıcı eklentileriyle (ör. reklam/izleme engelleyiciler) kısıtlayabilirsiniz. Ancak zorunlu teknik çerezler engellenirse oturum açma gibi işlevler çalışmayabilir.</p>
     </LegalArticle>
   );
 }
