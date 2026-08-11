@@ -760,8 +760,8 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
   // (#3) Kuyrukta bekleyen siparis icin pozisyon + ETA (mimari degismez; sadece gorunurluk).
   const queue = order.status === 'scan_queued' ? await getQueuePosition({ createdAt: order.createdAt }) : null;
 
-  // packageName (GA purchase event / fatura formu için); ham package objesi gönderilmez.
-  res.json({ ...order, package: undefined, packageName: order.package.displayName, report, queue });
+  // packageName + packageKey (GA event / fatura / canlı-tarama faz metinleri); ham package objesi gönderilmez.
+  res.json({ ...order, package: undefined, packageName: order.package.displayName, packageKey: order.package.key, report, queue });
 });
 
 // ============================================================================
