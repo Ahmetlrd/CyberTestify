@@ -751,7 +751,9 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
         id: r.id, createdAt: r.createdAt, deliveredAt: r.deliveredAt, devAccessSecret: ownerAccessSecret,
         incomplete: r.incomplete, incompleteReason: r.incompleteReason,
         hasFixSuggestions: r.fixSuggestionsIv != null,
-        fixSuggestionsUnlocked: r.fixSuggestionsUnlockedAt != null,
+        // (LANSMAN KAMPANYASI) kampanya açıkken AI Çözüm Önerileri varsayılan AÇIK + ücretsiz.
+        fixSuggestionsUnlocked: r.fixSuggestionsUnlockedAt != null || config.aiFixFreeCampaign,
+        fixCampaignFree: config.aiFixFreeCampaign,
         fixSuggestionPriceMinorUnit: fixSuggestionPrice(getPackageDef(order.package.key)),
         fixSuggestionListMinorUnit: fixSuggestionListPrice(getPackageDef(order.package.key)),
       }

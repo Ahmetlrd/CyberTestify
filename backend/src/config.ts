@@ -13,6 +13,9 @@ export const config = {
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3000',
   // (Fatura talebi — MANUEL) Yeni fatura talebi geldiginde Vedat'a bildirim gonderilecek adres.
   invoiceNotifyEmail: process.env.INVOICE_NOTIFY_EMAIL ?? 'support@cybertestify.com',
+  // (LANSMAN KAMPANYASI) AI Çözüm Önerileri ÜCRETSİZ + tüm raporlarda VARSAYILAN AÇIK. Altyapı korunur;
+  // kampanya bitince AI_FIX_FREE_CAMPAIGN=false ile tekrar kilitlenir (kod değişmeden). Varsayılan: AÇIK.
+  aiFixFreeCampaign: process.env.AI_FIX_FREE_CAMPAIGN !== 'false',
   // Admin paneli AYRI subdomain'den (admin.cybertestify.com) servis edilir; CORS'a
   // eklenmezse admin.* origin'inden yapilan istekler bloklanir. Dev'de bos (admin
   // ayni origin'de calisir). Birden fazla ise virgulle.

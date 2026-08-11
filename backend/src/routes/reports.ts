@@ -44,7 +44,9 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
   // ekle; VAR ama kilitliyse PDF'te "kilitli" notu goster; hic yoksa hic gosterme.
   let fixMarkdown: string | null = null;
   const hasFix = !!(report.fixSuggestions && report.fixSuggestionsIv && report.fixSuggestionsAuthTag && report.fixSuggestionsSalt);
-  if (hasFix && report.fixSuggestionsUnlockedAt) {
+  // (LANSMAN KAMPANYASI) kampanya açıkken AI Çözüm Önerileri VARSAYILAN AÇIK — satın alma beklemeden çöz.
+  const fixUnlocked = !!report.fixSuggestionsUnlockedAt || config.aiFixFreeCampaign;
+  if (hasFix && fixUnlocked) {
     try {
       fixMarkdown = decryptReport({
         encryptedBlob: report.fixSuggestions as Buffer,
@@ -74,7 +76,7 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
       createdAt: report.createdAt,
       locale,
     },
-    { fixMarkdown, fixLocked: hasFix && !report.fixSuggestionsUnlockedAt, extrasMarkdown },
+    { fixMarkdown, fixLocked: hasFix && !fixUnlocked, extrasMarkdown },
   );
 
   await prisma.report.update({ where: { id: report.id }, data: { deliveredAt: new Date() } });

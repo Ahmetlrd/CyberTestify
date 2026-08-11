@@ -292,8 +292,21 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               </p>
               {order.report.fixSuggestionsUnlocked ? (
                 <>
+                  {order.report.fixCampaignFree && (
+                    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+                      <span className="rounded-pill bg-amber-500 px-2.5 py-0.5 text-xs font-extrabold text-white">🎉 LANSMAN</span>
+                      <span className="font-semibold text-amber-900">
+                        {order.report.fixSuggestionListMinorUnit != null && (
+                          <span className="mr-1.5 font-normal text-amber-700 line-through">
+                            {(order.report.fixSuggestionListMinorUnit / 100).toLocaleString('tr-TR')} {order.currency}
+                          </span>
+                        )}
+                        Ücretsiz — lansman kampanyası kapsamında AI Çözüm Önerileri hediye!
+                      </span>
+                    </div>
+                  )}
                   <div className="mt-3 rounded-card border border-brand-200 bg-brand-50/40 px-4 py-3 text-sm text-ink-soft">
-                    ✓ Açıldı — çözüm önerileri artık <strong>raporunuzun içinde</strong> yer alıyor. Güncel raporu
+                    ✓ Açık — çözüm önerileri artık <strong>raporunuzun içinde</strong> yer alıyor. Güncel raporu
                     (çözüm önerileri dahil) indirmek için aşağıdaki butonu kullanın.
                   </div>
                   <button onClick={handleDownload} disabled={!accessSecret} className="btn-primary mt-3 disabled:opacity-50">

@@ -162,7 +162,19 @@ export default async function PackagesPage({ params }: { params: { region: strin
                       {tr ? 'Ön izleme niteliğindedir; kapsamlı bir denetim değildir.' : 'A preview, not a comprehensive audit.'}
                     </div>
                   </div>
-                  <Link href={`/verify?package=${basit.key}`} className="btn-outline mt-6 w-full">
+                  <a
+                    href={`${API}/orders/sample-report/${basit.key}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-6 flex w-full items-center justify-center gap-1.5 rounded-pill bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-105"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <path d="M14 2v6h6" />
+                    </svg>
+                    {tr ? 'Örnek raporu gör' : 'View sample report'}
+                  </a>
+                  <Link href={`/verify?package=${basit.key}`} className="btn-outline mt-3 w-full">
                     {tr ? 'Satın Al' : 'Buy Now'}
                   </Link>
                 </div>
@@ -260,9 +272,23 @@ export default async function PackagesPage({ params }: { params: { region: strin
                     {b.comingSoon ? (
                       <span className="btn-ghost mt-6 w-full cursor-default">{region.code === 'tr' ? 'Yakında' : 'Coming soon'}</span>
                     ) : (
-                      <Link href={`/verify?bundle=${b.key}`} className="btn-primary mt-6 w-full">
-                        {region.code === 'tr' ? 'Satın Al' : 'Buy Now'}
-                      </Link>
+                      <>
+                        <a
+                          href={`${API}/orders/sample-report/${b.key}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-6 flex w-full items-center justify-center gap-1.5 rounded-pill bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-105"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <path d="M14 2v6h6" />
+                          </svg>
+                          {region.code === 'tr' ? 'Örnek raporu gör' : 'View sample report'}
+                        </a>
+                        <Link href={`/verify?bundle=${b.key}`} className="btn-primary mt-3 w-full">
+                          {region.code === 'tr' ? 'Satın Al' : 'Buy Now'}
+                        </Link>
+                      </>
                     )}
                   </div>
                 );
