@@ -40,10 +40,11 @@ export function Analytics() {
 
   return (
     <>
-      {/* Consent Mode default DENIED — gtag.js işlemeden ÖNCE dataLayer'a bu sırayla girer. */}
+      {/* Consent Mode default DENIED — İLK HTML'de (beforeInteractive), gtag.js'ten ÖNCE çalışır.
+          KVKK: onay öncesi hiçbir izleme çerezi yazılmaz. */}
       <Script
         id="ga-consent-init"
-        strategy="afterInteractive"
+        strategy="beforeInteractive"
         dangerouslySetInnerHTML={{
           __html: `
             window.dataLayer = window.dataLayer || [];
