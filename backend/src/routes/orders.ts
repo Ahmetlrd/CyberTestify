@@ -6,7 +6,6 @@ import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestio
 import { validateConsentInput, activeTestScope, ACTIVE_TEST_CONSENT_VERSION, ACTIVE_TEST_RISK_ACK, hasValidActiveTestConsent } from '../services/activeTestConsent.js';
 import { storeTestCredential, hasTestCredential } from '../services/testCredentials.js';
 import { renderConsentPdf } from '../services/pdf.js';
-import { decryptSecret } from '../services/crypto.js';
 import { getPricing, currencyFor } from '../services/pricing.js';
 import { getPaymentProvider } from '../services/payment/index.js';
 import { initiateBundlePayment } from '../services/payment/iyzico.js';
@@ -735,22 +734,13 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
   });
 
   // (3) Rapor cikisini guvenli sekilde donustur: icerik degil, DURUM bilgisi.
-  // devAccessSecret DB'de PEPPER'li sifreli tutulur; burada SAHIP musteriye (requireAuth +
-  // customerId eslesmesi zaten dogrulandi) COZULMUS erisim sifresi verilir — dashboard bunu
-  // otomatik doldurur, musteri ekstra kod GIRMEDEN kendi raporunu acar. (Eski duz-metin
-  // kalintilari da tolere edilir: cozulemezse ham degeri don.)
+  // (ŞİFRE OTOMATİK DOLDURMA KAPALI) Erişim kodu ARTIK yanıtta DÖNMEZ (devAccessSecret: null).
+  // Herkes e-postasındaki kodu girerek açar (dashboard bir kez açınca localStorage'da tutar).
+  // Kod yalnızca admin tarafında (rapor inceleme için) pepper'dan çözülür; müşteriye gönderilmez.
   const r = order.report;
-  let ownerAccessSecret: string | null = null;
-  if (r?.devAccessSecret) {
-    try {
-      ownerAccessSecret = decryptSecret(r.devAccessSecret);
-    } catch {
-      ownerAccessSecret = r.devAccessSecret; // eski duz-metin kaydi (varsa)
-    }
-  }
   const report = r
     ? {
-        id: r.id, createdAt: r.createdAt, deliveredAt: r.deliveredAt, devAccessSecret: ownerAccessSecret,
+        id: r.id, createdAt: r.createdAt, deliveredAt: r.deliveredAt, devAccessSecret: null,
         incomplete: r.incomplete, incompleteReason: r.incompleteReason,
         hasFixSuggestions: r.fixSuggestionsIv != null,
         // (LANSMAN KAMPANYASI) kampanya açıkken AI Çözüm Önerileri varsayılan AÇIK + ücretsiz.
@@ -761,11 +751,18 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
       }
     : null;
 
+  // (İÇ KALİTE KAPISI) Sipariş admin onayı beklerken müşteriye "hala taranıyor" göster: durumu
+  // 'scan_running'e maskele ve raporu GİZLE (kod da e-posta da onaya kadar gitmez). Admin
+  // onaylayınca gerçek scan_completed + rapor görünür olur. Müşteri onay sürecinden HABERSİZDİR.
+  const gated = order.status === 'awaiting_admin_review';
+  const customerStatus = gated ? 'scan_running' : order.status;
+  const customerReport = gated ? null : report;
+
   // (#3) Kuyrukta bekleyen siparis icin pozisyon + ETA (mimari degismez; sadece gorunurluk).
   const queue = order.status === 'scan_queued' ? await getQueuePosition({ createdAt: order.createdAt }) : null;
 
   // packageName + packageKey (GA event / fatura / canlı-tarama faz metinleri); ham package objesi gönderilmez.
-  res.json({ ...order, package: undefined, packageName: order.package.displayName, packageKey: order.package.key, report, queue });
+  res.json({ ...order, status: customerStatus, package: undefined, packageName: order.package.displayName, packageKey: order.package.key, report: customerReport, queue });
 });
 
 // ============================================================================

@@ -52,11 +52,16 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       router.push('/login');
       return;
     }
+    // (ŞİFRE OTOMATİK DOLDURMA KAPALI) Erişim kodu artık sunucudan gelmez; herkes e-postasındaki
+    // kodu girer. Ama BİR KEZ başarıyla açtıysa, kolaylık olsun diye bu cihazda saklanır (localStorage).
+    if (typeof window !== 'undefined') {
+      const saved = window.localStorage.getItem(`ct_access_${params.orderId}`);
+      if (saved) setAccessSecret((prev) => prev || saved);
+    }
     async function load() {
       try {
         const o = await api.getOrder(params.orderId);
         setOrder(o);
-        if (o.report?.devAccessSecret) setAccessSecret((prev) => prev || o.report.devAccessSecret);
         if (TERMINAL.has(o.status) && timer.current) {
           clearInterval(timer.current);
           timer.current = null;
@@ -102,6 +107,9 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
     try {
       const blob = await api.downloadReport(params.orderId, accessSecret);
       setUnlocked(true);
+      // Başarıyla açıldı — kodu bu cihazda sakla (bir daha girmesin). Kilit kaldırmak isterse
+      // tarayıcı verisini temizlemesi yeter (sunucuda kod müşteriye asla dönmez).
+      if (typeof window !== 'undefined') window.localStorage.setItem(`ct_access_${params.orderId}`, accessSecret);
       // Rapor artik PDF olarak uretiliyor (bkz backend reports.ts /download).
       downloadBlob(blob, `cybertestify-rapor-${params.orderId}.pdf`);
     } catch (err: any) {
@@ -262,11 +270,10 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               </div>
             </div>
 
-            {order.report?.devAccessSecret && (
-              <div className="mt-4 rounded-card border border-accent/40 bg-accent-soft/50 p-3 text-xs text-ink-soft">
-                <strong>Tek kullanımlık erişim kodunuz:</strong> Bu kod ayrıca e-posta ile de tarafınıza iletilir.
-                Kolaylık olması için aşağıdaki kutuya otomatik dolduruldu.
-                <div className="mt-1 font-mono text-ink">{order.report.devAccessSecret}</div>
+            {!unlocked && (
+              <div className="mt-4 rounded-card border border-line bg-brand-50/40 p-3 text-xs text-ink-soft">
+                <strong>Erişim kodunuz e-posta ile gönderildi.</strong> Raporunuzu açmak için e-postanızdaki
+                tek kullanımlık kodu aşağıya girin. (Bir kez açtığınızda bu cihazda hatırlanır.)
               </div>
             )}
 

@@ -29,6 +29,7 @@ enum OrderStatus {
   scan_queued
   scan_running
   scan_completed
+  awaiting_admin_review  // (İç kalite kapısı) tarama BİTTİ + rapor üretildi; müşteriye AÇILMADAN önce admin (Vedat) raporu inceleyip onaylamalı. Müşteriye "hala taranıyor" gibi görünür (kod/e-posta onaydan sonra gider).
   scan_failed
   scope_violation  // izin disi hedefe erisim tespit edildi, tarama durduruldu
   report_delivered
@@ -388,6 +389,11 @@ model Report {
 
   createdAt         DateTime  @default(now())
   deliveredAt       DateTime?
+
+  // (İç kalite kapısı) Admin (Vedat) raporu inceleyip müşteriye açtığı an. null = henüz onaylanmadı
+  // (sipariş awaiting_admin_review'da bekler, müşteri "hala taranıyor" görür). Dolu = onaylandı,
+  // scan_completed'a geçti + erişim kodu e-postası gönderildi.
+  adminReleasedAt   DateTime?
 
   // Tarama beklenenden erken bitti/durduruldu ve rapor icerigi eksik/bos olabilir
   // (or. PentAGI'den manuel durdurma, cokme). Musteriye acik uyari gostermek icin.

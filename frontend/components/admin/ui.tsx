@@ -39,12 +39,17 @@ export function Pager({ page, pageSize, total, onPage }: { page: number; pageSiz
 const STATUS_COLOR: Record<string, string> = {
   scan_completed: '#22c55e', report_delivered: '#22c55e', scan_running: '#38bdf8',
   scan_queued: '#eab308', paid: '#a3e635', awaiting_payment: '#94a3b8',
+  awaiting_admin_review: '#f59e0b', awaiting_review: '#fbbf24',
   scan_failed: '#ef4444', scope_violation: '#f97316', report_purged: '#64748b', refunded: '#a78bfa',
+};
+// Kısa Türkçe etiketler (uzun enum yerine panelde okunur).
+const STATUS_LABEL: Record<string, string> = {
+  awaiting_admin_review: 'rapor onayı bekliyor',
 };
 export function StatusBadge({ status }: { status: string | null }) {
   if (!status) return <span style={{ color: '#64748b' }}>—</span>;
   const c = STATUS_COLOR[status] ?? '#94a3b8';
-  return <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600, color: '#0f172a', background: c }}>{status}</span>;
+  return <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600, color: '#0f172a', background: c }}>{STATUS_LABEL[status] ?? status}</span>;
 }
 
 export const fmtDate = (d: string | null) => (d ? new Date(d).toLocaleString('tr-TR') : '—');

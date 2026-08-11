@@ -4,10 +4,13 @@ import { promisify } from 'node:util';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { checkEgressProxyHealth } from '../services/egressHealth.js';
-import { sendRefundNotice } from '../services/mailer.js';
+import { sendRefundNotice, sendReportReady } from '../services/mailer.js';
 import { createDraftsFromBulk, listAllAdmin, publishNextDraft } from '../services/blog.js';
 import { enqueueOrStartScan } from '../services/orchestrator.js';
 import { hasTestCredential } from '../services/testCredentials.js';
+import { decryptReport, decryptSecret } from '../services/crypto.js';
+import { renderReportPdf } from '../services/pdf.js';
+import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -17,7 +20,7 @@ export const adminRouter = Router();
 
 const ORDER_STATUSES = [
   'awaiting_payment', 'awaiting_review', 'paid', 'scan_queued', 'scan_running', 'scan_completed',
-  'scan_failed', 'scope_violation', 'report_delivered', 'report_purged', 'refunded',
+  'awaiting_admin_review', 'scan_failed', 'scope_violation', 'report_delivered', 'report_purged', 'refunded',
 ] as const;
 
 /** ?page & ?pageSize -> {skip, take, page, pageSize} (pageSize 1..100, vars. 25). */
@@ -63,12 +66,15 @@ adminRouter.get('/orders', async (req, res) => {
         domain: { select: { hostname: true } },
         package: { select: { displayName: true, key: true } },
         flow: { select: { status: true, toolCallCount: true, scopeViolationTarget: true } },
+        report: { select: { id: true, adminReleasedAt: true } },
       },
     }),
   ]);
   const refundRequestsPending = await prisma.order.count({ where: { refundRequestedAt: { not: null }, status: { not: 'refunded' } } });
+  // (İÇ KALİTE KAPISI) Admin onayı bekleyen rapor sayısı — panelde uyarı rozeti için.
+  const reportReviewsPending = await prisma.order.count({ where: { status: 'awaiting_admin_review' } });
   res.json({
-    page, pageSize, total, statusFilter: status ?? null, refundRequestsPending,
+    page, pageSize, total, statusFilter: status ?? null, refundRequestsPending, reportReviewsPending,
     items: rows.map((o) => ({
       id: o.id, status: o.status, amountMinorUnit: o.amountMinorUnit, currency: o.currency,
       createdAt: o.createdAt, paidAt: o.paidAt,
@@ -78,6 +84,7 @@ adminRouter.get('/orders', async (req, res) => {
       packageName: o.package.displayName, packageKey: o.package.key,
       flowStatus: o.flow?.status ?? null, toolCallCount: o.flow?.toolCallCount ?? null,
       scopeViolationTarget: o.flow?.scopeViolationTarget ?? null,
+      hasReport: !!o.report, reportReleasedAt: o.report?.adminReleasedAt ?? null,
     })),
   });
 });
@@ -111,6 +118,108 @@ adminRouter.post('/orders/:id/refund', async (req, res) => {
   const mailed = await sendRefundNotice(order.id); // mailer no-throw
   console.log(`[admin] Siparis ${order.id} 'refunded' isaretlendi (mail=${mailed}).`);
   res.json({ ok: true, mailed });
+});
+
+// --- (İÇ KALİTE KAPISI) TARAMA SONRASI RAPOR ONAYI ---------------------------
+// Tarama bitip rapor üretilince sipariş 'awaiting_admin_review'da bekler; müşteri "hala
+// taranıyor" görür (kod/e-posta gitmez). Admin (Vedat) raporu inceler (AI dahil açık),
+// sonra ONAYLAR (müşteriye açılır + kod e-postası gider) veya YENİDEN DENER (baştan tarar).
+
+// (1) Onayla → scan_completed + erişim kodu e-postası (kod pepper'dan çözülür).
+adminRouter.post('/orders/:id/approve-report', async (req, res) => {
+  const order = await prisma.order.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, status: true, report: { select: { devAccessSecret: true } } },
+  });
+  if (!order) return res.status(404).json({ error: 'Siparis bulunamadi.' });
+  if (order.status !== 'awaiting_admin_review') {
+    return res.status(409).json({ error: `Siparis rapor-onayi bekleyen durumda degil (mevcut: ${order.status}).` });
+  }
+  // Erisim kodunu pepper'dan coz — musteriye e-posta ile SIMDI gonderilecek (onaya kadar bekliyordu).
+  let accessSecret: string | null = null;
+  if (order.report?.devAccessSecret) {
+    try { accessSecret = decryptSecret(order.report.devAccessSecret); } catch { accessSecret = null; }
+  }
+  await prisma.order.update({ where: { id: order.id }, data: { status: 'scan_completed' } });
+  await prisma.report.update({ where: { orderId: order.id }, data: { adminReleasedAt: new Date() } });
+  const mailed = accessSecret ? await sendReportReady(order.id, accessSecret) : false;
+  console.log(`[admin] Rapor ONAYLANDI + musteriye acildi: ${order.id} (mail=${mailed}).`);
+  res.json({ ok: true, released: true, mailed });
+});
+
+// (2) Yeniden dene → eski rapor+flow'u sil, siparisi 'paid'e cek, taramayi tekrar kuyruga al.
+// (Kimlik-dogrulamali paketlerde tek-kullanimlik kimlik bilgisi silinmis olabilir; o pakette
+// yeniden tarama login'de basarisiz olabilir — deterministik/pasif paketler icin sorunsuz.)
+adminRouter.post('/orders/:id/retry-scan', async (req, res) => {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, select: { id: true, status: true } });
+  if (!order) return res.status(404).json({ error: 'Siparis bulunamadi.' });
+  const retryable = ['awaiting_admin_review', 'scan_completed', 'scan_failed', 'scope_violation'];
+  if (!retryable.includes(order.status)) {
+    return res.status(409).json({ error: `Bu durumda yeniden taranamaz (mevcut: ${order.status}).` });
+  }
+  // Eski rapor + flow'u temizle (Report.orderId ve Flow.orderId unique — yeni tarama yeni flow yaratir).
+  await prisma.report.deleteMany({ where: { orderId: order.id } });
+  await prisma.flow.deleteMany({ where: { orderId: order.id } });
+  await prisma.order.update({ where: { id: order.id }, data: { status: 'paid' } });
+  try {
+    const r = await enqueueOrStartScan(order.id);
+    console.log(`[admin] Rapor YENIDEN DENENDI: ${order.id} (queued=${r.queued}).`);
+    res.json({ ok: true, retried: true, queued: r.queued });
+  } catch (err: any) {
+    console.error(`[admin] retry-scan hata (${order.id}):`, err?.message ?? err);
+    res.status(503).json({ error: 'Yeniden tarama baslatilamadi: ' + (err?.message ?? 'bilinmeyen hata') });
+  }
+});
+
+// (3) Raporu görüntüle → admin ŞİFRELİ raporu (AI Çözüm Önerileri DAHİL, her zaman açık) PDF
+// olarak görür. Erişim kodu pepper'dan çözülür; müşteriye HİÇBİR ŞEY sızmaz (yalnız admin).
+adminRouter.get('/orders/:id/report.pdf', async (req, res) => {
+  const report = await prisma.report.findFirst({
+    where: { orderId: req.params.id },
+    include: { order: { include: { domain: { select: { hostname: true } }, package: { select: { displayName: true, key: true } } } } },
+  });
+  if (!report) return res.status(404).json({ error: 'Rapor bulunamadi.' });
+  if (!report.devAccessSecret) return res.status(409).json({ error: 'Erisim kodu saklanmamis; rapor cozulemiyor.' });
+  let accessSecret: string;
+  try { accessSecret = decryptSecret(report.devAccessSecret); } catch { return res.status(500).json({ error: 'Erisim kodu cozulemedi (pepper?).' }); }
+
+  let plaintext: Buffer;
+  try {
+    plaintext = decryptReport({
+      encryptedBlob: report.encryptedBlob as Buffer, iv: report.iv as Buffer,
+      authTag: report.authTag as Buffer, keyDerivationSalt: report.keyDerivationSalt as Buffer, accessSecret,
+    });
+  } catch { return res.status(500).json({ error: 'Rapor cozulemedi.' }); }
+
+  // AI Çözüm Önerileri — admin İNCELEMESİ için HER ZAMAN açık (kampanya/kilit durumundan bağımsız).
+  let fixMarkdown: string | null = null;
+  if (report.fixSuggestions && report.fixSuggestionsIv && report.fixSuggestionsAuthTag && report.fixSuggestionsSalt) {
+    try {
+      fixMarkdown = decryptReport({
+        encryptedBlob: report.fixSuggestions as Buffer, iv: report.fixSuggestionsIv as Buffer,
+        authTag: report.fixSuggestionsAuthTag as Buffer, keyDerivationSalt: report.fixSuggestionsSalt as Buffer, accessSecret,
+      }).toString('utf-8');
+    } catch { fixMarkdown = null; }
+  }
+
+  const fullText = plaintext.toString('utf-8');
+  const di = fullText.indexOf(PASSIVE_EXTRAS_DELIM);
+  const reportMd = di === -1 ? fullText : fullText.slice(0, di).trim();
+  const extrasMarkdown = di === -1 ? null : fullText.slice(di + PASSIVE_EXTRAS_DELIM.length).trim();
+  const locale: 'tr' | 'en' = report.order.locale === 'en' ? 'en' : 'tr';
+
+  const pdf = await renderReportPdf(
+    reportMd,
+    {
+      hostname: report.order.domain.hostname, packageName: report.order.package.displayName,
+      packageKey: report.order.package.key, createdAt: report.createdAt, locale,
+    },
+    { fixMarkdown, extrasMarkdown },
+  );
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="admin-onceizleme-${report.orderId}.pdf"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(pdf);
 });
 
 // --- (Tam Kapsamlı Pentest — FAZ A) YARI-MANUEL ONAY KAPISI -------------------

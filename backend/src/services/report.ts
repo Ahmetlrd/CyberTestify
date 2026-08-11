@@ -1,4 +1,5 @@
 import { prisma } from '../db.js';
+import { config } from '../config.js';
 import * as pentagi from '../pentagi/client.js';
 import { encryptReport, generateReportAccessSecret } from './crypto.js';
 import { redactAll } from './piiRedaction.js';
@@ -447,7 +448,12 @@ export async function generateAndStoreReport(flowId: string) {
     },
   });
 
-  await prisma.order.update({ where: { id: flow.orderId }, data: { status: 'scan_completed' } });
+  // (İÇ KALİTE KAPISI) Kapı açıksa rapor müşteriye HEMEN açılmaz: 'awaiting_admin_review'da bekler
+  // (admin inceleyip onaylayınca scan_completed + e-posta). Kapı kapalıysa eski davranış (doğrudan teslim).
+  await prisma.order.update({
+    where: { id: flow.orderId },
+    data: { status: config.adminReportGate ? 'awaiting_admin_review' : 'scan_completed' },
+  });
 
   // Ham veriyi PentAGI tarafinda tutmuyoruz — rapor uretildikten hemen sonra sil. (Deterministik
   // flow'da PentAGI ham verisi YOK -> purge cagirma; sadece damgayi at.)

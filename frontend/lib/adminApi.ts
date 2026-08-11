@@ -45,6 +45,23 @@ export const adminApi = {
   order: (id: string) => areq<any>(`/admin/orders/${id}`),
   // (E) Iade olarak isaretle — 'refunded' + musteriye iade bildirim maili (backend).
   refundOrder: (id: string) => areq<{ ok: boolean; mailed?: boolean; alreadyRefunded?: boolean }>(`/admin/orders/${id}/refund`, { method: 'POST' }),
+
+  // (İÇ KALİTE KAPISI) Rapor onay akışı.
+  approveReport: (id: string) => areq<{ ok: boolean; released: boolean; mailed: boolean }>(`/admin/orders/${id}/approve-report`, { method: 'POST' }),
+  retryScan: (id: string) => areq<{ ok: boolean; retried: boolean; queued: boolean }>(`/admin/orders/${id}/retry-scan`, { method: 'POST' }),
+  // Şifreli raporu (AI dahil açık) PDF blob olarak çek — auth header gerektiği için <a href> yerine fetch.
+  reportPdfBlob: async (id: string): Promise<Blob> => {
+    const res = await fetch(`${API_URL}/admin/orders/${id}/report.pdf`, { headers: adminHeaders() });
+    if (res.status === 401 && typeof window !== 'undefined') {
+      window.localStorage.removeItem(ADMIN_TOKEN_KEY);
+      window.location.href = '/admin/login';
+    }
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      throw new Error(b.error ? (typeof b.error === 'string' ? b.error : JSON.stringify(b.error)) : `Rapor alınamadı: ${res.status}`);
+    }
+    return res.blob();
+  },
   scopeViolations: (page = 1) => areq<Page<any>>(`/admin/scope-violations?page=${page}`),
   // (Fatura talebi — MANUEL) Vedat fatura bilgilerini + fiyatı görür, durumu işaretler.
   invoiceRequests: (status = '') =>

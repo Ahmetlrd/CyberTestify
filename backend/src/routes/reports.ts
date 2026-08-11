@@ -27,6 +27,11 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
     include: { order: { include: { domain: { select: { hostname: true } }, package: { select: { displayName: true, key: true } } } } },
   });
 
+  // (İÇ KALİTE KAPISI) Admin onayı beklerken rapor müşteriye VERİLMEZ (müşteri "hala taranıyor" görür).
+  if (report.order.status === 'awaiting_admin_review') {
+    return res.status(409).json({ error: 'Raporunuz henüz hazırlanıyor.' });
+  }
+
   let plaintext: Buffer;
   try {
     plaintext = decryptReport({

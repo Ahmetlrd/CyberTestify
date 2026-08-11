@@ -16,6 +16,11 @@ export const config = {
   // (LANSMAN KAMPANYASI) AI Çözüm Önerileri ÜCRETSİZ + tüm raporlarda VARSAYILAN AÇIK. Altyapı korunur;
   // kampanya bitince AI_FIX_FREE_CAMPAIGN=false ile tekrar kilitlenir (kod değişmeden). Varsayılan: AÇIK.
   aiFixFreeCampaign: process.env.AI_FIX_FREE_CAMPAIGN !== 'false',
+  // (İÇ KALİTE KAPISI) Tarama bitince rapor müşteriye HEMEN açılmaz; önce admin (Vedat) inceleyip
+  // onaylar (bug/kalite kontrolü). Sipariş 'awaiting_admin_review'da bekler, müşteri "hala taranıyor"
+  // görür; onay verilince scan_completed + erişim kodu e-postası gider. Kapatmak için
+  // ADMIN_REPORT_GATE=false (kod değişmeden anında eski otomatik-teslim davranışı). Varsayılan: AÇIK.
+  adminReportGate: process.env.ADMIN_REPORT_GATE !== 'false',
   // Admin paneli AYRI subdomain'den (admin.cybertestify.com) servis edilir; CORS'a
   // eklenmezse admin.* origin'inden yapilan istekler bloklanir. Dev'de bos (admin
   // ayni origin'de calisir). Birden fazla ise virgulle.

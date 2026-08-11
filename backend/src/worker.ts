@@ -130,9 +130,15 @@ async function tick() {
         }
         const { accessSecret } = res;
         await prisma.report.update({ where: { orderId: flow.orderId }, data: { devAccessSecret: encryptSecret(accessSecret) } });
-        await sendReportReady(flow.orderId, accessSecret);
+        // (İÇ KALİTE KAPISI) Kapı açıksa erişim kodu e-postasını ŞİMDİ GÖNDERME — rapor
+        // 'awaiting_admin_review'da bekler; admin onaylayınca (admin route) e-posta gider.
+        if (config.adminReportGate) {
+          console.log(`[worker] ${flow.pentagiFlowId} — rapor üretildi, ADMIN ONAYI bekliyor (sipariş ${flow.orderId}). E-posta onayda gönderilecek.`);
+        } else {
+          await sendReportReady(flow.orderId, accessSecret);
+          console.log(`[worker] ${flow.pentagiFlowId} — PentAGI'siz deterministik rapor uretildi (siparis ${flow.orderId}).`);
+        }
         await recordScheduleOutcome(flow.order.scheduledScanId, true);
-        console.log(`[worker] ${flow.pentagiFlowId} — PentAGI'siz deterministik rapor uretildi (siparis ${flow.orderId}).`);
         continue;
       }
 
@@ -366,10 +372,14 @@ async function tick() {
           data: { devAccessSecret: encryptSecret(accessSecret) },
         });
 
-        // (D) Rapor hazir + erisim sifresi e-postasi. Sifre AYRI bir kanaldan (e-posta) iletilir;
-        // panelde de pepper-cozulmus gorunur. Mail hatasi rapor akisini BOZMAZ (mailer no-throw).
-        await sendReportReady(flow.orderId, accessSecret);
-        console.log(`[worker] Rapor hazir, siparis ${flow.orderId}. Erisim sifresi e-posta ile gonderildi (panelde de gorunur).`);
+        // (D) Rapor hazir + erisim sifresi e-postasi. Sifre AYRI bir kanaldan (e-posta) iletilir.
+        // (İÇ KALİTE KAPISI) Kapı açıksa e-postayı ŞİMDİ GÖNDERME — admin onayına ertelenir.
+        if (config.adminReportGate) {
+          console.log(`[worker] Rapor hazir, siparis ${flow.orderId} — ADMIN ONAYI bekliyor (awaiting_admin_review). E-posta onayda gönderilecek.`);
+        } else {
+          await sendReportReady(flow.orderId, accessSecret);
+          console.log(`[worker] Rapor hazir, siparis ${flow.orderId}. Erisim sifresi e-posta ile gonderildi (panelde de gorunur).`);
+        }
         // Zamanlanmis taramadan olustuysa: basari -> failCount sifirla.
         await recordScheduleOutcome(flow.order.scheduledScanId, true);
       }
