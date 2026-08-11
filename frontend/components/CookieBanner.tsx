@@ -35,8 +35,7 @@ export function CookieBanner() {
       }}
     >
       <p style={{ margin: 0, color: 'rgba(255,255,255,0.9)' }}>
-        Deneyiminizi ölçmek ve iyileştirmek için çerezler ve analitik araçlar (Google Analytics, Microsoft
-        Clarity) kullanıyoruz.{' '}
+        Deneyiminizi iyileştirmek için çerezler kullanıyoruz.{' '}
         <Link href="/legal/cerez" style={{ color: '#F5C97B', textDecoration: 'underline' }}>Çerez Politikası</Link>
       </p>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
