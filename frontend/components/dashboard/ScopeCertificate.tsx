@@ -36,7 +36,7 @@ export function ScopeCertificate({ hostname, flow }: { hostname: string; flow?: 
         </span>
         <div>
           <h3 className="text-sm font-extrabold text-brand">Kapsam Doğrulama Sertifikası</h3>
-          <p className="text-xs text-ink-muted">CyberTestify egress kilidi tarafından doğrulandı</p>
+          <p className="text-xs text-ink-muted">CyberTestify kapsam kilidi tarafından doğrulandı</p>
         </div>
       </div>
 
@@ -50,8 +50,8 @@ export function ScopeCertificate({ hostname, flow }: { hostname: string; flow?: 
           <dd className="text-sm font-semibold text-ink">{formatDuration(flow?.startedAt, flow?.finishedAt)}</dd>
         </div>
         <div>
-          <dt className="text-xs text-ink-muted">Yürütülen işlem</dt>
-          <dd className="text-sm font-semibold text-ink">{flow?.toolCallCount ?? 0} adım</dd>
+          <dt className="text-xs text-ink-muted">Erişim denetimi</dt>
+          <dd className="text-sm font-semibold text-emerald-600">Kapsam kilidi <span className="text-xs">· etkin ✓</span></dd>
         </div>
         <div>
           <dt className="text-xs text-ink-muted">Kapsam dışı erişim girişimi</dt>
