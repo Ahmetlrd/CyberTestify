@@ -620,6 +620,14 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
   });
 });
 
+// (İÇ KALİTE KAPISI + retry) Müşteriye GÖSTERİLEN durum. 'awaiting_admin_review' (admin onayı
+// bekliyor) ve 'paid' (retry sırasındaki geçici ara durum) müşteriye 'scan_running' ("tarama
+// devam ediyor") gösterilir — müşteri onay sürecinden HABERSİZ kalmalı. TÜM müşteri-yüzü
+// endpoint'lerde (liste + tek sipariş) AYNI mask kullanılır ki hiçbir yerden sızmasın.
+function customerFacingStatus(status: string): string {
+  return status === 'awaiting_admin_review' || status === 'paid' ? 'scan_running' : status;
+}
+
 // Musterinin tum taramalari (panelde listelemek icin — sekme kapatilsa da erisilir).
 ordersRouter.get('/', requireAuth, async (req, res) => {
   // ?archived=true -> yalniz arsivlenenler; varsayilan yalniz aktif (arsivlenmemis) liste.
@@ -638,7 +646,7 @@ ordersRouter.get('/', requireAuth, async (req, res) => {
       id: o.id,
       hostname: o.domain.hostname,
       packageName: o.package.displayName,
-      status: o.status,
+      status: customerFacingStatus(o.status),
       createdAt: o.createdAt,
       archived: o.archived,
       // (Fatura talebi) müşteri geçmiş siparişten de talep edebilsin: ödendi mi + mevcut talep durumu.
@@ -758,7 +766,7 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
   // admin "yeniden dene" derken sipariş kısa süre 'paid'e döner; bu görünürse ilerleme adımı
   // GERİ gitmiş gibi olur (panik/iade riski). 'paid' zaten geçici bir ara durumdur.
   const gated = order.status === 'awaiting_admin_review';
-  const customerStatus = gated || order.status === 'paid' ? 'scan_running' : order.status;
+  const customerStatus = customerFacingStatus(order.status);
   const customerReport = gated ? null : report;
 
   // (#3) Kuyrukta bekleyen siparis icin pozisyon + ETA (mimari degismez; sadece gorunurluk).

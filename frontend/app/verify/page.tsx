@@ -29,6 +29,9 @@ const ORDER_STATUS_LABEL: Record<string, string> = {
   paid: 'Sıraya alınıyor',
   scan_queued: 'Sırada',
   scan_running: 'Taranıyor',
+  // (Savunma) İç kalite kapısı durumu backend'de zaten 'scan_running'e maskelenir; yine de
+  // hiçbir koşulda ham enum sızmasın diye burada da "Taranıyor" gösterilir.
+  awaiting_admin_review: 'Taranıyor',
   scan_completed: 'Rapor hazır',
   report_delivered: 'Rapor hazır',
   scan_failed: 'Başarısız',
@@ -75,7 +78,7 @@ export default function VerifyHub() {
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // (İŞ 2) Panel sekmeleri — dağınık iç içe bölümler yerine net ayrım.
-  const [tab, setTab] = useState<'domains' | 'history'>('domains');
+  const [tab, setTab] = useState<'domains' | 'history'>('history');
 
   const refresh = useCallback(async () => {
     const [list, ord] = await Promise.all([api.listDomains(), api.listOrders(false)]);
@@ -390,11 +393,11 @@ export default function VerifyHub() {
         </>
       ) : (
         <>
-          {/* (İŞ 2) SEKME NAVİGASYONU — Alan Adları · Geçmiş Taramalar · Zamanlanmış (net ayrım). */}
+          {/* (İŞ 2) SEKME NAVİGASYONU — Taramalarım · Alan Adları · Zamanlanmış (net ayrım). */}
           <nav className="mt-6 flex flex-wrap gap-1.5 border-b border-line">
             {([
+              ['history', 'Taramalarım', orders.length],
               ['domains', 'Alan Adları', validDomains.length],
-              ['history', 'Geçmiş Taramalar', orders.length],
             ] as const).map(([key, label, count]) => (
               <button
                 key={key}
@@ -421,7 +424,7 @@ export default function VerifyHub() {
             orders.length > 0 ? (
               <section className="mt-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">Geçmiş Taramalarım</h2>
+                  <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">Taramalarım</h2>
                   <button onClick={toggleArchived} className="text-xs font-medium text-accent-600 hover:underline">
                     {showArchived ? 'Arşivlenenleri gizle' : 'Arşivlenenler'}
                     {archivedOrders && archivedOrders.length > 0 ? ` (${archivedOrders.length})` : ''}
