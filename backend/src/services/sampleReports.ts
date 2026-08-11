@@ -51,6 +51,64 @@ const SAMPLE_FIX_MD: Record<string, string> = {
     '- Yurt dışı veri aktarımlarını KVKK m.9 kapsamında belgeleyin.',
     '- E-posta kimlik doğrulama kayıtlarını (SPF/DMARC) tamamlayın (spoofing riskini azaltır).',
   ].join('\n'),
+  recon: [
+    '> Aşağıdaki adımlar örnek/temsilidir. Gerçek raporunuzda her keşif bulgusuna özel çözümler yer alır.',
+    '',
+    '### 1) Açık API dokümantasyonunu kapatın/koruyun',
+    '- Üretimde Swagger/OpenAPI arayüzünü devre dışı bırakın veya kimlik doğrulaması arkasına alın.',
+    '```nginx',
+    'location /swagger { deny all; return 404; }',
+    '```',
+    '',
+    '### 2) Hazırlık/eski alt alanları izole edin',
+    '- `staging.*` ve `old.*` alt alanlarını IP allowlist ya da temel kimlik doğrulamayla sınırlayın; kullanılmayanları kaldırın.',
+    '',
+    '### 3) CMS sürüm ifşasını gizleyin ve güncelleyin',
+    '- WordPress ve eklentileri güncel tutun; sürüm meta etiketini kaldırın.',
+    '```',
+    "remove_action('wp_head', 'wp_generator');",
+    '```',
+  ].join('\n'),
+  active_verify: [
+    '> Aşağıdaki adımlar örnek/temsilidir. Gerçek raporunuzda her bulguya özel, panoya kopyalanabilir çözümler yer alır.',
+    '',
+    '### 1) SQL enjeksiyonunu kökten kapatın (parametreli sorgu)',
+    '- Kullanıcı girdisini asla sorguya birleştirmeyin; hazır ifade (prepared statement) kullanın.',
+    '```sql',
+    '-- YANLIŞ:  "... WHERE username = \'" + input + "\'"',
+    '-- DOĞRU:   WHERE username = ?   (parametre olarak bağlayın)',
+    '```',
+    '',
+    '### 2) Yansıyan XSS için çıktı kodlaması',
+    '- Kullanıcı girdisini yansıtırken bağlama uygun kodlama (HTML entity) uygulayın; CSP ekleyin.',
+    '',
+    '### 3) IDOR — sunucu tarafı yetki kontrolü',
+    '- Her nesne erişiminde kaydın oturum sahibine ait olduğunu SUNUCUDA doğrulayın (yalnız kimliğe güvenmeyin).',
+    '',
+    '### 4) Oturum çerezi bayrakları + CORS',
+    '- Çerezlere `HttpOnly; Secure; SameSite=Lax` ekleyin; CORS politikasını yalnız güvenilen origin\'lerle sınırlayın.',
+  ].join('\n'),
+  full_pentest: [
+    '> Aşağıdaki adımlar örnek/temsilidir. Gerçek raporunuzda her bulguya özel çözümler yer alır.',
+    '',
+    '### 1) Forced browsing — fonksiyon seviyesi yetki kontrolü',
+    '- Yönetici uç noktalarında rol kontrolünü SUNUCUDA zorunlu kılın (arayüzde gizlemek yetmez).',
+    '```',
+    'if (!user.hasRole("admin")) return res.status(403).end();',
+    '```',
+    '',
+    '### 2) Authenticated SQL enjeksiyonu',
+    '- Tüm veritabanı erişimlerinde parametreli sorgu; ORM kullanıyorsanız ham SQL birleştirmeden kaçının.',
+    '',
+    '### 3) Sunucu tarafında oturum geçersiz kılma (logout)',
+    '- Çıkışta oturumu SUNUCUDA sonlandırın (yalnız çerez silmek yetmez).',
+    '```',
+    'req.session.destroy();  // veya oturum kaydını store\'dan sil',
+    '```',
+    '',
+    '### 4) Öncelik',
+    '- Önce Yüksek: forced browsing + SQLi; ardından oturum geçersiz kılma (düşük maliyetli hızlı kazanım).',
+  ].join('\n'),
 };
 
 /**
@@ -72,11 +130,11 @@ const DEFAULT_SAMPLE = 'ssl_tls';
 // ornek rapor da PAKET/BUNDLE bazinda sunulur (tek tek kontrol DEGIL). PDF basligi bundle
 // adini gosterir; icerik temsili bir uye ciktisidir.
 const BUNDLE_SAMPLE: Record<string, string> = {
-  bundle_surface: 'ssl_tls',
-  bundle_recon: 'ssl_tls',
-  bundle_compliance: 'kvkk_hazirlik',
-  bundle_active_verify: 'ssl_tls',
-  bundle_full_pentest: 'ssl_tls',
+  bundle_surface: 'ssl_tls', // Dış Yüzey = SSL/TLS + yapılandırma içeriği (doğru)
+  bundle_recon: 'recon', // Keşif = subdomain/API/CMS keşfi
+  bundle_compliance: 'kvkk_hazirlik', // Uyum = KVKK hazırlık
+  bundle_active_verify: 'active_verify', // Aktif Doğrulama = enjeksiyon/IDOR göstergeleri
+  bundle_full_pentest: 'full_pentest', // Tam Kapsamlı = authenticated bulgular
 };
 
 const pdfCache = new Map<string, Buffer>();
