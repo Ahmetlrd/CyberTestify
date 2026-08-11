@@ -95,6 +95,8 @@ services:
       args:
         # NEXT_PUBLIC_* build-time'da gomulur; tarayici bu URL'e gider.
         NEXT_PUBLIC_API_URL: "https://api.cybertestify.com"
+        # GA4 Measurement ID — .env'den (bossa gtag yuklenmez). Degisince frontend REBUILD gerekir.
+        NEXT_PUBLIC_GA_MEASUREMENT_ID: "${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}"
     container_name: cybertestify-frontend
     restart: always
     # SSR meta icin YALNIZ bu degisken .env'den gecirilir (secret sizmasin diye env_file DEGIL).

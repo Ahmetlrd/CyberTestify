@@ -8,6 +8,9 @@ RUN mkdir -p public
 # NEXT_PUBLIC_* degiskenleri BUILD sirasinda gomulur (tarayici tarafi).
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# GA4 Measurement ID — BOSSA gtag hic yuklenmez (opsiyonel; KVKK Consent Mode ile).
+ARG NEXT_PUBLIC_GA_MEASUREMENT_ID
+ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID}
 RUN npm run build
 
 FROM node:20-alpine AS run

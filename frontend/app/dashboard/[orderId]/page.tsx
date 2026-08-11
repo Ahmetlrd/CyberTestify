@@ -6,6 +6,7 @@ import { api } from '../../../lib/api';
 import { StatusTracker } from '../../../components/dashboard/StatusTracker';
 import { LiveScanPhases } from '../../../components/dashboard/LiveScanPhases';
 import { InvoiceRequestForm } from '../../../components/dashboard/InvoiceRequestForm';
+import { GA_ID } from '../../../lib/consent';
 import { ScopeCertificate } from '../../../components/dashboard/ScopeCertificate';
 
 const TERMINAL = new Set(['scan_completed', 'scan_failed', 'scope_violation', 'report_purged']);
@@ -68,6 +69,23 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       if (timer.current) clearInterval(timer.current);
     };
   }, [params.orderId, router]);
+
+  // (GA4 dönüşüm) Ödeme başarılı olduğunda 'purchase' event'i — sipariş başına YALNIZ BİR kez
+  // (localStorage guard; sayfa yenilense/poll etse de tekrar atmaz). Consent denied olsa bile
+  // Consent Mode ile modellenmiş dönüşüm çalışır. gtag hazır değilse guard yazılmaz → sonra tekrar denenir.
+  useEffect(() => {
+    if (!GA_ID || !order?.paidAt || !order?.id) return;
+    if (typeof window === 'undefined' || typeof (window as any).gtag !== 'function') return;
+    const key = `ga_purchase_${order.id}`;
+    if (window.localStorage.getItem(key)) return;
+    (window as any).gtag('event', 'purchase', {
+      transaction_id: order.id,
+      value: (order.amountMinorUnit ?? 0) / 100,
+      currency: order.currency ?? 'TRY',
+      items: [{ item_name: order.packageName ?? 'Paket' }],
+    });
+    window.localStorage.setItem(key, '1');
+  }, [order?.paidAt, order?.id, order?.amountMinorUnit, order?.currency, order?.packageName]);
 
   function downloadBlob(blob: Blob, name: string) {
     const url = URL.createObjectURL(blob);

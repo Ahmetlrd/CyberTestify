@@ -1,9 +1,11 @@
 import './globals.css';
+import { Suspense } from 'react';
 import { cookies, headers } from 'next/headers';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import { Nav } from '../components/Nav';
 import { Footer } from '../components/Footer';
 import { CookieBanner } from '../components/CookieBanner';
+import { Analytics } from '../components/Analytics';
 import { JsonLd } from '../components/JsonLd';
 import { getRegion } from '../config/regions';
 
@@ -77,6 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         ) : (
           <>
             <JsonLd data={ORGANIZATION_LD} />
+            <Suspense fallback={null}><Analytics /></Suspense>
             <Nav region={region} />
             <div className="flex-1">{children}</div>
             <Footer region={region} />

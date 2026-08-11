@@ -718,7 +718,7 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
     include: {
       flow: true,
       domain: { select: { hostname: true } },
-      package: { select: { key: true } },
+      package: { select: { key: true, displayName: true } },
       customer: { select: { email: true } }, // (Fatura talebi) fatura e-postası varsayılanı
       invoiceRequest: true, // (Fatura talebi) mevcut talebi göster/düzenle
       // fixSuggestions BLOB'unu ASLA gonderme; yalnizca varlik (iv) + kilit durumu.
@@ -760,7 +760,8 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
   // (#3) Kuyrukta bekleyen siparis icin pozisyon + ETA (mimari degismez; sadece gorunurluk).
   const queue = order.status === 'scan_queued' ? await getQueuePosition({ createdAt: order.createdAt }) : null;
 
-  res.json({ ...order, package: undefined, report, queue });
+  // packageName (GA purchase event / fatura formu için); ham package objesi gönderilmez.
+  res.json({ ...order, package: undefined, packageName: order.package.displayName, report, queue });
 });
 
 // ============================================================================

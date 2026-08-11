@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { COMPANY } from '../lib/company';
 import { Logo } from './Logo';
+import { CookiePrefsButton } from './CookiePrefsButton';
 import type { RegionConfig } from '../config/regions';
 import { getDict } from '../config/i18n';
 
@@ -65,6 +66,9 @@ export function Footer({ region }: { region: RegionConfig }) {
                     </Link>
                   </li>
                 ))}
+                <li>
+                  <CookiePrefsButton className="text-sm text-white/70 transition hover:text-white" />
+                </li>
               </ul>
             ) : (
               <p className="mt-4 text-sm text-white/50">
