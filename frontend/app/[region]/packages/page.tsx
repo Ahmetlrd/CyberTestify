@@ -21,7 +21,14 @@ export function generateStaticParams() {
 export function generateMetadata({ params }: { params: { region: string } }) {
   const region = getRegion(params.region);
   const d = getDict(region).pkg;
-  return { title: d.metaTitle, description: d.metaDesc };
+  const url = `https://cybertestify.com/${region.code}/packages`;
+  return {
+    title: d.metaTitle,
+    description: d.metaDesc,
+    alternates: { canonical: url },
+    openGraph: { type: 'website', siteName: 'CyberTestify', url, title: d.metaTitle, description: d.metaDesc, locale: region.lang === 'tr' ? 'tr_TR' : 'en_US' },
+    twitter: { card: 'summary_large_image', title: d.metaTitle, description: d.metaDesc },
+  };
 }
 
 async function getPackages(region: string): Promise<Pkg[]> {

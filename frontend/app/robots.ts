@@ -22,7 +22,7 @@ const DISALLOW = [
 // AI arama/asistan botlari (GEO/AEO). Retrieval (gercek zamanli) + training crawler'lari:
 // public sayfalara ACIKCA izinli, ozel yollar yukaridaki DISALLOW ile kapali.
 const AI_BOTS = [
-  'ChatGPT-User', 'Claude-Web', 'PerplexityBot', 'Amazonbot', 'YouBot', // retrieval
+  'ChatGPT-User', 'Claude-Web', 'ClaudeBot', 'Claude-SearchBot', 'PerplexityBot', 'Amazonbot', 'YouBot', 'OAI-SearchBot', // retrieval/asistan
   'GPTBot', 'Google-Extended', 'CCBot', 'Bytespider', 'FacebookBot', 'Applebot-Extended', // training
 ];
 

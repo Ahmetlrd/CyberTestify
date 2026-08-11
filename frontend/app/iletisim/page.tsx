@@ -1,6 +1,11 @@
 import { COMPANY } from '../../lib/company';
 
-export const metadata = { title: 'İletişim — CyberTestify' };
+export const metadata = {
+  title: 'İletişim — CyberTestify',
+  description: 'CyberTestify ile iletişime geçin — destek, sorular ve kurumsal talepler için.',
+  alternates: { canonical: '/iletisim' },
+  openGraph: { type: 'website', siteName: 'CyberTestify', url: 'https://cybertestify.com/iletisim', title: 'İletişim — CyberTestify', description: 'CyberTestify ile iletişime geçin.' },
+};
 
 export default function Page() {
   return (

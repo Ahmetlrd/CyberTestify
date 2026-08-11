@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Açık Kaynak Bileşenler — CyberTestify',
   description: 'CyberTestify altyapısında yararlanılan açık kaynak projeler ve lisans bildirimleri.',
+  alternates: { canonical: '/acik-kaynak' },
 };
 
 export default function OpenSourcePage() {

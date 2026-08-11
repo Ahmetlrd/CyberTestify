@@ -8,6 +8,8 @@ type Post = { title: string; description: string; slug: string; publishedAt: str
 export const metadata: Metadata = {
   title: 'Blog — CyberTestify',
   description: 'Web güvenliği, KVKK/ISO 27001/PCI-DSS hazırlığı ve güvenlik ön-değerlendirme üzerine yazılar.',
+  alternates: { canonical: '/blog' },
+  openGraph: { type: 'website', siteName: 'CyberTestify', url: 'https://cybertestify.com/blog', title: 'Blog — CyberTestify', description: 'Web güvenliği ve uyum hazırlığı üzerine yazılar.' },
 };
 
 async function getPosts(): Promise<Post[]> {

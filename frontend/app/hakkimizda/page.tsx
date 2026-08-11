@@ -3,7 +3,9 @@ import { COMPANY } from '../../lib/company';
 
 export const metadata = {
   title: 'Hakkımızda — CyberTestify',
-  description: 'CyberTestify, sahipliği doğrulanmış alan adlarına yönelik yapay zeka tabanlı pasif güvenlik ön-değerlendirme hizmeti sunar.',
+  description: 'CyberTestify, sahipliği doğrulanmış alan adlarına yönelik yapay zekâ destekli, otomatik güvenlik ön-değerlendirme hizmeti sunar.',
+  alternates: { canonical: '/hakkimizda' },
+  openGraph: { type: 'website', siteName: 'CyberTestify', url: 'https://cybertestify.com/hakkimizda', title: 'Hakkımızda — CyberTestify', description: 'CyberTestify, yapay zekâ destekli otomatik güvenlik ön-değerlendirme hizmeti.' },
 };
 
 export default function Page() {

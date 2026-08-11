@@ -1,12 +1,54 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { AutonomousSection } from '../../components/landing/AutonomousSection';
+import { JsonLd } from '../../components/JsonLd';
 import { REGION_CODES, isRegionCode, getRegion, type RegionConfig } from '../../config/regions';
 import { getDict, type Dict } from '../../config/i18n';
+
+const SITE = 'https://cybertestify.com';
 
 export function generateStaticParams() {
   return REGION_CODES.map((region) => ({ region }));
 }
+
+// (SEO) Ana sayfa — bölgeye göre BENZERSİZ başlık/açıklama + canonical + OG (dürüst dil; "otonom pentest" YOK).
+export function generateMetadata({ params }: { params: { region: string } }): Metadata {
+  const region = isRegionCode(params.region) ? getRegion(params.region) : getRegion('tr');
+  const tr = region.lang === 'tr';
+  const title = tr
+    ? 'CyberTestify — Dakikalar İçinde Başlayan Otomatik Güvenlik Taraması'
+    : 'CyberTestify — AI-Assisted Automated Website Security Scanning';
+  const description = tr
+    ? 'Web siteniz için yapay zekâ destekli, hızlı ve uygun fiyatlı otomatik güvenlik ön değerlendirmesi. Resmi pentest/denetim yerine geçmez. Alan adınızı doğrulayın, paketinizi seçin, şifreli raporunuzu alın.'
+    : 'AI-assisted, fast and affordable automated security pre-assessment for your website. Not a substitute for a formal pentest/audit. Verify your domain, pick a package, get your encrypted report.';
+  const url = `${SITE}/${region.code}`;
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: { type: 'website', siteName: 'CyberTestify', url, title, description, locale: tr ? 'tr_TR' : 'en_US' },
+    twitter: { card: 'summary_large_image', title, description },
+  };
+}
+
+// (SEO/AEO) Sık sorulan sorular — Google zengin sonuç + AI asistan kaynağı. DÜRÜST yanıtlar.
+const FAQ_TR = [
+  { q: 'CyberTestify tam olarak ne yapar?', a: 'Web sitenize yapay zekâ destekli, otomatik bir güvenlik ön-değerlendirmesi yapar: deterministik güvenlik kontrolleri çalıştırır ve bulgular için yapay zekâ destekli çözüm önerileri üretir. Resmî bir sızma testi/denetim yerine geçmez.' },
+  { q: 'Raporu kim görebilir?', a: 'Raporunuz uçtan uca şifrelenir ve yalnızca size özel, tek kullanımlık bir kodla açılır. Başka kimse erişemez.' },
+  { q: 'Hangi paket bana uygun?', a: 'Hızlı bir ön izleme için Basit Tarama; dış yüzey, keşif, uyum ya da kimlik-doğrulamalı derin kontroller için ilgili kombine paketleri seçebilirsiniz. Her paketin kapsamı ve sabit fiyatı paketler sayfasında açıkça yazılıdır.' },
+  { q: 'Verilerim güvende mi?', a: 'Taramalar yalnızca sahipliğini DNS ile doğruladığınız alan adına erişebilir (kapsam kilidi). Karşılaşılan kişisel veriler yapay zekâya ulaşmadan önce otomatik maskelenir; işlemler KVKK’ya uygun yürütülür.' },
+  { q: 'Sonuç ne kadar sürede hazır olur?', a: 'Deterministik paketler genellikle saniyeler–dakikalar içinde tamamlanır; kimlik-doğrulamalı/kapsamlı paketler daha uzun sürebilir. Süre pakete ve hedefin yapısına göre değişir.' },
+  { q: 'Bu resmî bir sızma testi mi?', a: 'Hayır. CyberTestify bir güvenlik ön-değerlendirme hizmetidir; resmî bir sızma testi ya da uyum denetimi (ör. ASV/QSA) yerine geçmez ve bir sertifikasyon sağlamaz.' },
+];
+const FAQ_EN = [
+  { q: 'What exactly does CyberTestify do?', a: 'It runs an AI-assisted, automated security pre-assessment of your website: deterministic security checks plus AI-assisted remediation suggestions for findings. It is not a substitute for a formal pentest/audit.' },
+  { q: 'Who can see the report?', a: 'Your report is end-to-end encrypted and opened only with a one-time code unique to you. No one else can access it.' },
+  { q: 'Which package is right for me?', a: 'Pick Basic Scan for a quick preview, or the relevant bundle for external surface, discovery, compliance readiness or authenticated deep checks. Each package’s scope and fixed price are stated clearly on the pricing page.' },
+  { q: 'Is my data safe?', a: 'Scans can only reach the domain you verified via DNS (scope lock). Personal data encountered is automatically masked before it reaches the AI; processing follows applicable data-protection rules.' },
+  { q: 'How long does it take?', a: 'Deterministic packages usually finish in seconds to minutes; authenticated/comprehensive packages can take longer. Time varies by package and target.' },
+  { q: 'Is this a formal penetration test?', a: 'No. CyberTestify is a security pre-assessment service; it is not a substitute for a formal penetration test or compliance audit and does not provide certification.' },
+];
 
 const DOT_BG = {
   backgroundImage: 'radial-gradient(rgba(255,255,255,0.08) 1px, transparent 1px)',
@@ -147,6 +189,41 @@ function FinalCTA({ d, region }: { d: Dict; region: RegionConfig }) {
   );
 }
 
+function Faq({ region }: { region: RegionConfig }) {
+  const tr = region.lang === 'tr';
+  const items = tr ? FAQ_TR : FAQ_EN;
+  const faqLd = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: items.map((it) => ({
+      '@type': 'Question',
+      name: it.q,
+      acceptedAnswer: { '@type': 'Answer', text: it.a },
+    })),
+  };
+  return (
+    <section className="border-t border-line bg-white">
+      <div className="container-page py-16 sm:py-20">
+        <div className="mx-auto max-w-3xl">
+          <p className="eyebrow text-center">{tr ? 'Sık Sorulan Sorular' : 'FAQ'}</p>
+          <h2 className="mt-2 text-center text-2xl font-extrabold text-brand sm:text-3xl">
+            {tr ? 'Merak edilenler' : 'Frequently asked questions'}
+          </h2>
+          <dl className="mt-8 divide-y divide-line">
+            {items.map((it) => (
+              <div key={it.q} className="py-5">
+                <dt className="text-base font-bold text-ink">{it.q}</dt>
+                <dd className="mt-2 text-sm leading-relaxed text-ink-soft">{it.a}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
+      <JsonLd data={faqLd} />
+    </section>
+  );
+}
+
 export default function RegionHome({ params }: { params: { region: string } }) {
   if (!isRegionCode(params.region)) notFound();
   const region = getRegion(params.region);
@@ -157,6 +234,7 @@ export default function RegionHome({ params }: { params: { region: string } }) {
       <AutonomousSection region={region} />
       <HowItWorks d={d} />
       <WhyUs d={d} />
+      <Faq region={region} />
       <FinalCTA d={d} region={region} />
     </>
   );

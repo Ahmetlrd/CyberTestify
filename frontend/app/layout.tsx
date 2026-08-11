@@ -34,12 +34,30 @@ const jakarta = Plus_Jakarta_Sans({
   display: 'swap',
 });
 
+const SITE_URL = 'https://cybertestify.com';
+const DEFAULT_TITLE = 'CyberTestify — Dakikalar İçinde Başlayan Otomatik Güvenlik Taraması';
+const DEFAULT_DESC =
+  'Sitenizin güvenliğini yapay zekâ destekli otomatik taramayla dakikalar içinde başlatın; süre pakete/kapsama göre değişir. KVKK’ya uygun veri işleme, şifreli raporlama, yalnızca doğrulanmış alan adları.';
+
+// metadataBase: OG/canonical göreli URL'leri mutlağa çevirir. openGraph/twitter varsayılanları site-geneli
+// (sayfalar generateMetadata ile başlık/açıklama/canonical'ı EZER). OG görseli app/opengraph-image.tsx'ten
+// Next tarafından OTOMATIK eklenir. verification ENV varsa basılır (Vedat Search Console için doldurur).
 export const metadata = {
-  title: 'CyberTestify — Dakikalar İçinde Başlayan Otomatik Güvenlik Taraması',
-  description:
-    'Sitenizin güvenliğini yapay zekâ destekli otomatik taramayla dakikalar içinde başlatın; süre pakete/kapsama göre değişir. KVKK’ya uygun veri işleme, şifreli raporlama, yalnızca doğrulanmış alan adları.',
-  // Google Search Console dogrulamasi — ENV'den (GOOGLE_SITE_VERIFICATION). Env BOSSA etiket
-  // HIC render edilmez (site bozulmaz). Doldurulunca her sayfanin <head>'ine basilir.
+  metadataBase: new URL(SITE_URL),
+  title: DEFAULT_TITLE,
+  description: DEFAULT_DESC,
+  applicationName: 'CyberTestify',
+  alternates: { canonical: '/tr' },
+  openGraph: {
+    type: 'website',
+    siteName: 'CyberTestify',
+    locale: 'tr_TR',
+    url: `${SITE_URL}/tr`,
+    title: DEFAULT_TITLE,
+    description: DEFAULT_DESC,
+  },
+  twitter: { card: 'summary_large_image', title: DEFAULT_TITLE, description: DEFAULT_DESC },
+  robots: { index: true, follow: true },
   ...(process.env.GOOGLE_SITE_VERIFICATION
     ? { verification: { google: process.env.GOOGLE_SITE_VERIFICATION } }
     : {}),
