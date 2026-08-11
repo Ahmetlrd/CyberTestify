@@ -64,7 +64,7 @@ function CampaignBanner({ region }: { region: RegionConfig }) {
     >
       <div className="container-page flex flex-wrap items-center justify-center gap-x-3 gap-y-1 py-2.5 text-center text-sm font-semibold">
         <span className="rounded-pill bg-white/20 px-2.5 py-0.5 text-xs font-extrabold tracking-wide">
-          {tr ? 'LANSMANA ÖZEL' : 'LAUNCH OFFER'}
+          {tr ? 'KAMPANYAYA ÖZEL' : 'LAUNCH OFFER'}
         </span>
         <span>
           {tr ? (

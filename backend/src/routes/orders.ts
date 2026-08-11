@@ -754,15 +754,34 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
   // (İÇ KALİTE KAPISI) Sipariş admin onayı beklerken müşteriye "hala taranıyor" göster: durumu
   // 'scan_running'e maskele ve raporu GİZLE (kod da e-posta da onaya kadar gitmez). Admin
   // onaylayınca gerçek scan_completed + rapor görünür olur. Müşteri onay sürecinden HABERSİZDİR.
+  // Ayrıca 'paid' (ödeme alındı, tarama başlamak üzere) müşteriye 'scan_running' gösterilir:
+  // admin "yeniden dene" derken sipariş kısa süre 'paid'e döner; bu görünürse ilerleme adımı
+  // GERİ gitmiş gibi olur (panik/iade riski). 'paid' zaten geçici bir ara durumdur.
   const gated = order.status === 'awaiting_admin_review';
-  const customerStatus = gated ? 'scan_running' : order.status;
+  const customerStatus = gated || order.status === 'paid' ? 'scan_running' : order.status;
   const customerReport = gated ? null : report;
 
   // (#3) Kuyrukta bekleyen siparis icin pozisyon + ETA (mimari degismez; sadece gorunurluk).
   const queue = order.status === 'scan_queued' ? await getQueuePosition({ createdAt: order.createdAt }) : null;
 
+  // (ADMIN RETRY — müşteriye YANSIMASIN) Müşterinin gördüğü canlı ilerleme çubuğu/faz/süre
+  // flow.startedAt'e göre hesaplanır (LiveScanPhases). Admin "yeniden dene" derse flow silinip
+  // yeniden yaratılır -> startedAt=şimdi -> müşteride ilerleme SIFIRDAN başlıyormuş gibi görünür
+  // (panik/iade riski). Bunu önlemek için müşteriye dönen startedAt'i, retry'lerden ETKİLENMEYEN
+  // sabit bir çıpaya (paidAt) sabitliyoruz -> ilerleme MONOTON, asla geri gitmez. (Admin kendi
+  // panelinde gerçek flow.startedAt'i ayrı endpoint'ten görür; bu yalnız müşteri görünümü.)
+  const scanAnchor = order.paidAt ?? order.createdAt;
+  const activeForCustomer = customerStatus === 'scan_running' || customerStatus === 'scan_queued';
+  const customerFlow = order.flow
+    ? { ...order.flow, startedAt: scanAnchor }
+    // Retry anında flow kısa süre silinmiş/kuyrukta olabilir (henüz yeni flow yok); aktif
+    // görünümde ilerleme çubuğu çıpasız kalıp SIFIRLANMASIN diye minimal flow üret.
+    : activeForCustomer
+      ? { startedAt: scanAnchor, activityFeed: null }
+      : order.flow;
+
   // packageName + packageKey (GA event / fatura / canlı-tarama faz metinleri); ham package objesi gönderilmez.
-  res.json({ ...order, status: customerStatus, package: undefined, packageName: order.package.displayName, packageKey: order.package.key, report: customerReport, queue });
+  res.json({ ...order, status: customerStatus, flow: customerFlow, package: undefined, packageName: order.package.displayName, packageKey: order.package.key, report: customerReport, queue });
 });
 
 // ============================================================================
