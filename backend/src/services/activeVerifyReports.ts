@@ -11,6 +11,7 @@ import {
   collectSsrfEvidence, collectRceEvidence, collectFileUploadEvidence, collectBusinessLogicEvidence, collectRaceMassAssignEvidence,
   type ActiveCheckEvidence, discoverSurface, spaHint, discoveryMethodNote,
 } from './activeVerifyEvidence.js';
+import { collectLoginBypassEvidence } from './authExtraChecks.js';
 
 export const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
 export type Level = 'low' | 'medium' | 'medium-high' | 'high';
@@ -191,6 +192,8 @@ const ACTIVE_BUNDLE_MEMBERS: ActiveMember[] = [
   { key: 'business_logic_verify', title: 'İş Mantığı Doğrulama', conf: 'Düşük', run: async (h) => { const ev = await collectBusinessLogicEvidence(h); return { rep: buildActiveCheckReport(ev, BUSINESS_CFG), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
   { key: 'race_massassign_verify', title: 'Race / Mass-Assignment Doğrulama', conf: 'Düşük', run: async (h) => { const ev = await collectRaceMassAssignEvidence(h); return { rep: buildActiveCheckReport(ev, RACE_CFG), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
   { key: 'rce_verify', title: 'RCE / Komut Enjeksiyonu Doğrulama', conf: 'Orta', run: async (h) => { const ev = await collectRceEvidence(h); return { rep: buildActiveCheckReport(ev, RCE_CFG), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
+  // (İŞ 3) Giriş baypası (SQLi göstergesi) — login POST'a kontrol vs SQLi karşılaştırması (gözlemsel).
+  { key: 'login_bypass', title: 'Giriş Baypası (SQLi Göstergesi)', conf: 'Yüksek', run: async (h) => { const ev = await collectLoginBypassEvidence(h); return { rep: buildActiveCheckReport(ev, LOGIN_BYPASS_CFG), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
 ];
 
 export function extractLevel(findings: string): Level {
@@ -371,6 +374,23 @@ function buildActiveCheckReport(ev: ActiveCheckEvidence, cfg: CheckCfg): { findi
     : `### ${cfg.fixTitle} — proaktif sertleştirme\n\n` + cfg.fixClean.map((l) => `- ${l}`).join('\n');
   return { findings, fixText };
 }
+
+const LOGIN_BYPASS_CFG: CheckCfg = {
+  title: 'Giriş Baypası (SQLi Göstergesi)',
+  whatChecked: [
+    'Giriş (login) ucuna önce **geçersiz kimlik** (kontrol) gönderildi; ardından klasik SQLi payload’ları (`\' OR \'1\'=\'1` vb.) denenip, kontrolün AKSİNE oturum/başarı (token/2xx) dönüp dönmediği gözlemlendi.',
+    'Login POST’u zaten izinli bir akıştır; bu, TEK ve zararsız bir gözlemdir.',
+    '⚠️ Oturum ele geçirme/istismar YOK — yalnız "kimlik doğrulama atlatma göstergesi var mı" gözlemi.',
+  ],
+  confidenceNote: 'Gösterge, kontrol denemesiyle karşılaştırmaya dayanır; kesin doğrulama manuel test gerektirir.',
+  fixTitle: 'Giriş Baypası / SQL Enjeksiyonu',
+  fixFound: [
+    'Kimlik doğrulama sorgularında **parametreli sorgu / hazırlanmış ifade (prepared statement)** kullanın; kullanıcı girdisini asla SQL’e doğrudan koymayın.',
+    'Girdi doğrulama + ORM güvenli API’leri; hatalı girişte tek-tip hata mesajı döndürün.',
+  ],
+  fixClean: ['Parametreli sorgu + girdi doğrulama uygulayın (proaktif).'],
+  cleanGenel: 'Giriş baypası (SQLi) göstergesi bulunamadı ya da test edilebilir bir login ucu yoktu.',
+};
 
 const SSRF_CFG: CheckCfg = {
   title: 'SSRF Doğrulama',

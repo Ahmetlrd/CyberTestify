@@ -162,11 +162,15 @@ export async function generateDnsEmailReport(host: string): Promise<{ findings: 
   const dns = await collectDns(host);
   if (!dns.ok) return null;
 
-  const spfWeak = !dns.spf || dns.spf.all === 'yok' || dns.spf.all === '+all' || dns.spf.all === '?all';
-  const spfMissing = !dns.spf || dns.spf.all === 'yok';
-  const dmarcMissing = !dns.dmarc || dns.dmarc.policy === 'yok';
+  // (İŞ 2) SORGULANAMADI (geçici DNS hatası) != KAYIT YOK. Sorgu başarısızsa "eksik/Yüksek" TETİKLENMEZ.
+  const spfQueried = dns.spf?.queried !== false;
+  const dmarcQueried = dns.dmarc?.queried !== false;
+  const spfWeak = spfQueried && (!dns.spf || dns.spf.all === 'yok' || dns.spf.all === '+all' || dns.spf.all === '?all');
+  const spfMissing = spfQueried && (!dns.spf || dns.spf.all === 'yok');
+  const dmarcMissing = dmarcQueried && (!dns.dmarc || dns.dmarc.policy === 'yok');
   const dmarcWeak = dns.dmarc?.policy === 'none';
   const dkimMissing = !dns.dkim?.found;
+  const dnsInconclusive = !spfQueried || !dmarcQueried;
 
   // Risk YALNIZ SPF/DMARC'a (yetkili/kesin sinyaller) gore. DKIM "tespit edilemedi" belirsizdir
   // (seçici bilinmiyor) ve DNSSEC yoklugu tek basina — ikisi de LEVEL'i YUKSELTMEZ, yalniz
@@ -180,16 +184,21 @@ export async function generateDnsEmailReport(host: string): Promise<{ findings: 
     else if (authWeak >= 1) level = 'medium';
   }
 
+  const checked = dns.checkedDomain;
   const spfSection =
-    `## SPF (Gönderen Politikası)\n\n` +
-    (dns.spf && dns.spf.all !== 'yok'
-      ? `- **Durum:** Var — \`${dns.spf.record}\`\n- **Sertlik:** \`${dns.spf.all}\` — ${dns.spf.all === '-all' ? 'katı (hardfail; en güvenli).' : dns.spf.all === '~all' ? 'yumuşak (softfail; kabul edilebilir, ideal değil).' : dns.spf.all === '+all' || dns.spf.all === '?all' ? '⚠️ zayıf/etkisiz — herkesin sizin adınıza mail göndermesine izin verir.' : 'belirsiz.'}\n\n`
-      : `- **Durum:** Yok — SPF kaydı bulunamadı. Alan adınız adına sahte e-posta gönderimi (spoofing) kolaylaşır.\n\n`);
+    `## SPF (Gönderen Politikası) — kontrol edilen alan: \`${checked}\`\n\n` +
+    (!spfQueried
+      ? `- **Durum:** Sorgulanamadı — geçici bir DNS hatası nedeniyle SPF kaydı bu taramada okunamadı. Bu **"kayıt yok" anlamına gelmez**; lütfen taramayı tekrarlayın.\n\n`
+      : dns.spf && dns.spf.all !== 'yok'
+        ? `- **Durum:** Var — \`${dns.spf.record}\`\n- **Sertlik:** \`${dns.spf.all}\` — ${dns.spf.all === '-all' ? 'katı (hardfail; en güvenli).' : dns.spf.all === '~all' ? 'yumuşak (softfail; kabul edilebilir, ideal değil).' : dns.spf.all === '+all' || dns.spf.all === '?all' ? '⚠️ zayıf/etkisiz — herkesin sizin adınıza mail göndermesine izin verir.' : 'belirsiz.'}\n\n`
+        : `- **Durum:** Yok — SPF kaydı bulunamadı. Alan adınız adına sahte e-posta gönderimi (spoofing) kolaylaşır.\n\n`);
   const dmarcSection =
-    `## DMARC (Kimlik Doğrulama Politikası)\n\n` +
-    (dns.dmarc && dns.dmarc.policy !== 'yok'
-      ? `- **Durum:** Var — \`${dns.dmarc.record}\`\n- **Politika:** \`p=${dns.dmarc.policy}\` — ${dns.dmarc.policy === 'reject' ? 'güçlü (sahte mailler reddedilir).' : dns.dmarc.policy === 'quarantine' ? 'orta (sahte mailler spam’e düşer).' : '⚠️ zayıf (p=none; yalnızca izler, engellemez).'}\n\n`
-      : `- **Durum:** Yok — DMARC kaydı bulunamadı. SPF/DKIM sonuçlarına göre uygulama yapılmıyor; spoofing’e karşı koruma zayıf.\n\n`);
+    `## DMARC (Kimlik Doğrulama Politikası) — kontrol edilen alan: \`${checked}\`\n\n` +
+    (!dmarcQueried
+      ? `- **Durum:** Sorgulanamadı — geçici bir DNS hatası nedeniyle DMARC kaydı bu taramada okunamadı. Bu **"kayıt yok" anlamına gelmez**; lütfen taramayı tekrarlayın.\n\n`
+      : dns.dmarc && dns.dmarc.policy !== 'yok'
+        ? `- **Durum:** Var — \`${dns.dmarc.record}\`\n- **Politika:** \`p=${dns.dmarc.policy}\` — ${dns.dmarc.policy === 'reject' ? 'güçlü (sahte mailler reddedilir).' : dns.dmarc.policy === 'quarantine' ? 'orta (sahte mailler spam’e düşer).' : '⚠️ zayıf (p=none; yalnızca izler, engellemez).'}\n\n`
+        : `- **Durum:** Yok — DMARC kaydı bulunamadı. SPF/DKIM sonuçlarına göre uygulama yapılmıyor; spoofing’e karşı koruma zayıf.\n\n`);
   const dkimSection =
     `## DKIM (İmza)\n\n` +
     (dns.dkim?.found
@@ -206,13 +215,16 @@ export async function generateDnsEmailReport(host: string): Promise<{ findings: 
     if (dmarcMissing) risks.push('- **Orta — DMARC eksik:** SPF/DKIM sonuçları uygulanmıyor.');
     else if (dmarcWeak) risks.push('- **Orta — DMARC zayıf (`p=none`):** Yalnızca raporlama; sahte mailler yine de teslim edilir.');
   }
+  if (dnsInconclusive) risks.push(`- **Bilgilendirme — ${!spfQueried && !dmarcQueried ? 'SPF ve DMARC' : !spfQueried ? 'SPF' : 'DMARC'} sorgulanamadı:** Geçici DNS hatası; "kayıt yok" olarak değerlendirilMEDİ. Kesin sonuç için taramayı tekrarlayın.`);
   if (dkimMissing) risks.push('- **Bilgilendirme — DKIM tespit edilemedi:** Yaygın seçicilerde bulunamadı (farklı seçici olabilir).');
   if (!dns.dnssec) risks.push('- **Bilgilendirme — DNSSEC pasif:** DNS yanıtları imzalı değil.');
   if (!risks.length) risks.push('- E-posta kimlik doğrulama kayıtları (SPF/DMARC/DKIM) düzgün yapılandırılmış.');
 
   const bullets: string[] = [];
   bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'e-posta sahteciliğine karşı koruma kritik seviyede zayıf.' : level === 'medium' ? 'e-posta kimlik doğrulamasında giderilmesi gereken eksikler var.' : 'e-posta kimlik doğrulama kayıtları büyük ölçüde sağlam.'}`);
-  bullets.push(`- SPF: ${dns.spf && dns.spf.all !== 'yok' ? `var (${dns.spf.all})` : 'yok'} · DMARC: ${dns.dmarc && dns.dmarc.policy !== 'yok' ? `p=${dns.dmarc.policy}` : 'yok'} · DKIM: ${dns.dkim?.found ? 'var' : 'tespit edilemedi'} · DNSSEC: ${dns.dnssec ? 'aktif' : 'yok'}.`);
+  const spfSummary = !spfQueried ? 'sorgulanamadı' : dns.spf && dns.spf.all !== 'yok' ? `var (${dns.spf.all})` : 'yok';
+  const dmarcSummary = !dmarcQueried ? 'sorgulanamadı' : dns.dmarc && dns.dmarc.policy !== 'yok' ? `p=${dns.dmarc.policy}` : 'yok';
+  bullets.push(`- SPF: ${spfSummary} · DMARC: ${dmarcSummary} · DKIM: ${dns.dkim?.found ? 'var' : 'tespit edilemedi'} · DNSSEC: ${dns.dnssec ? 'aktif' : 'yok'}.`);
   bullets.push('- **Önerilen ilk adım:** ' + (spfMissing || dmarcMissing ? 'SPF ve DMARC kayıtlarını ekleyin (örnek TXT kayıtları "AI Çözüm Önerileri" eklentisinde).' : 'DMARC politikasını kademeli sıkılaştırın (none → quarantine → reject).'));
 
   const genel =

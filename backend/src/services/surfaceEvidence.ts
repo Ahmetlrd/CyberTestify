@@ -175,21 +175,28 @@ export async function collectTls(host: string): Promise<TlsEvidence> {
 // ---- DNS / e-posta: Cloudflare DoH -------------------------------------------------
 export type DnsEvidence = {
   ok: boolean;
-  spf?: { record: string; all: '-all' | '~all' | '+all' | '?all' | 'yok' };
-  dmarc?: { record: string; policy: 'none' | 'quarantine' | 'reject' | 'yok' };
+  // queried=false: DNS SORGUSU BAŞARISIZ/timeout oldu -> "kayıt yok" DEĞİL, "sorgulanamadı" (Yüksek risk üretMEZ).
+  spf?: { record: string; all: '-all' | '~all' | '+all' | '?all' | 'yok'; queried: boolean };
+  dmarc?: { record: string; policy: 'none' | 'quarantine' | 'reject' | 'yok'; queried: boolean };
   dkim?: { found: boolean; selector?: string };
   dnssec?: boolean;
   mxCount: number;
+  checkedDomain: string; // SPF/DMARC'ın bakıldığı ad (org/apex) — rapor tutarlılığı için
 };
 
-async function doh(name: string, type: string): Promise<{ answers: string[]; ad: boolean } | null> {
+// DoH endpoint'leri — Cloudflare + Google (ikisi de application/dns-json). Biri timeout/hata verirse
+// digerine geç; geçici DNS hatasinin "kayit yok" gibi raporlanmasini onler (İŞ 2).
+const DOH_ENDPOINTS = [
+  (n: string, t: string) => `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(n)}&type=${t}`,
+  (n: string, t: string) => `https://dns.google/resolve?name=${encodeURIComponent(n)}&type=${t}`,
+];
+const dohSleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function dohFetchOnce(url: string): Promise<{ answers: string[]; ad: boolean } | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), DOH_TIMEOUT_MS);
   try {
-    const res = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`, {
-      signal: ctrl.signal,
-      headers: { accept: 'application/dns-json' },
-    });
+    const res = await fetch(url, { signal: ctrl.signal, headers: { accept: 'application/dns-json' } });
     if (!res.ok) return null;
     const j = (await res.json()) as { AD?: boolean; Answer?: Array<{ data?: string }> };
     const answers = (j.Answer ?? []).map((a) => String(a.data ?? '').replace(/^"|"$/g, '').replace(/"\s+"/g, ''));
@@ -199,6 +206,18 @@ async function doh(name: string, type: string): Promise<{ answers: string[]; ad:
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Retry + çoklu resolver. Hepsi başarısızsa null (= SORGULANAMADI, "kayıt yok" DEĞİL — çağıran ayırır).
+async function doh(name: string, type: string): Promise<{ answers: string[]; ad: boolean } | null> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    for (const ep of DOH_ENDPOINTS) {
+      const r = await dohFetchOnce(ep(name, type));
+      if (r) return r;
+    }
+    if (attempt === 0) await dohSleep(250);
+  }
+  return null;
 }
 
 const DKIM_SELECTORS = ['default', 'google', 'selector1', 'selector2', 'k1', 'mail', 's1', 'dkim'];
@@ -211,26 +230,26 @@ export async function collectDns(host: string): Promise<DnsEvidence> {
     doh(apex, 'DNSKEY'),
     doh(apex, 'MX'),
   ]);
-  if (!txt && !dmarcTxt && !dnskey && !mx) return { ok: false, mxCount: 0 };
+  if (!txt && !dmarcTxt && !dnskey && !mx) return { ok: false, mxCount: 0, checkedDomain: apex };
 
-  // SPF
+  // SPF — txt===null ise SORGU BAŞARISIZ (queried:false); değilse yanıt içinde SPF ara.
   let spf: DnsEvidence['spf'];
-  const spfRec = (txt?.answers ?? []).find((a) => /^v=spf1/i.test(a.trim()));
+  const spfRec = txt ? txt.answers.find((a) => /^v=spf1/i.test(a.trim())) : undefined;
   if (spfRec) {
     const all = /[-]all/i.test(spfRec) ? '-all' : /~all/i.test(spfRec) ? '~all' : /\+all/i.test(spfRec) ? '+all' : /\?all/i.test(spfRec) ? '?all' : 'yok';
-    spf = { record: spfRec.trim().slice(0, 300), all };
+    spf = { record: spfRec.trim().slice(0, 300), all, queried: true };
   } else {
-    spf = { record: '', all: 'yok' };
+    spf = { record: '', all: 'yok', queried: txt !== null }; // txt===null -> sorgulanamadı
   }
 
-  // DMARC
+  // DMARC — aynı mantık: dmarcTxt===null ise sorgu başarısız.
   let dmarc: DnsEvidence['dmarc'];
-  const dmarcRec = (dmarcTxt?.answers ?? []).find((a) => /v=DMARC1/i.test(a));
+  const dmarcRec = dmarcTxt ? dmarcTxt.answers.find((a) => /v=DMARC1/i.test(a)) : undefined;
   if (dmarcRec) {
     const p = dmarcRec.match(/\bp\s*=\s*(none|quarantine|reject)/i)?.[1]?.toLowerCase() as 'none' | 'quarantine' | 'reject' | undefined;
-    dmarc = { record: dmarcRec.trim().slice(0, 300), policy: p ?? 'none' };
+    dmarc = { record: dmarcRec.trim().slice(0, 300), policy: p ?? 'none', queried: true };
   } else {
-    dmarc = { record: '', policy: 'yok' };
+    dmarc = { record: '', policy: 'yok', queried: dmarcTxt !== null };
   }
 
   // DKIM (yaygin selector'lari dene)
@@ -244,12 +263,15 @@ export async function collectDns(host: string): Promise<DnsEvidence> {
   const dnssec = !!(dnskey?.answers.length) || !!txt?.ad || !!dmarcTxt?.ad || !!dnskey?.ad;
 
   const mxCount = (mx?.answers ?? []).length;
-  return { ok: true, spf, dmarc, dkim, dnssec, mxCount };
+  return { ok: true, spf, dmarc, dkim, dnssec, mxCount, checkedDomain: apex };
 }
 
 // ---- Acikta kalan hassas dosyalar (header_leak) -----------------------------------
 export type ExposedFileResult = { path: string; exposed: boolean; reason: string };
-const EXPOSED_CANDIDATES = ['/.git/config', '/.env', '/.git/HEAD', '/backup.zip', '/.DS_Store', '/wp-config.php.bak'];
+const EXPOSED_CANDIDATES = ['/.git/config', '/.env', '/.git/HEAD', '/backup.zip', '/.DS_Store', '/wp-config.php.bak',
+  // (İŞ 1) /ftp (Juice Shop) + yaygın hassas dizin/dosyalar. classifyExposedFile GERÇEK içerik/dizin
+  // listesi ister (SPA catch-all 200 -> "kapalı"; yanlış-pozitif yok).
+  '/ftp', '/backup', '/backups', '/uploads', '/files', '/admin', '/.svn/entries', '/.htaccess', '/config.php.bak', '/db.sql', '/dump.sql'];
 
 async function safeGetForExpose(url: string): Promise<{ ok: boolean; status: number; text: string; contentType: string }> {
   const ctrl = new AbortController();

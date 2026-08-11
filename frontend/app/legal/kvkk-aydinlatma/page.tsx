@@ -48,11 +48,10 @@ export default function Page() {
       <ul>
         <li><strong>iyzico</strong> — ödeme işleminin gerçekleştirilmesi (yurt içi)</li>
         <li>
-          <strong>Anthropic, PBC (ABD)</strong> — tarama/analiz komutlarının yapay zeka ile işlenmesi
-          (<strong>yurt dışı aktarım</strong>). Bu aktarım, sipariş sırasında
-          ayrıca vereceğiniz <strong>açık rızanızla</strong> (KVKK m. 9) gerçekleştirilir. Rıza vermezseniz
-          tarama hizmeti sunulamaz. (Sistemde tarama komutlarını işleyen tek yapay zeka sağlayıcısı
-          Anthropic’tir.)
+          <strong>Yurt dışında yerleşik bir yapay zekâ hizmet sağlayıcısı (ABD)</strong> — tarama/analiz
+          komutlarının yapay zeka ile işlenmesi (<strong>yurt dışı aktarım</strong>). Bu aktarım, sipariş
+          sırasında ayrıca vereceğiniz <strong>açık rızanızla</strong> (KVKK m. 9) gerçekleştirilir. Rıza
+          vermezseniz tarama hizmeti sunulamaz.
         </li>
         <li>
           <strong>Brevo (Sendinblue, AB/Fransa)</strong> — işlem/bilgilendirme e-postalarının (sipariş,

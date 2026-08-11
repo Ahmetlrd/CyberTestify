@@ -278,7 +278,17 @@ function looksLikeHomepage(body: string, homepage: string): boolean {
   return false;
 }
 
-// Dosya-turu "gercekten o dosya mi" imzalari (format izleri).
+// GERCEK dizin listesi mi? (Apache/nginx autoindex VEYA Juice Shop /ftp gibi dosya-linkli listeleme).
+// SPA shell'i buraya DUSMEZ (o zaten looksLikeHomepage ile elenir); burada yalniz gercek listeleme.
+export function looksLikeDirListing(b: string): boolean {
+  if (/<title>\s*index of\s*\//i.test(b) || /<h1>\s*index of\s*\//i.test(b)) return true;
+  if (/directory listing (for|of)/i.test(b) || /Parent Directory<\/a>/i.test(b)) return true;
+  // Birden fazla, uzantili dosya linki (ör. Juice Shop /ftp: *.bak, *.md, *.pdf, *.coupons_data...).
+  const links = b.match(/<a[^>]+href=["'][^"']+\.(bak|sql|zip|gz|tar|tgz|md|json|ya?ml|conf|log|pdf|txt|env|db|sqlite|key|pem|coupons_data)\b/gi);
+  return !!links && links.length >= 2;
+}
+
+// Dosya-turu "gercekten o dosya mi" imzalari (format izleri). Dizin yollari icin dizin-listesi imzasi.
 const FILE_SIGNATURES: Record<string, (b: string) => boolean> = {
   '/.git/config': (b) => /\[core\]/i.test(b) || /repositoryformatversion\s*=/i.test(b),
   '/.git/HEAD': (b) => /^\s*ref:\s*refs\//im.test(b),
@@ -287,6 +297,21 @@ const FILE_SIGNATURES: Record<string, (b: string) => boolean> = {
   '/backup.sql': (b) => /\b(CREATE TABLE|INSERT INTO|DROP TABLE)\b/i.test(b),
   '/.DS_Store': (b) => b.includes('Bud1'),
   '/wp-config.php': (b) => /define\s*\(\s*['"]DB_/i.test(b),
+  '/wp-config.php.bak': (b) => /define\s*\(\s*['"]DB_/i.test(b) || /<\?php/i.test(b),
+  // (İŞ 1) Dizinler -> gercek dizin listesi (autoindex / dosya-linkli). SPA catch-all elenir.
+  '/ftp': looksLikeDirListing,
+  '/ftp/': looksLikeDirListing,
+  '/backup': looksLikeDirListing,
+  '/backups': looksLikeDirListing,
+  '/uploads': looksLikeDirListing,
+  '/files': looksLikeDirListing,
+  '/admin': looksLikeDirListing,
+  // (İŞ 1) Dosyalar -> format imzasi.
+  '/.svn/entries': (b) => /^\s*\d+\s*[\r\n]/.test(b) || /\bsvn:\b/i.test(b) || /has-props/i.test(b),
+  '/.htaccess': (b) => /(RewriteEngine|RewriteRule|Order\s+(allow|deny)|Deny\s+from|Require\s+all|<Files|AuthType|ErrorDocument)/i.test(b),
+  '/config.php.bak': (b) => /<\?php/i.test(b) && /(define\s*\(\s*['"](DB_|APP_|SECRET)|\$(db|database|password|secret))/i.test(b),
+  '/db.sql': (b) => /\b(CREATE TABLE|INSERT INTO|DROP TABLE|MySQL dump|PostgreSQL database dump)\b/i.test(b),
+  '/dump.sql': (b) => /\b(CREATE TABLE|INSERT INTO|DROP TABLE|MySQL dump|PostgreSQL database dump)\b/i.test(b),
 };
 
 /**
@@ -321,7 +346,8 @@ export function classifyExposedFile(
   return { verdict: 'inconclusive', reason: 'HTTP 200, format imzası tanımlı değil — manuel doğrulama gerekir' };
 }
 
-const SENSITIVE_PATHS = ['/.git/config', '/.git/HEAD', '/.env', '/backup.zip', '/backup.sql', '/.DS_Store', '/wp-config.php'];
+const SENSITIVE_PATHS = ['/.git/config', '/.git/HEAD', '/.env', '/backup.zip', '/backup.sql', '/.DS_Store', '/wp-config.php',
+  '/ftp', '/backup', '/backups', '/uploads', '/files', '/admin', '/.svn/entries', '/.htaccess', '/config.php.bak', '/db.sql', '/dump.sql'];
 
 /** Deterministik hassas-dosya ifsasi kontrolu — classifyExposedFile ile catch-all/format ayrimi yapar. */
 async function checkExposedFiles(host: string): Promise<PassiveCheckResult> {

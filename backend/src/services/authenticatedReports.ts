@@ -11,6 +11,7 @@ import {
   collectCookieFlagsEvidence, collectSessionFixationEvidence, collectLogoutEvidence, collectForcedBrowsingEvidence,
 } from './authenticatedChecks.js';
 import { collectPrivilegeEscalationEvidence, collectMultiStepBusinessLogicEvidence } from './authAgentChecks.js';
+import { collectJwtAnalysis, collectLoginBypassEvidence } from './authExtraChecks.js';
 import {
   buildActiveCheckReport, buildInjectionReport, buildIdorReport,
   RISK_WORD, levelRank, extractLevel, headlineOf, detailOnly, type Level,
@@ -87,6 +88,32 @@ const MULTISTEP_CFG = {
   cleanGenel: 'Gözlemlenebilir bir istemci-tarafı fiyat/kupon alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.',
 };
 
+const JWT_CFG = {
+  title: 'JWT / Token Güvenliği', whatChecked: [
+    'Oturum bir **JWT bearer** taşıyorsa token OFFLINE çözülüp analiz edildi: imza algoritması (**alg=none / imzasız**), imza sırrının **zayıf/yaygın** olup olmadığı (yaygın sırlarla OFFLINE doğrulama), ve token gövdesindeki **hassas/aşırı claim** (parola/sır, rol/yetki).',
+    'Ek olarak TEK, zararsız gözlem: imzasız (alg=none) forge edilmiş bir token korumalı bir uçta KABUL ediliyor mu (yalnız gözlem; erişim kullanılmadı).',
+    '⚠️ Gerçek istismar YOK — token ele geçirme/yetki yükseltme yapılmadı; yalnız güvenlik göstergesi raporlandı.',
+  ],
+  confidenceNote: 'Zayıf-sır ve alg=none KABUL göstergeleri kesindir (yüksek güven); claim gözlemleri bilgilendirmedir.',
+  fixTitle: 'JWT / Token Güvenliği',
+  fixFound: ['İmza algoritmasını sunucuda **sabitleyin** (ör. yalnız RS256/HS256); `alg=none` ve istemci-seçimli alg’i REDDEDİN.', 'JWT imza sırrını **güçlü/rastgele** (256-bit+) yapın; sır/parola gibi hassas veriyi token gövdesine KOYMAYIN (JWT gövdesi şifreli değildir).', 'Token’a `exp` (kısa ömür) ekleyin; kritik yetki/rol kararlarını istemci claim’ine değil sunucu doğrulamasına dayandırın.'],
+  fixClean: ['İmza algoritmasını sabitleyin, güçlü sır kullanın, `exp` ekleyin ve hassas claim taşımayın (proaktif).'],
+  cleanGenel: 'JWT/token güvenlik göstergesi bulunamadı ya da oturum JWT taşımıyor.',
+};
+
+const LOGIN_BYPASS_CFG = {
+  title: 'Giriş Baypası (SQLi Göstergesi)', whatChecked: [
+    'Giriş (login) ucuna önce **geçersiz kimlik** (kontrol) gönderildi; ardından klasik SQLi payload’ları (`\' OR \'1\'=\'1` vb.) denenip, kontrolün AKSİNE oturum/başarı (token/2xx) dönüp dönmediği gözlemlendi.',
+    'Login POST’u zaten izinli akıştır; TEK, zararsız gözlemdir.',
+    '⚠️ Oturum ele geçirme/istismar YOK — yalnız "kimlik doğrulama atlatma göstergesi var mı" gözlemi.',
+  ],
+  confidenceNote: 'Gösterge, kontrol denemesiyle karşılaştırmaya dayanır; kesin doğrulama manuel test gerektirir.',
+  fixTitle: 'Giriş Baypası / SQL Enjeksiyonu',
+  fixFound: ['Kimlik doğrulama sorgularında **parametreli sorgu / hazırlanmış ifade (prepared statement)** kullanın; kullanıcı girdisini asla SQL’e doğrudan koymayın.', 'Girdi doğrulama + ORM güvenli API’leri; hatalı girişte tek-tip hata mesajı döndürün.'],
+  fixClean: ['Parametreli sorgu + girdi doğrulama uygulayın (proaktif); kimlik doğrulama akışını SQLi’ye kapatın.'],
+  cleanGenel: 'Giriş baypası (SQLi) göstergesi bulunamadı ya da test edilebilir bir login ucu yoktu.',
+};
+
 // (blocker fix — part 2) Aktif Doğrulama'nın (login'siz) şablonundan MİRAS kalan "kimlik doğrulaması
 // olmadan / kapsam dışı" cümlelerini authenticated bağlama çevirir. buildInjection/Idor/ActiveCheckReport
 // DİĞER paketlerde AYNEN kalır — bu yalnız authenticated raporu POST-İŞLER (kaynak şablonlara dokunmaz).
@@ -125,6 +152,11 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   runs.push({ title: 'Yetki Yükseltme (Privilege Escalation)', conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, PRIVESC_CFG) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0, agentCheck: true, agentUsed: privEv?.agentUsed ?? false, agentStatus: privEv?.agentStatus });
   const multiEv = await collectMultiStepBusinessLogicEvidence(host, session).catch(() => null);
   runs.push({ title: 'Çok-Adımlı İş Mantığı', conf: 'Düşük', rep: multiEv ? buildActiveCheckReport(multiEv, MULTISTEP_CFG) : null, inputs: multiEv?.inputsFound ?? 0, probes: multiEv?.probesSent ?? 0, fc: multiEv?.findings.length ?? 0, agentCheck: true, agentUsed: multiEv?.agentUsed ?? false, agentStatus: multiEv?.agentStatus });
+  // (İŞ 3) JWT/token güvenliği + giriş baypası (SQLi göstergesi) — deterministik, gözlemsel.
+  const jwtEv = await collectJwtAnalysis(host, session).catch(() => null);
+  runs.push({ title: 'JWT / Token Güvenliği', conf: 'Yüksek', rep: jwtEv ? buildActiveCheckReport(jwtEv, JWT_CFG) : null, inputs: jwtEv?.inputsFound ?? 0, probes: jwtEv?.probesSent ?? 0, fc: jwtEv?.findings.length ?? 0 });
+  const loginBypassEv = await collectLoginBypassEvidence(host, session.loginUrl).catch(() => null);
+  runs.push({ title: 'Giriş Baypası (SQLi Göstergesi)', conf: 'Yüksek', rep: loginBypassEv ? buildActiveCheckReport(loginBypassEv, LOGIN_BYPASS_CFG) : null, inputs: loginBypassEv?.inputsFound ?? 0, probes: loginBypassEv?.probesSent ?? 0, fc: loginBypassEv?.findings.length ?? 0 });
 
   if (runs.every((r) => !r.rep)) return null;
 

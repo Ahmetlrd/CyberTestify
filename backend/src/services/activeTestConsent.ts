@@ -20,8 +20,8 @@ export const ACTIVE_TEST_RISK_ACK =
 
 // (Tam Kapsamlı Pentest — FAZ A) Kimlik-doğrulamalı/otonom paketler için EK 3 onay metni (UI + PDF).
 export const CREDENTIAL_SHARING_ACK =
-  'Verdiğim test hesabı kimlik bilgilerinin şifreli saklanacağını, tarama için yurt dışındaki LLM ' +
-  'sağlayıcıya (Anthropic, PBC — ABD) iletilebileceğini ve tarama sonrası silineceğini anladım ve ' +
+  'Verdiğim test hesabı kimlik bilgilerinin şifreli saklanacağını, tarama için yurt dışında yerleşik bir ' +
+  'yapay zekâ hizmet sağlayıcısına (ABD) iletilebileceğini ve tarama sonrası silineceğini anladım ve ' +
   'KVKK m.9 kapsamında bu yurt dışı aktarıma açıkça rıza gösteriyorum.';
 export const TEST_ACCOUNT_DECLARATION =
   'Sağladığım hesabın üretim/ana hesabım OLMADIĞINI; yalnız bu tarama için oluşturulmuş, sınırlı ' +

