@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { api } from '../../../lib/api';
 import { StatusTracker } from '../../../components/dashboard/StatusTracker';
 import { LiveScanPhases } from '../../../components/dashboard/LiveScanPhases';
+import { InvoiceRequestForm } from '../../../components/dashboard/InvoiceRequestForm';
 import { ScopeCertificate } from '../../../components/dashboard/ScopeCertificate';
 
 const TERMINAL = new Set(['scan_completed', 'scan_failed', 'scope_violation', 'report_purged']);
@@ -323,6 +324,15 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
           </a>{' '}
           ile iletişime geçin.
         </p>
+      )}
+
+      {/* (Fatura talebi — MANUEL) ödemesi tamamlanmış siparişlerde opsiyonel fatura bilgisi. */}
+      {order?.paidAt && (
+        <InvoiceRequestForm
+          orderId={order.id}
+          defaultEmail={order.customer?.email ?? ''}
+          existing={order.invoiceRequest ?? null}
+        />
       )}
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}

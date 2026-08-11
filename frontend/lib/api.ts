@@ -75,14 +75,13 @@ export const api = {
     packageKey: string,
     consents: { ownershipConfirmed: boolean; distanceContractAccepted: boolean; withdrawalWaived: boolean; crossBorderTransfer: boolean },
     region = 'tr',
-    useCredits = false,
     activeTestConsent?: { riskAccepted: boolean },
     authCredentials?: { username: string; password: string },
     promoCode?: string,
   ) =>
-    request<{ orderId: string; paymentPageUrl?: string; paidWithCredits?: boolean; creditsSpent?: number; paidWithPromo?: boolean }>('/orders', {
+    request<{ orderId: string; paymentPageUrl?: string; paidWithPromo?: boolean }>('/orders', {
       method: 'POST',
-      body: JSON.stringify({ domainId, packageKey, ...consents, region, useCredits, activeTestConsent, authCredentials, promoCode }),
+      body: JSON.stringify({ domainId, packageKey, ...consents, region, activeTestConsent, authCredentials, promoCode }),
     }),
   // Kombine paketler (bundle) — bolgesel fiyat + uye listesi.
   listBundles: (region = 'tr') =>
@@ -116,18 +115,16 @@ export const api = {
       discountType?: 'percentage' | 'fixed'; discountValue?: number;
       originalAmountMinorUnit?: number; discountMinorUnit?: number; finalAmountMinorUnit?: number; currency?: string;
     }>('/orders/promo/preview', { method: 'POST', body: JSON.stringify({ code, ...target, region }) }),
-  // (Is 2) Kredi bakiyesi + satista olan bundle'lar + son hareketler.
-  getCredits: () =>
-    request<{
-      balance: number;
-      creditUnitValueMinor: number;
-      bundles: Array<{ key: string; displayName: string; credits: number; priceMinorUnit: number; discountPct: number }>;
-      transactions: Array<{ delta: number; reason: string; bundleKey: string | null; balanceAfter: number; createdAt: string }>;
-    }>('/credits'),
-  buyBundle: (bundleKey: string) =>
-    request<{ ok: boolean; balance: number; creditsAdded: number }>('/credits/buy-bundle', {
+  // (Fatura talebi — MANUEL) ödemesi tamamlanmış sipariş için fatura bilgisi gönder/güncelle.
+  requestInvoice: (orderId: string, body: {
+    type: 'bireysel' | 'kurumsal';
+    companyName?: string; taxOffice?: string; taxNumber?: string;
+    fullName?: string; nationalId?: string;
+    address: string; invoiceEmail: string;
+  }) =>
+    request<{ ok: boolean; updated?: boolean }>(`/orders/${orderId}/invoice-request`, {
       method: 'POST',
-      body: JSON.stringify({ bundleKey }),
+      body: JSON.stringify(body),
     }),
   getOrder: (orderId: string) => request<any>(`/orders/${orderId}`),
   // (#4) Kuyruk yogunlugu — yeni siparis oncesi "yogunuz" uyarisi icin.

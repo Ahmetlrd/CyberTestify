@@ -46,6 +46,11 @@ export const adminApi = {
   // (E) Iade olarak isaretle — 'refunded' + musteriye iade bildirim maili (backend).
   refundOrder: (id: string) => areq<{ ok: boolean; mailed?: boolean; alreadyRefunded?: boolean }>(`/admin/orders/${id}/refund`, { method: 'POST' }),
   scopeViolations: (page = 1) => areq<Page<any>>(`/admin/scope-violations?page=${page}`),
+  // (Fatura talebi — MANUEL) Vedat fatura bilgilerini + fiyatı görür, durumu işaretler.
+  invoiceRequests: (status = '') =>
+    areq<{ total: number; pendingCount: number; items: any[] }>(`/admin/invoice-requests${status ? `?status=${status}` : ''}`),
+  updateInvoice: (id: string, body: { status?: 'requested' | 'issued' | 'sent'; notes?: string }) =>
+    areq<{ ok: boolean; status: string }>(`/admin/invoice-requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   // (SEO BLOG)
   blogList: () =>
     areq<{ posts: Array<{ id: string; title: string; slug: string; status: string; createdAt: string; publishedAt: string | null }>; draftCount: number; publishedCount: number; lastPublishedAt: string | null }>('/admin/blog'),

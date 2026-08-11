@@ -32,7 +32,7 @@ export default function OrderPage() {
   const preselectBundle = sp.get('bundle');
   const [packages, setPackages] = useState<Pkg[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
-  // Kombine paket (bundle) modu — bir bundle secilince tekil akis (recurring/kredi/promo) gizlenir.
+  // Kombine paket (bundle) modu — bir bundle secilince tekil akis (recurring/promo) gizlenir.
   const [bundles, setBundles] = useState<any[]>([]);
   const [selectedBundle, setSelectedBundle] = useState<any | null>(null);
   const [bundleModules, setBundleModules] = useState<string[]>([]);
@@ -41,10 +41,6 @@ export default function OrderPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // (Is 2) Kredi bakiyesi + "krediyle öde" secenegi.
-  const [balance, setBalance] = useState(0);
-  const [creditUnit, setCreditUnit] = useState(99900);
-  const [useCredits, setUseCredits] = useState(false);
   // Promosyon kodu (checkout onizleme + siparise gecirme).
   const [promoInput, setPromoInput] = useState('');
   const [promo, setPromo] = useState<{ valid: boolean; error?: string; code?: string; discountMinorUnit?: number; finalAmountMinorUnit?: number } | null>(null);
@@ -111,7 +107,6 @@ export default function OrderPage() {
         if (b && !b.comingSoon) { setSelectedBundle(b); setSelected(null); }
       }
     }).catch(() => {});
-    api.getCredits().then((c) => { setBalance(c.balance); setCreditUnit(c.creditUnitValueMinor); }).catch(() => {});
     api.getQueueStatus().then(setQueue).catch(() => {}); // sessiz — uyari opsiyonel
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
@@ -161,9 +156,6 @@ export default function OrderPage() {
   // Grup 3 — AYRI: mesafeli satış cayma hakkı feragati (withdrawalConsent) — doğrudan.
   // (Aktif Doğrulama Paketi) düşük-kapsam uyarısı gösterilecek mi (ön-kontrol düşük sinyal döndüyse).
   const showLowScopeWarning = selectedBundle?.key === 'bundle_active_verify' && scopeLow === true;
-  const creditsNeeded = selectedPkg ? Math.max(1, Math.round(selectedPkg.priceMinorUnit / creditUnit)) : 0;
-  // Kredi ile odeme yalnizca tek-seferlik/hemen taramada (zamanlanmis akis prepaid farkli).
-  const canUseCredits = balance >= creditsNeeded && creditsNeeded > 0 && !recurring && startMode === 'now';
 
   async function applyPromo() {
     if (!promoInput.trim() || (!selected && !selectedBundle)) return;
@@ -211,7 +203,6 @@ export default function OrderPage() {
         router.push('/schedules');
         return;
       }
-      const payWithCredits = useCredits && canUseCredits;
       const res = await api.createOrder(
         domainId,
         selected,
@@ -222,13 +213,12 @@ export default function OrderPage() {
           crossBorderTransfer: crossBorderConsent, // KVKK m.9 yurt disi acik riza checkbox'i
         },
         region,
-        payWithCredits,
         isActiveLight ? { riskAccepted: atRisk, ...(needsAuthCreds ? { credentialSharingAccepted: credShare, testAccountDeclared: testAcct, elevatedRiskAccepted: elevRisk } : {}) } : undefined,
         needsAuthCreds ? { username: authUser.trim(), password: authPass } : undefined,
         promo?.valid ? promo.code : undefined,
       );
-      // Krediyle VEYA %100 promo ile odendiyse odeme sayfasi YOK — dogrudan siparis detayina git.
-      if (res.paidWithCredits || res.paidWithPromo) {
+      // %100 promo ile odendiyse odeme sayfasi YOK — dogrudan siparis detayina git.
+      if (res.paidWithPromo) {
         router.push(`/dashboard/${res.orderId}`);
         return;
       }
@@ -351,7 +341,6 @@ export default function OrderPage() {
     !selectedBundle && startMode === 'later' && startAt
       ? new Date(startAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
       : 'Hemen';
-  const payWithCreditsNow = !selectedBundle && useCredits && canUseCredits;
   const baseAmountMinor = selectedBundle ? selectedBundle.amountMinorUnit : selectedPkg ? selectedPkg.priceMinorUnit : 0;
   // Promo (tekil paket VEYA bundle) gecerliyse indirimli tutari goster.
   const unitAmountMinor =
@@ -699,26 +688,6 @@ export default function OrderPage() {
         </div>
       )}
 
-      {/* (Is 2) Kredi bakiyesi + krediyle öde */}
-      {balance > 0 && (
-        <div className="mt-5 rounded-card border border-brand-100 bg-brand-50/50 px-4 py-3 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-ink-soft">Kredi bakiyeniz</span>
-            <span className="font-bold text-brand">{balance} kredi</span>
-          </div>
-          {selected && canUseCredits && (
-            <label className="mt-2 flex cursor-pointer items-start gap-2">
-              <input type="checkbox" checked={useCredits} onChange={(e) => setUseCredits(e.target.checked)} className="mt-0.5" />
-              <span className="text-ink-soft">
-                Bu taramayı <strong>{creditsNeeded} kredi</strong> kullanarak öde (ödeme adımı atlanır).
-              </span>
-            </label>
-          )}
-          {selected && creditsNeeded > 0 && balance < creditsNeeded && !recurring && startMode === 'now' && (
-            <p className="mt-2 text-xs text-ink-muted">Bu paket {creditsNeeded} kredi gerektirir; bakiyeniz yetersiz.</p>
-          )}
-        </div>
-      )}
 
       {(selected || selectedBundle) && !intlComingSoon && (
         <div className="mt-5 rounded-card border border-brand-100 bg-white px-4 py-3 text-sm">
@@ -804,17 +773,10 @@ export default function OrderPage() {
                     )}
                   </dl>
                   <div className="mt-3 border-t border-line pt-3">
-                    {payWithCreditsNow ? (
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-sm text-ink-muted">Ödeme</span>
-                        <span className="text-lg font-extrabold text-brand">{creditsNeeded} kredi</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-sm text-ink-muted">{recurring ? `Toplam · ${runs} tarama` : 'Toplam'}</span>
-                        <span className="text-2xl font-extrabold text-brand">{formatMoney(totalMinor, getRegion(region))}</span>
-                      </div>
-                    )}
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-sm text-ink-muted">{recurring ? `Toplam · ${runs} tarama` : 'Toplam'}</span>
+                      <span className="text-2xl font-extrabold text-brand">{formatMoney(totalMinor, getRegion(region))}</span>
+                    </div>
                     <p className="mt-0.5 text-right text-[11px] text-ink-muted">KDV dahildir</p>
                   </div>
                 </>
@@ -891,7 +853,7 @@ export default function OrderPage() {
           <div className="min-w-0">
             <p className="truncate text-xs font-semibold text-brand">{selName ?? 'Paket seçilmedi'}</p>
             <p className="text-sm font-extrabold text-ink">
-              {payWithCreditsNow ? `${creditsNeeded} kredi` : formatMoney(totalMinor, getRegion(region))}
+              {formatMoney(totalMinor, getRegion(region))}
               <span className="ml-1 text-[10px] font-normal text-ink-muted">KDV dahil</span>
             </p>
           </div>

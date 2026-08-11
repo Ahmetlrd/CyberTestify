@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ADMIN_TOKEN_KEY } from '../../lib/adminApi';
+import { ADMIN_TOKEN_KEY, adminApi } from '../../lib/adminApi';
 
 const NAV = [
   { href: '/admin/dashboard', label: 'Özet' },
   { href: '/admin/customers', label: 'Müşteriler' },
   { href: '/admin/orders', label: 'Siparişler' },
+  { href: '/admin/invoices', label: 'Faturalar' },
   { href: '/admin/scope-violations', label: 'Kapsam İhlalleri' },
   { href: '/admin/blog', label: 'Blog' },
 ];
@@ -18,6 +19,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const isLogin = pathname === '/admin/login';
   const [ready, setReady] = useState(false);
+  const [pendingInvoices, setPendingInvoices] = useState(0); // (Fatura talebi) nav rozeti
 
   useEffect(() => {
     if (isLogin) { setReady(true); return; }
@@ -26,6 +28,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       return;
     }
     setReady(true);
+    adminApi.invoiceRequests('requested').then((d) => setPendingInvoices(d.pendingCount)).catch(() => {});
   }, [isLogin, pathname, router]);
 
   if (isLogin) return <>{children}</>;
@@ -45,9 +48,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             const on = pathname === n.href;
             return (
               <Link key={n.href} href={n.href} style={{
-                padding: '6px 12px', borderRadius: 6, fontSize: 14, textDecoration: 'none',
+                padding: '6px 12px', borderRadius: 6, fontSize: 14, textDecoration: 'none', position: 'relative',
                 color: on ? '#0f172a' : '#cbd5e1', background: on ? '#38bdf8' : 'transparent', fontWeight: on ? 600 : 400,
-              }}>{n.label}</Link>
+              }}>
+                {n.label}
+                {n.href === '/admin/invoices' && pendingInvoices > 0 && (
+                  <span style={{ marginLeft: 6, background: '#f59e0b', color: '#0f172a', borderRadius: 999, padding: '1px 7px', fontSize: 11, fontWeight: 800 }}>{pendingInvoices}</span>
+                )}
+              </Link>
             );
           })}
         </nav>

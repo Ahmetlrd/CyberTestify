@@ -176,6 +176,64 @@ adminRouter.post('/reviews/:id/reject', async (req, res) => {
   res.json({ ok: true, rejected: true, reason });
 });
 
+// --- (Fatura talebi — MANUEL) Vedat fatura bilgilerini + fiyatı görür, durumu işaretler --------
+// Sistem OTOMATİK e-fatura KESMEZ; Vedat kendi e-fatura aracıyla ELLE keser/gönderir, burada takip eder.
+adminRouter.get('/invoice-requests', async (req, res) => {
+  const status = typeof req.query.status === 'string' && ['requested', 'issued', 'sent'].includes(req.query.status)
+    ? (req.query.status as 'requested' | 'issued' | 'sent')
+    : undefined;
+  const rows = await prisma.invoiceRequest.findMany({
+    where: status ? { status } : undefined,
+    orderBy: { requestedAt: 'desc' },
+    include: {
+      order: {
+        select: {
+          id: true, amountMinorUnit: true, currency: true, paidAt: true,
+          customer: { select: { email: true } },
+          package: { select: { displayName: true } },
+          domain: { select: { hostname: true } },
+        },
+      },
+    },
+  });
+  const items = rows.map((r) => ({
+    id: r.id,
+    orderId: r.orderId,
+    packageName: r.order.package.displayName,
+    hostname: r.order.domain.hostname,
+    amountMinorUnit: r.order.amountMinorUnit,
+    currency: r.order.currency,
+    customerEmail: r.order.customer.email,
+    type: r.type,
+    companyName: r.companyName, taxOffice: r.taxOffice, taxNumber: r.taxNumber,
+    fullName: r.fullName, nationalId: r.nationalId,
+    address: r.address, invoiceEmail: r.invoiceEmail,
+    status: r.status, notes: r.notes,
+    requestedAt: r.requestedAt, issuedAt: r.issuedAt, sentAt: r.sentAt,
+  }));
+  const pendingCount = await prisma.invoiceRequest.count({ where: { status: 'requested' } });
+  res.json({ total: items.length, pendingCount, items });
+});
+
+// Durum güncelle: 'issued' (kesildi) / 'sent' (gönderildi) + opsiyonel not. Zaman damgalarını basar.
+adminRouter.patch('/invoice-requests/:id', async (req, res) => {
+  const status = req.body?.status;
+  if (status && !['requested', 'issued', 'sent'].includes(status)) {
+    return res.status(400).json({ error: 'Geçersiz durum.' });
+  }
+  const existing = await prisma.invoiceRequest.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: 'Fatura talebi bulunamadı.' });
+  const data: Record<string, unknown> = {};
+  if (typeof req.body?.notes === 'string') data.notes = req.body.notes.slice(0, 1000);
+  if (status) {
+    data.status = status;
+    if (status === 'issued' && !existing.issuedAt) data.issuedAt = new Date();
+    if (status === 'sent') { data.sentAt = new Date(); if (!existing.issuedAt) data.issuedAt = new Date(); }
+  }
+  const updated = await prisma.invoiceRequest.update({ where: { id: req.params.id }, data });
+  res.json({ ok: true, status: updated.status });
+});
+
 // --- (SEO BLOG) admin-only yonetim -------------------------------------------
 // Toplu front-matter yukleme -> draft; liste; "simdi yayinla" (en eski draft). requireAdmin arkasinda.
 adminRouter.post('/blog/bulk', async (req, res) => {

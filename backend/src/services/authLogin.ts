@@ -15,7 +15,6 @@
 import puppeteer from 'puppeteer-core';
 import { discoverSurface, type Surface } from './activeVerifyEvidence.js';
 import { consumeTestCredential, type TestCredentialInput } from './testCredentials.js';
-import { grantCredits, creditsForPackagePrice } from './credits.js';
 import { sendAuthLoginFailed } from './mailer.js';
 import { type AuthSession, type CookieFlag, applyAuthHeaders, parseSetCookie } from './authSession.js';
 import { prisma } from '../db.js';
@@ -253,10 +252,9 @@ export async function authenticateOrder(orderId: string): Promise<AuthResult> {
 }
 
 async function failOrder(orderId: string, customerId: string, amountMinorUnit: number, twoFactor: boolean, reason: string): Promise<void> {
-  await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed' } });
-  // KREDİ (nakit iade DEĞİL): ödenen tutar kadar, ileride kullanılabilir bakiye.
-  const credits = creditsForPackagePrice(amountMinorUnit);
-  await grantCredits(customerId, credits, 'auth_login_failed', orderId).catch((e) => console.error('[authLogin] kredi tanımlanamadı:', e));
+  // (İŞ 2) Kredi YOK. Sipariş scan_failed + sebep (admin görünürlüğü) + net müşteri e-postası.
+  // İade gerekiyorsa Vedat admin panelinden görüp iyzico'dan MANUEL yapar.
+  await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed', failureReason: `auth_login_failed:${reason}` } });
   await sendAuthLoginFailed(orderId, twoFactor).catch(() => {});
-  console.log(`[authLogin] Sipariş ${orderId} login başarısız (reason=${reason}) → scan_failed + ${credits} kredi tanımlandı.`);
+  console.log(`[authLogin] Sipariş ${orderId} login başarısız (reason=${reason}) → scan_failed (kredi yok; gerekirse manuel iade).`);
 }

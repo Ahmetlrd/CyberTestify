@@ -86,10 +86,6 @@ model Customer {
   termsAcceptedAt DateTime?
   termsVersion    String?
 
-  // (Is 2) Kredi/bundle: on-odenmis tarama kredisi bakiyesi. Bundle satin alinca artar,
-  // kredi ile tarama alinca azalir. Denetim izi CreditTransaction'da.
-  creditBalance Int @default(0)
-
   // Sifre sifirlama: token'in SHA-256 hash'i (duz token asla DB'de durmaz) + son gecerlilik.
   // Kullanildiginda/suresi dolunca temizlenir.
   resetTokenHash   String?
@@ -109,7 +105,6 @@ model Customer {
   domains            Domain[]
   orders             Order[]
   scheduledScans     ScheduledScan[]
-  creditTransactions CreditTransaction[]
   activeTestConsents ActiveTestConsent[]
 }
 
@@ -156,20 +151,47 @@ model TestCredential {
   @@index([orderId])
 }
 
-// (Is 2) Kredi hareketleri denetim defteri (ledger). Her +/- burada iz birakir;
-// bakiye Customer.creditBalance'ta tutulur (ikisi ayni transaction'da guncellenir).
-model CreditTransaction {
-  id           String   @id @default(uuid())
-  customerId   String
-  customer     Customer @relation(fields: [customerId], references: [id])
-  delta        Int      // +N (bundle satin alma) | -N (tarama kullanimi) | +N (iade)
-  reason       String   // 'bundle_purchase' | 'scan_use' | 'refund' | 'adjustment'
-  bundleKey    String?  // bundle_purchase ise hangi bundle
-  orderId      String?  // scan_use/refund ise ilgili siparis
-  balanceAfter Int      // islem sonrasi bakiye (denetim kolayligi)
-  createdAt    DateTime @default(now())
+// (Fatura talebi — MANUEL) Ödeme sonrası müşteri isterse fatura bilgilerini girer; sistem OTOMATİK
+// e-fatura KESMEZ — yalnız bilgi toplar, admin'de gösterir, durumu takip eder. Vedat kendi e-fatura
+// aracıyla ELLE keser ve gönderir. Sipariş başına en fazla bir talep (orderId @unique).
+enum InvoiceType {
+  bireysel
+  kurumsal
+}
 
-  @@index([customerId])
+enum InvoiceStatus {
+  requested // müşteri talep etti (kesilmeyi bekliyor)
+  issued    // fatura kesildi
+  sent      // fatura gönderildi
+}
+
+model InvoiceRequest {
+  id           String        @id @default(uuid())
+  orderId      String        @unique
+  order        Order         @relation(fields: [orderId], references: [id])
+  type         InvoiceType
+
+  // Kurumsal
+  companyName  String? // ticari unvan
+  taxOffice    String? // vergi dairesi
+  taxNumber    String? // VKN — 10 hane
+
+  // Bireysel
+  fullName     String? // ad soyad
+  nationalId   String? // TCKN — 11 hane
+
+  // Ortak
+  address      String
+  invoiceEmail String  // varsayılan sipariş e-postası; müşteri değiştirebilir
+
+  status       InvoiceStatus @default(requested)
+  notes        String?       // admin notu (Vedat)
+  requestedAt  DateTime      @default(now())
+  issuedAt     DateTime?
+  sentAt       DateTime?
+  updatedAt    DateTime      @updatedAt
+
+  @@index([status])
 }
 
 model Domain {
@@ -275,8 +297,13 @@ model Order {
   byokKeyEncrypted String?
   customPrompt     String?     // sadece byok_custom paketinde dolu
 
+  // (İŞ 2) Tarama başarısız olduğunda sebep (özellikle full_pentest login-başarısız) — admin görünürlüğü.
+  // Vedat bunu görüp gerekirse iyzico'dan MANUEL iade yapar (otomatik kredi YOK).
+  failureReason   String?
+
   flow   Flow?
   report Report?
+  invoiceRequest    InvoiceRequest?    // (Fatura talebi — MANUEL) ödeme sonrası opsiyonel
   activeTestConsent ActiveTestConsent? // (Faz 3) active-light paketlerde zorunlu
   testCredentials   TestCredential[]   // (Tam Kapsamlı Pentest — FAZ A) şifreli test hesabı kimlik bilgileri
 

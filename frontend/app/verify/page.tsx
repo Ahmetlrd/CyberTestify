@@ -20,6 +20,8 @@ type Order = {
   status: string;
   createdAt: string;
   archived: boolean;
+  paid?: boolean;
+  invoiceStatus?: 'requested' | 'issued' | 'sent' | null;
 };
 
 const ORDER_STATUS_LABEL: Record<string, string> = {
@@ -342,6 +344,12 @@ export default function VerifyHub() {
       </button>
       <div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
         <span className="badge">{ORDER_STATUS_LABEL[o.status] ?? o.status}</span>
+        {/* (Fatura talebi) ödemesi tamamlanmış siparişte talep/durum — form dashboard'ta (#fatura). */}
+        {o.paid && (
+          <button onClick={() => router.push(`/dashboard/${o.id}#fatura`)} className="btn-ghost text-xs text-accent-700">
+            {o.invoiceStatus === 'sent' ? 'Fatura gönderildi' : o.invoiceStatus ? 'Fatura talebi ✓' : 'Fatura talep et'}
+          </button>
+        )}
         {isArchived ? (
           <button onClick={() => archiveOrder(o.id, false)} className="btn-ghost text-xs">
             Arşivden çıkar

@@ -11,6 +11,8 @@ export const config = {
   databaseUrl: required('DATABASE_URL'),
   // Frontend'in origin'i — CORS ve mock odeme sonrasi yonlendirme icin.
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+  // (Fatura talebi — MANUEL) Yeni fatura talebi geldiginde Vedat'a bildirim gonderilecek adres.
+  invoiceNotifyEmail: process.env.INVOICE_NOTIFY_EMAIL ?? 'support@cybertestify.com',
   // Admin paneli AYRI subdomain'den (admin.cybertestify.com) servis edilir; CORS'a
   // eklenmezse admin.* origin'inden yapilan istekler bloklanir. Dev'de bos (admin
   // ayni origin'de calisir). Birden fazla ise virgulle.

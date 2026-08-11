@@ -171,7 +171,7 @@ export async function sendOrderConfirmation(orderIds: string[]): Promise<boolean
   }
 }
 
-// --- (Tam Kapsamlı Pentest — FAZ B) Login başarısız bildirimi (+ kredi) ------
+// --- (Tam Kapsamlı Pentest — FAZ B) Login başarısız bildirimi (kredi YOK — İŞ 2) ------
 export async function sendAuthLoginFailed(orderId: string, twoFactor: boolean): Promise<boolean> {
   try {
     const o = await prisma.order.findUnique({
@@ -186,12 +186,50 @@ export async function sendAuthLoginFailed(orderId: string, twoFactor: boolean): 
       <p>Lütfen kullanıcı adı/şifreyi kontrol edin (ve varsa 2FA’yı kapatın), sonra tekrar deneyin.</p>
       ${twoFa}
       <p style="margin-top:12px;padding:10px 14px;background:#f3f7f6;border-left:3px solid #123F3A;border-radius:6px;color:#3a4a47;font-size:13px">
-        Ödemeniz için hesabınıza <strong>kredi</strong> tanımlandı (nakit iade değil); bu bakiyeyi başka bir pakette veya bu taramayı yeniden başlatırken kullanabilirsiniz.
+        Doğru kimlik bilgisiyle taramayı <strong>yeniden başlatabilirsiniz</strong>. Ödemenizin iadesi veya tekrar çalıştırılması için
+        <a href="mailto:support@cybertestify.com" style="color:#123F3A;font-weight:600">support@cybertestify.com</a> adresinden bizimle iletişime geçin — talebinizi elden inceleyip yardımcı olalım.
       </p>`;
     const html = layout({ heading: 'Girişi yapılamadı', bodyHtml: body, cta: { label: 'Siparişimi görüntüle', url: `${config.frontendUrl}/dashboard/${o.id}` } });
     return await sendMail(o.customer.email, 'Kimlik-doğrulamalı tarama — giriş yapılamadı', html);
   } catch (err) {
     console.error('[mail] sendAuthLoginFailed hata:', err);
+    return false;
+  }
+}
+
+// --- (Fatura talebi — MANUEL) Vedat'a "yeni fatura talebi" bildirimi -----------
+// Sistem OTOMATİK e-fatura KESMEZ; bu yalnız Vedat'ı haberdar eder (admin panelde de görünür).
+function fmtMoney2(minor: number, currency: string): string {
+  try { return new Intl.NumberFormat('tr-TR', { style: 'currency', currency }).format(minor / 100); } catch { return `${(minor / 100).toFixed(2)} ${currency}`; }
+}
+export async function sendInvoiceRequestNotification(orderId: string): Promise<boolean> {
+  try {
+    const inv = await prisma.invoiceRequest.findUnique({
+      where: { orderId },
+      include: { order: { include: { customer: { select: { email: true } }, package: { select: { displayName: true } }, domain: { select: { hostname: true } } } } },
+    });
+    if (!inv) return false;
+    const o = inv.order;
+    const rows: Array<[string, string]> = [
+      ['Sipariş no', o.id],
+      ['Paket', o.package.displayName],
+      ['Hedef', o.domain.hostname],
+      ['Ödenen tutar', fmtMoney2(o.amountMinorUnit, o.currency)],
+      ['Müşteri e-posta', o.customer.email],
+      ['Fatura tipi', inv.type === 'kurumsal' ? 'Kurumsal' : 'Bireysel'],
+      ...(inv.type === 'kurumsal'
+        ? [['Ticari unvan', inv.companyName ?? '-'], ['Vergi dairesi', inv.taxOffice ?? '-'], ['VKN', inv.taxNumber ?? '-']] as Array<[string, string]>
+        : [['Ad soyad', inv.fullName ?? '-'], ['TCKN', inv.nationalId ?? '-']] as Array<[string, string]>),
+      ['Adres', inv.address],
+      ['Fatura e-posta', inv.invoiceEmail],
+    ];
+    const table = rows.map(([k, v]) => `<tr><td style="padding:6px 10px;color:#8a9794;font-size:13px">${esc(k)}</td><td style="padding:6px 10px;font-size:13px;font-weight:600">${esc(v)}</td></tr>`).join('');
+    const body = `<p>Yeni bir <strong>fatura talebi</strong> geldi. Faturayı e-fatura aracınızla elle kesip gönderdikten sonra admin panelinden durumu güncelleyin.</p>
+      <table role="presentation" style="width:100%;margin:12px 0;border:1px solid #e3e8e6;border-radius:10px;border-collapse:collapse">${table}</table>`;
+    const html = layout({ heading: 'Yeni fatura talebi', bodyHtml: body, cta: config.adminUrl ? { label: 'Admin panelinde aç', url: `${config.adminUrl}/admin/orders` } : undefined });
+    return await sendMail(config.invoiceNotifyEmail, `Yeni fatura talebi — ${o.package.displayName}`, html);
+  } catch (err) {
+    console.error('[mail] sendInvoiceRequestNotification hata:', err);
     return false;
   }
 }

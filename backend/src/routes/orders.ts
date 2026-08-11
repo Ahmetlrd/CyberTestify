@@ -11,9 +11,8 @@ import { getPricing, currencyFor } from '../services/pricing.js';
 import { getPaymentProvider } from '../services/payment/index.js';
 import { initiateBundlePayment } from '../services/payment/iyzico.js';
 import { getSampleReportPdf } from '../services/sampleReports.js';
-import { creditsForPackagePrice, spendCredits, type CreditTx } from '../services/credits.js';
 import { enqueueUnlessReview } from '../services/orchestrator.js';
-import { sendOrderConfirmation } from '../services/mailer.js';
+import { sendOrderConfirmation, sendInvoiceRequestNotification } from '../services/mailer.js';
 import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
 import { COMBO_BUNDLES, getBundle, bundlePrice, bundleMemberAmounts, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
@@ -188,7 +187,6 @@ const createOrderSchema = z.object({
   // Bolge (fiyat + para birimi). Yoksa tr.
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
   // (Is 2) true ise odeme yerine hesap kredisinden dus (yeterliyse). Yoksa normal odeme.
-  useCredits: z.boolean().optional().default(false),
   // Promosyon/indirim kodu (opsiyonel). Gecerliyse fiyat dusurulur; %100 -> odeme atlanir.
   promoCode: z.string().trim().max(64).optional(),
   // (Faz 3 v2) active-light: risk kabulu. (FAZ A) kimlik-doğrulamalı/otonom paketlerde 3 ek onay.
@@ -360,33 +358,6 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     return res.json({ orderId: order.id, paidWithPromo: true, code: promoApplied.code });
   }
 
-  // (Is 2) KREDI ILE ODEME: yeterli bakiye varsa odeme adimini ATLA — krediyi dus,
-  // siparisi 'paid' olustur, taramayi kuyruga al. Hepsi TEK transaction (tutarlilik).
-  // Promo verildiyse kredi yolu KULLANILMAZ (cift indirim olmasin).
-  if (parsed.data.useCredits && !promoApplied) {
-    const creditsNeeded = creditsForPackagePrice(amountMinorUnit);
-    const customer = await prisma.customer.findUniqueOrThrow({ where: { id: req.customerId! }, select: { creditBalance: true } });
-    if (customer.creditBalance < creditsNeeded) {
-      return res.status(402).json({ error: `Yetersiz kredi: bu paket ${creditsNeeded} kredi gerektirir, bakiyeniz ${customer.creditBalance}.`, creditsNeeded, balance: customer.creditBalance });
-    }
-    const order = await prisma.$transaction(async (tx) => {
-      const o = await tx.order.create({
-        data: {
-          customerId: req.customerId!, domainId: domain.id, packageId: packageDb.id,
-          amountMinorUnit, currency, status: 'paid', paymentProvider: 'credit', paidAt: new Date(),
-          locale: localeFor(region), ...consent,
-        },
-      });
-      await spendCredits(tx as unknown as CreditTx, req.customerId!, creditsNeeded, o.id);
-      return o;
-    });
-    if (isActiveLight) await recordConsent(order.id); // tarama baslamadan ONCE
-    if (authCreds) await storeTestCredential(order.id, authCreds); // (FAZ A) test hesabı — ŞİFRELİ
-    // Odeme yok — dogrudan tarama kuyruguna (concurrency=1; bkz orchestrator).
-    await enqueueUnlessReview(order.id);
-    await sendOrderConfirmation([order.id]); // (B) kredi ile odenen tekil siparis onayi
-    return res.json({ orderId: order.id, paidWithCredits: true, creditsSpent: creditsNeeded });
-  }
 
   // Kismi promo indirimi: siparis effectiveAmount ile olusur, kalan tutar iyzico'da odenir.
   const order = await prisma.order.create({
@@ -658,6 +629,7 @@ ordersRouter.get('/', requireAuth, async (req, res) => {
     include: {
       domain: { select: { hostname: true } },
       package: { select: { displayName: true } },
+      invoiceRequest: { select: { status: true } },
     },
   });
   res.json(
@@ -668,6 +640,9 @@ ordersRouter.get('/', requireAuth, async (req, res) => {
       status: o.status,
       createdAt: o.createdAt,
       archived: o.archived,
+      // (Fatura talebi) müşteri geçmiş siparişten de talep edebilsin: ödendi mi + mevcut talep durumu.
+      paid: o.paidAt != null,
+      invoiceStatus: o.invoiceRequest?.status ?? null,
     })),
   );
 });
@@ -694,6 +669,7 @@ ordersRouter.delete('/:orderId', requireAuth, async (req, res) => {
     await tx.report.deleteMany({ where: { orderId: order.id } });
     await tx.flow.deleteMany({ where: { orderId: order.id } });
     await tx.activeTestConsent.deleteMany({ where: { orderId: order.id } });
+    await tx.invoiceRequest.deleteMany({ where: { orderId: order.id } });
     await tx.order.delete({ where: { id: order.id } });
   });
   res.json({ ok: true });
@@ -743,6 +719,8 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
       flow: true,
       domain: { select: { hostname: true } },
       package: { select: { key: true } },
+      customer: { select: { email: true } }, // (Fatura talebi) fatura e-postası varsayılanı
+      invoiceRequest: true, // (Fatura talebi) mevcut talebi göster/düzenle
       // fixSuggestions BLOB'unu ASLA gonderme; yalnizca varlik (iv) + kilit durumu.
       report: {
         select: {
@@ -783,4 +761,57 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
   const queue = order.status === 'scan_queued' ? await getQueuePosition({ createdAt: order.createdAt }) : null;
 
   res.json({ ...order, package: undefined, report, queue });
+});
+
+// ============================================================================
+// (Fatura talebi — MANUEL) Müşteri, ödemesi tamamlanmış siparişi için opsiyonel fatura bilgisi girer.
+// Sistem OTOMATİK e-fatura KESMEZ; bilgi toplanır, admin'de gösterilir. Sipariş başına tek talep (upsert).
+// ============================================================================
+const invoiceSchema = z
+  .object({
+    type: z.enum(['bireysel', 'kurumsal']),
+    companyName: z.string().trim().max(200).optional(),
+    taxOffice: z.string().trim().max(120).optional(),
+    taxNumber: z.string().trim().optional(),
+    fullName: z.string().trim().max(160).optional(),
+    nationalId: z.string().trim().optional(),
+    address: z.string().trim().min(5, 'Adres zorunlu').max(600),
+    invoiceEmail: z.string().trim().email('Geçerli bir e-posta girin'),
+  })
+  .superRefine((d, ctx) => {
+    if (d.type === 'kurumsal') {
+      if (!d.companyName) ctx.addIssue({ code: 'custom', path: ['companyName'], message: 'Ticari unvan zorunlu' });
+      if (!d.taxOffice) ctx.addIssue({ code: 'custom', path: ['taxOffice'], message: 'Vergi dairesi zorunlu' });
+      if (!/^\d{10}$/.test(d.taxNumber ?? '')) ctx.addIssue({ code: 'custom', path: ['taxNumber'], message: 'VKN 10 haneli rakam olmalı' });
+    } else {
+      if (!d.fullName) ctx.addIssue({ code: 'custom', path: ['fullName'], message: 'Ad soyad zorunlu' });
+      if (!/^\d{11}$/.test(d.nationalId ?? '')) ctx.addIssue({ code: 'custom', path: ['nationalId'], message: 'TCKN 11 haneli rakam olmalı' });
+    }
+  });
+
+ordersRouter.post('/:orderId/invoice-request', requireAuth, async (req, res) => {
+  const order = await prisma.order.findFirst({
+    where: { id: req.params.orderId, customerId: req.customerId! },
+    include: { invoiceRequest: { select: { id: true } } },
+  });
+  if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı.' });
+  if (!order.paidAt) return res.status(409).json({ error: 'Fatura talebi yalnızca ödemesi tamamlanmış siparişler için verilebilir.' });
+  const parsed = invoiceSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const d = parsed.data;
+  const data = {
+    type: d.type,
+    companyName: d.type === 'kurumsal' ? d.companyName ?? null : null,
+    taxOffice: d.type === 'kurumsal' ? d.taxOffice ?? null : null,
+    taxNumber: d.type === 'kurumsal' ? d.taxNumber ?? null : null,
+    fullName: d.type === 'bireysel' ? d.fullName ?? null : null,
+    nationalId: d.type === 'bireysel' ? d.nationalId ?? null : null,
+    address: d.address,
+    invoiceEmail: d.invoiceEmail,
+  };
+  const isNew = !order.invoiceRequest;
+  // Kesilmiş/gönderilmiş faturayı yeniden 'requested'a DÜŞÜRMEZ — yalnız bilgi güncellenir (status korunur).
+  await prisma.invoiceRequest.upsert({ where: { orderId: order.id }, create: { orderId: order.id, ...data }, update: data });
+  if (isNew) void sendInvoiceRequestNotification(order.id); // Vedat'a bildirim (yalnız İLK talepte)
+  res.json({ ok: true, updated: !isNew });
 });
