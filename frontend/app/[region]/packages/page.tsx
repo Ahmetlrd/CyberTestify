@@ -163,7 +163,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                     </div>
                   </div>
                   <a
-                    href={`${API}/orders/sample-report/${basit.key}`}
+                    href={`${API}/orders/sample-report/${basit.key}?v=lansman1`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="mt-6 flex w-full items-center justify-center gap-1.5 rounded-pill bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-105"
@@ -274,7 +274,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                     ) : (
                       <>
                         <a
-                          href={`${API}/orders/sample-report/${b.key}`}
+                          href={`${API}/orders/sample-report/${b.key}?v=lansman1`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="mt-6 flex w-full items-center justify-center gap-1.5 rounded-pill bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-105"
@@ -325,7 +325,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
               {sampleItems.map((c) => (
                 <a
                   key={c.key}
-                  href={`${API}/orders/sample-report/${c.key}`}
+                  href={`${API}/orders/sample-report/${c.key}?v=lansman1`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="card flex items-center justify-between gap-3 p-4 transition-colors hover:border-accent/60"

@@ -117,7 +117,9 @@ ordersRouter.get('/sample-report/:packageKey', async (req, res) => {
     const pdf = await getSampleReportPdf(req.params.packageKey);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="cybertestify-ornek-rapor.pdf"');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    // Kampanya (AI bölümü açık/kapalı) örnek içeriği değiştirebildiğinden uzun süreli
+    // tarayıcı önbelleği KULLANMA; her istekte tazele (sunucuda pdfCache zaten hızlı tutar).
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     res.send(pdf);
   } catch {
     res.status(404).json({ error: 'Ornek rapor bulunamadi.' });
