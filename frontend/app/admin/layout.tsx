@@ -20,6 +20,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isLogin = pathname === '/admin/login';
   const [ready, setReady] = useState(false);
   const [pendingInvoices, setPendingInvoices] = useState(0); // (Fatura talebi) nav rozeti
+  const [pendingRefunds, setPendingRefunds] = useState(0); // (İade talebi) nav rozeti
 
   useEffect(() => {
     if (isLogin) { setReady(true); return; }
@@ -29,6 +30,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
     setReady(true);
     adminApi.invoiceRequests('requested').then((d) => setPendingInvoices(d.pendingCount)).catch(() => {});
+    adminApi.orders(1).then((d: any) => setPendingRefunds(d.refundRequestsPending ?? 0)).catch(() => {});
   }, [isLogin, pathname, router]);
 
   if (isLogin) return <>{children}</>;
@@ -54,6 +56,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {n.label}
                 {n.href === '/admin/invoices' && pendingInvoices > 0 && (
                   <span style={{ marginLeft: 6, background: '#f59e0b', color: '#0f172a', borderRadius: 999, padding: '1px 7px', fontSize: 11, fontWeight: 800 }}>{pendingInvoices}</span>
+                )}
+                {n.href === '/admin/orders' && pendingRefunds > 0 && (
+                  <span style={{ marginLeft: 6, background: '#f59e0b', color: '#0f172a', borderRadius: 999, padding: '1px 7px', fontSize: 11, fontWeight: 800 }}>{pendingRefunds}</span>
                 )}
               </Link>
             );

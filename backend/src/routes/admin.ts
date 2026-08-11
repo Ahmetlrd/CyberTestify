@@ -58,6 +58,7 @@ adminRouter.get('/orders', async (req, res) => {
       where, skip, take, orderBy: { createdAt: 'desc' },
       select: {
         id: true, status: true, amountMinorUnit: true, currency: true, createdAt: true, paidAt: true,
+        failureReason: true, attemptCount: true, refundRequestedAt: true, refundRequestReason: true,
         customer: { select: { email: true } },
         domain: { select: { hostname: true } },
         package: { select: { displayName: true, key: true } },
@@ -65,11 +66,14 @@ adminRouter.get('/orders', async (req, res) => {
       },
     }),
   ]);
+  const refundRequestsPending = await prisma.order.count({ where: { refundRequestedAt: { not: null }, status: { not: 'refunded' } } });
   res.json({
-    page, pageSize, total, statusFilter: status ?? null,
+    page, pageSize, total, statusFilter: status ?? null, refundRequestsPending,
     items: rows.map((o) => ({
       id: o.id, status: o.status, amountMinorUnit: o.amountMinorUnit, currency: o.currency,
       createdAt: o.createdAt, paidAt: o.paidAt,
+      failureReason: o.failureReason, attemptCount: o.attemptCount,
+      refundRequestedAt: o.refundRequestedAt, refundRequestReason: o.refundRequestReason,
       customerEmail: o.customer.email, hostname: o.domain.hostname,
       packageName: o.package.displayName, packageKey: o.package.key,
       flowStatus: o.flow?.status ?? null, toolCallCount: o.flow?.toolCallCount ?? null,

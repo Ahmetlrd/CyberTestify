@@ -47,14 +47,27 @@ export default function AdminOrders() {
         : !data ? <p style={{ color: '#94a3b8' }}>Yükleniyor…</p>
         : <>
             {note && <p style={{ color: '#a3e635', fontSize: 13, marginBottom: 8 }}>{note}</p>}
+            {data.refundRequestsPending > 0 && (
+              <p style={{ color: '#0f172a', background: '#f59e0b', fontWeight: 700, fontSize: 13, padding: '8px 12px', borderRadius: 8, marginBottom: 10 }}>
+                🔔 Bekleyen iade talebi: {data.refundRequestsPending} — aşağıda “İADE TALEBİ” etiketli siparişler.
+              </p>
+            )}
             <Table
-              columns={['Müşteri', 'Hedef', 'Paket', 'Durum', 'Tool', 'Tarih', 'İşlem']}
+              columns={['Müşteri', 'Hedef', 'Paket', 'Durum', 'Not', 'Tarih', 'İşlem']}
               rows={data.items.map((o: any) => [
                 o.customerEmail,
                 o.hostname,
                 o.packageName,
-                <StatusBadge key="s" status={o.status} />,
-                o.toolCallCount ?? '—',
+                <span key="s" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <StatusBadge status={o.status} />
+                  {o.refundRequestedAt && o.status !== 'refunded' && (
+                    <span style={{ background: '#f59e0b', color: '#0f172a', fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 999 }}>İADE TALEBİ</span>
+                  )}
+                </span>,
+                <span key="n" style={{ fontSize: 11, color: '#94a3b8' }}>
+                  {o.refundRequestReason ? `İade: ${o.refundRequestReason}` : o.failureReason ? `Hata: ${o.failureReason}` : ''}
+                  {typeof o.attemptCount === 'number' && o.attemptCount > 1 ? ` (deneme: ${o.attemptCount})` : ''}
+                </span>,
                 fmtDate(o.createdAt),
                 o.status === 'refunded' ? (
                   <span key="r" style={{ color: '#94a3b8', fontSize: 12 }}>iade edildi</span>

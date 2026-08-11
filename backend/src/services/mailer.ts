@@ -234,6 +234,38 @@ export async function sendInvoiceRequestNotification(orderId: string): Promise<b
   }
 }
 
+// --- (İade talebi) Müşteri iade istedi -> Vedat'a bildirim (admin panelde de görünür) --------
+export async function sendRefundRequestNotification(orderId: string): Promise<boolean> {
+  try {
+    const o = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { customer: { select: { email: true } }, package: { select: { displayName: true } }, domain: { select: { hostname: true } } },
+    });
+    if (!o) return false;
+    const promo = await prisma.promoCodeUsage.findUnique({ where: { orderId }, select: { finalAmountMinorUnit: true } });
+    const paidMinor = promo ? promo.finalAmountMinorUnit : o.amountMinorUnit;
+    const rows: Array<[string, string]> = [
+      ['Sipariş no', o.id],
+      ['Paket', o.package.displayName],
+      ['Hedef', o.domain.hostname],
+      ['Ödenen tutar', paidMinor > 0 ? fmtMoney2(paidMinor, o.currency) : `${fmtMoney2(0, o.currency)} (promosyonla ücretsiz)`],
+      ['Müşteri e-posta', o.customer.email],
+      ['Sipariş durumu', o.status],
+      ['Başarısızlık sebebi', o.failureReason ?? '-'],
+      ['Deneme sayısı', String(o.attemptCount)],
+      ['Talep sebebi', o.refundRequestReason ?? '-'],
+    ];
+    const table = rows.map(([k, v]) => `<tr><td style="padding:6px 10px;color:#8a9794;font-size:13px">${esc(k)}</td><td style="padding:6px 10px;font-size:13px;font-weight:600">${esc(v)}</td></tr>`).join('');
+    const body = `<p>Bir müşteri <strong>iade talebinde</strong> bulundu. iyzico panelinden iadeyi yaptıktan sonra admin panelinden siparişi "İade edildi" olarak işaretleyin.</p>
+      <table role="presentation" style="width:100%;margin:12px 0;border:1px solid #e3e8e6;border-radius:10px;border-collapse:collapse">${table}</table>`;
+    const html = layout({ heading: 'Yeni iade talebi', bodyHtml: body, cta: config.adminUrl ? { label: 'Admin panelinde aç', url: `${config.adminUrl}/admin/orders` } : undefined });
+    return await sendMail(config.invoiceNotifyEmail, `Yeni iade talebi — ${o.package.displayName}`, html);
+  } catch (err) {
+    console.error('[mail] sendRefundRequestNotification hata:', err);
+    return false;
+  }
+}
+
 // --- (C) Tarama basladi (flow gercekten 'scan_running' oldugunda) -------------
 export async function sendScanStarted(orderId: string): Promise<boolean> {
   try {
@@ -274,13 +306,27 @@ export async function sendRefundNotice(orderId: string): Promise<boolean> {
   try {
     const o = await orderWithRelations(orderId);
     if (!o) return false;
-    const body = `<p><strong>${esc(o.domain.hostname)}</strong> için <strong>${esc(o.package.displayName)}</strong> siparişinizin bedeli iade edilmiştir.</p>
+    // GERÇEKTEN ÖDENEN tutar: promo kullanıldıysa PromoCodeUsage.finalAmountMinorUnit (100% promo -> 0);
+    // yoksa order.amountMinorUnit. Bundle'da amountMinorUnit tam fiyat tutulur ama promo'yla 0 ödenmiş
+    // olabilir -> promo usage'a bak (yanlış "22.999" iade göstermesin).
+    const promo = await prisma.promoCodeUsage.findUnique({ where: { orderId }, select: { finalAmountMinorUnit: true } });
+    const paidMinor = promo ? promo.finalAmountMinorUnit : o.amountMinorUnit;
+    const refundRow = paidMinor > 0
+      ? `<tr><td style="padding:12px 14px;font-size:13px;color:#8a9794">İade tutarı</td><td style="padding:12px 14px;font-size:16px;font-weight:800;color:#123F3A;text-align:right">${fmtMoney(paidMinor, o.currency)}</td></tr>`
+      : `<tr><td style="padding:12px 14px;font-size:13px;color:#8a9794">Ödenen tutar</td><td style="padding:12px 14px;font-size:14px;font-weight:700;color:#123F3A;text-align:right">${fmtMoney(0, o.currency)} (promosyonla ücretsiz)</td></tr>`;
+    const intro = paidMinor > 0
+      ? `<p><strong>${esc(o.domain.hostname)}</strong> için <strong>${esc(o.package.displayName)}</strong> siparişinizin bedeli iade edilmiştir.</p>`
+      : `<p><strong>${esc(o.domain.hostname)}</strong> için <strong>${esc(o.package.displayName)}</strong> siparişiniz iptal edilmiştir. Bu sipariş <strong>promosyon koduyla ücretsiz</strong> oluşturulduğundan iade edilecek bir ödeme bulunmamaktadır.</p>`;
+    const tail = paidMinor > 0
+      ? `<p style="color:#3a4a47">İade tutarının kartınıza/hesabınıza yansıması, bankanıza bağlı olarak birkaç iş günü sürebilir.</p>`
+      : '';
+    const body = `${intro}
       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:12px 0;border:1px solid #e3e8e6;border-radius:10px">
         <tr><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;color:#8a9794">Sipariş no</td><td style="padding:12px 14px;border-bottom:1px solid #eef2f1;font-size:13px;text-align:right">${esc(o.id.slice(0, 8))}</td></tr>
-        <tr><td style="padding:12px 14px;font-size:13px;color:#8a9794">İade tutarı</td><td style="padding:12px 14px;font-size:16px;font-weight:800;color:#123F3A;text-align:right">${fmtMoney(o.amountMinorUnit, o.currency)}</td></tr>
+        ${refundRow}
       </table>
-      <p style="color:#3a4a47">İade tutarının kartınıza/hesabınıza yansıması, bankanıza bağlı olarak birkaç iş günü sürebilir.</p>`;
-    const html = layout({ heading: 'İadeniz gerçekleştirildi', bodyHtml: body });
+      ${tail}`;
+    const html = layout({ heading: paidMinor > 0 ? 'İadeniz gerçekleştirildi' : 'Siparişiniz iptal edildi', bodyHtml: body });
     return await sendMail(o.customer.email, 'İade bildirimi — CyberTestify', html);
   } catch (err) {
     console.error('[mail] sendRefundNotice hata:', err);

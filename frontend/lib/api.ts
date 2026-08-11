@@ -18,9 +18,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const msg = typeof body.error === 'string' ? body.error : body.error ? JSON.stringify(body.error) : `İstek başarısız: ${res.status}`;
-    const err = new Error(msg) as Error & { status?: number; emailUnverified?: boolean };
+    const err = new Error(msg) as Error & { status?: number; emailUnverified?: boolean; needsCredentials?: boolean; tooManyAttempts?: boolean };
     err.status = res.status;
-    if (body.emailUnverified) err.emailUnverified = true; // (satin alma) e-posta dogrulama gerekli
+    if (body.emailUnverified) err.emailUnverified = true;   // (satin alma) e-posta dogrulama gerekli
+    if (body.needsCredentials) err.needsCredentials = true; // (retry) kimlik-dogrulamali paket kimlik ister
+    if (body.tooManyAttempts) err.tooManyAttempts = true;   // (retry) cok deneme -> iade talebi
     throw err;
   }
   return res.json();
@@ -125,6 +127,18 @@ export const api = {
     request<{ ok: boolean; updated?: boolean }>(`/orders/${orderId}/invoice-request`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+  // (Başarısız tarama) Tekrar dene — kimlik-doğrulamalı pakette yeni test hesabı bilgisi gerekebilir.
+  retryScan: (orderId: string, authCredentials?: { username: string; password: string }) =>
+    request<{ ok: boolean; attempt?: number }>(`/orders/${orderId}/retry`, {
+      method: 'POST',
+      body: JSON.stringify(authCredentials ? { authCredentials } : {}),
+    }),
+  // (Başarısız/iptal) İade talebi — admin panelde görünür, ekip iyzico'dan manuel iade yapar.
+  requestRefund: (orderId: string, reason?: string) =>
+    request<{ ok: boolean; alreadyRequested?: boolean }>(`/orders/${orderId}/refund-request`, {
+      method: 'POST',
+      body: JSON.stringify(reason ? { reason } : {}),
     }),
   getOrder: (orderId: string) => request<any>(`/orders/${orderId}`),
   // (#4) Kuyruk yogunlugu — yeni siparis oncesi "yogunuz" uyarisi icin.

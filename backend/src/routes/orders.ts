@@ -4,7 +4,7 @@ import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice, fixSuggestionListPrice, securityProfileFor, requiresTestCredentials } from '../services/scanPackages.js';
 import { validateConsentInput, activeTestScope, ACTIVE_TEST_CONSENT_VERSION, ACTIVE_TEST_RISK_ACK, hasValidActiveTestConsent } from '../services/activeTestConsent.js';
-import { storeTestCredential } from '../services/testCredentials.js';
+import { storeTestCredential, hasTestCredential } from '../services/testCredentials.js';
 import { renderConsentPdf } from '../services/pdf.js';
 import { decryptSecret } from '../services/crypto.js';
 import { getPricing, currencyFor } from '../services/pricing.js';
@@ -12,7 +12,7 @@ import { getPaymentProvider } from '../services/payment/index.js';
 import { initiateBundlePayment } from '../services/payment/iyzico.js';
 import { getSampleReportPdf } from '../services/sampleReports.js';
 import { enqueueUnlessReview } from '../services/orchestrator.js';
-import { sendOrderConfirmation, sendInvoiceRequestNotification } from '../services/mailer.js';
+import { sendOrderConfirmation, sendInvoiceRequestNotification, sendRefundRequestNotification } from '../services/mailer.js';
 import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
 import { COMBO_BUNDLES, getBundle, bundlePrice, bundleMemberAmounts, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
@@ -815,4 +815,59 @@ ordersRouter.post('/:orderId/invoice-request', requireAuth, async (req, res) => 
   await prisma.invoiceRequest.upsert({ where: { orderId: order.id }, create: { orderId: order.id, ...data }, update: data });
   if (isNew) void sendInvoiceRequestNotification(order.id); // Vedat'a bildirim (yalnız İLK talepte)
   res.json({ ok: true, updated: !isNew });
+});
+
+// ============================================================================
+// (Başarısız tarama akışı) Tekrar dene + İade talebi — TÜM paketler için.
+// ============================================================================
+const retrySchema = z.object({
+  authCredentials: z.object({ username: z.string().min(1), password: z.string().min(1) }).optional(),
+});
+
+// TEKRAR DENE: başarısız taramayı yeniden kuyruğa alır. Kimlik-doğrulamalı pakette test kimlik
+// bilgisi tek-kullanımlık (önceki denemede tüketildi) -> yeni bilgi ister. attemptCount>2 -> reddedilir.
+ordersRouter.post('/:orderId/retry', requireAuth, async (req, res) => {
+  const order = await prisma.order.findFirst({
+    where: { id: req.params.orderId, customerId: req.customerId! },
+    include: { package: { select: { key: true } } },
+  });
+  if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı.' });
+  if (order.status !== 'scan_failed') return res.status(409).json({ error: 'Yalnız başarısız olan taramalar tekrar denenebilir.' });
+  if (order.attemptCount > 2) return res.status(409).json({ error: 'Bu tarama birden çok kez denendi. Lütfen iade talebinde bulunun.', tooManyAttempts: true });
+
+  const parsed = retrySchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  // Kimlik-doğrulamalı paket: yeni test hesabı bilgisi gerekir (eski tüketildi).
+  if (requiresTestCredentials(order.package.key)) {
+    const has = await hasTestCredential(order.id, 'primary');
+    if (!has) {
+      if (!parsed.data.authCredentials) return res.status(400).json({ error: 'Bu paket kimlik-doğrulamalı test içerir; tekrar denemek için test hesabı kullanıcı adı ve şifresini girin.', needsCredentials: true });
+      await storeTestCredential(order.id, parsed.data.authCredentials);
+    }
+  }
+
+  // Eski flow'u temizle (Flow.orderId @unique) + siparişi taramaya hazırla + yeniden kuyruğa al.
+  await prisma.flow.deleteMany({ where: { orderId: order.id } });
+  await prisma.order.update({
+    where: { id: order.id },
+    data: { status: 'paid', failureReason: null, attemptCount: { increment: 1 }, refundRequestedAt: null, refundRequestReason: null },
+  });
+  await enqueueUnlessReview(order.id);
+  res.json({ ok: true, attempt: order.attemptCount + 1 });
+});
+
+// İADE TALEBİ: müşteri iade ister -> admin panelde görünür (Vedat iyzico'dan manuel iade yapar).
+ordersRouter.post('/:orderId/refund-request', requireAuth, async (req, res) => {
+  const order = await prisma.order.findFirst({
+    where: { id: req.params.orderId, customerId: req.customerId! },
+    select: { id: true, status: true, refundRequestedAt: true },
+  });
+  if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı.' });
+  if (order.status === 'refunded') return res.status(409).json({ error: 'Bu sipariş zaten iade edilmiş.' });
+  if (order.refundRequestedAt) return res.json({ ok: true, alreadyRequested: true });
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 500) : null;
+  await prisma.order.update({ where: { id: order.id }, data: { refundRequestedAt: new Date(), refundRequestReason: reason } });
+  void sendRefundRequestNotification(order.id); // Vedat'a bildirim
+  res.json({ ok: true });
 });

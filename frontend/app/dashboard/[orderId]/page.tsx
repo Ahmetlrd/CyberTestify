@@ -6,6 +6,7 @@ import { api } from '../../../lib/api';
 import { StatusTracker } from '../../../components/dashboard/StatusTracker';
 import { LiveScanPhases } from '../../../components/dashboard/LiveScanPhases';
 import { InvoiceRequestForm } from '../../../components/dashboard/InvoiceRequestForm';
+import { ScanFailedActions } from '../../../components/dashboard/ScanFailedActions';
 import { GA_ID } from '../../../lib/consent';
 import { ScopeCertificate } from '../../../components/dashboard/ScopeCertificate';
 
@@ -20,6 +21,7 @@ const HEADLINE: Record<string, string> = {
   scan_failed: 'Tarama tamamlanamadı',
   scope_violation: 'Tarama güvenlik nedeniyle durduruldu',
   report_purged: 'Rapor saklama süresi doldu',
+  refunded: 'Siparişiniz iade edildi',
 };
 
 function LockIcon({ open }: { open: boolean }) {
@@ -156,9 +158,24 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       </h1>
       {order && <p className="mt-1 text-sm text-ink-muted">Hedef: {hostname}</p>}
 
-      <div className="mt-8">
-        <StatusTracker status={status} />
-      </div>
+      {/* İade/süre-doldu gibi terminal durumlarda adım göstergesi YANILTICI olur — gösterilmez. */}
+      {!['refunded', 'report_purged'].includes(status) && (
+        <div className="mt-8">
+          <StatusTracker status={status} />
+        </div>
+      )}
+
+      {status === 'refunded' && (
+        <div className="mt-8 rounded-card border border-brand-200 bg-brand-50/60 p-6 text-sm text-ink-soft">
+          <p className="font-semibold text-brand">Siparişiniz iade edildi</p>
+          <p className="mt-1">
+            Bu sipariş iptal/iade edilmiştir. Bir ödeme yaptıysanız iade tutarı, bankanıza bağlı olarak birkaç iş günü içinde
+            kartınıza/hesabınıza yansır. Sorunuz varsa{' '}
+            <a href="mailto:support@cybertestify.com" className="font-semibold text-accent-600 underline">support@cybertestify.com</a>{' '}
+            ile iletişime geçebilirsiniz.
+          </p>
+        </div>
+      )}
 
       {status === 'scan_queued' && order?.queue && (
         <div className="mt-4 rounded-card border border-accent/40 bg-accent-soft/40 px-4 py-3 text-sm text-ink-soft">
@@ -335,17 +352,17 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       )}
 
       {status === 'scan_failed' && (
-        <p className="mt-6 rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Tarama tamamlanamadı. Lütfen tekrar deneyin veya{' '}
-          <a href="mailto:destek@cybertestify.com" className="font-semibold underline">
-            destek
-          </a>{' '}
-          ile iletişime geçin.
-        </p>
+        <ScanFailedActions
+          orderId={order.id}
+          packageKey={order.packageKey}
+          attemptCount={order.attemptCount ?? 1}
+          failureReason={order.failureReason}
+          onRetry={() => window.location.reload()}
+        />
       )}
 
-      {/* (Fatura talebi — MANUEL) ödemesi tamamlanmış siparişlerde opsiyonel fatura bilgisi. */}
-      {order?.paidAt && (
+      {/* (Fatura talebi) yalnız ödemesi tamamlanmış + başarısız/iade OLMAYAN siparişlerde göster. */}
+      {order?.paidAt && !['scan_failed', 'scope_violation', 'report_purged', 'refunded'].includes(status) && (
         <InvoiceRequestForm
           orderId={order.id}
           defaultEmail={order.customer?.email ?? ''}

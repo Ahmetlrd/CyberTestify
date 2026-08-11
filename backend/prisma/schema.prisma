@@ -300,6 +300,12 @@ model Order {
   // (İŞ 2) Tarama başarısız olduğunda sebep (özellikle full_pentest login-başarısız) — admin görünürlüğü.
   // Vedat bunu görüp gerekirse iyzico'dan MANUEL iade yapar (otomatik kredi YOK).
   failureReason   String?
+  // Tarama deneme sayısı (ilk deneme=1; her "tekrar dene" +1). 2'den fazla başarısızlıkta müşteriye
+  // tekrar-dene yerine "iade talebi" gösterilir.
+  attemptCount    Int      @default(1)
+  // Müşteri iade talebinde bulunduysa (admin panelde görünür; Vedat iyzico'dan manuel iade yapar).
+  refundRequestedAt   DateTime?
+  refundRequestReason String?
 
   flow   Flow?
   report Report?
