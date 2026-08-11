@@ -301,7 +301,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
                             {(order.report.fixSuggestionListMinorUnit / 100).toLocaleString('tr-TR')} {order.currency}
                           </span>
                         )}
-                        Ücretsiz — lansman kampanyası kapsamında AI Çözüm Önerileri hediye!
+                        <strong className="mr-1">0 {order.currency}</strong>— kampanyaya özel ücretsiz, sizin için açıldı 🎁
                       </span>
                     </div>
                   )}

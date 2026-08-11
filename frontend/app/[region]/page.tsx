@@ -50,6 +50,43 @@ const FAQ_EN = [
   { q: 'Is this a formal penetration test?', a: 'No. CyberTestify is a security pre-assessment service; it is not a substitute for a formal penetration test or compliance audit and does not provide certification.' },
 ];
 
+// (LANSMAN KAMPANYASI) AI Çözüm Önerileri kısa süreliğine ÜCRETSİZ. Kapatmak için
+// NEXT_PUBLIC_AI_FIX_FREE_CAMPAIGN=false (env tanımsızsa varsayılan: AÇIK/gösterilir).
+const AI_FIX_FREE_CAMPAIGN = process.env.NEXT_PUBLIC_AI_FIX_FREE_CAMPAIGN !== 'false';
+
+function CampaignBanner({ region }: { region: RegionConfig }) {
+  if (!AI_FIX_FREE_CAMPAIGN) return null;
+  const tr = region.lang === 'tr';
+  return (
+    <Link
+      href={`/${region.code}/packages`}
+      className="group block bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 text-white"
+    >
+      <div className="container-page flex flex-wrap items-center justify-center gap-x-3 gap-y-1 py-2.5 text-center text-sm font-semibold">
+        <span className="rounded-pill bg-white/20 px-2.5 py-0.5 text-xs font-extrabold tracking-wide">
+          🎉 {tr ? 'LANSMANA ÖZEL' : 'LAUNCH OFFER'}
+        </span>
+        <span>
+          {tr ? (
+            <>
+              Kısa süreliğine <strong>AI Çözüm Önerileri ÜCRETSİZ</strong> — tüm raporlarda{' '}
+              <span className="line-through opacity-80">499&nbsp;TL</span> <strong>0&nbsp;TL</strong>
+            </>
+          ) : (
+            <>
+              For a limited time <strong>AI Fix Suggestions are FREE</strong> on every report
+            </>
+          )}
+        </span>
+        <span className="inline-flex items-center gap-1 underline decoration-white/50 underline-offset-2 group-hover:decoration-white">
+          {tr ? 'Paketleri gör' : 'View packages'}
+          <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
+        </span>
+      </div>
+    </Link>
+  );
+}
+
 const DOT_BG = {
   backgroundImage: 'radial-gradient(rgba(255,255,255,0.08) 1px, transparent 1px)',
   backgroundSize: '22px 22px',
@@ -230,6 +267,7 @@ export default function RegionHome({ params }: { params: { region: string } }) {
   const d = getDict(region);
   return (
     <>
+      <CampaignBanner region={region} />
       <Hero d={d} />
       <AutonomousSection region={region} />
       <HowItWorks d={d} />
