@@ -1,7 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import puppeteer from 'puppeteer-core';
 import { createHash } from 'node:crypto';
-import { lookupFinding } from './findingTaxonomy.js';
+import { lookupFinding, lookupByType, type FindingType } from './findingTaxonomy.js';
 
 /**
  * (3) Rapor PDF uretimi — SAF FORMATLAMA/RENDER. Ek LLM cagrisi YOK, ek Anthropic
@@ -261,7 +261,7 @@ function reportIdentifiers(hostname: string, createdAt: Date): { reportNo: strin
 }
 
 type Sev = 'critical' | 'high' | 'medium' | 'low';
-type Finding = { title: string; sev: Sev; classifyText: string };
+type Finding = { title: string; sev: Sev; type?: FindingType };
 function normSev(s: string): Sev | null {
   const x = s.toLocaleLowerCase('tr');
   if (/krit[iı]k|critical/.test(x)) return 'critical';
@@ -274,16 +274,44 @@ function stripMd(s: string): string {
   return s.replace(/`([^`]*)`/g, '$1').replace(/\*\*([^*]*)\*\*/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_]/g, '').trim();
 }
 
+// (MÜŞTERİ-GÖRÜNÜR JARGON) "PentAGI" iç kod adı HİÇBİR müşteri-görünür yerde geçmemeli — konumlandırma
+// "yapay zekâ destekli advisory". İç motor adını dış-dünya diline çevir (içerik/anlam DEĞİŞMEZ).
+function sanitizeJargon(md: string): string {
+  return md
+    .replace(/PentAGI\s*aj[aı]n[ıi]?\s*bu\s*u[çc]\s*noktay[ıi]/gi, 'İleri analiz bu uç noktayı')
+    .replace(/PentAGI\s*aj[aı]n[ıi]?\s*se[çc]ti\s*\+\s*backend\s*GET\s*ile\s*do[ğg]rulad[ıi]/gi, 'İleri analizle seçildi, backend ile doğrulandı')
+    .replace(/PentAGI\s*aj[aı]n[ıi]?/gi, 'İleri analiz')
+    .replace(/PentAGI/gi, 'yapay zekâ destekli analiz');
+}
+
 // Markdown gövdesindeki ŞİDDET içeren bulgu tablolarından (TESPİT EDİLEN RİSKLER / BULGULAR /
 // Risk Matrisi) bulgu satırlarını (başlık + şiddet) çıkarır. Şiddet kolonu OLMAYAN tablolar
 // (KVKK Uygun/Dikkat/Eksik, Kontrol Listesi Güven vb.) ATLANIR -> uyum raporunda 0 zafiyet.
-function parseFindings(md: string): { rows: Finding[]; counts: Record<Sev, number> } {
+// İç-jargon temizliği — master tablo/başlıkta ASLA "PentAGI", "backend GET ile doğruladı",
+// "ajanı seçti" gibi ifadeler + payload/parantez teknik detayı GÖRÜNMEZ (2.3'te kalır).
+function cleanTitle(raw: string): string {
+  let t = raw
+    .replace(/pentagi\s*aj[aı]n[ıi]?\s*se[çc]ti\s*\+?\s*/gi, '')
+    .replace(/backend\s*get\s*ile\s*do[ğg]rulad[ıi]/gi, '')
+    .replace(/aj[aı]n[ıi]?\s*se[çc]ti/gi, '')
+    .replace(/pentagi/gi, '')
+    .replace(/\s*\((?:sqli|xss)\s*g[öo]sterge[a-zçğıöşü ':=\-0-9]*\)/gi, '') // "(SQLi göstergesi: ' OR 1=1--)"
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[\s+•\-]+|[\s+]+$/g, '')
+    .trim();
+  return t;
+}
+
+function parseFindings(md: string, locale: 'tr' | 'en'): { rows: Finding[]; counts: Record<Sev, number> } {
   const counts: Record<Sev, number> = { critical: 0, high: 0, medium: 0, low: 0 };
   const rows: Finding[] = [];
   const seen = new Set<string>();
   const lines = md.split('\n');
+  let curSection = ''; // en yakın önceki ## BÖLÜM başlığı (ör. "İş Mantığı Doğrulama"). ### alt-başlıklar bağlam DEĞİL.
   let i = 0;
   while (i < lines.length) {
+    const hm = lines[i].match(/^##\s+(.+?)\s*$/); // yalnız H2 (## ) bölüm başlığı
+    if (hm) { curSection = stripMd(hm[1]); i++; continue; }
     if (!/^\s*\|.*\|\s*$/.test(lines[i])) { i++; continue; }
     // tablo bloğu topla
     const block: string[] = [];
@@ -293,26 +321,30 @@ function parseFindings(md: string): { rows: Finding[]; counts: Record<Sev, numbe
     const header = cells(block[0]).map((h) => h.toLocaleLowerCase('tr'));
     const sevCol = header.findIndex((h) => /[şs]iddet|severity|ciddiyet/.test(h));
     if (sevCol === -1) continue; // şiddet kolonu yoksa bulgu tablosu değil
-    // Aktif/authenticated tablolarda başlık = ENTRY POINT, zafiyet TÜRÜ ayrı "Teknik/Tür" kolonundadır.
-    // Başlık için tekniği tercih et; sınıflandırma için TÜM satır metnini kullan (uç nokta + teknik + kanıt).
     const techCol = header.findIndex((h) => /teknik|technique|t[üu]r\b|tip\b|\btype\b/.test(h));
     let titleCol = header.findIndex((h) => /bulgu|ba[şs]l[ıi]k|title|finding/.test(h));
     if (titleCol === -1) titleCol = header.findIndex((h) => /giri[şs]|u[çc] nokta|endpoint|uc nokta/.test(h));
     if (titleCol === -1) titleCol = header.findIndex((h, idx) => idx !== sevCol && !/^#|^no$|^s[ıi]ra/.test(h));
     if (titleCol === -1) titleCol = 0;
-    const nameCol = techCol !== -1 ? techCol : titleCol; // görünür başlık
+    const nameCol = techCol !== -1 ? techCol : titleCol;
     for (let r = 1; r < block.length; r++) {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue; // ayraç satırı
       const c = cells(block[r]);
       const sev = normSev(c[sevCol] ?? '');
       if (!sev) continue;
-      const title = stripMd(c[nameCol] ?? c[titleCol] ?? '').replace(/^\d+[).]?\s*/, '');
-      if (!title) continue;
-      const classifyText = c.filter((_, idx) => idx !== sevCol).map(stripMd).join(' '); // uç nokta + teknik + kanıt
-      const key = title.toLocaleLowerCase('tr').slice(0, 48);
+      const rawName = stripMd(c[nameCol] ?? c[titleCol] ?? '').replace(/^\d+[).]?\s*/, '');
+      if (!rawName) continue;
+      // Sınıflandırma ÖNCE SATIRDAN (uç nokta+teknik+kanıt), olmazsa BÖLÜM başlığından. Böylece
+      // "Enjeksiyon (SQLi/XSS)" başlığındaki SQLi, XSS satırını kirletmez; ama "İş Mantığı Doğrulama"
+      // gibi satırı jenerik olan bulgular bölüm başlığından doğru sınıflanır.
+      const rowText = c.filter((_, idx) => idx !== sevCol).map(stripMd).join(' ');
+      const info = lookupFinding(rowText, locale) ?? lookupFinding(curSection, locale);
+      // Görünür başlık: sınıflandıysa MÜŞTERİ-DOSTU etiket (jargonsuz); değilse temizlenmiş ham ad/bölüm.
+      const title = info ? info.label : (cleanTitle(rawName) || cleanTitle(curSection) || rawName);
+      const key = (info ? info.type : title.toLocaleLowerCase('tr')).slice(0, 48);
       if (seen.has(key)) continue;
       seen.add(key);
-      rows.push({ title, sev, classifyText });
+      rows.push({ title, sev, type: info?.type });
       counts[sev]++;
     }
   }
@@ -370,8 +402,8 @@ function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en'): string {
   const sorted = [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]);
   const blocks: string[] = [];
   sorted.forEach((f, idx) => {
-    const info = lookupFinding(f.classifyText, locale); // eşleme yoksa null (uç nokta+teknik+kanıt üzerinden)
-    if (!info) return; // UYDURMA YOK — İş Etkisi/CWE bilinmiyorsa blok yazma (bulgu 2.2'de yine görünür)
+    if (!f.type) return; // UYDURMA YOK — sınıflanmadıysa İş Etkisi/CWE yazma (bulgu 2.2'de yine görünür)
+    const info = lookupByType(f.type, locale);
     const sm = SEV_META[f.sev];
     blocks.push(`<div class="finding-block">
       <h3 id="s-fb-${idx + 1}">CT-${idx + 1} · ${escapeHtml(f.title)}</h3>
@@ -468,6 +500,8 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     /\n*(?:---\s*\n)?\s*#{1,6}\s*(?:Ekran\s*Gör?[uü]nt[uü]leri|Screenshots)\s*\n+_?(?:Yok|None)_?\s*(?=\n---|\s*$)/gi,
     '',
   );
+  // (JARGON) İç motor adı "PentAGI" müşteri-görünür metinde geçmesin.
+  effectiveMd = sanitizeJargon(effectiveMd);
 
   // Genel Degerlendirme (banner altina) — risk seviyesi (ek LLM YOK).
   const isKvkk = meta.packageKey === 'kvkk_hazirlik';
@@ -528,43 +562,74 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     <p class="assess-body">${escapeHtml(risk.sentence)}</p></div>`;
   }
   const fixTitle = isKvkk ? 'Önerilen Aksiyonlar' : t.fixTitle;
+  const loc = meta.locale;
 
-  let bodyHtml = md.render(effectiveMd);
+  // Ek Pasif Kontroller (kod-tabanli) — AYRI blok (ana bulgulardan görsel olarak ayrı).
+  const extrasHtml = opts.extrasMarkdown && opts.extrasMarkdown.trim()
+    ? `<div class="extras-section">${md.render(opts.extrasMarkdown)}</div>` : '';
 
-  // Ek Pasif Kontroller (kod-tabanli) — ana bulgulardan GORSEL olarak ayri, farkli renk.
-  // Markdown zaten "## Ek Pasif Kontroller" basligi + notu icerir; kutu icine sarariz.
-  if (opts.extrasMarkdown && opts.extrasMarkdown.trim()) {
-    bodyHtml += `<div class="extras-section">${md.render(opts.extrasMarkdown)}</div>`;
-  }
-
-  // Fix onerileri bolumu — 3 DURUM ve KOD GARANTISI: (1) unlock+icerik -> icerigi goster;
-  // (2) kilitli (icerik var, satin alinmamis) -> upsell kutusu; (3) HIC icerik yok (ajan
-  // ===FIX_SUGGESTIONS=== yazmadi) -> nazik "uretilemedi" notu. Boylece "AI Çözüm Önerileri"
-  // bolumu HER raporda MUTLAKA yer alir, ASLA sessizce kaybolmaz (KVKK haric — onun kendi
-  // "Önerilen Aksiyonlar" akisi var).
+  // AI ÇÖZÜM ÖNERİLERİ (bölüm 4) — 3 DURUM: (1) unlock+içerik -> göster; (2) kilitli -> upsell;
+  // (3) içerik yok -> nazik not. GERÇEK=kilitli / ÖRNEK=açık mantığı DEĞİŞMEZ.
+  let fixHtml = '';
   if (opts.fixMarkdown && opts.fixMarkdown.trim()) {
-    bodyHtml += `<div class="fix-section"><h2>${escapeHtml(fixTitle)}</h2>${md.render(opts.fixMarkdown)}</div>`;
+    fixHtml = `<div class="fix-section"><h2 id="s-ai">${escapeHtml(fixTitle)}</h2>${md.render(opts.fixMarkdown)}</div>`;
   } else if (opts.fixLocked) {
-    bodyHtml += `<div class="fix-locked"><h2>🔒 ${escapeHtml(fixTitle)}</h2><p>${escapeHtml(t.fixLocked)}</p><p class="fix-cta">${escapeHtml(t.fixLockedCta)}</p></div>`;
+    fixHtml = `<div class="fix-locked"><h2 id="s-ai">🔒 ${escapeHtml(fixTitle)}</h2><p>${escapeHtml(t.fixLocked)}</p><p class="fix-cta">${escapeHtml(t.fixLockedCta)}</p></div>`;
   } else if (!isKvkk) {
-    bodyHtml += `<div class="fix-locked"><h2>🔒 ${escapeHtml(fixTitle)}</h2><p>${escapeHtml(t.fixEmpty)}</p><p class="fix-cta">${escapeHtml(t.fixLockedCta)}</p></div>`;
+    fixHtml = `<div class="fix-locked"><h2 id="s-ai">🔒 ${escapeHtml(fixTitle)}</h2><p>${escapeHtml(t.fixEmpty)}</p><p class="fix-cta">${escapeHtml(t.fixLockedCta)}</p></div>`;
   }
 
-  // (PROFESYONEL İSKELET) MEVCUT gövdeden TÜRETİLEN bölümler — gövde/ton/disclaimer DEĞİŞMEZ.
+  // (PROFESYONEL İSKELET) TÜRETİLEN bölümler — gövde/ton/disclaimer DEĞİŞMEZ.
   const { reportNo, verifyCode } = reportIdentifiers(meta.hostname, meta.createdAt);
-  // KVKK uyum ön-değerlendirmesidir (severity'li zafiyet değil) -> dağılım/master GÖSTERME (yanıltmasın).
-  const parsed = isKvkk ? null : parseFindings(effectiveMd);
-  const summaryHtml = parsed ? buildDistribution(parsed.counts, meta.locale) + buildMasterTable(parsed.rows, meta.locale) : '';
-  // 2.3 Detaylı Bulgular (İş Etkisi + CWE) yalnız GERÇEK raporlarda; örneklerde (assessOverride)
-  // kendi elle yazılmış İş Etkisi/Standart Eşleme bölümleri zaten var -> mükerrer yazma.
-  const detailedHtml = parsed && !opts.assessOverride ? buildDetailedFindings(parsed.rows, meta.locale) : '';
-  const glossaryHtml = buildGlossary(effectiveMd, meta.locale);
-  // Tekrar eden aynı "Kapsam ve yöntem" notunu (her kontrolden sonra) BİR kereye indir.
-  bodyHtml = dedupeBlockquotes(bodyHtml);
-  const notCert = meta.locale === 'tr' ? 'Bu rapor resmi sızma testi / sertifikasyon değildir.' : 'This report is not a formal penetration test / certification.';
-  const sealTitle = meta.locale === 'tr' ? 'CyberTestify Güvenlik Taraması — Tamamlandı' : 'CyberTestify Security Scan — Completed';
-  // İÇİNDEKİLER: içerik başlıklarına id ata + TOC sayfası (sayfa no'lar render'da iki-geçişli doldurulur).
-  const contentInner0 = `${assessBox}${summaryHtml}${detailedHtml}${bodyHtml}${glossaryHtml}`;
+  // Uyum paketleri (KVKK/PCI/ISO) severity'li ZAFİYET taraması DEĞİL, hazırlık ön-değerlendirmesidir
+  // -> dağılım/master GÖSTERME (yanıltıcı "0 zafiyet" olmasın; çerçeve gözlemleri gövdede kalır).
+  const isCompliance = ['kvkk_hazirlik', 'bundle_compliance', 'pci_hazirlik', 'iso27001_hazirlik'].includes(meta.packageKey ?? '');
+  const parsed = isCompliance ? null : parseFindings(effectiveMd, loc);
+  const distMasterHtml = parsed ? buildDistribution(parsed.counts, loc) + buildMasterTable(parsed.rows, loc) : '';
+  // 2.3 Detaylı Bulgular (İş Etkisi + CWE) yalnız GERÇEK raporlarda; örneklerde (assessOverride) kendi var.
+  const detailedHtml = parsed && !opts.assessOverride ? buildDetailedFindings(parsed.rows, loc) : '';
+  const glossaryHtml = buildGlossary(effectiveMd, loc);
+  const notCert = loc === 'tr' ? 'Bu rapor resmi sızma testi / sertifikasyon değildir.' : 'This report is not a formal penetration test / certification.';
+  const sealTitle = loc === 'tr' ? 'CyberTestify Güvenlik Taraması — Tamamlandı' : 'CyberTestify Security Scan — Completed';
+
+  // (TEK YAPI) effectiveMd'yi ## bölümlerine ayır; İÇERİK SİLİNMEZ, DOĞRU bölüme TAŞINIR:
+  // - "YÖNETİCİ ÖZETİ" -> 1. Yönetici Özeti (öne alınır)
+  // - "GENEL DEĞERLENDİRME" -> ATILIR (üst risk kutusuyla MÜKERRER; kutu kalır)
+  // - "ÖNCELİKLİ AKSİYONLAR" -> 1.2 İyileştirme Öncelikleri
+  // - kontrol detayları / metodoloji / sonraki adımlar / yasal -> 3. Kontrol Özeti ve Metodoloji (H3'e indirilir; TOC temiz)
+  const summaryParts: string[] = [];
+  const detailParts: string[] = [];
+  let hasExec = false;
+  for (const chunk of effectiveMd.split(/\n(?=##\s)/)) {
+    const hm = chunk.match(/^##\s+(.+?)\s*(?:\n|$)/);
+    const tt = hm ? stripMd(hm[1]).toLocaleLowerCase('tr') : '';
+    if (!tt) { if (chunk.trim()) detailParts.push(chunk.replace(/^###\s/gm, '#### ').replace(/^##\s/gm, '### ')); continue; }
+    if (/^bulgular$/.test(tt)) continue; // boş "## Bulgular" wrapper
+    if (/y[öo]netici [öo]zeti|executive summary/.test(tt)) { hasExec = true; summaryParts.push(chunk.replace(/^##[^\n]*\n?/, '').trim()); continue; }
+    if (/genel de[ğg]erlendirme|overall assessment/.test(tt)) continue; // MÜKERRER -> at
+    if (/[öo]ncelikli aksiyonlar|priority actions|iyile[şs]tirme [öo]ncelik/.test(tt)) { summaryParts.push(chunk.replace(/^###\s/gm, '#### ').replace(/^##\s/gm, '### ')); continue; }
+    detailParts.push(chunk.replace(/^###\s/gm, '#### ').replace(/^##\s/gm, '### ')); // detay -> H3
+  }
+  const reorganize = hasExec && !opts.assessOverride;
+  const H2 = (id: string, tr: string, en: string) => `<h2 id="${id}">${escapeHtml(loc === 'tr' ? tr : en)}</h2>`;
+
+  let contentInner0: string;
+  if (reorganize) {
+    const summaryBody = dedupeBlockquotes(md.render(summaryParts.join('\n\n')));
+    const detailBody = dedupeBlockquotes(md.render(detailParts.join('\n\n')));
+    const hasFindings = !!(distMasterHtml || detailedHtml);
+    const findingsSection = hasFindings ? H2('s-findings', '2. Bulgular', '2. Findings') + distMasterHtml + detailedHtml : '';
+    const cn = hasFindings ? '3' : '2'; // bulgu bölümü yoksa (uyum) numara boşluğu olmasın
+    contentInner0 =
+      H2('s-summary', '1. Yönetici Özeti', '1. Executive Summary') + assessBox + summaryBody +
+      findingsSection +
+      H2('s-controls', `${cn}. Kontrol Özeti ve Metodoloji`, `${cn}. Controls & Methodology`) + detailBody +
+      extrasHtml + fixHtml + glossaryHtml;
+  } else {
+    // Yapısız gövde / örnek PDF: mevcut akış (assessBox + dağılım/master + gövde + AI + sözlük).
+    const bodyHtml = dedupeBlockquotes(md.render(effectiveMd) + extrasHtml + fixHtml);
+    contentInner0 = `${assessBox}${distMasterHtml}${detailedHtml}${bodyHtml}${glossaryHtml}`;
+  }
   const { html: contentInner, entries: tocEntries } = injectTocIds(contentInner0);
   const tocPage = buildTocPage(tocEntries, meta.locale);
 

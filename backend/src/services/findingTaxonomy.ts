@@ -135,7 +135,7 @@ export const FINDING_TAXONOMY: Record<FindingType, Entry> = {
 const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   { re: /forced.?browsing|zorla gezinme|admin u[çc]|fonksiyon seviyesi|y[öo]netici u[çc]/i, type: 'forced_browsing' },
   { re: /privilege|yetki y[üu]kseltme|dikey yetki/i, type: 'privilege_escalation' },
-  { re: /login.?bypass|kimlik do[ğg]rulama atlat|giri[şs] atlat/i, type: 'login_bypass' },
+  { re: /login.?bypass|kimlik do[ğg]rulama (atlat|baypas)|giri[şs] baypas|baypas g[öo]sterge/i, type: 'login_bypass' },
   { re: /logout|[çc]ık[ıi][şs].*oturum|oturum ge[çc]ersiz/i, type: 'weak_logout' },
   { re: /session.?fixation|oturum sabit/i, type: 'session_fixation' },
   { re: /\bjwt\b|token b[üu]t[üu]nl[üu]k|alg\s*=\s*none/i, type: 'jwt' },
@@ -172,14 +172,63 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
 ];
 
 export function classifyFinding(title: string): FindingType | null {
-  for (const c of CLASSIFIERS) if (c.re.test(title)) return c.type;
+  // Türkçe "İ" problemi: JS'te /i flag'i "İ"yi "i"ye eşlemez -> önce tr-locale ile küçült.
+  const t = title.toLocaleLowerCase('tr');
+  for (const c of CLASSIFIERS) if (c.re.test(t)) return c.type;
   return null;
 }
 
+// Master tablo / bulgu başlığı için MÜŞTERİ-DOSTU, jargonsuz ad (PentAGI/iç-jargon YOK; payload/
+// teknik detay master'da DEĞİL, 2.3 Detaylı Bulgular'da kalır).
+const FRIENDLY_LABEL: Record<FindingType, { tr: string; en: string }> = {
+  clickjacking: { tr: 'X-Frame-Options eksik (clickjacking)', en: 'Missing X-Frame-Options (clickjacking)' },
+  mime_sniffing: { tr: 'X-Content-Type-Options eksik (MIME-sniffing)', en: 'Missing X-Content-Type-Options' },
+  csp_missing: { tr: 'Content-Security-Policy eksik', en: 'Missing Content-Security-Policy' },
+  referrer_policy: { tr: 'Referrer-Policy eksik', en: 'Missing Referrer-Policy' },
+  hsts_missing: { tr: 'HSTS (Strict-Transport-Security) eksik', en: 'Missing HSTS' },
+  weak_tls: { tr: 'Zayıf TLS şifre yapılandırması', en: 'Weak TLS cipher configuration' },
+  weak_key: { tr: 'Zayıf sertifika anahtar boyutu', en: 'Weak certificate key size' },
+  cert: { tr: 'Sertifika yapılandırma sorunu', en: 'Certificate configuration issue' },
+  version_disclosure: { tr: 'Sürüm/teknoloji ifşası', en: 'Version/technology disclosure' },
+  exposed_files: { tr: 'Açıkta hassas dosya', en: 'Exposed sensitive file' },
+  spf: { tr: 'SPF kaydı eksik/zayıf', en: 'Missing/weak SPF record' },
+  dmarc: { tr: 'DMARC kaydı eksik', en: 'Missing DMARC record' },
+  dkim: { tr: 'DKIM imzası eksik', en: 'Missing DKIM signing' },
+  dnssec: { tr: 'DNSSEC pasif', en: 'DNSSEC not enabled' },
+  cors: { tr: 'Gevşek CORS yapılandırması', en: 'Loose CORS configuration' },
+  cookie_flags: { tr: 'Eksik çerez güvenlik bayrakları', en: 'Missing cookie security flags' },
+  sqli: { tr: 'SQL Enjeksiyon göstergesi', en: 'SQL Injection indicator' },
+  xss: { tr: 'Yansıyan XSS göstergesi', en: 'Reflected XSS indicator' },
+  idor: { tr: 'Yetkisiz nesne erişimi (IDOR) göstergesi', en: 'IDOR indicator' },
+  ssrf: { tr: 'SSRF göstergesi', en: 'SSRF indicator' },
+  open_redirect: { tr: 'Açık yönlendirme (open redirect)', en: 'Open redirect' },
+  rce: { tr: 'Komut/kod çalıştırma göstergesi', en: 'Command/code execution indicator' },
+  file_upload: { tr: 'Kısıtsız dosya yükleme göstergesi', en: 'Unrestricted file upload indicator' },
+  business_logic: { tr: 'İş mantığı / yetki göstergesi (ileri analiz)', en: 'Business-logic / authorization indicator (advanced analysis)' },
+  race: { tr: 'Yarış durumu (race condition) göstergesi', en: 'Race condition indicator' },
+  forced_browsing: { tr: 'Yetkisiz uç nokta erişimi (forced browsing)', en: 'Unauthorized endpoint access (forced browsing)' },
+  weak_logout: { tr: 'Oturum geçersizleştirme zayıflığı', en: 'Weak session invalidation' },
+  session_fixation: { tr: 'Oturum sabitleme (session fixation)', en: 'Session fixation' },
+  jwt: { tr: 'JWT/Token güvenlik göstergesi', en: 'JWT/Token security indicator' },
+  privilege_escalation: { tr: 'Yetki yükseltme göstergesi', en: 'Privilege escalation indicator' },
+  login_bypass: { tr: 'Kimlik doğrulama baypas göstergesi', en: 'Authentication bypass indicator' },
+  exposed_api_docs: { tr: 'Açık API dokümantasyonu', en: 'Exposed API documentation' },
+  staging_exposure: { tr: 'İnternete açık hazırlık ortamı', en: 'Internet-exposed staging environment' },
+  stale_subdomain: { tr: 'Bakım-dışı alt alan adı', en: 'Stale subdomain' },
+  outdated_component: { tr: 'Güncel olmayan bileşen (CVE)', en: 'Outdated component (CVE)' },
+  subdomain_takeover: { tr: 'Alt alan adı devralma riski', en: 'Subdomain takeover risk' },
+};
+export function friendlyLabel(type: FindingType, locale: 'tr' | 'en'): string {
+  return locale === 'tr' ? FRIENDLY_LABEL[type].tr : FRIENDLY_LABEL[type].en;
+}
+
 // Başlık -> { İş Etkisi, CWE, OWASP } (locale). Eşleme yoksa null (UYDURMA YOK).
-export function lookupFinding(title: string, locale: 'tr' | 'en'): { impact: string; cwe: string; owasp: string; type: FindingType } | null {
+export function lookupByType(type: FindingType, locale: 'tr' | 'en'): { impact: string; cwe: string; owasp: string; type: FindingType; label: string } {
+  const e = FINDING_TAXONOMY[type];
+  return { impact: locale === 'tr' ? e.tr : e.en, cwe: e.cwe, owasp: e.owasp, type, label: friendlyLabel(type, locale) };
+}
+export function lookupFinding(title: string, locale: 'tr' | 'en'): { impact: string; cwe: string; owasp: string; type: FindingType; label: string } | null {
   const type = classifyFinding(title);
   if (!type) return null;
-  const e = FINDING_TAXONOMY[type];
-  return { impact: locale === 'tr' ? e.tr : e.en, cwe: e.cwe, owasp: e.owasp, type };
+  return lookupByType(type, locale);
 }
