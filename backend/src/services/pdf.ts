@@ -1,7 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import puppeteer from 'puppeteer-core';
 import { createHash } from 'node:crypto';
-import { lookupFinding, lookupByType, type FindingType } from './findingTaxonomy.js';
+import { lookupFinding, lookupByType, findingDetail, type FindingType } from './findingTaxonomy.js';
 
 /**
  * (3) Rapor PDF uretimi — SAF FORMATLAMA/RENDER. Ek LLM cagrisi YOK, ek Anthropic
@@ -261,7 +261,7 @@ function reportIdentifiers(hostname: string, createdAt: Date): { reportNo: strin
 }
 
 type Sev = 'critical' | 'high' | 'medium' | 'low';
-type Finding = { title: string; sev: Sev; type?: FindingType };
+type Finding = { title: string; sev: Sev; type?: FindingType; endpoint?: string; evidence?: string };
 function normSev(s: string): Sev | null {
   const x = s.toLocaleLowerCase('tr');
   if (/krit[iı]k|critical/.test(x)) return 'critical';
@@ -278,10 +278,26 @@ function stripMd(s: string): string {
 // "yapay zekâ destekli advisory". İç motor adını dış-dünya diline çevir (içerik/anlam DEĞİŞMEZ).
 function sanitizeJargon(md: string): string {
   return md
-    .replace(/PentAGI\s*aj[aı]n[ıi]?\s*bu\s*u[çc]\s*noktay[ıi]/gi, 'İleri analiz bu uç noktayı')
-    .replace(/PentAGI\s*aj[aı]n[ıi]?\s*se[çc]ti\s*\+\s*backend\s*GET\s*ile\s*do[ğg]rulad[ıi]/gi, 'İleri analizle seçildi, backend ile doğrulandı')
-    .replace(/PentAGI\s*aj[aı]n[ıi]?/gi, 'İleri analiz')
-    .replace(/PentAGI/gi, 'yapay zekâ destekli analiz');
+    // "Otonom Analiz Motoru" = müşteri-görünür isim. İç mimari adları (PentAGI/LLM/advisory/ajan/backend GET)
+    // müşteriye GÖSTERİLMEZ. NOT: "yapay zeka üretimidir" uyarısı + sınır-ötesi bilgilendirme AYRICA korunur.
+    .replace(/yapay\s*zek[âa]\s*destekli\s*advisory\s*\(tek\s*LLM\s*[çc]a[ğg]r[ıi]s[ıi]\)/gi, 'Otonom Analiz Motoru')
+    .replace(/yapay\s*zek[âa]\s*destekli\s*advisory/gi, 'Otonom Analiz Motoru')
+    .replace(/AI\s*advisory\s*analiz\s*etti/gi, 'Otonom Analiz Motoru değerlendirdi')
+    .replace(/s[ıi]n[ıi]rl[ıi][- ]otonom\s*ajan\s*katman[ıi]yla/gi, 'otonom analiz motoruyla')
+    .replace(/s[ıi]n[ıi]rl[ıi]\/kontroll[üu]\s*otonom\s*ajan\s*analiziyle/gi, 'otonom analiz motoruyla')
+    .replace(/sınırlı-otonom ajan katmanıyla/gi, 'otonom analiz motoruyla')
+    .replace(/\(?\s*tek\s*LLM\s*[çc]a[ğg]r[ıi]s[ıi]\s*\)?/gi, '')
+    .replace(/\badvisory\b/gi, 'otonom analiz')
+    .replace(/PentAGI\s*aj[aı]n[ıi]?\s*bu\s*u[çc]\s*noktay[ıi]/gi, 'Otonom Analiz Motoru bu uç noktayı')
+    .replace(/PentAGI\s*aj[aı]n[ıi]?\s*se[çc]ti\s*\+\s*backend\s*GET\s*ile\s*do[ğg]rulad[ıi]/gi, 'Otonom Analiz Motoru seçti, erişilebilirliği doğrulandı')
+    .replace(/PentAGI\s*aj[aı]n[ıi]?/gi, 'Otonom Analiz Motoru')
+    .replace(/İleri analiz(le)? bu uç noktayı/gi, 'Otonom Analiz Motoru bu uç noktayı')
+    .replace(/İleri analizle seçildi, backend ile doğrulandı/gi, 'Otonom Analiz Motoru seçti, erişilebilirliği doğrulandı')
+    .replace(/PentAGI/gi, 'Otonom Analiz Motoru')
+    .replace(/\bLLM\b/gi, 'Otonom Analiz Motoru')
+    // "ajana/... gönderilmez" -> motor diline
+    .replace(/aj[aı]na\/yapay zek[âa] destekli analiz['’]?y[ei]/gi, 'Otonom Analiz Motoru’na')
+    .replace(/aj[aı]na\/PentAGI['’]?y[ei]/gi, 'Otonom Analiz Motoru’na');
 }
 
 // Markdown gövdesindeki ŞİDDET içeren bulgu tablolarından (TESPİT EDİLEN RİSKLER / BULGULAR /
@@ -322,11 +338,14 @@ function parseFindings(md: string, locale: 'tr' | 'en'): { rows: Finding[]; coun
     const sevCol = header.findIndex((h) => /[şs]iddet|severity|ciddiyet/.test(h));
     if (sevCol === -1) continue; // şiddet kolonu yoksa bulgu tablosu değil
     const techCol = header.findIndex((h) => /teknik|technique|t[üu]r\b|tip\b|\btype\b/.test(h));
+    const endpointCol = header.findIndex((h) => /giri[şs]|u[çc] nokta|endpoint|uc nokta|yol\b|path/.test(h));
     let titleCol = header.findIndex((h) => /bulgu|ba[şs]l[ıi]k|title|finding/.test(h));
-    if (titleCol === -1) titleCol = header.findIndex((h) => /giri[şs]|u[çc] nokta|endpoint|uc nokta/.test(h));
+    if (titleCol === -1) titleCol = endpointCol;
     if (titleCol === -1) titleCol = header.findIndex((h, idx) => idx !== sevCol && !/^#|^no$|^s[ıi]ra/.test(h));
     if (titleCol === -1) titleCol = 0;
     const nameCol = techCol !== -1 ? techCol : titleCol;
+    // Kanıt/açıklama kolonu — kartın "Nasıl Tespit Edildi"/açıklama için GERÇEK veri.
+    const evidCol = header.findIndex((h) => /kan[ıi]t|evidence|k[ıi]sa a[çc][ıi]klama|a[çc][ıi]klama|not\b/.test(h));
     for (let r = 1; r < block.length; r++) {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue; // ayraç satırı
       const c = cells(block[r]);
@@ -339,12 +358,15 @@ function parseFindings(md: string, locale: 'tr' | 'en'): { rows: Finding[]; coun
       // gibi satırı jenerik olan bulgular bölüm başlığından doğru sınıflanır.
       const rowText = c.filter((_, idx) => idx !== sevCol).map(stripMd).join(' ');
       const info = lookupFinding(rowText, locale) ?? lookupFinding(curSection, locale);
-      // Görünür başlık: sınıflandıysa MÜŞTERİ-DOSTU etiket (jargonsuz); değilse temizlenmiş ham ad/bölüm.
       const title = info ? info.label : (cleanTitle(rawName) || cleanTitle(curSection) || rawName);
+      // Uç nokta: entry kolonundan (nameCol'dan farklıysa). "GET /rest/..." gibi.
+      let endpoint = endpointCol !== -1 && endpointCol !== nameCol ? stripMd(c[endpointCol] ?? '') : '';
+      if (endpoint.length > 60) endpoint = endpoint.slice(0, 60) + '…';
+      const evidence = evidCol !== -1 ? stripMd(c[evidCol] ?? '') : '';
       const key = (info ? info.type : title.toLocaleLowerCase('tr')).slice(0, 48);
       if (seen.has(key)) continue;
       seen.add(key);
-      rows.push({ title, sev, type: info?.type });
+      rows.push({ title, sev, type: info?.type, endpoint: endpoint || undefined, evidence: evidence || undefined });
       counts[sev]++;
     }
   }
@@ -387,7 +409,9 @@ function buildMasterTable(rows: Finding[], locale: 'tr' | 'en'): string {
   } else {
     body = sorted.map((f, idx) => {
       const sm = SEV_META[f.sev];
-      return `<tr><td>CT-${idx + 1}</td><td>${escapeHtml(f.title)}</td><td>${open}</td><td class="${sm.cls}"><span class="sev-badge">${locale === 'tr' ? sm.tr : sm.en}</span></td></tr>`;
+      // Başlığa UÇ NOKTA (varsa) — "SQL Enjeksiyon göstergesi — /rest/products/search?q". Payload/teknik master'da DEĞİL.
+      const titleCell = f.endpoint ? `${escapeHtml(f.title)} <span class="mt-ep">— ${escapeHtml(f.endpoint)}</span>` : escapeHtml(f.title);
+      return `<tr><td>CT-${idx + 1}</td><td>${titleCell}</td><td>${open}</td><td class="${sm.cls}"><span class="sev-badge">${locale === 'tr' ? sm.tr : sm.en}</span></td></tr>`;
     }).join('');
   }
   return `<h2 id="s-master">${locale === 'tr' ? '2.2 Master Bulgu Tablosu' : '2.2 Master Findings Table'}</h2>
@@ -401,15 +425,25 @@ function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en'): string {
   const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const sorted = [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]);
   const blocks: string[] = [];
+  const L = locale === 'tr'
+    ? { state: 'Durum: Açık', ep: 'Etkilenen nokta', desc: 'Açıklama', how: 'Nasıl Tespit Edildi', impact: 'İş Etkisi', fix: 'Çözüm Önerisi', ref: 'Referans' }
+    : { state: 'State: Open', ep: 'Affected point', desc: 'Description', how: 'How it was detected', impact: 'Business Impact', fix: 'Recommended Fix', ref: 'Reference' };
   sorted.forEach((f, idx) => {
-    if (!f.type) return; // UYDURMA YOK — sınıflanmadıysa İş Etkisi/CWE yazma (bulgu 2.2'de yine görünür)
+    if (!f.type) return; // UYDURMA YOK — sınıflanmadıysa kart yazma (bulgu 2.2'de yine görünür)
     const info = lookupByType(f.type, locale);
+    const det = findingDetail(f.type, locale);
     const sm = SEV_META[f.sev];
+    // Açıklama = türe-özgü tanım + (varsa) GERÇEK uç nokta. NASIL TESPİT = önce GERÇEK kanıt (taranan
+    // veriden), yoksa türe-özgü zararsız-gösterge yedeği. ÇALIŞAN EXPLOIT YOK — yalnız gösterge.
+    const howText = (f.evidence && f.evidence.length > 8) ? f.evidence : det.how;
     blocks.push(`<div class="finding-block">
-      <h3 id="s-fb-${idx + 1}">CT-${idx + 1} · ${escapeHtml(f.title)}</h3>
-      <div class="fb-meta"><span class="sev-badge badge-${f.sev}">${locale === 'tr' ? sm.tr : sm.en}</span> · ${locale === 'tr' ? 'Durum: Açık' : 'State: Open'}</div>
-      <p><strong>${locale === 'tr' ? 'İş Etkisi' : 'Business Impact'}:</strong> ${escapeHtml(info.impact)}</p>
-      <p class="finding-ref"><strong>${locale === 'tr' ? 'Referans' : 'Reference'}:</strong> ${escapeHtml(info.cwe)} · OWASP ${escapeHtml(info.owasp)}</p>
+      <h3 id="s-fb-${idx + 1}">CT-${idx + 1} · ${escapeHtml(f.title)}${f.endpoint ? ` <span class="mt-ep">— ${escapeHtml(f.endpoint)}</span>` : ''}</h3>
+      <div class="fb-meta"><span class="sev-badge badge-${f.sev}">${locale === 'tr' ? sm.tr : sm.en}</span> · ${L.state}</div>
+      <p><strong>${L.desc}:</strong> ${escapeHtml(det.desc)}${f.endpoint ? ` <strong>${L.ep}:</strong> <code>${escapeHtml(f.endpoint)}</code>` : ''}</p>
+      <p><strong>${L.how}:</strong> ${escapeHtml(howText)}</p>
+      <p><strong>${L.impact}:</strong> ${escapeHtml(info.impact)}</p>
+      <p><strong>${L.fix}:</strong> ${escapeHtml(det.fix)}</p>
+      <p class="finding-ref"><strong>${L.ref}:</strong> ${escapeHtml(info.cwe)} · OWASP ${escapeHtml(info.owasp)}</p>
     </div>`);
   });
   if (!blocks.length) return '';
@@ -461,9 +495,12 @@ function injectTocIds(html: string): { html: string; entries: { id: string; text
 // desteklemiyor ve Y-tahmini sayfa sınırlarında ±1 sapıyor; YANLIŞ sayfa no yazmak "uydurma
 // sayı yasağı"na aykırı olurdu. Bölüm adları + tıklanır bağlantı (PDF içi) verilir.
 function buildTocPage(entries: { id: string; text: string }[], locale: 'tr' | 'en'): string {
-  const rows = entries.map((e, i) =>
-    `<div class="toc-row"><span class="toc-n">${i + 1}.</span><a href="#${e.id}">${escapeHtml(e.text)}</a></div>`,
-  ).join('');
+  // TEK numaralandırma: başlık metnindeki manuel "1./2./2.1" ön-eki kullanılır (otomatik <ol> sayacı
+  // EKLENMEZ -> "1. 1. Yönetici Özeti" çakışması biter). "N.N" alt bölümler girintili gösterilir.
+  const rows = entries.map((e) => {
+    const sub = /^\d+\.\d+\s/.test(e.text.trim());
+    return `<div class="toc-row${sub ? ' toc-sub' : ''}"><a href="#${e.id}">${escapeHtml(e.text)}</a></div>`;
+  }).join('');
   return `<div class="toc-page"><h1>${locale === 'tr' ? 'İçindekiler' : 'Table of Contents'}</h1>${rows}</div>`;
 }
 
@@ -615,16 +652,39 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
 
   let contentInner0: string;
   if (reorganize) {
+    // (KAPSAM-DIŞI SADELEŞTİRME) Hedefin mimarisine UYMAYAN / giriş noktası olmayan kontroller
+    // (bulgu YOK) yarım-sayfa "NE KONTROL EDİLDİ/BULGULAR" bloğu olarak açılmasın; TEK "İnceleme
+    // Notu" kutusunda toplanır. GERÇEKTEN çalışan (⚠ gösterge/bulgu olan) kontroller TAM blok kalır.
+    const scopeOut: string[] = [];
+    const keptDetail = detailParts.filter((chunk) => {
+      const hm = chunk.match(/^###\s+(.+?)\s*(?:\n|$)/);
+      const name = hm ? stripMd(hm[1]).trim() : '';
+      const isControlBlock = /NE KONTROL ED[İi]LD[İi]|####?\s*BULGULAR/i.test(chunk);
+      const isScopeOut = /kapsam d[ıi][şs][ıi]|uygulanabilir giri[şs] noktas[ıi] yok|giri[şs] noktas[ıi] yok/i.test(chunk);
+      // GERÇEK bulgu = tabloda ŞİDDET satırı ("… | Yüksek |"). "zafiyet göstergesi bulunamadı" prozunu
+      // yanlışlıkla bulgu sayma (yanlış-negatif collapse'ı önle).
+      const hasSevRow = /^\s*\|.*\b(y[üu]ksek|orta|d[üu][şs][üu]k|krit[iı]k)\b.*\|\s*$/im.test(chunk);
+      if (name && isControlBlock && isScopeOut && !hasSevRow) { scopeOut.push(name); return false; }
+      return true;
+    });
+    const scopeNote = scopeOut.length
+      ? `<div class="scope-note"><strong>${loc === 'tr' ? 'İnceleme Notu' : 'Review Note'}:</strong> ${loc === 'tr'
+          ? `Şu kontroller, hedefin mimarisine uygulanabilir bir giriş noktası bulunmadığından mimari gereği kapsam dışı bırakılmıştır (Kontrol Özeti tablosunda da işaretlidir): ${escapeHtml(scopeOut.join(', '))}.`
+          : `The following controls were excluded as no applicable entry point exists for the target architecture (also marked in the Control Summary): ${escapeHtml(scopeOut.join(', '))}.`}</div>`
+      : '';
     const summaryBody = dedupeBlockquotes(md.render(summaryParts.join('\n\n')));
-    const detailBody = dedupeBlockquotes(md.render(detailParts.join('\n\n')));
+    const detailBody = scopeNote + dedupeBlockquotes(md.render(keptDetail.join('\n\n')));
     const hasFindings = !!(distMasterHtml || detailedHtml);
     const findingsSection = hasFindings ? H2('s-findings', '2. Bulgular', '2. Findings') + distMasterHtml + detailedHtml : '';
-    const cn = hasFindings ? '3' : '2'; // bulgu bölümü yoksa (uyum) numara boşluğu olmasın
+    const cn = hasFindings ? 3 : 2; // bulgu bölümü yoksa (uyum) numara boşluğu olmasın
+    // AI ve Ekler bölümlerini de numarala (TOC tek-numara okur) — kilit emojisi korunur.
+    const fixNum = fixHtml.replace(/<h2 id="s-ai">(🔒 )?/, (_m, lock) => `<h2 id="s-ai">${lock ?? ''}${cn + 1}. `);
+    const glossNum = glossaryHtml.replace(/<h2 id="s-glossary">/, `<h2 id="s-glossary">${cn + 2}. `);
     contentInner0 =
       H2('s-summary', '1. Yönetici Özeti', '1. Executive Summary') + assessBox + summaryBody +
       findingsSection +
       H2('s-controls', `${cn}. Kontrol Özeti ve Metodoloji`, `${cn}. Controls & Methodology`) + detailBody +
-      extrasHtml + fixHtml + glossaryHtml;
+      extrasHtml + fixNum + glossNum;
   } else {
     // Yapısız gövde / örnek PDF: mevcut akış (assessBox + dağılım/master + gövde + AI + sözlük).
     const bodyHtml = dedupeBlockquotes(md.render(effectiveMd) + extrasHtml + fixHtml);
@@ -737,10 +797,10 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   /* ---- İÇİNDEKİLER ---- */
   .toc-page { padding: 30px 40px; page-break-after: always; }
   .toc-page h1 { font-size: 24px; border: none; color: #123F3A; margin-bottom: 18px; }
-  .toc-row { display: flex; align-items: baseline; gap: 8px; margin: 7px 0; font-size: 12.5px;
-    border-bottom: 1px dotted #E1ECE8; padding-bottom: 5px; }
-  .toc-row .toc-n { color: #5FA396; font-weight: 700; min-width: 20px; }
+  .toc-row { margin: 7px 0; font-size: 12.5px; border-bottom: 1px dotted #E1ECE8; padding-bottom: 5px; }
+  .toc-row.toc-sub { border-bottom: none; margin: 3px 0 3px 22px; padding-bottom: 0; font-size: 12px; }
   .toc-row a { color: #14514A; text-decoration: none; font-weight: 600; }
+  .toc-row.toc-sub a { color: #35618a; font-weight: 500; }
   /* ---- 2.1 Zafiyet Dağılımı ---- */
   .dist-chart { display: flex; align-items: flex-end; gap: 20px; height: 108px; padding: 6px 10px 0;
     border-bottom: 2px solid #DCEAE6; margin: 10px 0 6px; }
@@ -751,6 +811,10 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .sev-critical-bg { background: #B3261E; } .sev-high-bg { background: #D64545; }
   .sev-medium-bg { background: #E0940E; } .sev-low-bg { background: #9AA0A6; }
   /* ---- 2.2 Master tablo + Sözlük ---- */
+  .scope-note { margin: 10px 0 14px; padding: 10px 14px; background: #F3F7FA; border: 1px solid #C9DCE8;
+    border-left: 4px solid #2B6C9B; border-radius: 6px; font-size: 11.5px; color: #274b63; }
+  .mt-ep { color: #5b6b67; font-weight: 400; font-size: 10.5px; }
+  .finding-block code { background: #EEF5F3; padding: 1px 5px; border-radius: 3px; font-size: 10.5px; word-break: break-all; }
   table.master td:first-child, table.master th:first-child { white-space: nowrap; width: 46px; }
   table.master td:nth-child(3), table.master th:nth-child(3) { white-space: nowrap; width: 74px; }
   table.glossary th { display: none; }

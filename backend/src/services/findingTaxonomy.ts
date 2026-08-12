@@ -222,6 +222,125 @@ export function friendlyLabel(type: FindingType, locale: 'tr' | 'en'): string {
   return locale === 'tr' ? FRIENDLY_LABEL[type].tr : FRIENDLY_LABEL[type].en;
 }
 
+// Bulgu kartı derinliği: her tür için Açıklama (ne/nerede), Nasıl Tespit Edildi (ZARARSIZ gösterge
+// probu + gözlem — İSTİSMAR TARİFİ DEĞİL) ve Çözüm (somut, o türe özgü). "howDetected" gerçek Kanıt
+// bulunmadığında yedek olarak kullanılır (pdf.ts önce gerçek kanıtı yazar). TÜM 36 tür DOLU (TODO yok).
+type Detail = { desc: string; how: string; fix: string };
+const D = (tr: Detail, en: Detail) => ({ tr, en });
+const FINDING_DETAIL: Record<FindingType, { tr: Detail; en: Detail }> = {
+  clickjacking: D(
+    { desc: 'Sayfa, X-Frame-Options / CSP frame-ancestors olmadığından başka bir sitenin iframe’ine gömülebilir.', how: 'Yanıt başlıkları incelendi; X-Frame-Options ve CSP frame-ancestors gözlenmedi.', fix: '`X-Frame-Options: SAMEORIGIN` ekleyin veya CSP’ye `frame-ancestors \'self\'` koyun.' },
+    { desc: 'The page can be framed by other sites (no X-Frame-Options / CSP frame-ancestors).', how: 'Response headers inspected; no X-Frame-Options or CSP frame-ancestors observed.', fix: 'Add `X-Frame-Options: SAMEORIGIN` or CSP `frame-ancestors \'self\'`.' }),
+  mime_sniffing: D(
+    { desc: 'X-Content-Type-Options yok; tarayıcı içerik türünü tahmin edebilir (MIME-sniffing).', how: 'Yanıt başlıklarında `nosniff` gözlenmedi.', fix: '`X-Content-Type-Options: nosniff` başlığını ekleyin.' },
+    { desc: 'No X-Content-Type-Options; browser may MIME-sniff.', how: 'No `nosniff` observed in headers.', fix: 'Add `X-Content-Type-Options: nosniff`.' }),
+  csp_missing: D(
+    { desc: 'Content-Security-Policy gönderilmiyor; tarayıcı-taraflı XSS azaltma katmanı yok.', how: 'Yanıt başlıklarında Content-Security-Policy gözlenmedi.', fix: 'Sıkı bir CSP tanımlayın (`default-src \'self\'`); üçüncü taraf kaynakları allowlist’leyin.' },
+    { desc: 'No Content-Security-Policy; no browser-side XSS mitigation.', how: 'No CSP header observed.', fix: 'Define a strict CSP (`default-src \'self\'`) and allowlist third-party sources.' }),
+  referrer_policy: D(
+    { desc: 'Referrer-Policy yok; dış bağlantılara tam adres sızabilir.', how: 'Yanıt başlıklarında Referrer-Policy gözlenmedi.', fix: '`Referrer-Policy: strict-origin-when-cross-origin` ekleyin.' },
+    { desc: 'No Referrer-Policy; full URL may leak to external links.', how: 'No Referrer-Policy observed.', fix: 'Add `Referrer-Policy: strict-origin-when-cross-origin`.' }),
+  hsts_missing: D(
+    { desc: 'HSTS (Strict-Transport-Security) yok; tarayıcı HTTPS’e zorlanmıyor.', how: 'Yanıt başlıklarında Strict-Transport-Security gözlenmedi.', fix: '`Strict-Transport-Security: max-age=31536000; includeSubDomains` ekleyin (site tamamen HTTPS ise).' },
+    { desc: 'No HSTS; browser not forced to HTTPS.', how: 'No Strict-Transport-Security observed.', fix: 'Add `Strict-Transport-Security: max-age=31536000; includeSubDomains` (if fully HTTPS).' }),
+  weak_tls: D(
+    { desc: 'Sunucu zayıf/eski TLS şifre paketlerini kabul ediyor.', how: 'TLS el sıkışması incelendi; zayıf cipher/eski protokol desteği gözlendi.', fix: 'Yalnız TLS 1.2+ ve ileri-gizlilikli AEAD (ECDHE+AES-GCM/ChaCha20) bırakın; CBC/3DES/RSA-kex kapatın.' },
+    { desc: 'Server accepts weak/legacy TLS ciphers.', how: 'TLS handshake inspected; weak cipher/legacy protocol observed.', fix: 'Allow only TLS 1.2+ forward-secret AEAD suites; disable CBC/3DES/RSA-kex.' }),
+  weak_key: D(
+    { desc: 'Sertifika anahtar boyutu uzun-vade için sınırlı.', how: 'Sertifika incelendi; anahtar boyutu kaydedildi.', fix: 'Yenilemede en az 2048-bit RSA veya ECDSA P-256 kullanın.' },
+    { desc: 'Certificate key size is limited for the long term.', how: 'Certificate inspected; key size recorded.', fix: 'Use ≥2048-bit RSA or ECDSA P-256 at renewal.' }),
+  cert: D(
+    { desc: 'TLS sertifikasında yapılandırma sorunu (süre/hostname/zincir).', how: 'Sertifika geçerlilik, hostname eşleşmesi ve zincir gözlendi.', fix: 'Geçerli, hostname’i kapsayan, tam zincirli sertifika kullanın; otomatik yenileme (ACME) kurun.' },
+    { desc: 'Certificate configuration issue (validity/hostname/chain).', how: 'Validity, hostname match and chain observed.', fix: 'Use a valid, hostname-covering, full-chain certificate; automate renewal (ACME).' }),
+  version_disclosure: D(
+    { desc: 'Sunucu/teknoloji sürümü başlık veya sayfada ifşa oluyor.', how: 'Server / X-Powered-By başlıkları ve sayfa imzaları incelendi.', fix: 'Sürüm başlıklarını gizleyin (`server_tokens off`, X-Powered-By kaldır).' },
+    { desc: 'Server/tech version disclosed via header or page.', how: 'Server / X-Powered-By headers and page signatures inspected.', fix: 'Hide version headers (`server_tokens off`, remove X-Powered-By).' }),
+  exposed_files: D(
+    { desc: 'Hassas dosya (.git/.env/yedek) dışarıya açık.', how: 'Yaygın hassas yollar tek GET ile denendi; içerik ana sayfadan farklı/gerçek dosya gözlendi.', fix: 'Bu yolları engelleyin; kaynak/yedek/sır dosyalarını web-kökünden çıkarın.' },
+    { desc: 'Sensitive file (.git/.env/backup) exposed.', how: 'Common sensitive paths probed with a single GET; a real file distinct from the homepage was observed.', fix: 'Block these paths; move source/backup/secret files out of web root.' }),
+  spf: D(
+    { desc: 'SPF kaydı eksik veya gevşek (~all/?all).', how: 'Alan adının TXT/SPF kaydı sorgulandı.', fix: '`v=spf1 … -all` ile sıkı bir SPF yayınlayın.' },
+    { desc: 'SPF record missing or lax (~all/?all).', how: 'Domain TXT/SPF record queried.', fix: 'Publish a strict SPF with `-all`.' }),
+  dmarc: D(
+    { desc: 'DMARC kaydı yok; SPF/DKIM uygulanmıyor.', how: '`_dmarc` TXT kaydı sorgulandı; bulunamadı.', fix: '`_dmarc` altına `v=DMARC1; p=quarantine` (izlemeyle başlayıp reject’e yükseltin).' },
+    { desc: 'No DMARC; SPF/DKIM not enforced.', how: '`_dmarc` TXT record queried; not found.', fix: 'Publish `_dmarc` `v=DMARC1; p=quarantine` (start monitoring, then reject).' }),
+  dkim: D(
+    { desc: 'Yaygın seçicilerde DKIM imzası bulunamadı.', how: 'Yaygın DKIM seçicileri (default/google/selector1…) sorgulandı.', fix: 'Sağlayıcınızda DKIM üretip `seçici._domainkey` TXT kaydını ekleyin.' },
+    { desc: 'No DKIM found on common selectors.', how: 'Common DKIM selectors queried.', fix: 'Generate DKIM at your provider and add the `selector._domainkey` TXT record.' }),
+  dnssec: D(
+    { desc: 'DNSSEC pasif; DNS yanıtları imzalı değil.', how: 'Alan adının DNSSEC/DS durumu sorgulandı.', fix: 'DNS sağlayıcınızda DNSSEC’i açıp DS kaydını registrar’a girin.' },
+    { desc: 'DNSSEC not enabled; DNS responses unsigned.', how: 'Domain DNSSEC/DS status queried.', fix: 'Enable DNSSEC and add the DS record at your registrar.' }),
+  cors: D(
+    { desc: 'CORS politikası gevşek; başka kökenlere oturumlu erişim açabilir.', how: 'Bir test Origin’iyle istek gönderildi; Access-Control-Allow-Origin/Credentials yanıtı gözlendi.', fix: 'Origin’i allowlist’leyin; kimlik bilgili isteklerde wildcard kullanmayın.' },
+    { desc: 'Loose CORS may allow credentialed cross-origin access.', how: 'Request sent with a test Origin; Access-Control-Allow-Origin/Credentials observed.', fix: 'Allowlist origins; never use wildcard with credentials.' }),
+  cookie_flags: D(
+    { desc: 'Oturum çerezinde Secure/HttpOnly/SameSite bayrakları eksik.', how: 'Set-Cookie başlıkları toplanıp bayrakları incelendi.', fix: 'Oturum çerezlerine `HttpOnly; Secure; SameSite=Lax/Strict` ekleyin.' },
+    { desc: 'Session cookie missing Secure/HttpOnly/SameSite flags.', how: 'Set-Cookie headers collected and flags inspected.', fix: 'Add `HttpOnly; Secure; SameSite` to session cookies.' }),
+  sqli: D(
+    { desc: 'Bir giriş noktası, girdiyi veritabanı sorgusuna süzebiliyor (enjeksiyon göstergesi).', how: 'Giriş noktasına tek bir zararsız işaret (tek tırnak / zaman-tabanlı sonda) gönderildi; yanıtta veritabanı hata imzası veya süre sapması gözlendi. Veri çekme/istismar YAPILMADI.', fix: 'Tüm sorguları parametreli sorgu / hazırlanmış ifade ile yazın; veritabanı hata mesajlarını son kullanıcıya göstermeyin.' },
+    { desc: 'An input reaches a DB query (injection indicator).', how: 'A single harmless marker (single quote / time-based probe) was sent; a DB error signature or timing deviation was observed. No data extracted/exploited.', fix: 'Use parameterized queries/prepared statements; hide DB error messages.' }),
+  xss: D(
+    { desc: 'Kullanıcı girdisi yanıt HTML’ine kodlanmadan yansıyor (yansıyan XSS göstergesi).', how: 'Benzersiz, zararsız bir işaret dizesi enjekte edildi; yanıtta kaçırılmadan yansıdığı gözlendi (JS çalıştırılmadı).', fix: 'Çıktıyı bağlama uygun kodlayın (HTML entity encoding); CSP ile satır-içi script’i kısıtlayın.' },
+    { desc: 'User input reflects unencoded in HTML (reflected XSS indicator).', how: 'A unique harmless marker was injected and observed reflected unescaped (no JS executed).', fix: 'Context-encode output (HTML entity encoding); restrict inline script via CSP.' }),
+  idor: D(
+    { desc: 'Kimlik parametresi değiştirilerek başka bir kaydın erişilebildiğine dair sinyal.', how: 'ID değeri komşu bir değere değiştirilip istek gönderildi; farklı/geçerli kaynak dönüşü gözlendi (içerik saklanmadı).', fix: 'Her erişimde nesne-düzeyi yetki kontrolü uygulayın; tahmin edilebilir ID yerine UUID kullanın.' },
+    { desc: 'Signal that changing an ID reaches another record.', how: 'ID changed to a neighbor and requested; a different/valid resource was observed (content not stored).', fix: 'Enforce object-level authorization; use UUIDs instead of predictable IDs.' }),
+  ssrf: D(
+    { desc: 'Sunucu-taraflı fetch parametresi iç kaynaklara istek yaptırabilir (gösterge).', how: 'Kontrollü, gecikmeli bir echo URL’i verildi; yanıt süresi sapması gözlendi. İç ağ/metadata ASLA hedeflenmedi.', fix: 'URL alanlarında sunucu-taraflı allowlist + iç-ağ engelleme; şema/host doğrulama uygulayın.' },
+    { desc: 'A server-side fetch parameter may reach internal resources (indicator).', how: 'A controlled delayed echo URL was supplied; a timing deviation was observed. Internal/metadata never targeted.', fix: 'Apply server-side allowlist + internal-network blocking; validate scheme/host.' }),
+  open_redirect: D(
+    { desc: 'Yönlendirme parametresi dış adrese yönlendirebiliyor.', how: 'Yönlendirme parametresine kontrollü bir işaret verildi; dış hedefe yönlendirme göstergesi gözlendi.', fix: 'Yönlendirmeleri iç allowlist ile sınırlayın; kullanıcı-girdili tam URL’e yönlendirmeyin.' },
+    { desc: 'A redirect parameter can send users to external addresses.', how: 'A controlled marker was supplied; redirection to an external target was indicated.', fix: 'Restrict redirects to an internal allowlist; never redirect to a user-supplied full URL.' }),
+  rce: D(
+    { desc: 'Bir parametre komut/kod yürütmeye ulaşabiliyor (zaman-tabanlı gösterge).', how: 'Yalnız zararsız, zaman-tabanlı gecikme sondası (sleep) gönderildi; süre sapması gözlendi. Gerçek komut YÜRÜTÜLMEDİ.', fix: 'Sistem-komutu çağıran yolları gözden geçirin; girdiyi allowlist’leyin, shell birleştirmeden kaçının; en düşük yetki uygulayın.' },
+    { desc: 'A parameter may reach command/code execution (time-based indicator).', how: 'Only a harmless time-based delay probe (sleep) was sent; a timing deviation was observed. No real command executed.', fix: 'Review command-invoking paths; allowlist input, avoid shell concatenation; least privilege.' }),
+  file_upload: D(
+    { desc: 'Dosya yükleme kısıtsız görünüyor (gösterge).', how: 'Tek, zararsız ve çalıştırılamaz bir test dosyası gönderildi; yalnız kabul/red gözlendi (dosya geri çağrılmadı).', fix: 'Sunucu-taraflı tip/MIME doğrulaması + allowlist + web-kökü dışı depolama uygulayın.' },
+    { desc: 'File upload appears unrestricted (indicator).', how: 'A single harmless, non-executable test file was sent; only accept/reject observed (file not retrieved).', fix: 'Apply server-side type/MIME validation + allowlist + storage outside web root.' }),
+  business_logic: D(
+    { desc: 'İş akışı/yetki alanında incelenmesi gereken bir gösterge (ör. istemci-değiştirilebilir fiyat/adım-atlama).', how: 'Yüzey gözlemsel olarak incelendi (yalnız GET); state-değiştiren istek gönderilmedi.', fix: 'Kritik değerleri (fiyat/miktar/rol) sunucuda doğrulayın; adım ön-koşullarını sunucuda zorunlu kılın.' },
+    { desc: 'A workflow/authorization indicator to review (e.g., client-editable price/step-skipping).', how: 'Surface reviewed observationally (GET only); no state-changing request sent.', fix: 'Validate critical values (price/qty/role) server-side; enforce step preconditions server-side.' }),
+  race: D(
+    { desc: 'Eşzamanlılık/mass-assignment göstergesi (düşük güven).', how: 'Tek gözlemsel istek yapıldı; tüketilebilir kaynağı değiştiren tekrar/yarış testi ÇALIŞTIRILMADI.', fix: 'Kritik işlemleri atomik/idempotent tasarlayın; model bağlamada alan allowlist’i uygulayın.' },
+    { desc: 'Concurrency/mass-assignment indicator (low confidence).', how: 'A single observational request was made; no repeated/race test against consumable resources was run.', fix: 'Design critical operations atomic/idempotent; apply field allowlist on model binding.' }),
+  forced_browsing: D(
+    { desc: 'Menüde olmayan bir yönetim/gizli uç noktaya, düşük yetkili oturumla erişilebiliyor.', how: 'Yaygın yönetim uç noktalarına eldeki oturumla GET yapıldı; ana-sayfadan FARKLI 200/JSON dönüşü gözlendi (dönen veri raporlanmadı).', fix: 'Her hassas uç noktada sunucu-taraflı rol/yetki kontrolü uygulayın; UI’da gizlemek yetmez.' },
+    { desc: 'An admin/hidden endpoint is reachable with a low-privileged session.', how: 'Common admin endpoints were GET-requested with the session; a 200/JSON distinct from the homepage was observed (returned data not reported).', fix: 'Enforce server-side role/authorization on every sensitive endpoint; UI hiding is insufficient.' }),
+  weak_logout: D(
+    { desc: 'Çıkıştan sonra oturum sunucu tarafında geçersizleştirilmiyor.', how: 'Logout sonrası AYNI oturumla korumalı bir uca erişim denendi; erişim sürdüğü gözlendi.', fix: 'Logout’ta oturumu sunucu tarafında iptal edin (revocation/expiry); istemci-tarafı silme yetmez.' },
+    { desc: 'Session not invalidated server-side after logout.', how: 'After logout, access to a protected endpoint with the SAME session was attempted and still succeeded.', fix: 'Invalidate the session server-side on logout (revocation/expiry).' }),
+  session_fixation: D(
+    { desc: 'Girişte oturum kimliği yenilenmiyor (fixation göstergesi).', how: 'Login öncesi/sonrası oturum çerezi değeri karşılaştırıldı.', fix: 'Girişte oturum id’sini yenileyin (session regeneration).' },
+    { desc: 'Session ID not regenerated on login (fixation indicator).', how: 'Session cookie value compared before/after login.', fix: 'Regenerate the session ID on login.' }),
+  jwt: D(
+    { desc: 'JWT/token yapılandırmasında güvenlik göstergesi (alg=none / zayıf sır / aşırı claim).', how: 'Token OFFLINE çözülüp imza algoritması, sır dayanıklılığı ve claim’ler incelendi.', fix: 'İmza algoritmasını sabitleyin, güçlü sır kullanın, `exp` ekleyin, hassas claim taşımayın.' },
+    { desc: 'JWT/token security indicator (alg=none / weak secret / excessive claims).', how: 'Token decoded OFFLINE; algorithm, secret strength and claims inspected.', fix: 'Pin the signing algorithm, use a strong secret, add `exp`, avoid sensitive claims.' }),
+  privilege_escalation: D(
+    { desc: 'Standart kullanıcının yetkisini aşabileceğine dair gösterge (mass-assignment vb.).', how: 'Yüzey Otonom Analiz Motoru ile değerlendirildi; backend güvenli, gözlemsel bir prob uyguladı (gerçek yükseltme yapılmadı).', fix: 'Rol/yetki alanlarını istemciden kabul etmeyin; alan allowlist’i uygulayın.' },
+    { desc: 'Indicator a standard user could exceed privileges (mass-assignment etc.).', how: 'Surface evaluated by the Autonomous Analysis Engine; the backend applied a safe observational probe (no real escalation).', fix: 'Do not accept role/authorization fields from the client; apply a field allowlist.' }),
+  login_bypass: D(
+    { desc: 'Giriş formuna klasik SQLi payload’ı ile kimlik doğrulama atlatma göstergesi.', how: 'Önce geçersiz kimlik, sonra `\' OR 1=1--` benzeri bir işaret denendi; kontrolün AKSİNE oturum/başarı yanıtı gözlendi. Oturum ele geçirilmedi.', fix: 'Kimlik sorgularında parametreli sorgu kullanın; girdi doğrulama + hatalı girişte tek-tip hata mesajı.' },
+    { desc: 'Auth-bypass indicator via a classic SQLi payload on the login form.', how: 'Invalid credentials first, then a `\' OR 1=1--`-style marker; contrary to the control, a success/session response was observed. No session hijacked.', fix: 'Use parameterized queries in auth; validate input; return uniform error messages.' }),
+  exposed_api_docs: D(
+    { desc: 'Herkese açık API dokümantasyonu (Swagger/OpenAPI) bulundu.', how: 'Yaygın dokümantasyon yolları GET ile denendi; şema/arayüz dönüşü gözlendi (uç noktalar çağrılmadı).', fix: 'Şema uçlarını üretimde kimlik doğrulama/IP kısıtı arkasına alın; GraphQL introspection’ı kapatın.' },
+    { desc: 'Public API documentation (Swagger/OpenAPI) found.', how: 'Common doc paths GET-probed; a schema/UI response observed (endpoints not called).', fix: 'Put schema endpoints behind auth/IP restriction in production; disable GraphQL introspection.' }),
+  staging_exposure: D(
+    { desc: 'İnternete açık hazırlık/test ortamı gözlendi.', how: 'Alt alan/uç gözlemlendi; üretim-dışı ortam göstergesi kaydedildi.', fix: 'Hazırlık ortamlarını IP/kimlik ile kısıtlayın veya internete kapatın.' },
+    { desc: 'Internet-exposed staging/test environment observed.', how: 'Subdomain/endpoint observed; non-production indicator recorded.', fix: 'Restrict staging by IP/auth or take it off the internet.' }),
+  stale_subdomain: D(
+    { desc: 'Bakım-dışı/unutulmuş bir alt alan adı gözlendi.', how: 'Certificate Transparency + DNS kayıtları pasif toplandı.', fix: 'Kullanılmayan CNAME/kayıtları temizleyin; alt alan envanteri tutun.' },
+    { desc: 'A stale/forgotten subdomain observed.', how: 'Certificate Transparency + DNS records collected passively.', fix: 'Clean up unused CNAME/records; keep a subdomain inventory.' }),
+  outdated_component: D(
+    { desc: 'Güncel olmayan bir bileşen/CMS parmak izi ve olası bilinen CVE.', how: 'HTTP başlıkları / meta generator / HTML izleri pasif incelendi; sürüm NVD ile eşlendi (CVE istismar edilmedi).', fix: 'Bileşen/eklenti/tema sürümlerini güncel tutun; otomatik güncelleme + bağımlılık taraması kurun.' },
+    { desc: 'Outdated component/CMS fingerprint and possible known CVE.', how: 'HTTP headers / meta generator / HTML traces inspected passively; version matched against NVD (no CVE exploited).', fix: 'Keep components/plugins/themes updated; add auto-update + dependency scanning.' }),
+  subdomain_takeover: D(
+    { desc: 'Devralınabilir (dangling) alt alan göstergesi.', how: 'Alt alan CNAME kayıtları çözümlenip terk-edilmiş bulut imzalarıyla karşılaştırıldı.', fix: 'Bulut kaynağını silmeden önce DNS kaydını kaldırın; sahipsiz CNAME’leri temizleyin.' },
+    { desc: 'Dangling subdomain takeover indicator.', how: 'Subdomain CNAMEs resolved and compared against abandoned-cloud signatures.', fix: 'Remove the DNS record before deleting the cloud resource; clean dangling CNAMEs.' }),
+};
+export function findingDetail(type: FindingType, locale: 'tr' | 'en'): Detail {
+  return locale === 'tr' ? FINDING_DETAIL[type].tr : FINDING_DETAIL[type].en;
+}
+
 // Başlık -> { İş Etkisi, CWE, OWASP } (locale). Eşleme yoksa null (UYDURMA YOK).
 export function lookupByType(type: FindingType, locale: 'tr' | 'en'): { impact: string; cwe: string; owasp: string; type: FindingType; label: string } {
   const e = FINDING_TAXONOMY[type];
