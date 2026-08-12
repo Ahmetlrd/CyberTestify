@@ -255,6 +255,17 @@ Denetim **pasif ve düşük-etkili** yöntemlerle yürütülmüştür. TLS el s�
 | Başlık | X-Content-Type-Options | ⚠️ Eksik (Orta) |
 | Başlık | Content-Security-Policy | ⚠️ Eksik (Orta) |
 
+## Tarama İstatistikleri
+
+| Ölçüt | Değer |
+|-------|-------|
+| Test edilen uç nokta | 1 (`ornek-site.com:443`) |
+| Gönderilen istek | 12 (protokol handshake denemeleri + başlık GET) |
+| Test edilen TLS protokolü | 5 (TLS 1.3/1.2/1.1/1.0, SSL 3.0) |
+| Çalıştırılan kontrol | 16 |
+| Tespit edilen bulgu | 4 (0 kritik · 0 yüksek · 3 orta · 1 düşük) |
+| Yaklaşık süre | ~10 saniye |
+
 ## Risk Matrisi
 
 | # | Bulgu | Etki | Olasılık | Şiddet |
