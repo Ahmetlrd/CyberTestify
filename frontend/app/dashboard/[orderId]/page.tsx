@@ -45,6 +45,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const [busyFix, setBusyFix] = useState(false);
   const [fixPromo, setFixPromo] = useState(''); // AI Cozum Onerileri promosyon kodu
   const [error, setError] = useState<string | null>(null);
+  const [dlError, setDlError] = useState<string | null>(null); // rapor indirme hatası — kutunun altında gösterilir
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -104,6 +105,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
 
   async function handleDownload() {
     setError(null);
+    setDlError(null);
     try {
       const blob = await api.downloadReport(params.orderId, accessSecret);
       setUnlocked(true);
@@ -113,7 +115,8 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       // Rapor artik PDF olarak uretiliyor (bkz backend reports.ts /download).
       downloadBlob(blob, `cybertestify-rapor-${params.orderId}.pdf`);
     } catch (err: any) {
-      setError(err.message);
+      // (UX) İndirme hatasını sayfa DİBİNDE değil, erişim-kodu kutusunun HEMEN ALTINDA göster.
+      setDlError(err.message);
     }
   }
 
@@ -288,6 +291,9 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
                 Raporu indir
               </button>
             </div>
+            {dlError && (
+              <p className="mt-2 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{dlError}</p>
+            )}
           </div>
 
           {/* (3) Ücretli eklenti: AI Çözüm Önerileri */}
