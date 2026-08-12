@@ -450,6 +450,28 @@ function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en'): string {
   return `<h2 id="s-detail">${locale === 'tr' ? '2.3 Detaylı Bulgular' : '2.3 Detailed Findings'}</h2>${blocks.join('')}`;
 }
 
+// (YÖNETİCİ ÖZETİ) İyileştirme Öncelikleri — parse edilen GERÇEK bulgulardan DETERMİNİSTİK 3 grup:
+// En Acil (yüksek/kritik, config-dışı) · Hızlı Kazanım (sunucu/config, 1-2 gün) · Orta Vadeli (süreç/
+// kod/manuel). UYDURMA YOK — bulgu yoksa madde yok. Yönetici "ne yapmalıyım"ı 30 saniyede alır.
+const CONFIG_TYPES = new Set<FindingType>(['clickjacking', 'mime_sniffing', 'csp_missing', 'referrer_policy', 'hsts_missing', 'weak_tls', 'weak_key', 'cert', 'version_disclosure', 'spf', 'dmarc', 'dkim', 'dnssec', 'cors', 'cookie_flags', 'exposed_files', 'exposed_api_docs']);
+function buildPriorities(rows: Finding[], locale: 'tr' | 'en'): string {
+  if (!rows.length) return '';
+  const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+  const urgent: string[] = [], quick: string[] = [], process: string[] = [];
+  [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]).forEach((f) => {
+    const name = f.title + (f.endpoint ? ` (${f.endpoint})` : '');
+    if (f.type && CONFIG_TYPES.has(f.type)) quick.push(name);
+    else if (f.sev === 'critical' || f.sev === 'high') urgent.push(name);
+    else process.push(name);
+  });
+  const grp = (title: string, items: string[]) => items.length ? `<p class="pri-grp"><strong>${title}:</strong> ${escapeHtml(items.join('; '))}.</p>` : '';
+  const body = grp(locale === 'tr' ? '⚡ En Acil / Öncelikli' : '⚡ Most Urgent', urgent)
+    + grp(locale === 'tr' ? '🛠 Hızlı Kazanım (sunucu yapılandırması, ~1-2 gün)' : '🛠 Quick Wins (~1-2 days)', quick)
+    + grp(locale === 'tr' ? '🗓 Orta Vadeli / Süreç (manuel doğrulama veya kod/mimari)' : '🗓 Medium-term / Process', process);
+  if (!body) return '';
+  return `<div class="priorities"><h3>${locale === 'tr' ? 'İyileştirme Öncelikleri' : 'Improvement Priorities'}</h3>${body}</div>`;
+}
+
 // Ek — Sözlük: yalnız RAPORDA GEÇEN terimler (bloat yok).
 const GLOSSARY_TERMS: Array<{ re: RegExp; term: string; tr: string; en: string }> = [
   { re: /\bSQLi\b|SQL enjeksiyon|SQL Injection/i, term: 'SQL Injection', tr: 'Kullanıcı girdisinin veritabanı sorgusuna karışabildiği bir enjeksiyon zafiyeti.', en: 'An injection flaw where user input reaches a database query.' },
@@ -672,7 +694,19 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
           ? `Şu kontroller, hedefin mimarisine uygulanabilir bir giriş noktası bulunmadığından mimari gereği kapsam dışı bırakılmıştır (Kontrol Özeti tablosunda da işaretlidir): ${escapeHtml(scopeOut.join(', '))}.`
           : `The following controls were excluded as no applicable entry point exists for the target architecture (also marked in the Control Summary): ${escapeHtml(scopeOut.join(', '))}.`}</div>`
       : '';
-    const summaryBody = dedupeBlockquotes(md.render(summaryParts.join('\n\n')));
+    // (YÖNETİCİ ÖZETİ KISALTMA) Bulgusu olan raporlarda özetteki uzun per-kontrol madde listesini AT
+    // (bilgi §3 KONTROL ÖZETİ tablosunda AYNEN durur — veri kaybı yok, tekrar önlenir) + türetilmiş
+    // İyileştirme Öncelikleri ekle. Bulgusuz raporlarda özet zaten kısa -> dokunma.
+    const hasVuln = !!(parsed && parsed.rows.length);
+    let execMd = summaryParts.join('\n\n');
+    if (hasVuln) {
+      execMd = execMd.split('\n').filter((line) => {
+        const bm = line.match(/^\s*[-*]\s+\*\*(.+?):\*\*/);
+        if (!bm) return true; // madde değil -> tut
+        return /genel risk|kapsam|[öo]nerilen/.test(bm[1].toLocaleLowerCase('tr')); // yalnız üst-düzey madde tut
+      }).join('\n');
+    }
+    const summaryBody = dedupeBlockquotes(md.render(execMd)) + (hasVuln ? buildPriorities(parsed!.rows, loc) : '');
     const detailBody = scopeNote + dedupeBlockquotes(md.render(keptDetail.join('\n\n')));
     const hasFindings = !!(distMasterHtml || detailedHtml);
     const findingsSection = hasFindings ? H2('s-findings', '2. Bulgular', '2. Findings') + distMasterHtml + detailedHtml : '';
@@ -680,11 +714,14 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     // AI ve Ekler bölümlerini de numarala (TOC tek-numara okur) — kilit emojisi korunur.
     const fixNum = fixHtml.replace(/<h2 id="s-ai">(🔒 )?/, (_m, lock) => `<h2 id="s-ai">${lock ?? ''}${cn + 1}. `);
     const glossNum = glossaryHtml.replace(/<h2 id="s-glossary">/, `<h2 id="s-glossary">${cn + 2}. `);
+    // (TOC HİZASI) "Ek Pasif Kontroller" bölümü §3 (Kontrol Özeti) altında bir alt-bölümdür ->
+    // h3'e indir ki TOC'ta ayrı numarasız satır olarak görünüp numaralandırmayı bozmasın.
+    const extrasSub = extrasHtml.replace(/<h2\b/g, '<h3').replace(/<\/h2>/g, '</h3>');
     contentInner0 =
       H2('s-summary', '1. Yönetici Özeti', '1. Executive Summary') + assessBox + summaryBody +
       findingsSection +
       H2('s-controls', `${cn}. Kontrol Özeti ve Metodoloji`, `${cn}. Controls & Methodology`) + detailBody +
-      extrasHtml + fixNum + glossNum;
+      extrasSub + fixNum + glossNum;
   } else {
     // Yapısız gövde / örnek PDF: mevcut akış (assessBox + dağılım/master + gövde + AI + sözlük).
     const bodyHtml = dedupeBlockquotes(md.render(effectiveMd) + extrasHtml + fixHtml);
@@ -811,10 +848,16 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .sev-critical-bg { background: #B3261E; } .sev-high-bg { background: #D64545; }
   .sev-medium-bg { background: #E0940E; } .sev-low-bg { background: #9AA0A6; }
   /* ---- 2.2 Master tablo + Sözlük ---- */
+  .priorities { margin: 12px 0 6px; padding: 12px 16px; background: #FBFDFC; border: 1px solid #DCEAE6; border-left: 4px solid #F5A623; border-radius: 8px; }
+  .priorities h3 { margin: 0 0 6px; color: #123F3A; font-size: 13px; }
+  .priorities .pri-grp { margin: 5px 0; font-size: 11.5px; }
   .scope-note { margin: 10px 0 14px; padding: 10px 14px; background: #F3F7FA; border: 1px solid #C9DCE8;
     border-left: 4px solid #2B6C9B; border-radius: 6px; font-size: 11.5px; color: #274b63; }
   .mt-ep { color: #5b6b67; font-weight: 400; font-size: 10.5px; }
   .finding-block code { background: #EEF5F3; padding: 1px 5px; border-radius: 3px; font-size: 10.5px; word-break: break-all; }
+  /* (TABLO TAŞMA) uzun uç nokta/path hücreyi taşırmasın; satır kaymasın. */
+  td { overflow-wrap: anywhere; word-break: break-word; }
+  td code { overflow-wrap: anywhere; word-break: break-all; }
   table.master td:first-child, table.master th:first-child { white-space: nowrap; width: 46px; }
   table.master td:nth-child(3), table.master th:nth-child(3) { white-space: nowrap; width: 74px; }
   table.glossary th { display: none; }
