@@ -40,6 +40,13 @@ $COMPOSE up -d
 echo "==> prisma migrate deploy"
 $COMPOSE exec -T api npx prisma migrate deploy
 
+# (Tam Kapsamlı Pentest — FAZ B) test.cybertestify.com (OWASP Juice Shop) SABİT test hesabını
+# yeniden garanti et. Juice Shop container recreate/reboot'ta DB'sini sıfırlar -> seed'li hesap
+# silinir -> authenticated login e2e "bad_credentials" verir. Seed idempotent; başarısız olsa
+# deploy'u BOZMAZ (|| true) — yalnız test fixture'ıdır, üretim akışını etkilemez.
+echo "==> Juice Shop test hesabı seed (idempotent)"
+$COMPOSE exec -T api npx tsx prisma/seedJuiceShopTestAccount.ts || echo "   (seed atlandı/başarısız — test fixture; üretimi etkilemez)"
+
 echo "==> Durum"
 $COMPOSE ps --format "table {{.Name}}\t{{.State}}\t{{.Status}}"
 echo "==> Bitti."
