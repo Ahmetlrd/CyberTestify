@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it';
 import puppeteer from 'puppeteer-core';
+import { createHash } from 'node:crypto';
 
 /**
  * (3) Rapor PDF uretimi — SAF FORMATLAMA/RENDER. Ek LLM cagrisi YOK, ek Anthropic
@@ -243,6 +244,157 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 }
 
+// ============================================================================
+// (PROFESYONEL RAPOR İSKELETİ — Aikido tarzı sunum, İÇERİK bizim dürüst çizgimiz)
+// Kapak / Zafiyet Dağılımı / Master Bulgu Tablosu / Sözlük — hepsi MEVCUT markdown
+// gövdesinden TÜRETİLİR (uydurma YOK). Gövde/ton/disclaimer/AI-kilit DEĞİŞMEZ.
+// ============================================================================
+
+// Deterministik Rapor No + Doğrulama Kodu (aynı rapor -> aynı numara; rastgelelik YOK).
+function reportIdentifiers(hostname: string, createdAt: Date): { reportNo: string; verifyCode: string } {
+  const y = createdAt.getUTCFullYear();
+  const mo = String(createdAt.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(createdAt.getUTCDate()).padStart(2, '0');
+  const h = createHash('sha256').update(`${hostname}|${createdAt.toISOString()}`).digest('hex').toUpperCase();
+  return { reportNo: `CT-${y}${mo}${d}-${h.slice(0, 4)}`, verifyCode: `${h.slice(4, 8)}-${h.slice(8, 12)}` };
+}
+
+type Sev = 'critical' | 'high' | 'medium' | 'low';
+function normSev(s: string): Sev | null {
+  const x = s.toLocaleLowerCase('tr');
+  if (/krit[iı]k|critical/.test(x)) return 'critical';
+  if (/y[üu]ksek|high/.test(x)) return 'high';
+  if (/orta|medium/.test(x)) return 'medium';
+  if (/d[üu][şs][üu]k|low/.test(x)) return 'low';
+  return null;
+}
+function stripMd(s: string): string {
+  return s.replace(/`([^`]*)`/g, '$1').replace(/\*\*([^*]*)\*\*/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_]/g, '').trim();
+}
+
+// Markdown gövdesindeki ŞİDDET içeren bulgu tablolarından (TESPİT EDİLEN RİSKLER / BULGULAR /
+// Risk Matrisi) bulgu satırlarını (başlık + şiddet) çıkarır. Şiddet kolonu OLMAYAN tablolar
+// (KVKK Uygun/Dikkat/Eksik, Kontrol Listesi Güven vb.) ATLANIR -> uyum raporunda 0 zafiyet.
+function parseFindings(md: string): { rows: { title: string; sev: Sev }[]; counts: Record<Sev, number> } {
+  const counts: Record<Sev, number> = { critical: 0, high: 0, medium: 0, low: 0 };
+  const rows: { title: string; sev: Sev }[] = [];
+  const seen = new Set<string>();
+  const lines = md.split('\n');
+  let i = 0;
+  while (i < lines.length) {
+    if (!/^\s*\|.*\|\s*$/.test(lines[i])) { i++; continue; }
+    // tablo bloğu topla
+    const block: string[] = [];
+    while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { block.push(lines[i]); i++; }
+    if (block.length < 2) continue;
+    const cells = (r: string) => r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+    const header = cells(block[0]).map((h) => h.toLocaleLowerCase('tr'));
+    const sevCol = header.findIndex((h) => /[şs]iddet|severity|ciddiyet/.test(h));
+    if (sevCol === -1) continue; // şiddet kolonu yoksa bulgu tablosu değil
+    let titleCol = header.findIndex((h) => /bulgu|ba[şs]l[ıi]k|title|giri[şs]|u[çc] nokta|finding/.test(h));
+    if (titleCol === -1) titleCol = header.findIndex((h, idx) => idx !== sevCol && !/^#|^no$|^s[ıi]ra/.test(h));
+    if (titleCol === -1) titleCol = 0;
+    for (let r = 1; r < block.length; r++) {
+      if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue; // ayraç satırı
+      const c = cells(block[r]);
+      const sev = normSev(c[sevCol] ?? '');
+      if (!sev) continue;
+      const title = stripMd(c[titleCol] ?? '').replace(/^\d+[).]?\s*/, '');
+      if (!title) continue;
+      const key = title.toLocaleLowerCase('tr').slice(0, 48);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({ title, sev });
+      counts[sev]++;
+    }
+  }
+  return { rows, counts };
+}
+
+const SEV_META: Record<Sev, { tr: string; en: string; cls: string }> = {
+  critical: { tr: 'Kritik', en: 'Critical', cls: 'sev-critical' },
+  high: { tr: 'Yüksek', en: 'High', cls: 'sev-high' },
+  medium: { tr: 'Orta', en: 'Medium', cls: 'sev-medium' },
+  low: { tr: 'Düşük', en: 'Low', cls: 'sev-low' },
+};
+
+// 2.1 Zafiyet Dağılımı — gerçek sayılardan bar grafiği + sayı tablosu (0'lar da çizilir, dürüst).
+function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en'): string {
+  const order: Sev[] = ['critical', 'high', 'medium', 'low'];
+  const max = Math.max(1, ...order.map((s) => counts[s]));
+  const total = order.reduce((a, s) => a + counts[s], 0);
+  const bars = order.map((s) => {
+    const h = Math.round((counts[s] / max) * 80); // px (maks 80)
+    return `<div class="dist-col"><div class="dist-num">${counts[s]}</div><div class="dist-bar ${SEV_META[s].cls}-bg" style="height:${h}px"></div><div class="dist-lbl">${locale === 'tr' ? SEV_META[s].tr : SEV_META[s].en}</div></div>`;
+  }).join('');
+  const intro = total === 0
+    ? (locale === 'tr' ? 'Bu taramada açık bir zafiyet göstergesi tespit edilmedi. Çalıştırılan kontroller ve gözlemler aşağıdaki bölümlerde ayrıntılıdır.' : 'No open vulnerability indicator was detected in this scan. Executed checks and observations are detailed in the sections below.')
+    : (locale === 'tr' ? `Bu taramada toplam <strong>${total}</strong> bulgu göstergesi tespit edildi; şiddet dağılımı aşağıdadır.` : `A total of <strong>${total}</strong> finding indicators were detected; the severity distribution is below.`);
+  return `<h2 id="s-dist">${locale === 'tr' ? '2.1 Zafiyet Dağılımı' : '2.1 Vulnerability Distribution'}</h2>
+  <div class="dist-chart">${bars}</div>
+  <p>${intro}</p>`;
+}
+
+// 2.2 Master Bulgu Tablosu — ID (CT-N) + Başlık + Durum + Şiddet. Boşsa dürüst "temiz" satırı.
+function buildMasterTable(rows: { title: string; sev: Sev }[], locale: 'tr' | 'en'): string {
+  const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+  const sorted = [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]);
+  const head = locale === 'tr' ? ['ID', 'Başlık', 'Durum', 'Şiddet'] : ['ID', 'Title', 'State', 'Severity'];
+  const open = locale === 'tr' ? 'Açık' : 'Open';
+  let body: string;
+  if (sorted.length === 0) {
+    body = `<tr><td>—</td><td colspan="2">${locale === 'tr' ? 'Bu taramada açık zafiyet göstergesi tespit edilmedi.' : 'No open vulnerability indicator detected in this scan.'}</td><td><span class="sev-badge" style="background:#1C6B60">${locale === 'tr' ? 'Temiz' : 'Clean'}</span></td></tr>`;
+  } else {
+    body = sorted.map((f, idx) => {
+      const sm = SEV_META[f.sev];
+      return `<tr><td>CT-${idx + 1}</td><td>${escapeHtml(f.title)}</td><td>${open}</td><td class="${sm.cls}"><span class="sev-badge">${locale === 'tr' ? sm.tr : sm.en}</span></td></tr>`;
+    }).join('');
+  }
+  return `<h2 id="s-master">${locale === 'tr' ? '2.2 Master Bulgu Tablosu' : '2.2 Master Findings Table'}</h2>
+  <table class="master"><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// Ek — Sözlük: yalnız RAPORDA GEÇEN terimler (bloat yok).
+const GLOSSARY_TERMS: Array<{ re: RegExp; term: string; tr: string; en: string }> = [
+  { re: /\bSQLi\b|SQL enjeksiyon|SQL Injection/i, term: 'SQL Injection', tr: 'Kullanıcı girdisinin veritabanı sorgusuna karışabildiği bir enjeksiyon zafiyeti.', en: 'An injection flaw where user input reaches a database query.' },
+  { re: /\bXSS\b|Cross-Site Scripting|yans[ıi]yan/i, term: 'XSS', tr: 'Cross-Site Scripting — sayfaya kötü amaçlı betik enjekte edilebilmesi.', en: 'Cross-Site Scripting — injection of malicious scripts into pages.' },
+  { re: /\bIDOR\b/i, term: 'IDOR', tr: 'Yetkisiz Nesne Erişimi — kimlik parametresiyle başka kaydın erişilebilmesi.', en: 'Insecure Direct Object Reference — accessing others’ records via ID manipulation.' },
+  { re: /\bSSRF\b/i, term: 'SSRF', tr: 'Server-Side Request Forgery — sunucuyu istenmeyen isteklere zorlama.', en: 'Server-Side Request Forgery.' },
+  { re: /\bCSRF\b/i, term: 'CSRF', tr: 'Cross-Site Request Forgery — kullanıcının istemsiz işlem yapmasını sağlama.', en: 'Cross-Site Request Forgery.' },
+  { re: /\bCWE\b/i, term: 'CWE', tr: 'Common Weakness Enumeration — zafiyet türleri sınıflandırması.', en: 'Common Weakness Enumeration.' },
+  { re: /\bOWASP\b/i, term: 'OWASP', tr: 'Açık web uygulama güvenliği topluluğu; Top 10 ve test kılavuzlarıyla bilinir.', en: 'Open Web Application Security Project.' },
+  { re: /\bTLS\b|SSL/i, term: 'TLS', tr: 'Taşıma katmanı şifrelemesi (HTTPS’in temeli).', en: 'Transport Layer Security.' },
+  { re: /\bHSTS\b|Strict-Transport-Security/i, term: 'HSTS', tr: 'Tarayıcıyı yalnız HTTPS kullanmaya zorlayan güvenlik başlığı.', en: 'HTTP Strict Transport Security header.' },
+  { re: /\bCSP\b|Content-Security-Policy/i, term: 'CSP', tr: 'İçerik Güvenlik Politikası — XSS/enjeksiyon azaltma başlığı.', en: 'Content Security Policy.' },
+  { re: /\bCORS\b/i, term: 'CORS', tr: 'Kaynaklar-arası paylaşım politikası; gevşek yapılandırma risklidir.', en: 'Cross-Origin Resource Sharing.' },
+  { re: /\bJWT\b/i, term: 'JWT', tr: 'JSON Web Token — oturum/yetki taşıyan imzalı belirteç.', en: 'JSON Web Token.' },
+  { re: /\bKVKK\b/i, term: 'KVKK', tr: 'Kişisel Verilerin Korunması Kanunu (Türkiye).', en: 'Turkish Personal Data Protection Law.' },
+  { re: /VERB[İi]S/i, term: 'VERBİS', tr: 'Veri Sorumluları Sicil Bilgi Sistemi (KVKK kayıt sistemi).', en: 'Turkish data controllers’ registry.' },
+  { re: /clickjacking|X-Frame-Options/i, term: 'Clickjacking', tr: 'Sayfanın görünmez iframe içine alınıp kullanıcı tıklamalarının kandırılması.', en: 'Tricking clicks via invisible framing.' },
+  { re: /forced browsing|yetki y[üu]kseltme/i, term: 'Forced Browsing', tr: 'Menüde olmayan (ör. yönetici) uç noktalara URL bilerek erişme.', en: 'Accessing hidden endpoints by guessing URLs.' },
+];
+function buildGlossary(md: string, locale: 'tr' | 'en'): string {
+  const hits = GLOSSARY_TERMS.filter((g) => g.re.test(md));
+  if (hits.length === 0) return '';
+  const rows = hits.map((g) => `<tr><td><strong>${escapeHtml(g.term)}</strong></td><td>${escapeHtml(locale === 'tr' ? g.tr : g.en)}</td></tr>`).join('');
+  return `<h2 id="s-glossary">${locale === 'tr' ? 'Ek — Sözlük' : 'Appendix — Glossary'}</h2>
+  <table class="glossary"><tbody>${rows}</tbody></table>`;
+}
+
+// Tekrar eden AYNI blockquote'ları (ör. her kontrolden sonra kelime-kelime tekrarlanan
+// "Kapsam ve yöntem" notu) BİR kereye indir — ilkini tut, sonrakileri kaldır.
+function dedupeBlockquotes(html: string): string {
+  const seen = new Set<string>();
+  return html.replace(/<blockquote>[\s\S]*?<\/blockquote>/g, (m) => {
+    const key = m.replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr');
+    if (key.length < 60) return m; // kısa notları tekilleştirme (yanlış-pozitif önle)
+    if (seen.has(key)) return '';
+    seen.add(key);
+    return m;
+  });
+}
+
+
 export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions): string {
   const t = L[meta.locale];
   const dateStr = meta.createdAt.toLocaleDateString(meta.locale === 'tr' ? 'tr-TR' : 'en-GB', {
@@ -344,6 +496,17 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     bodyHtml += `<div class="fix-locked"><h2>🔒 ${escapeHtml(fixTitle)}</h2><p>${escapeHtml(t.fixEmpty)}</p><p class="fix-cta">${escapeHtml(t.fixLockedCta)}</p></div>`;
   }
 
+  // (PROFESYONEL İSKELET) MEVCUT gövdeden TÜRETİLEN bölümler — gövde/ton/disclaimer DEĞİŞMEZ.
+  const { reportNo, verifyCode } = reportIdentifiers(meta.hostname, meta.createdAt);
+  // KVKK uyum ön-değerlendirmesidir (severity'li zafiyet değil) -> dağılım/master GÖSTERME (yanıltmasın).
+  const parsed = isKvkk ? null : parseFindings(effectiveMd);
+  const summaryHtml = parsed ? buildDistribution(parsed.counts, meta.locale) + buildMasterTable(parsed.rows, meta.locale) : '';
+  const glossaryHtml = buildGlossary(effectiveMd, meta.locale);
+  // Tekrar eden aynı "Kapsam ve yöntem" notunu (her kontrolden sonra) BİR kereye indir.
+  bodyHtml = dedupeBlockquotes(bodyHtml);
+  const notCert = meta.locale === 'tr' ? 'Bu rapor resmi sızma testi / sertifikasyon değildir.' : 'This report is not a formal penetration test / certification.';
+  const sealTitle = meta.locale === 'tr' ? 'CyberTestify Güvenlik Taraması — Tamamlandı' : 'CyberTestify Security Scan — Completed';
+
   return `<!doctype html><html lang="${meta.locale}"><head><meta charset="utf-8">
 <style>
   * { box-sizing: border-box; }
@@ -428,8 +591,54 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .fix-locked { margin-top: 22px; padding: 14px; background: #EEF5F3; border: 1px dashed #5FA396; border-radius: 6px; color: #14514A; }
   .fix-locked h2 { color: #5FA396; margin: 0 0 4px; font-size: 14px; }
   .fix-locked .fix-cta { margin: 8px 0 0; font-weight: 600; color: #14514A; }
+  /* ---- KAPAK SAYFASI (markalı, page-break-after) ---- */
+  .cover { height: 262mm; display: flex; flex-direction: column; justify-content: space-between;
+    background: linear-gradient(160deg, #0A2E2A 0%, #123F3A 55%, #0d332e 100%); color: #EEF5F3;
+    padding: 30px 40px 26px; page-break-after: always; }
+  .cover-top { display: flex; align-items: center; gap: 12px; }
+  .cover-top .brand { font-size: 22px; font-weight: 700; color: #fff; }
+  .cover-top .brand span { color: #F5A623; }
+  .cover-mid { text-align: center; margin-top: -30px; }
+  .cover-datebadge { display: inline-block; border: 1px solid #5FA396; color: #9Fc4bc; border-radius: 14px;
+    padding: 4px 14px; font-size: 12px; font-weight: 600; }
+  .cover-title { font-size: 40px; font-weight: 800; color: #fff; margin: 16px 0 6px; letter-spacing: .5px; }
+  .cover-sub { font-size: 15px; color: #B9D6CE; }
+  .cover-seal { margin: 34px auto 0; max-width: 380px; border: 1.5px solid #F5A623; border-radius: 12px;
+    padding: 16px 18px; background: rgba(245,166,35,.06); }
+  .cover-seal .seal-title { font-size: 13.5px; font-weight: 800; color: #F5A623; margin-bottom: 8px; }
+  .cover-seal .seal-row { font-size: 12px; color: #DCEAE6; margin: 2px 0; font-variant-numeric: tabular-nums; }
+  .cover-foot { text-align: center; font-size: 10.5px; color: #7FB0A6; border-top: 1px solid rgba(255,255,255,.12); padding-top: 12px; }
+  /* ---- 2.1 Zafiyet Dağılımı ---- */
+  .dist-chart { display: flex; align-items: flex-end; gap: 20px; height: 108px; padding: 6px 10px 0;
+    border-bottom: 2px solid #DCEAE6; margin: 10px 0 6px; }
+  .dist-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .dist-num { font-size: 14px; font-weight: 800; color: #123F3A; margin-bottom: 4px; }
+  .dist-bar { width: 64%; min-height: 3px; border-radius: 4px 4px 0 0; }
+  .dist-lbl { margin-top: 6px; font-size: 11px; font-weight: 600; color: #14514A; }
+  .sev-critical-bg { background: #B3261E; } .sev-high-bg { background: #D64545; }
+  .sev-medium-bg { background: #E0940E; } .sev-low-bg { background: #9AA0A6; }
+  /* ---- 2.2 Master tablo + Sözlük ---- */
+  table.master td:first-child, table.master th:first-child { white-space: nowrap; width: 46px; }
+  table.master td:nth-child(3), table.master th:nth-child(3) { white-space: nowrap; width: 74px; }
+  table.glossary th { display: none; }
+  table.glossary td:first-child { white-space: nowrap; width: 130px; color: #14514A; }
 </style></head>
 <body>
+  <div class="cover">
+    <div class="cover-top">${LOGO_SVG}<div class="brand">Cyber<span>Testify</span></div></div>
+    <div class="cover-mid">
+      <div class="cover-datebadge">${escapeHtml(dateStr)}</div>
+      <div class="cover-title">${escapeHtml(t.brandTagline)}</div>
+      <div class="cover-sub">${escapeHtml(meta.hostname)} &nbsp;·&nbsp; ${escapeHtml(meta.packageName)}</div>
+      <div class="cover-seal">
+        <div class="seal-title">${escapeHtml(sealTitle)}</div>
+        <div class="seal-row">${meta.locale === 'tr' ? 'Rapor No' : 'Report No'}: <strong>${reportNo}</strong></div>
+        <div class="seal-row">${meta.locale === 'tr' ? 'Doğrulama Kodu' : 'Verification Code'}: <strong>${verifyCode}</strong></div>
+        <div class="seal-row">${escapeHtml(t.date)}: ${escapeHtml(dateStr)}</div>
+      </div>
+    </div>
+    <div class="cover-foot">${escapeHtml(notCert)}</div>
+  </div>
   <div class="cover-band">
     ${LOGO_SVG}
     <div>
@@ -441,8 +650,9 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     <div><div class="k">${escapeHtml(t.target)}</div><div class="v">${escapeHtml(meta.hostname)}</div></div>
     <div><div class="k">${escapeHtml(t.pkg)}</div><div class="v">${escapeHtml(meta.packageName)}</div></div>
     <div><div class="k">${escapeHtml(t.date)}</div><div class="v">${escapeHtml(dateStr)}</div></div>
+    <div><div class="k">${meta.locale === 'tr' ? 'Rapor No' : 'Report No'}</div><div class="v">${reportNo}</div></div>
   </div>
-  <div class="content">${assessBox}${bodyHtml}</div>
+  <div class="content">${assessBox}${summaryHtml}${bodyHtml}${glossaryHtml}</div>
   <script>
     // Siddet kelimelerine gore tablo hucrelerini renklendir (TR+EN, buyuk/kucuk duyarsiz).
     (function () {
@@ -486,6 +696,8 @@ export async function renderReportPdf(
 ): Promise<Buffer> {
   const html = buildHtml(bodyMarkdown, meta, opts);
   const t = L[meta.locale];
+  const { reportNo } = reportIdentifiers(meta.hostname, meta.createdAt);
+  const confidential = meta.locale === 'tr' ? 'Gizli' : 'Confidential';
 
   const browser = await puppeteer.launch({
     executablePath: CHROMIUM_PATH,
@@ -501,11 +713,12 @@ export async function renderReportPdf(
       margin: { top: '14mm', bottom: '18mm', left: '0mm', right: '0mm' },
       displayHeaderFooter: true,
       headerTemplate: '<div></div>',
+      // (HER SAYFA) CyberTestify | Gizli | Rapor No: CT-… | Sayfa X / Y
       footerTemplate: `
         <div style="width:100%; font-size:8px; color:#5FA396; padding:0 12mm;
                     display:flex; justify-content:space-between; align-items:center;">
-          <span style="max-width:78%;">${escapeHtml(t.footerLegal)}</span>
-          <span>${escapeHtml(t.page)} <span class="pageNumber"></span>/<span class="totalPages"></span></span>
+          <span style="max-width:78%;">CyberTestify | ${escapeHtml(confidential)} | ${escapeHtml(t.footerLegal)}</span>
+          <span>${escapeHtml(reportNo)} &nbsp;·&nbsp; ${escapeHtml(t.page)} <span class="pageNumber"></span>/<span class="totalPages"></span></span>
         </div>`,
     });
     return Buffer.from(pdf);
