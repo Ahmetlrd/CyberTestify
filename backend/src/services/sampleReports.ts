@@ -156,6 +156,17 @@ const BUNDLE_SAMPLE: Record<string, string> = {
   bundle_full_pentest: 'full_pentest', // Tam Kapsamlı = authenticated bulgular
 };
 
+// (issue #4) Örnek raporun ÜST KUTU risk seviyesi — GÖVDEDEKİ gerçek riskle birebir.
+// Keşif=Orta, Aktif Doğrulama=Yüksek, Tam Kapsamlı=Yüksek (bug buradaydı: hepsi "Düşük" görünüyordu).
+const SAMPLE_RISK: Record<string, { level: 'high' | 'medium' | 'low' }> = {
+  ssl_tls: { level: 'medium' },
+  basit_tarama: { level: 'medium' },
+  kvkk_hazirlik: { level: 'low' }, // uyum hazırlığı — güvenlik açığı değil, iyileştirme alanları
+  recon: { level: 'medium' },
+  active_verify: { level: 'high' },
+  full_pentest: { level: 'high' },
+};
+
 const pdfCache = new Map<string, Buffer>();
 
 function sampleKeyFor(packageKey: string): string {
@@ -177,6 +188,9 @@ export async function getSampleReportPdf(packageKey: string): Promise<Buffer> {
 
   // (LANSMAN KAMPANYASI) örnek raporda AI Çözüm Önerileri bölümü AÇIK (temsili içerik). Kapanınca kilitli.
   const fixMarkdown = config.aiFixFreeCampaign ? (SAMPLE_FIX_MD[sampleKey] ?? SAMPLE_FIX_MD[DEFAULT_SAMPLE]) : null;
+  // (issue #4) Üst "Genel Değerlendirme" kutusu = GÖVDEDEKİ gerçek risk. Statik örnek gövdesinin
+  // risk ifadesi severity-parse'a takılmayabildiğinden her örneğe AÇIK seviye veriyoruz (tutarlılık).
+  const assessOverride = SAMPLE_RISK[sampleKey] ?? SAMPLE_RISK[DEFAULT_SAMPLE];
   const pdf = await renderReportPdf(
     md,
     {
@@ -185,7 +199,7 @@ export async function getSampleReportPdf(packageKey: string): Promise<Buffer> {
       createdAt: new Date('2026-01-15T10:00:00.000Z'), // sabit ornek tarihi (stabil cikti)
       locale: 'tr',
     },
-    { fixMarkdown },
+    { fixMarkdown, assessOverride },
   );
   pdfCache.set(packageKey, pdf);
   return pdf;

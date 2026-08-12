@@ -30,6 +30,10 @@ export interface ReportPdfOptions {
   fixMarkdown?: string | null; // unlock edilmisse fix onerileri Markdown'i
   fixLocked?: boolean; // fix onerisi VAR ama satin alinmamis (kilitli goster)
   extrasMarkdown?: string | null; // Ek Pasif Kontroller (kod-tabanli) — ayri/renkli bolum
+  // (ORNEK PDF) Ust "Genel Degerlendirme" kutusunun risk seviyesini AÇIKÇA belirle. Yalnizca
+  // ORNEK raporlar kullanir (statik govdedeki risk severity-parse'a takilmayabilir); GERCEK
+  // raporlar bunu ASLA gecmez -> onlarin assessRisk/assessBasit mantigi AYNEN korunur.
+  assessOverride?: { level: 'high' | 'medium' | 'low'; sentence?: string } | null;
 }
 
 const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
@@ -262,7 +266,18 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   // Genel Degerlendirme (banner altina) — risk seviyesi (ek LLM YOK).
   const isKvkk = meta.packageKey === 'kvkk_hazirlik';
   let assessBox: string;
-  if (meta.packageKey === 'bundle_full_pentest') {
+  if (opts.assessOverride) {
+    // (ORNEK PDF) Ust kutu riski AÇIKÇA verildi — statik ornek govdesindeki risk ifadesi
+    // severity-parse'a takilmayabildiginden ust kutu <-> govde TUTARLILIGINI garanti eder.
+    // GERCEK raporlar bu opt'u gecmez; onlarin assessRisk/assessBasit mantigi DEGISMEZ.
+    const lv = opts.assessOverride.level;
+    const label = lv === 'high' ? t.riskHigh : lv === 'medium' ? t.riskMedium : t.riskLow;
+    const sentence = opts.assessOverride.sentence ?? (lv === 'high' ? t.assessHigh : lv === 'medium' ? t.assessMedium : t.assessLow);
+    assessBox = `<div class="assess assess-${lv}">
+    <div class="assess-head"><span class="assess-title">${escapeHtml(t.assessTitle)}</span>
+      <span class="risk-badge risk-${lv}">${escapeHtml(label)}</span></div>
+    <p class="assess-body">${escapeHtml(sentence)}</p></div>`;
+  } else if (meta.packageKey === 'bundle_full_pentest') {
     // (Tam Kapsamlı Pentest — blocker fix) Authenticated rapor KENDİ dinamik "Değerlendirme Özeti
     // (Authenticated)" kutusunu + "## GENEL DEĞERLENDİRME" (doğru risk) içerir. Üstte AYRICA bir
     // risk-rozeti kutusu RENDER ETME — aksi halde assessRisk bu formatı yanlış okuyup "Düşük Risk"

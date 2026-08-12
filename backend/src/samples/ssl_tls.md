@@ -223,6 +223,61 @@ ornek-site.com, SSL/TLS açısından **güvenli ve modern** bir konfigürasyona 
 
 ---
 
+## Metodoloji ve Yaklaşım
+
+Denetim **pasif ve düşük-etkili** yöntemlerle yürütülmüştür. TLS el sıkışması her protokol sürümü için ayrı ayrı denenmiş (`node:tls` / OpenSSL), sertifika zinciri kök CA'ya kadar doğrulanmış, cipher suite ve anahtar değişimi parametreleri okunmuş, güvenlik başlıkları ve HTTP→HTTPS yönlendirmesi kod düzeyinde çözümlenmiştir. Değerlendirme; **Mozilla Server Side TLS**, **NIST SP 800-52r2** ve **OWASP Secure Headers Project** kılavuzlarıyla karşılaştırmalıdır. Hiçbir istismar denenmemiştir.
+
+## Test Ortamı ve Sınırlamalar
+
+- **Kapsam:** `ornek-site.com:443` uç noktası ve ana sayfa yanıt başlıkları (giriş gerektiren alanlar ve iç ağ kapsam dışı).
+- **Yöntem:** Salt-okunur handshake/GET; oran sınırı ve zaman aşımı korumalı; bant-dışı (OOB) kanal yok.
+- **Sınır:** Sonuçlar denetim anındaki sunucu yapılandırmasını yansıtır; CDN/edge düğümüne göre cipher/başlık farkı olabilir.
+
+## Kapsam ve Kontrol Listesi
+
+Çalıştırılan tüm kontroller — geçenler dahil (16 kontrol; 12 temiz, 4 iyileştirme).
+
+| Kategori | Kontrol | Sonuç |
+|----------|---------|-------|
+| Sertifika | Geçerlilik / süre | ✅ Geçti (66 gün) |
+| Sertifika | Zincir doğrulama (4 seviye) | ✅ Geçti |
+| Sertifika | Hostname/SAN eşleşmesi | ✅ Geçti |
+| Sertifika | Anahtar boyutu | ⚠️ 2048-bit (Düşük) |
+| Protokol | TLS 1.3 / 1.2 desteği | ✅ Geçti |
+| Protokol | TLS 1.1 / 1.0 reddi | ✅ Geçti |
+| Protokol | SSL 3.0 reddi | ✅ Geçti |
+| Şifreleme | AEAD cipher (GCM/ChaCha20) | ✅ Geçti |
+| Şifreleme | Zayıf cipher (RC4/3DES/NULL) | ✅ Geçti (yok) |
+| Şifreleme | İleri gizlilik (ECDHE/X25519) | ✅ Geçti |
+| Başlık | HSTS | ✅ Geçti |
+| Taşıma | HTTP→HTTPS yönlendirme | ✅ Geçti (301) |
+| Başlık | X-Frame-Options | ⚠️ Eksik (Orta) |
+| Başlık | X-Content-Type-Options | ⚠️ Eksik (Orta) |
+| Başlık | Content-Security-Policy | ⚠️ Eksik (Orta) |
+
+## Risk Matrisi
+
+| # | Bulgu | Etki | Olasılık | Şiddet |
+|---|-------|------|----------|--------|
+| 1 | X-Frame-Options eksik | Orta (clickjacking) | Orta | **Orta** |
+| 2 | X-Content-Type-Options eksik | Orta (MIME-sniffing) | Orta | **Orta** |
+| 3 | Content-Security-Policy eksik | Yüksek (XSS azaltma yok) | Orta | **Orta** |
+| 4 | RSA 2048-bit anahtar | Düşük (uzun vade) | Düşük | **Düşük** |
+
+## Standart Eşleme
+
+| Bulgu | OWASP Top 10 (2021) | CWE | WSTG |
+|-------|---------------------|-----|------|
+| Eksik güvenlik başlıkları | A05: Security Misconfiguration | CWE-693 Protection Mechanism Failure | WSTG-CONF-07 |
+| X-Frame-Options eksik | A05 | CWE-1021 Improper Restriction of Framing | WSTG-CLNT-09 |
+| CSP eksik | A05 | CWE-693 | WSTG-CONF-12 |
+
+## Sonraki Adımlar
+
+1. **Öncelik 1 (Orta):** X-Frame-Options, X-Content-Type-Options ve CSP başlıklarını ekleyin.
+2. **Öncelik 2 (Düşük):** Sertifika yenilemesinde RSA anahtarını 3072/4096-bit'e yükseltmeyi değerlendirin; 7 Eylül 2026 son kullanma öncesi yenileme planlayın.
+3. Panoya kopyalanabilir tüm düzeltmeler aşağıdaki **AI Çözüm Önerileri** bölümündedir; uyguladıktan sonra yeniden tarayarak doğrulayın.
+
 ---
 
 ## Yasal Uyari ve Kapsam

@@ -32,6 +32,58 @@ ornek-site.com'un herkese açık sayfaları, KVKK ilkeleri açısından dışar�
 
 ---
 
+## Metodoloji ve Yaklaşım
+
+Bu ön-değerlendirme, hedefin **herkese açık sayfalarını pasif olarak** inceleyerek KVKK'nın dışarıdan gözlemlenebilir hazırlık göstergelerini derler: aydınlatma/gizlilik metninin varlığı, çerez rıza (CMP) davranışı, rıza öncesi bırakılan çerezler, üçüncü taraf izleyiciler ve veri toplayan formların taşıma güvenliği kod düzeyinde gözlemlenir. Kesin bir uyum hükmü KURULMAZ; nötr durum etiketleri (**Uygun / Dikkat / Eksik**) kullanılır.
+
+## Test Ortamı ve Sınırlamalar
+
+- **Kapsam:** Yalnız herkese açık sayfalar; iç süreçler, politika/sözleşme belgeleri, VERBİS kaydının içeriği ve idari tedbirler **kapsam dışıdır**.
+- **Yöntem:** Salt-okunur GET; kimlik doğrulama yapılmadı.
+- **Sınır:** Bu rapor bir **hukuki görüş veya resmî uyum denetimi değildir**; nihai değerlendirme için KVKK uzmanı/avukat gereklidir.
+
+## Kapsam ve Kontrol Listesi
+
+Gözlemlenen tüm KVKK göstergeleri — uygun olanlar dahil (5 alan; 2 uygun, 3 iyileştirme).
+
+| KVKK Konusu | Gözlem | Durum |
+|-------------|--------|-------|
+| Aydınlatma / gizlilik metni | `/gizlilik-politikasi` erişilebilir | ✅ Uygun |
+| Kişisel veri formu — taşıma | İletişim formu HTTPS üzerinde | ✅ Uygun |
+| Çerez rızası (CMP) | Rızadan ÖNCE analytics çerezi bırakılıyor | ⚠️ Dikkat |
+| Üçüncü taraf izleyiciler | Google Analytics + Meta Pixel | ⚠️ Dikkat |
+| Veri sorumlusu / VERBİS atfı | Gözlemlenmedi | ❌ Eksik |
+
+## Tarama İstatistikleri
+
+| Ölçüt | Değer |
+|-------|-------|
+| İncelenen sayfa | 4 (ana sayfa, gizlilik, iletişim, form) |
+| Tespit edilen üçüncü taraf izleyici | 2 (Google Analytics, Meta Pixel) |
+| Rıza öncesi bırakılan çerez | Var (analytics) |
+| Veri toplayan form | 1 (iletişim; HTTPS) |
+| Gözlemlenen KVKK alanı | 5 |
+| Yaklaşık süre | ~15 saniye |
+
+## Standart Eşleme (KVKK)
+
+| Gözlem | İlgili KVKK Dayanağı |
+|--------|----------------------|
+| Aydınlatma metni | KVKK m.10 (Aydınlatma yükümlülüğü) |
+| Çerez rızası / açık rıza | KVKK m.5-6 (İşleme şartları / açık rıza) |
+| Üçüncü taraf izleyici aktarımı | KVKK m.8-9 (Yurt içi/yurt dışı aktarım) |
+| Veri sorumlusu / VERBİS | KVKK m.16 (VERBİS kayıt yükümlülüğü) |
+
+> Not: Yukarıdaki eşleme farkındalık amaçlıdır; bir uyum beyanı oluşturmaz.
+
+## Sonraki Adımlar
+
+1. **Öncelik 1:** Rıza öncesi zorunlu-olmayan çerezleri bloklayan bir CMP (opt-in) kurun; formlara ayrı açık rıza kutusu ekleyin.
+2. **Öncelik 2:** Veri sorumlusu kimliğini ve VERBİS kayıt durumuna atfı siteye ekleyin; aydınlatma metninde üçüncü taraf aktarımını açıklayın.
+3. **Nihai değerlendirme** için KVKK uzmanı/avukat ile çalışın. Panoya alınabilir adımlar **AI Çözüm Önerileri** bölümündedir.
+
+---
+
 ## Yasal Uyari ve Kapsam
 
 - **Yapay zeka uretimi:** Bu rapor yapay zeka tabanli otomatik bir ajan tarafindan uretilmistir; olgusal ifadeler bagimsiz dogrulanmadan kullanilmamalidir.

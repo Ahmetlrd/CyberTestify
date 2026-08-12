@@ -51,6 +51,65 @@ ornek-site.com için pasif ve düşük-etkili keşif teknikleriyle dış saldır
 
 ---
 
+## Metodoloji ve Yaklaşım
+
+Keşif **pasif ve düşük-etkili** kaynaklarla yapılmıştır: alt alanlar sertifika şeffaflık kayıtları (crt.sh benzeri CT logları) ve pasif DNS ile derlenmiş, her aday A/CNAME çözümlemesiyle doğrulanmıştır; API dokümantasyonu bilinen yollar (`/swagger`, `/openapi.json`, `/api-docs`) üzerinden salt-okunur sorgulanmış; CMS parmak izi yanıt başlıkları ve `/wp-json` üzerinden çıkarılıp kamuya açık zafiyet veritabanlarıyla eşlenmiştir. Yaklaşım **OWASP WSTG-INFO** (bilgi toplama) ile uyumludur. Hiçbir istismar denenmemiştir.
+
+## Test Ortamı ve Sınırlamalar
+
+- **Kapsam:** `ornek-site.com` ve doğrulanmış alt alanlarının herkese açık yüzeyi (iç ağ ve giriş-arkası kapsam dışı).
+- **Yöntem:** Salt-okunur GET/DNS; oran sınırı korumalı; bant-dışı (OOB) kanal yok.
+- **Sınır:** Envanter, pasif kaynakların kapsamıyla sınırlıdır; yayınlanmamış/erişimi kısıtlı varlıklar görünmeyebilir. CVE eşlemesi sürüm parmak izine dayalıdır (kesin sürüm doğrulaması yapılmadı).
+
+## Kapsam ve Kontrol Listesi
+
+Çalıştırılan tüm kontroller — geçenler dahil (7 kontrol; 3 temiz, 4 iyileştirme).
+
+| Kontrol | Kapsam | Sonuç |
+|---------|--------|-------|
+| Alt alan envanteri (CT + pasif DNS) | 6 alt alan | ⚠️ 2 riskli (staging/old) |
+| DNS çözümleme doğrulaması | 6/6 çözüldü | ✅ Geçti |
+| Alt alan devralma (dangling CNAME) | 6 kayıt | ✅ Geçti (yok) |
+| API dokümantasyon keşfi | `/swagger` | ⚠️ Açık (Orta) |
+| Hassas uç nokta işaretleme | 24 uç nokta | ⚠️ 3 hassas (`/v1/admin/*`) |
+| CMS parmak izi | WordPress 6.2 | ⚠️ Sürüm ifşası |
+| Eklenti/CVE eşleme | 2 eski eklenti | ⚠️ CVE eşleşmesi |
+
+## Tarama İstatistikleri
+
+| Ölçüt | Değer |
+|-------|-------|
+| Keşfedilen alt alan | 6 (6 çözüldü) |
+| İncelenen API uç noktası | 24 (3 hassas işaretlendi) |
+| CMS/eklenti CVE eşleşmesi | 3 (temsilî; 0 kritik · 1 yüksek · 2 orta) |
+| Çalıştırılan kontrol | 7 |
+| Yaklaşık süre | ~40 saniye |
+
+## Risk Matrisi
+
+| # | Bulgu | Etki | Olasılık | Şiddet |
+|---|-------|------|----------|--------|
+| 1 | Açık API dokümantasyonu | Orta (yüzey ifşası) | Yüksek | **Orta** |
+| 2 | İnternete açık staging | Orta (zayıf korunan ortam) | Orta | **Orta** |
+| 3 | CMS sürüm ifşası + eski eklenti | Orta (bilinen CVE) | Orta | **Orta** |
+| 4 | Bakım-dışı `old` alt alanı | Düşük (unutulmuş varlık) | Düşük | **Düşük** |
+
+## Standart Eşleme
+
+| Bulgu | OWASP Top 10 (2021) | CWE | WSTG |
+|-------|---------------------|-----|------|
+| Açık API dokümantasyonu | A05: Security Misconfiguration | CWE-200 Exposure of Sensitive Information | WSTG-INFO-02 |
+| Eski CMS/eklenti | A06: Vulnerable & Outdated Components | CWE-1104 Use of Unmaintained Components | WSTG-INFO-08 |
+| Staging/old ifşası | A05 | CWE-668 Exposure to Wrong Sphere | WSTG-INFO-04 |
+
+## Sonraki Adımlar
+
+1. **Öncelik 1 (Orta):** Üretimde API dokümantasyonunu kapatın/kimlik doğrulaması arkasına alın; `staging`/`old` alt alanlarını IP allowlist ile sınırlayın.
+2. **Öncelik 2 (Orta):** CMS ve eklentileri güncelleyin, sürüm ifşasını kaldırın.
+3. Panoya kopyalanabilir tüm düzeltmeler aşağıdaki **AI Çözüm Önerileri** bölümündedir.
+
+---
+
 ## Yasal Uyari ve Kapsam
 
 - **Yapay zeka destekli:** Bu rapor yapay zeka destekli otomatik bir keşif akışıyla üretilmiştir; olgusal ifadeler bağımsız doğrulanmadan kullanılmamalıdır.

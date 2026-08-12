@@ -52,6 +52,52 @@ Hedefin temel taşıma güvenliği (TLS/HTTPS) sağlam durumda ve teknoloji imza
 
 ---
 
+## Metodoloji ve Yaklaşım
+
+Bu ön-kontrol YALNIZCA **pasif ve düşük-etkili** tekniklerle yapılır: ana sayfa yanıtı GET ile alınır, TLS el sıkışması `node:tls` ile kurulur ve HTTP güvenlik başlıkları kod düzeyinde çözümlenir. Hiçbir girdi enjekte edilmez, oturum açılmaz, veri değiştirilmez. Gözlemlenen değerler OWASP Secure Headers Project ve endüstri en iyi uygulamalarıyla karşılaştırılır.
+
+## Test Ortamı ve Sınırlamalar
+
+- **Kapsam:** Yalnız `https://ornek-site.com/` ana sayfası (giriş gerektiren alanlar ve alt sayfalar kapsam dışı).
+- **Yöntem:** Salt-okunur GET/HEAD; oran sınırı ve 9 sn zaman aşımı korumalı; bant-dışı (OOB) kanal yok.
+- **Sınır:** Bulgular tarama anındaki yanıtları yansıtır; sunucu tarafı değişiklikler sonucu etkileyebilir. Bu bir ön-kontroldür, kapsamlı bir denetim değildir.
+
+## Kapsam ve Kontrol Listesi
+
+Çalıştırılan tüm kontroller — geçenler dahil (10 kontrol; 6 temiz, 4 iyileştirme).
+
+| Kontrol | Kapsam | Sonuç |
+|---------|--------|-------|
+| HTTPS zorunluluğu (HTTP→HTTPS 301) | Ana sayfa | ✅ Geçti |
+| TLS sertifika geçerliliği | Sertifika zinciri | ✅ Geçti (66 gün kaldı) |
+| TLS protokol sürümü | Handshake | ✅ Geçti (TLS 1.3) |
+| Strict-Transport-Security (HSTS) | Yanıt başlığı | ✅ Geçti (max-age=1 yıl) |
+| Sunucu sürüm ifşası | `Server` başlığı | ✅ Geçti (gizli) |
+| Teknoloji/çatı sürüm ifşası | Yanıt + HTML | ✅ Geçti |
+| X-Frame-Options | Yanıt başlığı | ⚠️ Eksik (Orta) |
+| X-Content-Type-Options | Yanıt başlığı | ⚠️ Eksik (Orta) |
+| Content-Security-Policy | Yanıt başlığı | ⚠️ Eksik (Orta) |
+| Referrer-Policy | Yanıt başlığı | ⚠️ Eksik (Düşük) |
+
+## Tarama İstatistikleri
+
+| Ölçüt | Değer |
+|-------|-------|
+| Taranan sayfa | 1 (ana sayfa) |
+| Gönderilen istek | 4 (GET + TLS handshake denemeleri) |
+| İncelenen giriş noktası | 0 (pasif; girdi denenmedi) |
+| Çalıştırılan kontrol | 10 |
+| Tespit edilen bulgu | 4 (0 kritik · 0 yüksek · 3 orta · 1 düşük) |
+| Yaklaşık süre | ~8 saniye |
+
+## Sonraki Adımlar
+
+1. **Öncelik 1 (Orta):** X-Frame-Options, X-Content-Type-Options ve Content-Security-Policy başlıklarını ekleyin.
+2. **Öncelik 2 (Düşük):** Referrer-Policy başlığını ekleyin.
+3. Panoya kopyalanabilir tüm düzeltmeler aşağıdaki **AI Çözüm Önerileri** bölümündedir; uyguladıktan sonra aynı paketle yeniden tarayarak doğrulayın.
+
+---
+
 ## Yasal Uyari ve Kapsam
 
 - **Yapay zeka uretimi:** Bu rapor yapay zeka tabanli otomatik bir ajan tarafindan uretilmistir; olgusal ifadeler bagimsiz dogrulanmadan kullanilmamalidir.

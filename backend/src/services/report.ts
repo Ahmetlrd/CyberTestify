@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import * as pentagi from '../pentagi/client.js';
 import { encryptReport, generateReportAccessSecret } from './crypto.js';
 import { redactAll } from './piiRedaction.js';
-import { FIX_SUGGESTIONS_DELIM } from './scanPackages.js';
+import { FIX_SUGGESTIONS_DELIM, getPackageDef, securityProfileFor } from './scanPackages.js';
 import { hasPassiveExtras, runPassiveExtras, renderPassiveExtrasMarkdown, PASSIVE_EXTRAS_DELIM } from './passiveExtras.js';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
 import { generateBasitReport } from './basitReport.js';
@@ -518,6 +518,53 @@ const FULL_PENTEST_LEGAL_EN = [
   '**Responsibility:** Verifying and remediating findings is the customer’s responsibility.',
 ];
 
+// (KALİTE) TÜM raporlara EKLEMELİ (mevcut gövdeyi BOZMADAN) — hiçbir generator'da OLMAYAN iki
+// bölüm: "Metodoloji ve Yaklaşım" (yaklaşım+teknik+standart+kısa sınırlama) ve "Sonraki Adımlar"
+// (net CTA). Paket PROFİLİNE göre yazılır (pasif/uyum/aktif/authenticated) — dürüst, kısa, uydurma
+// sayı YOK, gövdedeki "Ne Kontrol Edildi"/scope notlarını TEKRARLAMAZ (yaklaşım+standart odaklı).
+function reportKind(packageKey?: string): 'compliance' | 'authenticated' | 'active' | 'passive' {
+  if (!packageKey) return 'passive';
+  if (['kvkk_hazirlik', 'bundle_compliance', 'pci_hazirlik', 'iso27001_hazirlik'].includes(packageKey)) return 'compliance';
+  if (['bundle_full_pentest', 'authenticated_scan'].includes(packageKey)) return 'authenticated';
+  try {
+    const prof = securityProfileFor(getPackageDef(packageKey as Parameters<typeof getPackageDef>[0]));
+    if (prof === 'active-light' || prof === 'active-verify-only') return 'active';
+  } catch { /* bilinmeyen key -> passive */ }
+  return 'passive';
+}
+
+function buildCommonSections(packageKey: string | undefined, locale: Locale): string {
+  const kind = reportKind(packageKey);
+  if (locale === 'en') {
+    const METH_EN: Record<string, string> = {
+      passive: 'This scan uses **passive, low-impact** techniques only: the target’s public responses are retrieved via GET/HEAD/OPTIONS, and TLS handshakes, DNS records and HTTP headers are parsed at the code level. No input is injected, no login is performed and no data is modified. Observed configuration is compared against OWASP/industry best practices.\n\n**Limitations:** No authentication (login-gated areas are out of scope); requests are timeout/rate-limit protected; no out-of-band channels. Findings reflect responses at scan time.',
+      compliance: 'This pre-assessment passively reviews the target’s public pages to compile the **externally observable readiness indicators** for the relevant framework. No definitive compliance verdict is made; neutral status labels (Observed / Not observed / Needs review) are used.\n\n**Limitations:** External observation only — internal processes, policies and contracts are out of scope. No authentication. This is not legal advice or an official audit.',
+      active: 'Following the **“prove — don’t exploit”** principle, active low-impact verification probes are run: each input point receives a harmless baseline request first, then a single distinguishing indicator probe; a vulnerability **indicator** is derived from the response/timing delta. Vulnerabilities are not exploited and no data is read or changed.\n\n**Limitations:** A circuit breaker halts probing on repeated 5xx/WAF responses. Destructive methods (DELETE/data-writing PUT, real command execution, exfiltration, DoS) are blocked at the code level. No authentication. Absence of findings does not PROVE absence of a vulnerability.',
+      authenticated: 'This scan runs in an **authenticated (logged-in)** context using the TEST account you provided. Authorization, session management, forced-browsing and authenticated input checks follow the **“prove — don’t exploit”** principle. Your password is never sent to the agent/PentAGI; it is used only in the backend’s deterministic session.\n\n**Limitations:** Requests are observational/GET-heavy; real data modification, account-state changes, payment/order completion and cross-account access are OUT OF SCOPE and blocked at the code level.',
+    };
+    const NEXT_EN: Record<string, string> = {
+      passive: '1. Remediate the items in **“Findings / Detected Risks”** in order of severity.\n2. Copy-paste-ready fixes for each finding are in the **AI Fix Suggestions** section.\n3. After fixing, re-scan with the same package to verify.',
+      compliance: '1. Apply the quick wins in **“Priority Actions”** first.\n2. Engage the relevant specialist (KVKK / PCI QSA / ISO consultant) for the final assessment.\n3. Re-check after remediation.',
+      active: '1. Reproduce and remediate the High/Medium indicators in your own environment.\n2. Copy-paste-ready fixes are in the **AI Fix Suggestions** section.\n3. A re-test after remediation is recommended.',
+      authenticated: '1. Prioritise High-severity findings first (authorization/session).\n2. Copy-paste-ready fixes are in the **AI Fix Suggestions** section.\n3. A re-test after remediation is recommended.',
+    };
+    return `\n\n---\n\n## Methodology & Approach\n\n${METH_EN[kind]}\n\n## Next Steps\n\n${NEXT_EN[kind]}`;
+  }
+  const METH_TR: Record<string, string> = {
+    passive: 'Bu tarama YALNIZCA **pasif ve düşük-etkili** tekniklerle yürütülür: hedefin herkese açık yanıtları GET/HEAD/OPTIONS ile alınır; TLS el sıkışması, DNS kayıtları ve HTTP başlıkları kod düzeyinde çözümlenir. Hiçbir girdi enjekte edilmez, oturum açılmaz, veri değiştirilmez. Gözlemlenen yapılandırma OWASP/endüstri en iyi uygulamalarıyla karşılaştırılır.\n\n**Sınırlamalar:** Kimlik doğrulama yapılmadı (giriş gerektiren alanlar kapsam dışı); istekler zaman aşımı/oran sınırıyla korunur; bant-dışı (out-of-band) kanal kullanılmaz. Bulgular tarama anındaki yanıtları yansıtır.',
+    compliance: 'Bu ön-değerlendirme, hedefin herkese açık sayfalarını pasif olarak inceleyerek ilgili çerçevenin **dışarıdan gözlemlenebilir hazırlık göstergelerini** derler. Kesin bir uyum hükmü KURULMAZ; nötr durum etiketleri (Gözlemlendi / Gözlemlenmedi / İnceleme gerekli) kullanılır.\n\n**Sınırlamalar:** Yalnız dış gözlem — iç süreç, politika ve sözleşme belgeleri kapsam dışıdır. Kimlik doğrulama yapılmadı. Bu rapor hukuki görüş veya resmî denetim değildir.',
+    active: '**“Kanıtla — istismar etme”** ilkesiyle aktif ve düşük-etkili doğrulama probları çalıştırılır: her giriş noktasına önce zararsız bir temel istek, ardından ayırt edici tek bir gösterge probu gönderilir; yanıt/zamanlama farkından zafiyet **göstergesi** türetilir. Zafiyet sömürülmez, veri çekilmez/değiştirilmez.\n\n**Sınırlamalar:** Art arda 5xx/WAF yanıtında devre kesici probları durdurur. Yıkıcı yöntemler (DELETE/veri-yazan PUT, gerçek komut çalıştırma, exfiltrasyon, DoS) kod düzeyinde engellidir. Kimlik doğrulama yapılmadı. Bulgu olmaması, zafiyet olmadığını KANITLAMAZ.',
+    authenticated: 'Bu tarama, sağladığınız TEST hesabıyla **kimlik-doğrulamalı (login’li)** bağlamda yürütülür. Yetkilendirme, oturum yönetimi, forced-browsing ve authenticated girdi kontrolleri **“kanıtla — istismar etme”** ilkesiyle çalıştırılır. Şifreniz hiçbir aşamada ajana/PentAGI’ye gönderilmez; yalnız backend’in deterministik oturumunda kullanılır.\n\n**Sınırlamalar:** İstekler gözlemsel/GET-ağırlıklıdır; gerçek veri değişikliği, hesap-durumu değişikliği, ödeme/sipariş tamamlama ve çapraz-hesap erişimi KAPSAM DIŞIDIR ve kod düzeyinde engellidir.',
+  };
+  const NEXT_TR: Record<string, string> = {
+    passive: '1. **“Tespit Edilen Riskler / Bulgular”** bölümündeki bulguları şiddet sırasına göre giderin.\n2. Her bulgu için panoya kopyalanabilir düzeltmeler **AI Çözüm Önerileri** bölümündedir.\n3. Düzeltme sonrası aynı paketle yeniden tarayarak doğrulayın.',
+    compliance: '1. **“Öncelikli Aksiyonlar”** bölümündeki hızlı kazanımları önce uygulayın.\n2. Nihai değerlendirme için ilgili uzman (KVKK / PCI QSA / ISO danışmanı) ile çalışın.\n3. Düzeltmeler sonrası yeniden kontrol edin.',
+    active: '1. Yüksek/Orta göstergeleri kendi ortamınızda doğrulayıp giderin.\n2. Panoya kopyalanabilir düzeltmeler **AI Çözüm Önerileri** bölümündedir.\n3. Düzeltme sonrası yeniden test önerilir.',
+    authenticated: '1. Yüksek şiddetli bulguları öncelikle giderin (yetkilendirme/oturum).\n2. Panoya kopyalanabilir düzeltmeler **AI Çözüm Önerileri** bölümündedir.\n3. Düzeltme sonrası yeniden test önerilir.',
+  };
+  return `\n\n---\n\n## Metodoloji ve Yaklaşım\n\n${METH_TR[kind]}\n\n## Sonraki Adımlar\n\n${NEXT_TR[kind]}`;
+}
+
 export function renderReportMarkdown(
   hostname: string,
   packageName: string,
@@ -543,6 +590,8 @@ export function renderReportMarkdown(
   const legalTitle = isKvkk ? 'Yasal Uyarı ve Kapsam' : t.legalTitle;
   // (Tam Kapsamlı Pentest) AYRI, DOĞRU disclaimer (authenticated); diğer paketlerin metni DEĞİŞMEZ.
   const legal = isFullPentest ? (locale === 'en' ? FULL_PENTEST_LEGAL_EN : FULL_PENTEST_LEGAL_TR) : isKvkk ? KVKK_LEGAL : t.legal;
+  // (KALİTE) Ortak bölümler gövdenin ARKASINA, legal'in ÖNÜNE eklenir; ilk sayfa/özet DEĞİŞMEZ.
+  const commonBlock = buildCommonSections(packageKey, locale);
   return `# ${isKvkk ? 'KVKK Ön Uyum Kontrol Raporu' : t.title}
 
 **${t.target}:** ${hostname}
@@ -551,7 +600,7 @@ export function renderReportMarkdown(
 
 ---
 
-${bodyBlock}${screenshotsBlock}
+${bodyBlock}${screenshotsBlock}${commonBlock}
 
 ---
 
