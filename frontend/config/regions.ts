@@ -45,7 +45,7 @@ export const REGIONS: Record<RegionCode, RegionConfig> = {
     paymentProvider: 'iyzico',
     invoicingMethod: 'earsiv',
     supportEmail: 'support@cybertestify.com',
-    companyLegalName: 'Entar6 Enerji ve Tarım Sanayi ve Ticaret Limited Şirketi',
+    companyLegalName: 'CyberTestify',
     legalReady: true,
   },
   us: {

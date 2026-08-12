@@ -7,7 +7,7 @@ export default function Page() {
   return (
     <LegalArticle title="Kullanım Koşulları">
       <p>
-        Bu Kullanım Koşulları, {COMPANY.legalName} ({COMPANY.brand}, &quot;Hizmet Sağlayıcı&quot;)
+        Bu Kullanım Koşulları, {COMPANY.brand} (&quot;Hizmet Sağlayıcı&quot;)
         tarafından {COMPANY.domain} üzerinden sunulan güvenlik ön-değerlendirme hizmetinin
         kullanımını düzenler. Hizmeti kullanarak bu koşulları kabul etmiş sayılırsınız.
       </p>

@@ -7,7 +7,7 @@ export default function Page() {
   return (
     <LegalArticle title="Gizlilik Politikası ve Sözleşmesi">
       <p>
-        {COMPANY.legalName} ({COMPANY.brand}) olarak gizliliğinize önem veriyoruz. Bu politika,
+        {COMPANY.brand} olarak gizliliğinize önem veriyoruz. Bu politika,
         hangi verileri neden işlediğimizi ve nasıl koruduğumuzu özetler. Kişisel verilere ilişkin
         ayrıntılı bilgilendirme için <a href="/legal/kvkk-aydinlatma">KVKK Aydınlatma Metni</a>&apos;ni
         inceleyin.

@@ -8,8 +8,7 @@ export default function Page() {
     <LegalArticle title="Mesafeli Satış Sözleşmesi">
       <h3>1. Taraflar</h3>
       <p>
-        <strong>Satıcı:</strong> {COMPANY.legalName} ({COMPANY.brand}), {COMPANY.address}, MERSİS{' '}
-        {COMPANY.mersisNo}, {COMPANY.email}.<br />
+        <strong>Satıcı:</strong> {COMPANY.brand}, {COMPANY.email}.<br />
         <strong>Alıcı:</strong> Sipariş sırasında hesap bilgilerini giren kullanıcı (&quot;Tüketici&quot;).
       </p>
 

@@ -20,9 +20,7 @@ export function DynamicContract({
       <p className="text-sm font-bold text-brand">Mesafeli Satış Sözleşmesi — Bu Siparişe Özel</p>
 
       <p className="mt-2">
-        <strong>SATICI:</strong> {COMPANY.legalName} ({COMPANY.brand}) — {COMPANY.address}. Vergi Dairesi/No:{' '}
-        {COMPANY.taxOffice} / {COMPANY.taxNo}. Ticaret Sicil No: {COMPANY.ticaretSicilNo}. MERSİS: {COMPANY.mersisNo}.
-        E-posta: {COMPANY.email} — Tel: {COMPANY.phone}.
+        <strong>SATICI:</strong> {COMPANY.brand} — E-posta: {COMPANY.email}.
       </p>
       <p className="mt-1">
         <strong>ALICI:</strong> Sipariş sırasında oturum açan hesap sahibi (&quot;Tüketici&quot;).

@@ -18,9 +18,6 @@ const LEGAL_LINKS: Array<[string, string]> = [
 
 export function Footer({ region }: { region: RegionConfig }) {
   const d = getDict(region).footer;
-  // TR fatura yöntemi = e-Arşiv → tam imprint (MERSİS/vergi). Diğer bölgeler için
-  // kendi tüzel kişilik/vergi bilgileri ayrıca hazırlanacak (config-driven).
-  const showTrImprint = region.invoicingMethod === 'earsiv';
 
   return (
     <footer className="mt-24 bg-brand-deep text-white/80">
@@ -79,24 +76,14 @@ export function Footer({ region }: { region: RegionConfig }) {
         </div>
 
         <div className="mt-12 border-t border-white/10 pt-6 text-xs leading-relaxed text-white/55">
-          <div className="font-semibold text-white/75">{region.companyLegalName}</div>
-          {showTrImprint && (
-            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-              <span>{COMPANY.address}</span>
-              <span>
-                {COMPANY.taxOffice} V.D. — Vergi No: {COMPANY.taxNo}
-              </span>
-              <span>Ticaret Sicil No: {COMPANY.ticaretSicilNo}</span>
-              <span>MERSİS: {COMPANY.mersisNo}</span>
-              <span>Tel: {COMPANY.phone}</span>
-              <span>
-                <a href={`mailto:${COMPANY.email}`} className="hover:text-white">
-                  {COMPANY.email}
-                </a>
-              </span>
-              {COMPANY.kep && <span>KEP: {COMPANY.kep}</span>}
-            </div>
-          )}
+          <div className="font-semibold text-white/75">{COMPANY.brand}</div>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+            <span>
+              <a href={`mailto:${COMPANY.email}`} className="hover:text-white">
+                {COMPANY.email}
+              </a>
+            </span>
+          </div>
           {/* iyzico resmi "iyzico ile ode" bandi (Visa/Mastercard/Troy dahil) — koyu zemin icin White */}
           <img
             src="/iyzico/logo_band_white.svg"

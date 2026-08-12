@@ -61,20 +61,11 @@ export default function Page() {
         <li><strong>Alan adı sahipliği doğrulanmadan tarama yapılmıyor</strong> (güvenlik öncelikli).</li>
       </ul>
 
-      <h2 className="mt-8 text-lg font-bold text-brand">İşletme Bilgileri</h2>
+      <h2 className="mt-8 text-lg font-bold text-brand">İletişim</h2>
       <div className="mt-3 rounded-card border border-line bg-brand-50/40 p-5 text-sm leading-relaxed text-ink-soft">
-        <div className="font-semibold text-brand">{COMPANY.legalName}</div>
-        <div className="mt-1">{COMPANY.address}</div>
-        <div className="mt-1">
-          {COMPANY.taxOffice} V.D. — Vergi No: {COMPANY.taxNo} · Ticaret Sicil No: {COMPANY.ticaretSicilNo} · MERSİS:{' '}
-          {COMPANY.mersisNo}
-        </div>
-        <div className="mt-1">
-          <a href={`mailto:${COMPANY.email}`} className="text-accent-600 underline">
-            {COMPANY.email}
-          </a>{' '}
-          · {COMPANY.phone}
-        </div>
+        <a href={`mailto:${COMPANY.email}`} className="text-accent-600 underline">
+          {COMPANY.email}
+        </a>
       </div>
 
       <p className="mt-6 text-sm text-ink-muted">

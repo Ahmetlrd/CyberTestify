@@ -8,8 +8,8 @@ export default function Page() {
     <LegalArticle title="Kişisel Verilerin İşlenmesine İlişkin Aydınlatma Metni">
       <p>
         Bu metin, 6698 sayılı Kişisel Verilerin Korunması Kanunu (&quot;KVKK&quot;) md. 10 kapsamında,
-        veri sorumlusu sıfatıyla <strong>{COMPANY.legalName}</strong> ({COMPANY.brand}) tarafından
-        hazırlanmıştır. Adres: {COMPANY.address}. E-posta: {COMPANY.email}. KEP: {COMPANY.kep}.
+        veri sorumlusu sıfatıyla <strong>{COMPANY.brand}</strong> tarafından
+        hazırlanmıştır. E-posta: {COMPANY.email}.
       </p>
 
       <h3>1. İşlenen Kişisel Veriler</h3>

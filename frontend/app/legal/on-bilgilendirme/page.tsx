@@ -13,10 +13,8 @@ export default function Page() {
 
       <h3>1. Satıcı / Hizmet Sağlayıcı</h3>
       <p>
-        {COMPANY.legalName} ({COMPANY.brand})<br />
-        Adres: {COMPANY.address}<br />
-        MERSİS: {COMPANY.mersisNo} · Vergi Dairesi/No: {COMPANY.taxOffice}/{COMPANY.taxNo}<br />
-        Tel: {COMPANY.phone} · E-posta: {COMPANY.email}
+        {COMPANY.brand}<br />
+        E-posta: {COMPANY.email}
       </p>
 
       <h3>2. Hizmetin Temel Nitelikleri</h3>
