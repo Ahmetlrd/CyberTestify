@@ -133,6 +133,12 @@ async function extractBrowserToken(page: Awaited<ReturnType<Awaited<ReturnType<t
       for (const k of Object.keys(localStorage)) {
         const raw = localStorage.getItem(k) || '';
         if (!raw) continue;
+        // Firebase (localStorage persistence): `firebase:authUser:<apiKey>:[DEFAULT]` JSON ->
+        // stsTokenManager.accessToken (JWT idToken). Çoğu Firebase SPA cookie/IndexedDB DEĞİL
+        // BURAYA yazar. (nomorelink.com bu şekilde.)
+        if (/firebase:authUser/i.test(k) || raw.includes('stsTokenManager')) {
+          try { const j = JSON.parse(raw); const at = j && j.stsTokenManager && j.stsTokenManager.accessToken; if (typeof at === 'string' && at.length > 20) return at; } catch { /* düz değil */ }
+        }
         // Supabase: {"access_token":"...", ...} veya ["access_token", ...]
         if (/auth-token|supabase|sb-/i.test(k) && raw.includes('access_token')) {
           try { const j = JSON.parse(raw); const at = j.access_token || (Array.isArray(j) ? j[0] : ''); if (typeof at === 'string' && at.length > 20) return at; } catch { /* düz değil */ }
