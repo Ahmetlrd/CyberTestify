@@ -472,6 +472,45 @@ function buildPriorities(rows: Finding[], locale: 'tr' | 'en'): string {
   return `<div class="priorities"><h3>${locale === 'tr' ? 'İyileştirme Öncelikleri' : 'Improvement Priorities'}</h3>${body}</div>`;
 }
 
+// (PREMIUM) Pozitif Güvence — "KONTROL ÖZETİ" tablosunda TEMİZ (✓ / kanıt yok / gösterge yok /
+// vektör yok) çıkan kontrolleri tek blokta toplar. UYDURMA YOK: yalnız gerçekten çalıştırılıp temiz
+// çıkanlar; kapsam-dışı olanlar hariç. Müşteri "neyin GÜVENLİ olduğunu" da görür.
+function buildPositiveAssurance(md: string, locale: 'tr' | 'en'): string {
+  const lines = md.split('\n');
+  const clean: string[] = [];
+  const seen = new Set<string>();
+  let i = 0;
+  while (i < lines.length) {
+    if (!/^\s*\|.*\|\s*$/.test(lines[i])) { i++; continue; }
+    const block: string[] = [];
+    while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { block.push(lines[i]); i++; }
+    if (block.length < 2) continue;
+    const cells = (r: string) => r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+    const header = cells(block[0]).map((h) => h.toLocaleLowerCase('tr'));
+    const kCol = header.findIndex((h) => /kontrol/.test(h));
+    const sCol = header.findIndex((h) => /sonu[çc]/.test(h));
+    if (kCol === -1 || sCol === -1) continue; // yalnız KONTROL ÖZETİ tablosu
+    for (let r = 1; r < block.length; r++) {
+      if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue;
+      const c = cells(block[r]);
+      const sonuc = (c[sCol] ?? '').toLocaleLowerCase('tr');
+      const isClean = /✓|kan[ıi]t yok|g[öo]sterge yok|vekt[öo]r yok|temiz/.test(sonuc);
+      const scopeOut = /kapsam d|giri[şs] noktas[ıi] yok/.test(sonuc);
+      if (!isClean || scopeOut) continue;
+      const name = stripMd(c[kCol] ?? '');
+      const key = name.toLocaleLowerCase('tr');
+      if (!name || seen.has(key)) continue;
+      seen.add(key);
+      clean.push(name);
+    }
+  }
+  if (clean.length < 2) return ''; // tek/hiç temiz kontrolde blok gösterme
+  return `<div class="assurance"><h3>${locale === 'tr' ? 'Pozitif Güvence' : 'Positive Assurance'}</h3>
+  <p>${locale === 'tr'
+    ? `Şu kontroller çalıştırıldı ve belirgin bir zafiyet göstergesi bulunamadı: ${escapeHtml(clean.join(', '))}. Bu alanlar, tarama anındaki gözlemlerde temiz görünmektedir (kesin güvence için düzenli tekrar önerilir).`
+    : `The following controls were executed with no significant vulnerability indicator: ${escapeHtml(clean.join(', '))}.`}</p></div>`;
+}
+
 // Ek — Sözlük: yalnız RAPORDA GEÇEN terimler (bloat yok).
 const GLOSSARY_TERMS: Array<{ re: RegExp; term: string; tr: string; en: string }> = [
   { re: /\bSQLi\b|SQL enjeksiyon|SQL Injection/i, term: 'SQL Injection', tr: 'Kullanıcı girdisinin veritabanı sorgusuna karışabildiği bir enjeksiyon zafiyeti.', en: 'An injection flaw where user input reaches a database query.' },
@@ -562,6 +601,11 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   // (JARGON) İç motor adı "PentAGI" müşteri-görünür metinde geçmesin.
   effectiveMd = sanitizeJargon(effectiveMd);
 
+  // Bulgu parse'ı ÖNCE (rozet tutarlılığı için gerekli): uyum paketleri severity'li ZAFİYET
+  // değil hazırlık ön-değerlendirmesidir -> dağılım/master GÖSTERİLMEZ.
+  const isCompliance = ['kvkk_hazirlik', 'bundle_compliance', 'pci_hazirlik', 'iso27001_hazirlik'].includes(meta.packageKey ?? '');
+  const parsed = isCompliance ? null : parseFindings(effectiveMd, meta.locale);
+
   // Genel Degerlendirme (banner altina) — risk seviyesi (ek LLM YOK).
   const isKvkk = meta.packageKey === 'kvkk_hazirlik';
   let assessBox: string;
@@ -615,6 +659,13 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
       const g = effectiveMd.match(/##\s*GENEL DEĞERLENDİRME\s*\n+\*\*Risk Seviyesi:[^\n]*\*\*\s*\n+([^\n]+)/);
       if (g) risk.sentence = g[1].trim().replace(/\*\*/g, ''); // kutu duz metin — markdown ** temizle
     }
+    // (ROZET TUTARLILIĞI) Severity'li AKTİF bulgu YOK (master "Temiz") ama rozet Yüksek diyorsa
+    // çelişki doğuyor (config/başlık eksikleri "zafiyet" değildir). 0 bulguda Yüksek'i "İyileştirilebilir"e
+    // indir -> rozet ↔ master TUTARLI. (Orta/Düşük dokunulmaz; Basit'in "Temiz+Orta" hali korunur.)
+    if (parsed && parsed.rows.length === 0 && (risk.level === 'high' || risk.level === 'medium-high')) {
+      risk.level = 'medium';
+      risk.label = meta.locale === 'tr' ? 'İyileştirilebilir' : 'Improvable';
+    }
     assessBox = `<div class="assess assess-${risk.level}">
     <div class="assess-head"><span class="assess-title">${escapeHtml(t.assessTitle)}</span>
       <span class="risk-badge risk-${risk.level}">${escapeHtml(risk.label)}</span></div>
@@ -640,13 +691,13 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
 
   // (PROFESYONEL İSKELET) TÜRETİLEN bölümler — gövde/ton/disclaimer DEĞİŞMEZ.
   const { reportNo, verifyCode } = reportIdentifiers(meta.hostname, meta.createdAt);
-  // Uyum paketleri (KVKK/PCI/ISO) severity'li ZAFİYET taraması DEĞİL, hazırlık ön-değerlendirmesidir
-  // -> dağılım/master GÖSTERME (yanıltıcı "0 zafiyet" olmasın; çerçeve gözlemleri gövdede kalır).
-  const isCompliance = ['kvkk_hazirlik', 'bundle_compliance', 'pci_hazirlik', 'iso27001_hazirlik'].includes(meta.packageKey ?? '');
-  const parsed = isCompliance ? null : parseFindings(effectiveMd, loc);
+  // (parsed/isCompliance yukarıda hesaplandı — rozet tutarlılığı için.)
   const distMasterHtml = parsed ? buildDistribution(parsed.counts, loc) + buildMasterTable(parsed.rows, loc) : '';
   // 2.3 Detaylı Bulgular (İş Etkisi + CWE) yalnız GERÇEK raporlarda; örneklerde (assessOverride) kendi var.
   const detailedHtml = parsed && !opts.assessOverride ? buildDetailedFindings(parsed.rows, loc) : '';
+  // (PREMIUM) Pozitif Güvence — KONTROL ÖZETİ'ndeki TEMİZ (✓) kontrollerden türetilir (uydurma yok).
+  const isPremium = ['bundle_active_verify', 'bundle_full_pentest'].includes(meta.packageKey ?? '');
+  const assuranceHtml = isPremium && !opts.assessOverride ? buildPositiveAssurance(effectiveMd, loc) : '';
   const glossaryHtml = buildGlossary(effectiveMd, loc);
   const notCert = loc === 'tr' ? 'Bu rapor resmi sızma testi / sertifikasyon değildir.' : 'This report is not a formal penetration test / certification.';
   const sealTitle = loc === 'tr' ? 'CyberTestify Güvenlik Taraması — Tamamlandı' : 'CyberTestify Security Scan — Completed';
@@ -709,7 +760,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     const summaryBody = dedupeBlockquotes(md.render(execMd)) + (hasVuln ? buildPriorities(parsed!.rows, loc) : '');
     const detailBody = scopeNote + dedupeBlockquotes(md.render(keptDetail.join('\n\n')));
     const hasFindings = !!(distMasterHtml || detailedHtml);
-    const findingsSection = hasFindings ? H2('s-findings', '2. Bulgular', '2. Findings') + distMasterHtml + detailedHtml : '';
+    const findingsSection = hasFindings ? H2('s-findings', '2. Bulgular', '2. Findings') + distMasterHtml + detailedHtml + assuranceHtml : '';
     const cn = hasFindings ? 3 : 2; // bulgu bölümü yoksa (uyum) numara boşluğu olmasın
     // AI ve Ekler bölümlerini de numarala (TOC tek-numara okur) — kilit emojisi korunur.
     const fixNum = fixHtml.replace(/<h2 id="s-ai">(🔒 )?/, (_m, lock) => `<h2 id="s-ai">${lock ?? ''}${cn + 1}. `);
@@ -851,6 +902,9 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .priorities { margin: 12px 0 6px; padding: 12px 16px; background: #FBFDFC; border: 1px solid #DCEAE6; border-left: 4px solid #F5A623; border-radius: 8px; }
   .priorities h3 { margin: 0 0 6px; color: #123F3A; font-size: 13px; }
   .priorities .pri-grp { margin: 5px 0; font-size: 11.5px; }
+  .assurance { margin: 14px 0 6px; padding: 12px 16px; background: #EEF7F1; border: 1px solid #CFE5DB; border-left: 4px solid #1C6B60; border-radius: 8px; }
+  .assurance h3 { margin: 0 0 5px; color: #14514A; font-size: 13px; }
+  .assurance p { margin: 0; font-size: 11.5px; color: #274b41; }
   .scope-note { margin: 10px 0 14px; padding: 10px 14px; background: #F3F7FA; border: 1px solid #C9DCE8;
     border-left: 4px solid #2B6C9B; border-radius: 6px; font-size: 11.5px; color: #274b63; }
   .mt-ep { color: #5b6b67; font-weight: 400; font-size: 10.5px; }
