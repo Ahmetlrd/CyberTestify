@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import puppeteer from 'puppeteer-core';
 import { createHash } from 'node:crypto';
+import { lookupFinding } from './findingTaxonomy.js';
 
 /**
  * (3) Rapor PDF uretimi — SAF FORMATLAMA/RENDER. Ek LLM cagrisi YOK, ek Anthropic
@@ -260,6 +261,7 @@ function reportIdentifiers(hostname: string, createdAt: Date): { reportNo: strin
 }
 
 type Sev = 'critical' | 'high' | 'medium' | 'low';
+type Finding = { title: string; sev: Sev; classifyText: string };
 function normSev(s: string): Sev | null {
   const x = s.toLocaleLowerCase('tr');
   if (/krit[iı]k|critical/.test(x)) return 'critical';
@@ -275,9 +277,9 @@ function stripMd(s: string): string {
 // Markdown gövdesindeki ŞİDDET içeren bulgu tablolarından (TESPİT EDİLEN RİSKLER / BULGULAR /
 // Risk Matrisi) bulgu satırlarını (başlık + şiddet) çıkarır. Şiddet kolonu OLMAYAN tablolar
 // (KVKK Uygun/Dikkat/Eksik, Kontrol Listesi Güven vb.) ATLANIR -> uyum raporunda 0 zafiyet.
-function parseFindings(md: string): { rows: { title: string; sev: Sev }[]; counts: Record<Sev, number> } {
+function parseFindings(md: string): { rows: Finding[]; counts: Record<Sev, number> } {
   const counts: Record<Sev, number> = { critical: 0, high: 0, medium: 0, low: 0 };
-  const rows: { title: string; sev: Sev }[] = [];
+  const rows: Finding[] = [];
   const seen = new Set<string>();
   const lines = md.split('\n');
   let i = 0;
@@ -291,20 +293,26 @@ function parseFindings(md: string): { rows: { title: string; sev: Sev }[]; count
     const header = cells(block[0]).map((h) => h.toLocaleLowerCase('tr'));
     const sevCol = header.findIndex((h) => /[şs]iddet|severity|ciddiyet/.test(h));
     if (sevCol === -1) continue; // şiddet kolonu yoksa bulgu tablosu değil
-    let titleCol = header.findIndex((h) => /bulgu|ba[şs]l[ıi]k|title|giri[şs]|u[çc] nokta|finding/.test(h));
+    // Aktif/authenticated tablolarda başlık = ENTRY POINT, zafiyet TÜRÜ ayrı "Teknik/Tür" kolonundadır.
+    // Başlık için tekniği tercih et; sınıflandırma için TÜM satır metnini kullan (uç nokta + teknik + kanıt).
+    const techCol = header.findIndex((h) => /teknik|technique|t[üu]r\b|tip\b|\btype\b/.test(h));
+    let titleCol = header.findIndex((h) => /bulgu|ba[şs]l[ıi]k|title|finding/.test(h));
+    if (titleCol === -1) titleCol = header.findIndex((h) => /giri[şs]|u[çc] nokta|endpoint|uc nokta/.test(h));
     if (titleCol === -1) titleCol = header.findIndex((h, idx) => idx !== sevCol && !/^#|^no$|^s[ıi]ra/.test(h));
     if (titleCol === -1) titleCol = 0;
+    const nameCol = techCol !== -1 ? techCol : titleCol; // görünür başlık
     for (let r = 1; r < block.length; r++) {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue; // ayraç satırı
       const c = cells(block[r]);
       const sev = normSev(c[sevCol] ?? '');
       if (!sev) continue;
-      const title = stripMd(c[titleCol] ?? '').replace(/^\d+[).]?\s*/, '');
+      const title = stripMd(c[nameCol] ?? c[titleCol] ?? '').replace(/^\d+[).]?\s*/, '');
       if (!title) continue;
+      const classifyText = c.filter((_, idx) => idx !== sevCol).map(stripMd).join(' '); // uç nokta + teknik + kanıt
       const key = title.toLocaleLowerCase('tr').slice(0, 48);
       if (seen.has(key)) continue;
       seen.add(key);
-      rows.push({ title, sev });
+      rows.push({ title, sev, classifyText });
       counts[sev]++;
     }
   }
@@ -336,7 +344,7 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en'): st
 }
 
 // 2.2 Master Bulgu Tablosu — ID (CT-N) + Başlık + Durum + Şiddet. Boşsa dürüst "temiz" satırı.
-function buildMasterTable(rows: { title: string; sev: Sev }[], locale: 'tr' | 'en'): string {
+function buildMasterTable(rows: Finding[], locale: 'tr' | 'en'): string {
   const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const sorted = [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]);
   const head = locale === 'tr' ? ['ID', 'Başlık', 'Durum', 'Şiddet'] : ['ID', 'Title', 'State', 'Severity'];
@@ -352,6 +360,28 @@ function buildMasterTable(rows: { title: string; sev: Sev }[], locale: 'tr' | 'e
   }
   return `<h2 id="s-master">${locale === 'tr' ? '2.2 Master Bulgu Tablosu' : '2.2 Master Findings Table'}</h2>
   <table class="master"><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// 2.3 Detaylı Bulgular — her GERÇEK bulgu için blok: CT-N + başlık + şiddet + Durum + İŞ ETKİSİ +
+// Referans (CWE/OWASP). İş Etkisi/CWE deterministik eşlemeden (findingTaxonomy); eşleme yoksa blok
+// ATLANIR (UYDURMA YOK). Sadece GERÇEK raporlarda (örneklerin kendi İş Etkisi bölümleri zaten var).
+function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en'): string {
+  const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+  const sorted = [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]);
+  const blocks: string[] = [];
+  sorted.forEach((f, idx) => {
+    const info = lookupFinding(f.classifyText, locale); // eşleme yoksa null (uç nokta+teknik+kanıt üzerinden)
+    if (!info) return; // UYDURMA YOK — İş Etkisi/CWE bilinmiyorsa blok yazma (bulgu 2.2'de yine görünür)
+    const sm = SEV_META[f.sev];
+    blocks.push(`<div class="finding-block">
+      <h3 id="s-fb-${idx + 1}">CT-${idx + 1} · ${escapeHtml(f.title)}</h3>
+      <div class="fb-meta"><span class="sev-badge badge-${f.sev}">${locale === 'tr' ? sm.tr : sm.en}</span> · ${locale === 'tr' ? 'Durum: Açık' : 'State: Open'}</div>
+      <p><strong>${locale === 'tr' ? 'İş Etkisi' : 'Business Impact'}:</strong> ${escapeHtml(info.impact)}</p>
+      <p class="finding-ref"><strong>${locale === 'tr' ? 'Referans' : 'Reference'}:</strong> ${escapeHtml(info.cwe)} · OWASP ${escapeHtml(info.owasp)}</p>
+    </div>`);
+  });
+  if (!blocks.length) return '';
+  return `<h2 id="s-detail">${locale === 'tr' ? '2.3 Detaylı Bulgular' : '2.3 Detailed Findings'}</h2>${blocks.join('')}`;
 }
 
 // Ek — Sözlük: yalnız RAPORDA GEÇEN terimler (bloat yok).
@@ -379,6 +409,30 @@ function buildGlossary(md: string, locale: 'tr' | 'en'): string {
   const rows = hits.map((g) => `<tr><td><strong>${escapeHtml(g.term)}</strong></td><td>${escapeHtml(locale === 'tr' ? g.tr : g.en)}</td></tr>`).join('');
   return `<h2 id="s-glossary">${locale === 'tr' ? 'Ek — Sözlük' : 'Appendix — Glossary'}</h2>
   <table class="glossary"><tbody>${rows}</tbody></table>`;
+}
+
+// TOC için: içerik HTML'indeki h1/h2 başlıklara id ata + sıralı (id,metin) listesi çıkar (ana
+// bölümler; h3 alt-başlıklar TOC'a girmez). Var olan id'ler korunur.
+function injectTocIds(html: string): { html: string; entries: { id: string; text: string }[] } {
+  const entries: { id: string; text: string }[] = [];
+  let n = 0;
+  const out = html.replace(/<(h1|h2)([^>]*)>([\s\S]*?)<\/\1>/g, (_m, tag, attrs, inner) => {
+    let id = (attrs.match(/id="([^"]+)"/) || [])[1];
+    if (!id) { id = `toc-${++n}`; attrs = ` id="${id}"${attrs}`; }
+    const text = String(inner).replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/🔒|🔓/g, '').trim();
+    if (text) entries.push({ id, text });
+    return `<${tag}${attrs}>${inner}</${tag}>`;
+  });
+  return { html: out, entries };
+}
+// TOC: temiz bölüm listesi (numaralı). Sayfa no YAZMIYORUZ — Chromium target-counter'ı
+// desteklemiyor ve Y-tahmini sayfa sınırlarında ±1 sapıyor; YANLIŞ sayfa no yazmak "uydurma
+// sayı yasağı"na aykırı olurdu. Bölüm adları + tıklanır bağlantı (PDF içi) verilir.
+function buildTocPage(entries: { id: string; text: string }[], locale: 'tr' | 'en'): string {
+  const rows = entries.map((e, i) =>
+    `<div class="toc-row"><span class="toc-n">${i + 1}.</span><a href="#${e.id}">${escapeHtml(e.text)}</a></div>`,
+  ).join('');
+  return `<div class="toc-page"><h1>${locale === 'tr' ? 'İçindekiler' : 'Table of Contents'}</h1>${rows}</div>`;
 }
 
 // Tekrar eden AYNI blockquote'ları (ör. her kontrolden sonra kelime-kelime tekrarlanan
@@ -501,11 +555,18 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   // KVKK uyum ön-değerlendirmesidir (severity'li zafiyet değil) -> dağılım/master GÖSTERME (yanıltmasın).
   const parsed = isKvkk ? null : parseFindings(effectiveMd);
   const summaryHtml = parsed ? buildDistribution(parsed.counts, meta.locale) + buildMasterTable(parsed.rows, meta.locale) : '';
+  // 2.3 Detaylı Bulgular (İş Etkisi + CWE) yalnız GERÇEK raporlarda; örneklerde (assessOverride)
+  // kendi elle yazılmış İş Etkisi/Standart Eşleme bölümleri zaten var -> mükerrer yazma.
+  const detailedHtml = parsed && !opts.assessOverride ? buildDetailedFindings(parsed.rows, meta.locale) : '';
   const glossaryHtml = buildGlossary(effectiveMd, meta.locale);
   // Tekrar eden aynı "Kapsam ve yöntem" notunu (her kontrolden sonra) BİR kereye indir.
   bodyHtml = dedupeBlockquotes(bodyHtml);
   const notCert = meta.locale === 'tr' ? 'Bu rapor resmi sızma testi / sertifikasyon değildir.' : 'This report is not a formal penetration test / certification.';
   const sealTitle = meta.locale === 'tr' ? 'CyberTestify Güvenlik Taraması — Tamamlandı' : 'CyberTestify Security Scan — Completed';
+  // İÇİNDEKİLER: içerik başlıklarına id ata + TOC sayfası (sayfa no'lar render'da iki-geçişli doldurulur).
+  const contentInner0 = `${assessBox}${summaryHtml}${detailedHtml}${bodyHtml}${glossaryHtml}`;
+  const { html: contentInner, entries: tocEntries } = injectTocIds(contentInner0);
+  const tocPage = buildTocPage(tocEntries, meta.locale);
 
   return `<!doctype html><html lang="${meta.locale}"><head><meta charset="utf-8">
 <style>
@@ -608,6 +669,13 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .cover-seal .seal-title { font-size: 13.5px; font-weight: 800; color: #F5A623; margin-bottom: 8px; }
   .cover-seal .seal-row { font-size: 12px; color: #DCEAE6; margin: 2px 0; font-variant-numeric: tabular-nums; }
   .cover-foot { text-align: center; font-size: 10.5px; color: #7FB0A6; border-top: 1px solid rgba(255,255,255,.12); padding-top: 12px; }
+  /* ---- İÇİNDEKİLER ---- */
+  .toc-page { padding: 30px 40px; page-break-after: always; }
+  .toc-page h1 { font-size: 24px; border: none; color: #123F3A; margin-bottom: 18px; }
+  .toc-row { display: flex; align-items: baseline; gap: 8px; margin: 7px 0; font-size: 12.5px;
+    border-bottom: 1px dotted #E1ECE8; padding-bottom: 5px; }
+  .toc-row .toc-n { color: #5FA396; font-weight: 700; min-width: 20px; }
+  .toc-row a { color: #14514A; text-decoration: none; font-weight: 600; }
   /* ---- 2.1 Zafiyet Dağılımı ---- */
   .dist-chart { display: flex; align-items: flex-end; gap: 20px; height: 108px; padding: 6px 10px 0;
     border-bottom: 2px solid #DCEAE6; margin: 10px 0 6px; }
@@ -622,6 +690,15 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   table.master td:nth-child(3), table.master th:nth-child(3) { white-space: nowrap; width: 74px; }
   table.glossary th { display: none; }
   table.glossary td:first-child { white-space: nowrap; width: 130px; color: #14514A; }
+  /* ---- 2.3 Detaylı Bulgular (İş Etkisi + Referans) ---- */
+  .finding-block { border: 1px solid #DCEAE6; border-left: 4px solid #5FA396; border-radius: 8px;
+    padding: 8px 14px 10px; margin: 10px 0; background: #FBFDFC; page-break-inside: avoid; }
+  .finding-block h3 { margin: 2px 0 4px; color: #123F3A; font-size: 13px; }
+  .finding-block .fb-meta { font-size: 10.5px; color: #5b6b67; margin-bottom: 4px; }
+  .finding-block p { margin: 4px 0; font-size: 11.5px; }
+  .finding-block .finding-ref { font-size: 10.5px; color: #35618a; }
+  .badge-critical { background: #B3261E; } .badge-high { background: #D64545; }
+  .badge-medium { background: #E0940E; } .badge-low { background: #9AA0A6; }
 </style></head>
 <body>
   <div class="cover">
@@ -639,6 +716,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     </div>
     <div class="cover-foot">${escapeHtml(notCert)}</div>
   </div>
+  ${tocPage}
   <div class="cover-band">
     ${LOGO_SVG}
     <div>
@@ -652,7 +730,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     <div><div class="k">${escapeHtml(t.date)}</div><div class="v">${escapeHtml(dateStr)}</div></div>
     <div><div class="k">${meta.locale === 'tr' ? 'Rapor No' : 'Report No'}</div><div class="v">${reportNo}</div></div>
   </div>
-  <div class="content">${assessBox}${summaryHtml}${bodyHtml}${glossaryHtml}</div>
+  <div class="content">${contentInner}</div>
   <script>
     // Siddet kelimelerine gore tablo hucrelerini renklendir (TR+EN, buyuk/kucuk duyarsiz).
     (function () {
