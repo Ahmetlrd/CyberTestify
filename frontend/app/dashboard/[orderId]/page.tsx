@@ -383,6 +383,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
           packageKey={order.packageKey}
           attemptCount={order.attemptCount ?? 1}
           failureReason={order.failureReason}
+          refundRequestedAt={order.refundRequestedAt ?? null}
           onRetry={() => window.location.reload()}
         />
       )}

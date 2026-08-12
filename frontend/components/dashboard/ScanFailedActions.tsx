@@ -21,12 +21,13 @@ function failureMessage(reason?: string | null): string {
 }
 
 export function ScanFailedActions({
-  orderId, packageKey, attemptCount, failureReason, onRetry,
+  orderId, packageKey, attemptCount, failureReason, refundRequestedAt, onRetry,
 }: {
   orderId: string;
   packageKey?: string;
   attemptCount: number;
   failureReason?: string | null;
+  refundRequestedAt?: string | null;
   onRetry: () => void;
 }) {
   const tooMany = attemptCount > 2;
@@ -35,8 +36,10 @@ export function ScanFailedActions({
   const [needCreds, setNeedCreds] = useState(false);
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
+  // İade talebi bu oturumda gönderildi VEYA sunucuda zaten kayıtlı (sayfa yenilense de kalıcı).
   const [refundDone, setRefundDone] = useState(false);
   const [refundReason, setRefundReason] = useState('');
+  const alreadyRefunded = refundDone || !!refundRequestedAt;
 
   async function retry() {
     setBusy(true); setErr(null);
@@ -58,10 +61,13 @@ export function ScanFailedActions({
     finally { setBusy(false); }
   }
 
-  if (refundDone) {
+  if (alreadyRefunded) {
     return (
       <div className="mt-6 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-        <strong>İade talebiniz alındı.</strong> Ekibimiz talebinizi inceleyip en kısa sürede sizinle iletişime geçecek ve iadenizi işleme alacaktır.
+        <strong>İade talebiniz alındı.</strong> Bu sipariş için talebiniz kaydedildi; ekibimiz inceleyip en kısa sürede
+        sizinle iletişime geçecek ve iadenizi işleme alacaktır. Yeni bir talep göndermenize gerek yok. Sorunuz varsa{' '}
+        <a href="mailto:support@cybertestify.com" className="font-semibold underline">support@cybertestify.com</a>{' '}
+        ile iletişime geçebilirsiniz.
       </div>
     );
   }
