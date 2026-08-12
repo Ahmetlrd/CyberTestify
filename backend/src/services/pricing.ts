@@ -8,6 +8,17 @@ import { SCAN_PACKAGES } from './scanPackages.js';
  */
 export const REGION_CURRENCY: Record<string, string> = { tr: 'TRY', us: 'USD', ae: 'AED' };
 
+/**
+ * GECICI TEST OVERRIDE — env TEST_PRICE_OVERRIDE_MINOR set ise TUM fiyatlar (tekil paket,
+ * bundle, AI-eklenti) bu minor-unit degere sabitlenir ( or. "100" = 1 TL). Gercek kart ile
+ * uctan uca odeme/iade testi icindir. Kalici fiyat sayilarina DOKUNMAZ — env kaldirilinca
+ * eski fiyatlar aynen doner. Baseline: memory/price-list-baseline.md.
+ */
+export const PRICE_OVERRIDE_MINOR: number | null =
+  process.env.TEST_PRICE_OVERRIDE_MINOR && Number.isFinite(Number(process.env.TEST_PRICE_OVERRIDE_MINOR))
+    ? Math.max(0, Math.round(Number(process.env.TEST_PRICE_OVERRIDE_MINOR)))
+    : null;
+
 // USD fiyatlari (cent). Vedat'in onayladigi tabloya gore; kur ~47,5 TL/USD ile TL'yle
 // tutarli. Listede OLMAYAN paketler icin TL'den turetilir (round(TL-kurus / 47.5) = USD-cent).
 const USD_CENTS: Record<string, number> = {
@@ -55,5 +66,6 @@ export function getPricing(packageKey: string, region: string): { amountMinorUni
   const amountMinorUnit = byRegion[region] ?? byRegion.tr ?? 0;
   // Bilinmeyen bolge -> TR/TRY'ye guvenli dusus.
   const currency = REGION_CURRENCY[region] ? currencyFor(region) : 'TRY';
+  if (PRICE_OVERRIDE_MINOR != null) return { amountMinorUnit: PRICE_OVERRIDE_MINOR, currency };
   return { amountMinorUnit, currency };
 }

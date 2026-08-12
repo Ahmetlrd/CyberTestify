@@ -82,13 +82,22 @@ export function localeFor(region: string | undefined | null): 'tr' | 'en' {
   return region === 'tr' ? 'tr' : 'en';
 }
 
+// GECICI TEST OVERRIDE (bkz pricing.ts PRICE_OVERRIDE_MINOR — burada dongusel import olmasin
+// diye env dogrudan okunur). Set ise AI-eklenti fiyati da bu minor-unit degere sabitlenir.
+const PRICE_OVERRIDE_MINOR: number | null =
+  process.env.TEST_PRICE_OVERRIDE_MINOR && Number.isFinite(Number(process.env.TEST_PRICE_OVERRIDE_MINOR))
+    ? Math.max(0, Math.round(Number(process.env.TEST_PRICE_OVERRIDE_MINOR)))
+    : null;
+
 // Eklenti (AI Çözüm Önerileri) NIHAI fiyati. Acikca verilmisse O; yoksa taban fiyatin %50'si.
 export function fixSuggestionPrice(def: ScanPackageDef): number {
+  if (PRICE_OVERRIDE_MINOR != null) return PRICE_OVERRIDE_MINOR;
   return def.fixSuggestionPriceMinorUnit ?? Math.round(def.priceMinorUnit * 0.5);
 }
 // "indirimli gibi" gosterim icin ustu-cizili ANCHOR (liste) fiyati. YALNIZ acikca tanimlanmis
 // paketlerde gosterilir (uydurma indirim yok); anchor nihai fiyattan buyuk degilse null doner.
 export function fixSuggestionListPrice(def: ScanPackageDef): number | null {
+  if (PRICE_OVERRIDE_MINOR != null) return null; // test override'da sahte anchor gosterme
   if (def.fixSuggestionListMinorUnit == null) return null;
   return def.fixSuggestionListMinorUnit > fixSuggestionPrice(def) ? def.fixSuggestionListMinorUnit : null;
 }

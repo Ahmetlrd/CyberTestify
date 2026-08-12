@@ -6,7 +6,7 @@ import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestio
 import { validateConsentInput, activeTestScope, ACTIVE_TEST_CONSENT_VERSION, ACTIVE_TEST_RISK_ACK, hasValidActiveTestConsent } from '../services/activeTestConsent.js';
 import { storeTestCredential, hasTestCredential } from '../services/testCredentials.js';
 import { renderConsentPdf } from '../services/pdf.js';
-import { getPricing, currencyFor } from '../services/pricing.js';
+import { getPricing, currencyFor, PRICE_OVERRIDE_MINOR } from '../services/pricing.js';
 import { getPaymentProvider } from '../services/payment/index.js';
 import { initiateBundlePayment } from '../services/payment/iyzico.js';
 import { getSampleReportPdf } from '../services/sampleReports.js';
@@ -50,8 +50,8 @@ ordersRouter.get('/packages', async (req, res) => {
           key: p.key,
           displayName: t.displayName,
           description: t.description,
-          // Bolge satiri yoksa TR tabanina guvenli dusus.
-          priceMinorUnit: row?.amountMinorUnit ?? p.priceMinorUnit,
+          // Bolge satiri yoksa TR tabanina guvenli dusus. (TEST OVERRIDE aktifse sabit fiyat.)
+          priceMinorUnit: PRICE_OVERRIDE_MINOR ?? row?.amountMinorUnit ?? p.priceMinorUnit,
           currency: row?.currency ?? currencyFor(region),
           // (3) Ucretli "AI Cozum Onerileri" eklentisi fiyati + ustu-cizili anchor ("indirimli gibi").
           fixSuggestionPriceMinorUnit: fixSuggestionPrice(p),

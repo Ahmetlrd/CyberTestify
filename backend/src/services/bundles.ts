@@ -1,4 +1,4 @@
-import { getPricing } from './pricing.js';
+import { getPricing, PRICE_OVERRIDE_MINOR } from './pricing.js';
 
 /**
  * KOMBINE PAKETLER (bundle) — mevcut TEKIL paketleri SILMEDEN/gizlemeden, birden fazla
@@ -202,12 +202,19 @@ export function bundlePrice(
   const singlesSum = prices.reduce((sum, p) => sum + p.amountMinorUnit, 0);
   const currency = prices[0]?.currency ?? getPricing('basit_tarama', region).currency;
   const amountMinorUnit =
-    region === 'tr' && bundle.finalPriceMinorUnitTr != null
+    PRICE_OVERRIDE_MINOR != null
+      ? PRICE_OVERRIDE_MINOR
+      : region === 'tr' && bundle.finalPriceMinorUnitTr != null
       ? bundle.finalPriceMinorUnitTr
       : Math.round(singlesSum * (1 - bundle.discountPct / 100));
   // GOSTERILEN "orijinal" (ustu cizili): pazarlama anchor'i varsa O; yoksa uye tekil toplami.
+  // Test override'da anchor da esitlenir -> sahte "%100 indirim" gorunmez.
   const originalMinorUnit =
-    region === 'tr' && bundle.anchorOriginalMinorUnitTr != null ? bundle.anchorOriginalMinorUnitTr : singlesSum;
+    PRICE_OVERRIDE_MINOR != null
+      ? PRICE_OVERRIDE_MINOR
+      : region === 'tr' && bundle.anchorOriginalMinorUnitTr != null
+      ? bundle.anchorOriginalMinorUnitTr
+      : singlesSum;
   const effectiveDiscountPct =
     originalMinorUnit > 0 ? Math.max(0, Math.round((1 - amountMinorUnit / originalMinorUnit) * 100)) : 0;
   return { memberKeys, originalMinorUnit, amountMinorUnit, currency, discountPct: effectiveDiscountPct };
