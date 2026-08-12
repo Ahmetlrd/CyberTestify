@@ -78,7 +78,7 @@ export default function VerifyHub() {
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // (İŞ 2) Panel sekmeleri — dağınık iç içe bölümler yerine net ayrım.
-  const [tab, setTab] = useState<'domains' | 'history'>('history');
+  const [tab, setTab] = useState<'domains' | 'history'>('domains');
 
   const refresh = useCallback(async () => {
     const [list, ord] = await Promise.all([api.listDomains(), api.listOrders(false)]);
@@ -319,11 +319,7 @@ export default function VerifyHub() {
                   </p>
                 );
               }
-              return (
-                <p className="mt-2 text-xs text-ink-muted">
-                  <code>https://</code> veya <code>www.</code> yazsan da olur — otomatik temizlenir.
-                </p>
-              );
+              return null;
             })()}
           </form>
         )}

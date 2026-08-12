@@ -123,7 +123,7 @@ const tr: Dict = {
       'Sabit kapsam, sabit fiyat, sürpriz maliyet yok. Yapay zekâ destekli otomatik web sitesi güvenlik tarama paketleri ve fiyatları.',
     eyebrow: 'Fiyatlar',
     title: 'Şeffaf, sabit fiyatlandırma',
-    subtitle: 'Kapsam sabit, fiyat sabit, sürpriz maliyet yok. Tüm fiyatlar vergiler dahildir.',
+    subtitle: 'Kapsam sabit, fiyat sabit, sürpriz maliyet yok. Tüm fiyatlara vergiler dahildir.',
     trust: ['🇹🇷 Yerli sunucu', '💬 Türkçe destek', '🧾 e-Arşiv faturalı', '🔒 Uçtan uca şifreli rapor'],
     popular: 'Popüler',
     perScan: '/ tarama',
