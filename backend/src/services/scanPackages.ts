@@ -119,6 +119,7 @@ export function requiresTestCredentials(packageKey: string): boolean {
 const FOREIGN_AI_PACKAGES = new Set<string>([
   'bundle_full_pentest',
   'bundle_active_verify',
+  'bundle_elite_autonomous', // vitrin/contact-only ama tümüyle AI — ileride açılırsa consent hazır
   'autonomous_pentest',
   'business_logic_verify',
   'race_massassign_verify',
