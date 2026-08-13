@@ -366,7 +366,11 @@ function parseFindings(md: string, locale: 'tr' | 'en'): { rows: Finding[]; coun
       // eşliyordu (başlık "CSP eksik" ama master "Yansıyan XSS" gösteriyordu). Tür/başlık, uç
       // nokta + teknik + başlık kolonlarından gelir; açıklama sınıflandırmayı KİRLETMEZ.
       const classifyText = c.filter((_, idx) => idx !== sevCol && idx !== evidCol && idx !== confCol).map(stripMd).join(' ');
-      const info = lookupFinding(classifyText, locale) ?? lookupFinding(curSection, locale);
+      // ÖNCE başlık/tür/uç-nokta kolonları, SONRA bölüm başlığı, EN SON çare tam satır (kanıt dahil).
+      // Kanıt en sona bırakılır: başlık/bölümden sınıflanan bulgular (ör. "CSP eksik") kanıttaki
+      // yabancı kelimeden (XSS) etkilenmez; yalnız hiç sınıflanamayan satırlar kanıta düşer.
+      const fullRowText = c.filter((_, idx) => idx !== sevCol && idx !== confCol).map(stripMd).join(' ');
+      const info = lookupFinding(classifyText, locale) ?? lookupFinding(curSection, locale) ?? lookupFinding(fullRowText, locale);
       const title = info ? info.label : (cleanTitle(rawName) || cleanTitle(curSection) || rawName);
       // Uç nokta: entry kolonundan (nameCol'dan farklıysa). "GET /rest/..." gibi.
       let endpoint = endpointCol !== -1 && endpointCol !== nameCol ? stripMd(c[endpointCol] ?? '') : '';
