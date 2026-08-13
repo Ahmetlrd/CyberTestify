@@ -165,7 +165,8 @@ export function assessBasit(
 
   // (0) TARANAMADI/İNCELENEMEDİ: hedefe hiç ulaşılamadıysa bu "temiz/düşük" DEĞİLDİR. Nötr bir
   //     "İncelenemedi" rozeti göster (amber; ASLA yeşil-düşük). "Güvenli" imasından kaçınır.
-  if (/risk\s*seviyesi\s*[:：]\s*\**\s*incelenemedi|tarama\s*(yap[ıi]lamad|y[üu]r[üu]t[üu]lemed)/i.test(md.slice(0, 1500))) {
+  // NOT: Türkçe "İ" (U+0130) JS'te /i flag'iyle "i"ye eşlenmez -> önce tr-locale ile küçült.
+  if (/risk\s*seviyesi\s*[:：]\s*\*{0,2}\s*incelenemedi|tarama\s*(yap[ıi]lamad|y[uü]r[uü]t[uü]lemed)|ula[şs][ıi]lamad[ıi][ğg][ıi] i[çc]in kontrol/.test(md.slice(0, 1500).toLocaleLowerCase('tr'))) {
     return { level: 'medium', label: 'İncelenemedi', sentence: 'Hedefe ulaşılamadığı için tarama yürütülemedi; bu sonuç sitenin GÜVENLİ olduğu anlamına GELMEZ. Erişim sağlanınca yeniden taranmalıdır.' };
   }
 
@@ -387,7 +388,7 @@ const SEV_META: Record<Sev, { tr: string; en: string; cls: string }> = {
 };
 
 // 2.1 Zafiyet Dağılımı — gerçek sayılardan bar grafiği + sayı tablosu (0'lar da çizilir, dürüst).
-function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en'): string {
+function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en', unscannable = false): string {
   const order: Sev[] = ['critical', 'high', 'medium', 'low'];
   const max = Math.max(1, ...order.map((s) => counts[s]));
   const total = order.reduce((a, s) => a + counts[s], 0);
@@ -395,7 +396,10 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en'): st
     const h = Math.round((counts[s] / max) * 80); // px (maks 80)
     return `<div class="dist-col"><div class="dist-num">${counts[s]}</div><div class="dist-bar ${SEV_META[s].cls}-bg" style="height:${h}px"></div><div class="dist-lbl">${locale === 'tr' ? SEV_META[s].tr : SEV_META[s].en}</div></div>`;
   }).join('');
-  const intro = total === 0
+  // (DÜRÜSTLÜK) Hedefe ulaşılamadıysa 0/0/0/0 "temiz" DEĞİL "incelenemedi"dir — açıkça belirt.
+  const intro = unscannable
+    ? (locale === 'tr' ? '⚠️ Hedefe ulaşılamadığı için kontroller çalıştırılamadı; aşağıdaki sıfırlar bir güvenlik değerlendirmesi <strong>DEĞİLDİR</strong> (0 = incelenemedi, “temiz” değil).' : '⚠️ The target could not be reached, so checks did not run; the zeros below are <strong>NOT</strong> a security assessment (0 = not scanned, not "clean").')
+    : total === 0
     ? (locale === 'tr' ? 'Bu taramada açık bir zafiyet göstergesi tespit edilmedi. Çalıştırılan kontroller ve gözlemler aşağıdaki bölümlerde ayrıntılıdır.' : 'No open vulnerability indicator was detected in this scan. Executed checks and observations are detailed in the sections below.')
     : (locale === 'tr' ? `Bu taramada toplam <strong>${total}</strong> bulgu göstergesi tespit edildi; şiddet dağılımı aşağıdadır.` : `A total of <strong>${total}</strong> finding indicators were detected; the severity distribution is below.`);
   return `<h2 id="s-dist">${locale === 'tr' ? '2.1 Zafiyet Dağılımı' : '2.1 Vulnerability Distribution'}</h2>
@@ -404,13 +408,16 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en'): st
 }
 
 // 2.2 Master Bulgu Tablosu — ID (CT-N) + Başlık + Durum + Şiddet. Boşsa dürüst "temiz" satırı.
-function buildMasterTable(rows: Finding[], locale: 'tr' | 'en'): string {
+function buildMasterTable(rows: Finding[], locale: 'tr' | 'en', unscannable = false): string {
   const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const sorted = [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]);
   const head = locale === 'tr' ? ['ID', 'Başlık', 'Durum', 'Şiddet'] : ['ID', 'Title', 'State', 'Severity'];
   const open = locale === 'tr' ? 'Açık' : 'Open';
   let body: string;
-  if (sorted.length === 0) {
+  if (unscannable) {
+    // (DÜRÜSTLÜK) Hedefe ulaşılamadı -> "Temiz" satırı YERİNE açık uyarı; nötr gri "İncelenemedi" (risk rengi YOK).
+    body = `<tr><td>—</td><td colspan="2">${locale === 'tr' ? 'Hedefe ulaşılamadığı için kontroller çalıştırılamadı — sonuç değerlendirilemez (“temiz” anlamına gelmez).' : 'The target could not be reached, so checks did not run — result cannot be assessed (does not mean "clean").'}</td><td><span class="sev-badge" style="background:#6B7280">${locale === 'tr' ? 'İncelenemedi' : 'Not scanned'}</span></td></tr>`;
+  } else if (sorted.length === 0) {
     body = `<tr><td>—</td><td colspan="2">${locale === 'tr' ? 'Bu taramada açık zafiyet göstergesi tespit edilmedi.' : 'No open vulnerability indicator detected in this scan.'}</td><td><span class="sev-badge" style="background:#1C6B60">${locale === 'tr' ? 'Temiz' : 'Clean'}</span></td></tr>`;
   } else {
     body = sorted.map((f, idx) => {
@@ -698,7 +705,10 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   // (PROFESYONEL İSKELET) TÜRETİLEN bölümler — gövde/ton/disclaimer DEĞİŞMEZ.
   const { reportNo, verifyCode } = reportIdentifiers(meta.hostname, meta.createdAt);
   // (parsed/isCompliance yukarıda hesaplandı — rozet tutarlılığı için.)
-  const distMasterHtml = parsed ? buildDistribution(parsed.counts, loc) + buildMasterTable(parsed.rows, loc) : '';
+  // (DÜRÜSTLÜK) Hedefe ulaşılamadı/tarama yürütülemedi -> master "Temiz" DEĞİL "İncelenemedi",
+  // dağılımdaki 0'lar "temiz" değil "incelenemedi" olarak işaretlenir. (assessBasit rozeti zaten nötr yapıyor.)
+  const unscannable = /risk\s*seviyesi\s*[:：]\s*\*{0,2}\s*incelenemedi|tarama\s*(yap[ıi]lamad|y[uü]r[uü]t[uü]lemed)|ula[şs][ıi]lamad[ıi][ğg][ıi] i[çc]in kontrol/.test(effectiveMd.slice(0, 2000).toLocaleLowerCase('tr'));
+  const distMasterHtml = parsed ? buildDistribution(parsed.counts, loc, unscannable) + buildMasterTable(parsed.rows, loc, unscannable) : '';
   // 2.3 Detaylı Bulgular (İş Etkisi + CWE) yalnız GERÇEK raporlarda; örneklerde (assessOverride) kendi var.
   const detailedHtml = parsed && !opts.assessOverride ? buildDetailedFindings(parsed.rows, loc) : '';
   // (PREMIUM) Pozitif Güvence — KONTROL ÖZETİ'ndeki TEMİZ (✓) kontrollerden türetilir (uydurma yok).

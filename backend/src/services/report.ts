@@ -1,4 +1,5 @@
 import { prisma } from '../db.js';
+import { unscannableReport } from './unscannable.js';
 import { config } from '../config.js';
 import * as pentagi from '../pentagi/client.js';
 import { encryptReport, generateReportAccessSecret } from './crypto.js';
@@ -370,10 +371,14 @@ export async function generateAndStoreReport(flowId: string) {
   let incompleteReason: string | null = null;
   if (incomplete) {
     const rawEvidence = await buildRawEvidenceFallback(flow.pentagiFlowId, locale);
-    if (rawEvidence.trim()) findings = rawEvidence;
+    // (GÜVENLİK AĞI — DÜRÜSTLÜK) Rapor boş kaldıysa (generator hiçbir veri toplayamadı / null döndü):
+    // ASLA pdf'in varsayılan "Düşük Risk"/"Temiz"ine düşme. "Risk Seviyesi: İncelenemedi" markörünü ÖNE
+    // koy -> assessBasit nötr amber rozet + master/dağılım "İncelenemedi" gösterir. Ham kanıt varsa altına ekle.
+    const marker = unscannableReport(flow.order.domain.hostname).findings;
+    findings = rawEvidence.trim() ? `${marker}\n\n---\n\n${rawEvidence}` : marker;
     incompleteReason =
-      'Tarama, tam anlatısal raporu yazma adımına ulaşamadan sonlandı (bütçe/erken duruş). ' +
-      'Aşağıda tarama sırasında toplanan ham kanıtlar otomatik derlenmiştir.';
+      'Tarama, tam anlatısal raporu yazma adımına ulaşamadan sonlandı (hedefe ulaşılamadı veya bütçe/erken duruş). ' +
+      'Bu rapor bir "temiz/güvenli" sonucu DEĞİLDİR.';
   }
 
   // (KVKK GUVENLIK AGI) yalniz kvkk_hazirlik: uyum-dili / ihlal iddiasi / Subtask sizintisi /

@@ -526,7 +526,8 @@ export async function generateBundleSurfaceReport(host: string): Promise<{ findi
   if (!o.reachable) return unscannableSurfaceReport(host);
   // Her alan kendi kanitini toplar (bagimsiz, saf); paralel calistir, biri patlarsa null.
   const results = await Promise.all(BUNDLE_AREAS.map((a) => a.gen(host).catch(() => null)));
-  return combineSurfaceAreas(results, { httpOnly: o.reachable && !o.httpsWorks });
+  // Hiçbir alan veri toplayamadıysa (reachable ama tüm sorgular başarısız) -> "İncelenemedi".
+  return combineSurfaceAreas(results, { httpOnly: o.reachable && !o.httpsWorks }) ?? unscannableSurfaceReport(host);
 }
 
 // Hedefe ulaşılamadığında dürüst "İncelenemedi" raporu (pdf.ts assessBasit nötr amber rozet basar).

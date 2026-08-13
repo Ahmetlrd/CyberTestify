@@ -506,7 +506,8 @@ export async function generateBundleReconReport(host: string): Promise<{ finding
   const o = await resolveOrigin(host);
   if (!o.reachable) return unscannableReconReport(host);
   const ev = await collectReconEvidence(host);
-  return combineReconAreas(ev, { httpOnly: !o.httpsWorks });
+  // Hiçbir keşif alanı veri toplayamadıysa -> "İncelenemedi" (null->Düşük fallback DEĞİL).
+  return combineReconAreas(ev, { httpOnly: !o.httpsWorks }) ?? unscannableReconReport(host);
 }
 
 function unscannableReconReport(host: string): { findings: string; fixText: string } {

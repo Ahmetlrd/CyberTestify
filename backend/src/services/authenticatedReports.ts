@@ -7,6 +7,7 @@
  * Tüm Türkçe metin KOD tarafından yazılır (ajan yok).
  */
 import { collectInjectionEvidence, collectIdorEvidence } from './activeVerifyEvidence.js';
+import { unscannableReport } from './unscannable.js';
 import {
   collectCookieFlagsEvidence, collectSessionFixationEvidence, collectLogoutEvidence, collectForcedBrowsingEvidence,
 } from './authenticatedChecks.js';
@@ -158,7 +159,8 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   const loginBypassEv = await collectLoginBypassEvidence(host, session.loginUrl).catch(() => null);
   runs.push({ title: 'Giriş Baypası (SQLi Göstergesi)', conf: 'Yüksek', rep: loginBypassEv ? buildActiveCheckReport(loginBypassEv, LOGIN_BYPASS_CFG) : null, inputs: loginBypassEv?.inputsFound ?? 0, probes: loginBypassEv?.probesSent ?? 0, fc: loginBypassEv?.findings.length ?? 0 });
 
-  if (runs.every((r) => !r.rep)) return null;
+  // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
+  if (runs.every((r) => !r.rep)) return unscannableReport(host, 'kimlik-doğrulamalı kontroller');
 
   const levels: Array<Level | null> = runs.map((r) => (r.rep ? extractLevel(r.rep.findings) : null));
   const ranked = levels.map((lv, i) => ({ lv, i })).filter((x): x is { lv: Level; i: number } => x.lv !== null).sort((a, b) => levelRank(b.lv) - levelRank(a.lv));

@@ -13,6 +13,7 @@ import {
 } from './activeVerifyEvidence.js';
 import { collectLoginBypassEvidence } from './authExtraChecks.js';
 import { resolveOrigin } from './surfaceEvidence.js';
+import { unscannableReport } from './unscannable.js';
 
 export const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
 export type Level = 'low' | 'medium' | 'medium-high' | 'high';
@@ -221,9 +222,11 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
   // + http-only ise https_missing bulgusu üretilir.
   const o = await resolveOrigin(host);
   const httpOnly = o.reachable && !o.httpsWorks;
+  // (DÜRÜSTLÜK) Hedefe HİÇ ulaşılamadı -> "İncelenemedi" (ASLA null->Düşük fallback). Headless keşfi de atla.
+  if (!o.reachable) return unscannableReport(host, 'aktif doğrulama kontrolleri');
   const runs = await Promise.all(ACTIVE_BUNDLE_MEMBERS.map((m) => m.run(host).catch(() => null)));
-  // Hicbir uye veri toplayamadiysa (hedefe ulasilamadi) -> fallback.
-  if (runs.every((r) => !r || !r.rep)) return null;
+  // Hiçbir üye veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
+  if (runs.every((r) => !r || !r.rep)) return unscannableReport(host, 'aktif doğrulama kontrolleri');
   const surf = await discoverSurface(host); // cache'ten — benzersiz sayfa + SPA bilgisi
 
   const levels: Array<Level | null> = runs.map((r) => (r?.rep ? extractLevel(r.rep.findings) : null));

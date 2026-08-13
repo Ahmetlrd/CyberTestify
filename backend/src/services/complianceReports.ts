@@ -8,6 +8,7 @@
  * var/yok olarak raporlanır (Gözlemlendi / Gözlemlenmedi / İnceleme gerekli).
  */
 import { collectHttp, collectTls, collectExposedFiles, resolveOrigin, cachedOriginUrl, type HttpEvidence, type TlsEvidence, type ExposedFileResult } from './surfaceEvidence.js';
+import { unscannableReport } from './unscannable.js';
 
 type Level = 'low' | 'medium' | 'high';
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', high: 'Yüksek' } as const;
@@ -508,8 +509,11 @@ export function combineComplianceAreas(results: Array<{ findings: string; fixTex
 }
 
 export async function generateBundleComplianceReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+  const o = await resolveOrigin(host);
+  // (DÜRÜSTLÜK) Hedefe ulaşılamadı -> "İncelenemedi" (null->Düşük fallback DEĞİL).
+  if (!o.reachable) return unscannableReport(host, 'uyum ön-değerlendirme kontrolleri');
   const ev = await collectComplianceEvidence(host);
-  if (!ev) return null;
+  if (!ev) return unscannableReport(host, 'uyum ön-değerlendirme kontrolleri');
   // 3 cerceve AYNI kanittan (tek-sefer toplandi) — saf builder'lar.
   const areas = [buildKvkkArea(ev), buildPciArea(ev), buildIsoArea(ev)];
   const priorities = areas.flatMap((a) => a.priorities);
