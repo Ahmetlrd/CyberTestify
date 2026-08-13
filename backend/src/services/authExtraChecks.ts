@@ -7,6 +7,7 @@
  * ve prob-üst-sınırı AYNEN geçerli. Bulunamazsa DÜRÜSTÇE "gösterge yok".
  */
 import crypto from 'node:crypto';
+import { cachedOriginUrl } from './surfaceEvidence.js';
 import { ProbeCtx, type ActiveCheckEvidence, type VFinding } from './activeVerifyEvidence.js';
 import { type AuthSession, applyAuthHeaders } from './authSession.js';
 
@@ -84,7 +85,7 @@ export async function collectJwtAnalysis(host: string, session: AuthSession): Pr
   let probedAny = false;
   for (const path of CANDIDATES) {
     if (real.stopped) break;
-    const url = `https://${host}${path}`;
+    const url = `${cachedOriginUrl(host)}${path}`;
     const okReal = await real.fetchOnce(url); // gerçek token ile korumalı uç mu?
     if (!okReal || okReal.status !== 200 || /<html|<!doctype|login|sign in/i.test(okReal.text.slice(0, 400))) continue;
     probedAny = true;
@@ -118,7 +119,7 @@ export async function collectLoginBypassEvidence(host: string, loginUrl?: string
   const candidates: string[] = [];
   if (loginUrl) candidates.push(loginUrl);
   for (const p of ['/rest/user/login', '/api/login', '/api/auth/login', '/api/users/login', '/login', '/auth/login']) {
-    const u = `https://${host}${p}`;
+    const u = `${cachedOriginUrl(host)}${p}`;
     if (!candidates.includes(u)) candidates.push(u);
   }
 

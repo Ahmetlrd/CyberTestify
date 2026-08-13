@@ -16,7 +16,7 @@
  */
 import { randomBytes, createHash } from 'node:crypto';
 import puppeteer from 'puppeteer-core';
-import { collectHttp } from './surfaceEvidence.js';
+import { collectHttp, resolveOrigin, cachedOriginUrl } from './surfaceEvidence.js';
 import { requestAgentScenarios, type AgentSuggestion } from './agentAdvisor.js';
 import { type AuthSession, applyAuthHeaders } from './authSession.js';
 
@@ -87,7 +87,7 @@ function sameHost(u: string, host: string): boolean {
 }
 function absUrl(raw: string, host: string): string | null {
   try {
-    const u = raw.startsWith('http') ? new URL(raw) : new URL(raw, `https://${host}/`);
+    const u = raw.startsWith('http') ? new URL(raw) : new URL(raw, `${cachedOriginUrl(host)}/`);
     return sameHost(u.toString(), host) ? u.toString() : null;
   } catch { return null; }
 }
@@ -247,7 +247,7 @@ async function crawlSurface(host: string): Promise<Surface> {
   if (!home.ok) return empty;
 
   // Ana sayfadaki ayni-host ic linkleri topla (asset/harici/fragment HARIC).
-  const homeUrl = `https://${host}/`;
+  const homeUrl = `${cachedOriginUrl(host)}/`;
   const linkSet = new Set<string>();
   for (const m of home.html.matchAll(/href\s*=\s*["']([^"'#]+)["']/gi)) {
     const abs = absUrl(m[1].replace(/&amp;/g, '&'), host);
@@ -326,7 +326,7 @@ let chromiumUnavailable = false; // bir kez basarisiz olursa tekrar deneme (perf
 
 async function crawlHeadless(host: string, session?: AuthSession): Promise<Surface | null> {
   if (chromiumUnavailable) return null;
-  const homeUrl = `https://${host}/`;
+  const homeUrl = `${cachedOriginUrl(host)}/`;
   await acquireHeadless();
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
   try {
@@ -361,7 +361,7 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
             await page.evaluateOnNewDocument((t: string) => { try { localStorage.setItem('token', t); localStorage.setItem('access_token', t); } catch { /* erişilemez */ } }, session.bearer).catch(() => {});
           }
           if (session.cookie) {
-            const cookies = session.cookie.split(';').map((kv) => { const i = kv.indexOf('='); return { name: kv.slice(0, i).trim(), value: kv.slice(i + 1).trim(), url: `https://${host}/` }; }).filter((c) => c.name);
+            const cookies = session.cookie.split(';').map((kv) => { const i = kv.indexOf('='); return { name: kv.slice(0, i).trim(), value: kv.slice(i + 1).trim(), url: `${cachedOriginUrl(host)}/` }; }).filter((c) => c.name);
             if (cookies.length) await page.setCookie(...cookies).catch(() => {});
           }
         }
@@ -617,7 +617,7 @@ function countInputsIn(host: string, htmls: string[]): number {
 // ic-ag hard-guard mevcut headless ile AYNI. Basarisiz/timeout -> null.
 async function renderHomepageHeadless(host: string): Promise<string | null> {
   if (chromiumUnavailable) return null;
-  const homeUrl = `https://${host}/`;
+  const homeUrl = `${cachedOriginUrl(host)}/`;
   try { const u = new URL(homeUrl); if (u.hostname.toLowerCase() !== host.toLowerCase() || isInternalHost(u.hostname)) return null; } catch { return null; }
   await acquireHeadless();
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
@@ -660,7 +660,7 @@ export async function quickScopeSignal(host: string): Promise<ScopeSignal> {
   const jsRendered = (anchors <= 2 && formCount === 0) && (scriptCount >= 1) && (spaShell || home.html.length < 30000);
 
   // 1) UCUZ STATIK: ana sayfa + en fazla 3 ic link (asset HARIC).
-  const homeUrl = `https://${host}/`;
+  const homeUrl = `${cachedOriginUrl(host)}/`;
   const links: string[] = []; const seenL = new Set<string>([homeUrl]);
   for (const m of home.html.matchAll(/href\s*=\s*["']([^"'#]+)["']/gi)) {
     if (links.length >= 3) break;
@@ -712,7 +712,7 @@ const INJ_MAX_INPUTS = 10; // API-tabanli input'lar eklendigi icin arttirildi
 
 export async function collectInjectionEvidence(host: string, session?: AuthSession): Promise<InjEvidence> {
   const surf = await discoverSurface(host, session);
-  if (!surf.ok) return { ok: false, baseUrl: `https://${host}/`, pagesScanned: 0, inputsFound: 0, inputsTested: 0, probesSent: 0, payloadsSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'] };
+  if (!surf.ok) return { ok: false, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: 0, inputsFound: 0, inputsTested: 0, probesSent: 0, payloadsSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'] };
   const inputs = surf.inputs.slice(0, INJ_MAX_INPUTS);
   const ctx = new ProbeCtx();
   if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
@@ -721,7 +721,7 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
   let tested = 0;
   let payloads = 0;
 
-  const base = await ctx.fetchOnce(`https://${host}/`);
+  const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
   if (base) ctx.baseline = base.ms;
   const send = async (ip: InputPoint, val: string, expectSlow = false): Promise<ProbeResult | null> =>
     ip.method === 'GET'
@@ -772,7 +772,7 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
 
   if (ctx.stopped) notes.push(ctx.stopped);
   if (!inputs.length) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada test edilebilir GET parametresi veya form alanı bulunamadı (giriş noktası yok).` + spaHint(surf));
-  return { ok: true, baseUrl: `https://${host}/`, pagesScanned: surf.pagesScanned, inputsFound: inputs.length, inputsTested: tested, probesSent: ctx.sent, payloadsSent: payloads, findings, stopped: ctx.stopped, notes };
+  return { ok: true, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: surf.pagesScanned, inputsFound: inputs.length, inputsTested: tested, probesSent: ctx.sent, payloadsSent: payloads, findings, stopped: ctx.stopped, notes };
 }
 
 // ======================================================================================
@@ -867,7 +867,7 @@ export async function collectIdorEvidence(host: string, session?: AuthSession): 
   const notes: string[] = [];
   let tested = 0;
 
-  const base = await ctx.fetchOnce(`https://${host}/`);
+  const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
   if (base) ctx.baseline = base.ms;
 
   for (const ep of eps) {
@@ -974,7 +974,7 @@ function agentInputToUrl(label: string, host: string): string | null {
   let rest = (m ? m[1] : label).trim().replace(/\?$/, '');
   if (rest.includes('?') && !/=/.test(rest.split('?')[1] || '')) rest = rest + '=1'; // "path?param" -> "path?param=1"
   try {
-    const u = rest.startsWith('http') ? new URL(rest) : new URL(rest.startsWith('/') ? rest : `/${rest}`, `https://${host}/`);
+    const u = rest.startsWith('http') ? new URL(rest) : new URL(rest.startsWith('/') ? rest : `/${rest}`, `${cachedOriginUrl(host)}/`);
     if (u.hostname.toLowerCase() !== host.toLowerCase() || isInternalHost(u.hostname)) return null;
     return u.toString();
   } catch { return null; }
@@ -1014,7 +1014,7 @@ export async function collectSsrfEvidence(host: string, session?: AuthSession): 
   if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
   const findings: VFinding[] = [];
   const notes: string[] = [];
-  const base = await ctx.fetchOnce(`https://${host}/`);
+  const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
   if (base) ctx.baseline = base.ms;
 
   for (const ip of inputs) {
@@ -1051,7 +1051,7 @@ export async function collectRceEvidence(host: string, session?: AuthSession): P
   if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
   const findings: VFinding[] = [];
   const notes: string[] = [];
-  const base = await ctx.fetchOnce(`https://${host}/`);
+  const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
   if (base) ctx.baseline = base.ms;
 
   for (const ip of inputs) {
@@ -1110,7 +1110,7 @@ export async function collectFileUploadEvidence(host: string): Promise<ActiveChe
   const ctx = new ProbeCtx();
   const findings: VFinding[] = [];
   const notes: string[] = [];
-  const base = await ctx.fetchOnce(`https://${host}/`);
+  const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
   if (base) ctx.baseline = base.ms;
 
   for (const f of forms) {
@@ -1158,7 +1158,7 @@ export async function collectBusinessLogicEvidence(host: string): Promise<Active
   const links = new Set<string>();
   for (const m of html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)) { const abs = absUrl(m[1].replace(/&amp;/g, '&'), host); if (abs && STEP_SKIP_RE.test(abs)) links.add(abs); }
   for (const e of surf.idEndpoints) { if (STEP_SKIP_RE.test(e.url)) links.add(e.url); }
-  const base = await ctx.fetchOnce(`https://${host}/`);
+  const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
   if (base) ctx.baseline = base.ms;
   for (const url of [...links].slice(0, 4)) {
     if (ctx.stopped) break;
@@ -1219,7 +1219,7 @@ export async function collectRaceMassAssignEvidence(host: string): Promise<Activ
   const ctx = new ProbeCtx();
   const findings: VFinding[] = [];
   const notes: string[] = [];
-  const base = await ctx.fetchOnce(`https://${host}/`);
+  const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
   if (base) ctx.baseline = base.ms;
 
   if (form) {

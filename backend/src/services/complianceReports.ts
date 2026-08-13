@@ -7,7 +7,7 @@
  * gibi kesin hukuki hüküm KURULMAZ; yalnızca "dışarıdan gözlemlenebilir" teknik gösterge
  * var/yok olarak raporlanır (Gözlemlendi / Gözlemlenmedi / İnceleme gerekli).
  */
-import { collectHttp, collectTls, collectExposedFiles, type HttpEvidence, type TlsEvidence, type ExposedFileResult } from './surfaceEvidence.js';
+import { collectHttp, collectTls, collectExposedFiles, resolveOrigin, cachedOriginUrl, type HttpEvidence, type TlsEvidence, type ExposedFileResult } from './surfaceEvidence.js';
 
 type Level = 'low' | 'medium' | 'high';
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', high: 'Yüksek' } as const;
@@ -73,6 +73,7 @@ type ComplianceEvidence = {
   infoLeak: string[];
   securityTxt: boolean;
   httpsRedirect: 'yes' | 'no' | 'unknown';
+  httpOnly: boolean; // HTTPS(443) yok -> şifresiz iletişim (KVKK m.12 / PCI Req 4 / ISO A.8.24 eksiği)
 };
 
 async function fetchPageText(url: string, redirect: RequestRedirect = 'follow'): Promise<{ ok: boolean; status: number; html: string; location?: string }> {
@@ -157,22 +158,24 @@ function infoLeakSigns(html: string, headers: Map<string, string>): string[] {
 async function hasPolicyPage(host: string, homeHtml: string): Promise<{ found: boolean; where: string }> {
   if (POLICY_RE.test(homeHtml)) return { found: true, where: 'ana sayfa (link/metin)' };
   for (const p of ['/gizlilik', '/gizlilik-politikasi', '/kvkk', '/aydinlatma-metni', '/privacy']) {
-    const r = await fetchPageText(`https://${host}${p}`);
+    const r = await fetchPageText(`${cachedOriginUrl(host)}${p}`);
     if (r.ok && r.status < 400 && POLICY_RE.test(r.html)) return { found: true, where: p };
   }
   return { found: false, where: '' };
 }
 
 export async function collectComplianceEvidence(host: string): Promise<ComplianceEvidence | null> {
+  const o = await resolveOrigin(host); // cache'i ısıt -> alt fetch'ler http-only'de de çalışır
   const [http, tls] = await Promise.all([collectHttp(host), collectTls(host)]);
   if (!http.ok && !tls.found) return null;
   const html = http.html;
   const [exposed, policy, securityTxtRes, httpRes] = await Promise.all([
     collectExposedFiles(host, html),
     hasPolicyPage(host, html),
-    fetchPageText(`https://${host}/.well-known/security.txt`),
+    fetchPageText(`${cachedOriginUrl(host)}/.well-known/security.txt`),
     fetchPageText(`http://${host}/`, 'manual'),
   ]);
+  const httpOnly = o.reachable && !o.httpsWorks; // HTTPS(443) yok -> şifresiz iletişim (KVKK m.12 / PCI Req 4 eksiği)
 
   // KVKK: cerez banner / izleyiciler / iletisim
   const cookieBanner = /(cookieconsent|cookie-consent|cookie-banner|çerez.{0,25}(kabul|onay|tercih|ayar)|kabul et.{0,12}çerez|accept.{0,8}cookies|onetrust|cookiebot|iubenda|klaro|tarteaucitron)/i.test(html);
@@ -189,7 +192,7 @@ export async function collectComplianceEvidence(host: string): Promise<Complianc
   let contactWhere = contactFound ? 'ana sayfa' : '';
   if (!contactFound) {
     for (const p of ['/iletisim', '/hakkimizda', '/kvkk', '/contact']) {
-      const r = await fetchPageText(`https://${host}${p}`);
+      const r = await fetchPageText(`${cachedOriginUrl(host)}${p}`);
       if (r.ok && CONTACT_RE.test(r.html)) { contactFound = true; contactWhere = p; break; }
     }
   }
@@ -208,6 +211,7 @@ export async function collectComplianceEvidence(host: string): Promise<Complianc
     infoLeak: infoLeakSigns(html, http.headers),
     securityTxt: securityTxtRes.ok && securityTxtRes.status < 400 && /contact:/i.test(securityTxtRes.html),
     httpsRedirect,
+    httpOnly,
   };
 }
 
@@ -242,7 +246,9 @@ function buildKvkkArea(ev: ComplianceEvidence): Area {
     `| Açık rıza — çerezler (m.5) | ${ev.cookieBanner ? 'Çerez rıza banner’ı gözlemlendi' : 'Çerez rıza banner’ı gözlemlenmedi'}${ev.preConsentCookies > 0 ? `; ana sayfa yanıtında rızadan önce ${ev.preConsentCookies} çerez bırakılıyor` : ''} | ${ev.cookieBanner && ev.preConsentCookies === 0 ? 'Gözlemlendi' : 'İnceleme gerekli'} | Rıza öncesi izleyici çerez bırakmayın; açık rıza banner’ı ekleyin |`,
     `| Üçüncü taraf aktarım/izleyiciler (m.8-9) | ${ev.trackers.length ? 'Gözlemlenen: ' + ev.trackers.join(', ') : 'Ana sayfada belirgin izleyici gözlemlenmedi'} | ${ev.trackers.length ? (ev.cookieBanner ? 'Gözlemlendi (rıza mekanizması var)' : 'İnceleme gerekli') : 'Gözlemlenmedi'} | İzleyicileri açık rızaya bağlayın; aydınlatmada açıkça belirtin |`,
     `| Veri sorumlusu / VERBIS (m.16) | ${ev.contactFound ? `İletişim/veri sorumlusu bilgisi gözlemlendi (${ev.contactWhere})` : 'Kontrol edilen sayfalarda gözlemlenmedi'} | ${durum(ev.contactFound)} | Veri sorumlusu kimliği ve iletişim/VERBIS bilgisini yayınlayın |`,
-    `| Veri güvenliği tedbirleri (m.12) | Site HTTPS üzerinden sunuluyor${ev.http.headers.has('strict-transport-security') ? ' (HSTS mevcut)' : ''}${ev.httpsRedirect === 'yes' ? ', HTTP→HTTPS yönlendirmesi var' : ''} | Gözlemlendi | Taşıma güvenliğini (HTTPS/HSTS) sürdürün |`,
+    ev.httpOnly
+      ? `| Veri güvenliği tedbirleri (m.12) | ⚠️ Site **HTTPS DESTEKLEMİYOR** — kişisel veri şifresiz (düz metin) taşınıyor, ağ üzerinde dinlenebilir/değiştirilebilir | Eksik | Geçerli TLS sertifikası kurup tüm trafiği HTTPS’e taşıyın (m.12 teknik tedbir) + HSTS ekleyin |`
+      : `| Veri güvenliği tedbirleri (m.12) | Site HTTPS üzerinden sunuluyor${ev.http.headers.has('strict-transport-security') ? ' (HSTS mevcut)' : ''}${ev.httpsRedirect === 'yes' ? ', HTTP→HTTPS yönlendirmesi var' : ''} | Gözlemlendi | Taşıma güvenliğini (HTTPS/HSTS) sürdürün |`,
   ].join('\n');
 
   // İzleyici detayı (hangi veriyi toplayabilir)
@@ -296,7 +302,7 @@ function buildPciArea(ev: ComplianceEvidence): Area {
   const cookies = http.setCookies.map(parseCookieFlags);
   const insecureCookies = cookies.filter((c) => !c.secure || !c.httpOnly);
   const versionBanner = ev.versionDisclosure.length > 0;
-  const tlsBad = tls.hostnameMatch === false || (tls.daysLeft != null && tls.daysLeft < 0) || tls.weakProtocols.length > 0;
+  const tlsBad = ev.httpOnly || tls.hostnameMatch === false || (tls.daysLeft != null && tls.daysLeft < 0) || tls.weakProtocols.length > 0;
   const pwAutocomplete = ev.forms.some((f) => f.passwordAutocompleteRisk);
   const insecureForm = ev.forms.some((f) => f.insecureAction);
 
@@ -306,7 +312,9 @@ function buildPciArea(ev: ComplianceEvidence): Area {
 
   const st = (bad: boolean, partial = false) => (bad ? 'Eksik' : partial ? 'Kısmi' : 'Mevcut');
   const rows = [
-    `| Req 4.2.1 — Aktarımda güçlü şifreleme | TLS ${tls.protocol ?? 'tespit edilemedi'}${tls.weakProtocols.length ? `, zayıf sürüm: ${tls.weakProtocols.join(', ')}` : ''}${tls.daysLeft != null ? `, sertifika ${tls.daysLeft >= 0 ? tls.daysLeft + ' gün' : 'SÜRESİ DOLMUŞ'}` : ''} | ${st(tlsBad)} | TLS 1.2+ zorunlu; sertifikayı geçerli tutun |`,
+    ev.httpOnly
+      ? `| Req 4.2.1 — Aktarımda güçlü şifreleme | ⚠️ Site **HTTPS DESTEKLEMİYOR** — kart/hassas veri şifresiz (düz metin) taşınıyor | Eksik | Geçerli TLS 1.2+ sertifikası kurup tüm trafiği HTTPS’e taşıyın |`
+      : `| Req 4.2.1 — Aktarımda güçlü şifreleme | TLS ${tls.protocol ?? 'tespit edilemedi'}${tls.weakProtocols.length ? `, zayıf sürüm: ${tls.weakProtocols.join(', ')}` : ''}${tls.daysLeft != null ? `, sertifika ${tls.daysLeft >= 0 ? tls.daysLeft + ' gün' : 'SÜRESİ DOLMUŞ'}` : ''} | ${st(tlsBad)} | TLS 1.2+ zorunlu; sertifikayı geçerli tutun |`,
     `| Req 4.1 — HTTPS zorunluluğu | HSTS: ${http.headers.has('strict-transport-security') ? 'var' : 'yok'}; HTTP→HTTPS yönlendirme: ${ev.httpsRedirect === 'yes' ? 'var' : ev.httpsRedirect === 'no' ? '⚠️ yok (HTTP 200 dönüyor)' : 'belirlenemedi'} | ${st(!http.headers.has('strict-transport-security') || ev.httpsRedirect === 'no')} | HSTS ekleyin + tüm HTTP’yi HTTPS’e yönlendirin |`,
     `| Req 6.4 — Güvenlik başlıkları | ${missingHdrs.length ? 'Eksik: ' + missingHdrs.map((h) => h.n).join(', ') : 'HSTS/CSP/X-Frame/X-Content-Type mevcut'} | ${st(missingHdrs.length >= 2, missingHdrs.length === 1)} | Eksik güvenlik başlıklarını ekleyin |`,
     `| Req 8 — Oturum/çerez + otomatik doldurma | ${cookies.length ? `${insecureCookies.length}/${cookies.length} çerezde Secure/HttpOnly eksik` : 'Ana sayfada Set-Cookie gözlemlenmedi'}${pwAutocomplete ? '; parola alanında autocomplete kapatılmamış' : ''} | ${st(insecureCookies.length > 0 || pwAutocomplete)} | Çerez bayrakları + parola alanında autocomplete="off" |`,
@@ -353,7 +361,7 @@ function buildIsoArea(ev: ComplianceEvidence): Area {
   const exposedHits = ev.exposed.filter((e) => e.exposed);
   const missingHdrs = SEC_HDRS.slice(0, 4).filter((h) => !http.headers.has(h.h));
   const versionBanner = ev.versionDisclosure.length > 0;
-  const tlsBad = tls.hostnameMatch === false || (tls.daysLeft != null && tls.daysLeft < 0) || tls.weakProtocols.length > 0;
+  const tlsBad = ev.httpOnly || tls.hostnameMatch === false || (tls.daysLeft != null && tls.daysLeft < 0) || tls.weakProtocols.length > 0;
 
   let level: Level = 'low';
   if (exposedHits.length || tlsBad || ev.infoLeak.length >= 2) level = 'high';

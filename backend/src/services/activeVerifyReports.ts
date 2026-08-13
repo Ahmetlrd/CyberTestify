@@ -12,6 +12,7 @@ import {
   type ActiveCheckEvidence, discoverSurface, spaHint, discoveryMethodNote,
 } from './activeVerifyEvidence.js';
 import { collectLoginBypassEvidence } from './authExtraChecks.js';
+import { resolveOrigin } from './surfaceEvidence.js';
 
 export const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
 export type Level = 'low' | 'medium' | 'medium-high' | 'high';
@@ -216,6 +217,10 @@ export function detailOnly(findings: string): string {
 }
 
 export async function generateBundleActiveVerifyReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+  // Protokolü ÖNCE çöz: cache'i ısıtır (üye collector'lar cachedOriginUrl ile http-only'de de tarar)
+  // + http-only ise https_missing bulgusu üretilir.
+  const o = await resolveOrigin(host);
+  const httpOnly = o.reachable && !o.httpsWorks;
   const runs = await Promise.all(ACTIVE_BUNDLE_MEMBERS.map((m) => m.run(host).catch(() => null)));
   // Hicbir uye veri toplayamadiysa (hedefe ulasilamadi) -> fallback.
   if (runs.every((r) => !r || !r.rep)) return null;
@@ -304,11 +309,18 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
     return `## ${m.title}\n\n${detailOnly(r.rep.findings)}\n`;
   }).join('\n');
 
+  // (DÜRÜSTLÜK) http-only: HTTPS eksikliği ŞİDDET-kolonlu tabloyla -> Master + Dağılıma girer.
+  const httpsFindingSection = httpOnly
+    ? `## TESPİT EDİLEN RİSKLER\n\n| Bulgu | Şiddet | Açıklama |\n|-------|--------|----------|\n| HTTPS desteklenmiyor (şifresiz iletişim) | Yüksek | Hedef HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir, oturum/şifre çalınabilir. Aktif kontroller http:// üzerinden yürütüldü. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS. |\n\n`
+    : '';
+  const httpsSummaryNote = httpOnly ? '\n- ⚠️ **HTTPS desteklenmiyor:** Hedef HTTPS (443) üzerinden yanıt vermedi; aktif doğrulama http:// üzerinden yürütüldü. Şifresiz iletişim başlı başına ciddi bir bulgudur.' : '';
+  const genelHttps = httpOnly ? 'Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz (düz metin) taşınıyor — öncelikli olarak HTTPS’e geçilmelidir. ' : '';
+
   const findings =
     `${box}\n\n` +
-    `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
-    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${genel}\n\n` +
-    `${controlTable}\n` +
+    `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}${httpsSummaryNote}\n\n` +
+    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${genelHttps}${genel}\n\n` +
+    `${httpsFindingSection}${controlTable}\n` +
     `${sections}`;
 
   const fixParts = ACTIVE_BUNDLE_MEMBERS.map((m, i) => {

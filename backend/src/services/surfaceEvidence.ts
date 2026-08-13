@@ -56,6 +56,14 @@ async function httpResponds(host: string): Promise<boolean> {
   } catch { return false; } finally { clearTimeout(timer); }
 }
 
+// SENKRON origin erişimi: resolveOrigin cache'inde varsa çözülen origin'i, YOKSA https://host'a
+// düşer. Böylece https-hedeflerde davranış AYNEN korunur (https default); yalnız resolveOrigin
+// önceden çağrılmış (cache sıcak) http-only hedeflerde http:// döner. Kullanmadan önce ilgili
+// collector'da collectHttp/resolveOrigin çağrılmış olmalı (URL kurulmadan cache'i ısıtır).
+export function cachedOriginUrl(host: string): string {
+  return originCache.get(host)?.origin ?? `https://${host}`;
+}
+
 // Hedefin çalışan şemasını (https tercihli) çözer. Cache'li (aynı rapor içinde birçok kez çağrılır).
 export async function resolveOrigin(host: string): Promise<TargetOrigin> {
   const cached = originCache.get(host);

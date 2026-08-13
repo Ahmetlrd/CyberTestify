@@ -13,6 +13,7 @@
  * (E — authenticated injection/XSS/IDOR — ayrı: mevcut collectInjection/collectIdor motoru session ile.)
  */
 import { createHash } from 'node:crypto';
+import { cachedOriginUrl } from './surfaceEvidence.js';
 import { ProbeCtx, type ActiveCheckEvidence, type VFinding } from './activeVerifyEvidence.js';
 import { type AuthSession, applyAuthHeaders } from './authSession.js';
 
@@ -21,7 +22,7 @@ const SESSION_COOKIE_RE = /(token|jwt|session|sid|auth|_session|connect\.sid|php
 const LOGIN_PAGE_RE = /(login|sign\s?in|giriş yap|oturum aç|password|şifre|kullanıcı adı|unauthorized|forbidden|access denied)/i;
 
 function abs(host: string, p: string): string | null {
-  try { const u = new URL(p, `https://${host}/`); return u.hostname.toLowerCase() === host.toLowerCase() ? u.toString() : null; } catch { return null; }
+  try { const u = new URL(p, `${cachedOriginUrl(host)}/`); return u.hostname.toLowerCase() === host.toLowerCase() ? u.toString() : null; } catch { return null; }
 }
 
 // ======================================================================================
@@ -68,7 +69,7 @@ export async function collectSessionFixationEvidence(host: string, session: Auth
   const preValues = new Map<string, string>();
   try {
     const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 10_000);
-    const res = await fetch(`https://${host}/`, { signal: ctrl.signal, redirect: 'manual', headers: { 'user-agent': 'CyberTestify-ActiveVerify/1.0' } });
+    const res = await fetch(`${cachedOriginUrl(host)}/`, { signal: ctrl.signal, redirect: 'manual', headers: { 'user-agent': 'CyberTestify-ActiveVerify/1.0' } });
     clearTimeout(t); probes++;
     for (const line of ((res.headers as any).getSetCookie?.() ?? []) as string[]) {
       const nv = line.split(';')[0]; const name = nv.split('=')[0].trim();
@@ -171,7 +172,7 @@ export async function collectForcedBrowsingEvidence(host: string, session: AuthS
   ctx.authHeaders = applyAuthHeaders({}, session);
 
   // Ana sayfa (shell) hash'i — SPA'nın her rotaya döndüğü aynı HTML'i "bulgu" saymamak için.
-  const home = await ctx.fetchOnce(`https://${host}/`);
+  const home = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
   const shellHash = home && home.status === 200 ? md5(home.text) : '';
   let tested = 0;
   for (const p of ADMIN_PATHS) {

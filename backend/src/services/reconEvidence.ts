@@ -12,7 +12,7 @@
  * her CVE ID'si `CVE-YYYY-NNNN+` regex'i ile dogrulanir. Turkce rapor cumlesini HER ZAMAN kod yazar.
  * Her kontrol ASLA throw ETMEZ (izole); ulasilamayan veri "tespit edilemedi" olur.
  */
-import { apexDomain, collectHttp, type HttpEvidence } from './surfaceEvidence.js';
+import { apexDomain, collectHttp, cachedOriginUrl, type HttpEvidence } from './surfaceEvidence.js';
 
 const HTTP_TIMEOUT_MS = 9000;
 const CRTSH_TIMEOUT_MS = 20000;
@@ -254,7 +254,7 @@ function parseOpenApi(path: string, json: unknown): ApiSpec | null {
 
 export async function collectApi(host: string): Promise<ApiEvidence> {
   const results = await pMap(API_PATHS, 8, async (path) => {
-    const r = await safeGet(`https://${host}${path}`);
+    const r = await safeGet(`${cachedOriginUrl(host)}${path}`);
     return { path, r };
   });
   const reachable: ApiEvidence['reachable'] = [];
@@ -368,10 +368,10 @@ function detectCms(http: HttpEvidence): { cms?: string; version?: string; eviden
 // meta generator'da surum yoksa yaygin surum dosyalarini dene (bir ek fetch, deterministik).
 async function sniffVersion(host: string, cms: string): Promise<string | undefined> {
   if (cms === 'WordPress') {
-    const r = await safeGet(`https://${host}/readme.html`);
+    const r = await safeGet(`${cachedOriginUrl(host)}/readme.html`);
     if (r.status === 200) return r.text.match(/Version\s+([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i)?.[1];
   } else if (cms === 'Drupal') {
-    const r = await safeGet(`https://${host}/CHANGELOG.txt`);
+    const r = await safeGet(`${cachedOriginUrl(host)}/CHANGELOG.txt`);
     if (r.status === 200) return r.text.match(/Drupal\s+([0-9]+\.[0-9]+(?:\.[0-9]+)?),/i)?.[1];
   }
   return undefined;

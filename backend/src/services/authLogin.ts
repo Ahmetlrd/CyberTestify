@@ -14,6 +14,7 @@
  */
 import puppeteer from 'puppeteer-core';
 import { discoverSurface, type Surface } from './activeVerifyEvidence.js';
+import { resolveOrigin, cachedOriginUrl } from './surfaceEvidence.js';
 import { consumeTestCredential, type TestCredentialInput } from './testCredentials.js';
 import { sendAuthLoginFailed } from './mailer.js';
 import { type AuthSession, type CookieFlag, applyAuthHeaders, parseSetCookie } from './authSession.js';
@@ -40,7 +41,7 @@ export type AuthResult =
 
 function sameHostAbs(pathOrUrl: string, host: string): string | null {
   try {
-    const u = pathOrUrl.startsWith('http') ? new URL(pathOrUrl) : new URL(pathOrUrl, `https://${host}/`);
+    const u = pathOrUrl.startsWith('http') ? new URL(pathOrUrl) : new URL(pathOrUrl, `${cachedOriginUrl(host)}/`);
     if (u.hostname.toLowerCase() !== host.toLowerCase() || isInternalHostname(u.hostname)) return null;
     return u.toString();
   } catch { return null; }
@@ -313,6 +314,7 @@ export async function authenticateOrder(orderId: string): Promise<AuthResult> {
     await failOrder(order.id, order.customerId, order.amountMinorUnit, false, 'no_login_endpoint');
     return { ok: false, reason: 'no_login_endpoint', attempts: 0 };
   }
+  await resolveOrigin(order.domain.hostname); // protokolü çöz (cache) -> login + checks http-only'de de çalışır
   const result = await getAuthSession(order.domain.hostname, creds);
   if (!result.ok) {
     await failOrder(order.id, order.customerId, order.amountMinorUnit, result.reason === 'two_factor', result.reason);

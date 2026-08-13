@@ -12,6 +12,7 @@
  *  - Ajan null/timeout/tavan -> deterministik FAZ C sinyaline DÜŞER (paket çökmez).
  */
 import { randomBytes } from 'node:crypto';
+import { cachedOriginUrl } from './surfaceEvidence.js';
 import { ProbeCtx, discoverSurface, domFormLabel, type ActiveCheckEvidence, type VFinding, type Surface } from './activeVerifyEvidence.js';
 import { type AuthSession, applyAuthHeaders } from './authSession.js';
 import { requestAuthAgentScenarios, type AuthAgentSuggestion } from './authAgentAdvisor.js';
@@ -40,7 +41,7 @@ const PRICE_FIELD_RE = /name=["'](price|amount|total|cost|fiyat|tutar|qty|quanti
 const rand = () => randomBytes(8).toString('hex');
 
 function absUrl(host: string, raw: string): string | null {
-  try { const u = raw.startsWith('http') ? new URL(raw) : new URL(raw, `https://${host}/`); return u.hostname.toLowerCase() === host.toLowerCase() ? u.toString() : null; } catch { return null; }
+  try { const u = raw.startsWith('http') ? new URL(raw) : new URL(raw, `${cachedOriginUrl(host)}/`); return u.hostname.toLowerCase() === host.toLowerCase() ? u.toString() : null; } catch { return null; }
 }
 
 // Ajan önerileri host başına TEK createFlow ile alınır (iki kontrol PAYLAŞIR). Cache.

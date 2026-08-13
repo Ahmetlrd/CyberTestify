@@ -9,6 +9,7 @@
  * (kilitli). generateBundleReconReport { findings, fixText } | null doner.
  */
 import { collectReconEvidence, type ReconEvidence, type SubEvidence, type ApiEvidence, type CmsEvidence } from './reconEvidence.js';
+import { resolveOrigin } from './surfaceEvidence.js';
 
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
 type Level = 'low' | 'medium' | 'medium-high' | 'high';
@@ -432,9 +433,10 @@ const BEST_PRACTICES_SECTION =
 // ======================================================================================
 // BIRLESTIRME
 // ======================================================================================
-export function combineReconAreas(ev: ReconEvidence): { findings: string; fixText: string } | null {
+export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean }): { findings: string; fixText: string } | null {
   // Ucu de veri toplayamadiysa fallback.
   if (!ev.sub.ok && !ev.api.ok && !ev.cms.ok) return null;
+  const httpOnly = opts?.httpOnly ?? false;
 
   const areas: Area[] = [buildSubArea(ev.sub), buildApiArea(ev.api), buildCmsArea(ev.cms)];
 
@@ -448,7 +450,8 @@ export function combineReconAreas(ev: ReconEvidence): { findings: string; fixTex
   // Birikimli risk (surface ile tutarli): en yuksek 'Orta-Yüksek' iken 2+ alan Orta+ ise -> Yüksek.
   const mediumPlus = available.filter((a) => levelRank(a.level) >= 1).length;
   const cumulative = baseWorst === 'medium-high' && mediumPlus >= 2;
-  const worst: Level = cumulative ? 'high' : baseWorst;
+  let worst: Level = cumulative ? 'high' : baseWorst;
+  if (httpOnly && levelRank(worst) < 3) worst = 'high'; // http-only (şifresiz) = ciddi
   const scannedNote = unavailableCount ? ` (${unavailableCount} alanda veri kaynağına ulaşılamadı)` : '';
 
   const summary: string[] = [];
@@ -459,7 +462,8 @@ export function combineReconAreas(ev: ReconEvidence): { findings: string; fixTex
         ? `- **Genel risk seviyesi: Yüksek** — ${available.length} alan incelendi${scannedNote}; birden fazla alan aynı anda risk taşıyor (en yükseği **${worstArea.title}** — ${worstArea.headline}).`
         : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — ${available.length} alan incelendi${scannedNote}; en yüksek risk **${worstArea.title}** alanında (${worstArea.headline}).`,
   );
-  for (const a of areas) summary.push(a.dataUnavailable ? `- **${a.title}:** veri kaynağına ulaşılamadı (sonuç üretilemedi)` : `- **${a.title}:** ${RISK_WORD[a.level]} — ${a.headline}`);
+  if (httpOnly) summary.push('- ⚠️ **HTTPS desteklenmiyor:** Hedef HTTPS (443) üzerinden yanıt vermedi; keşif http:// üzerinden yürütüldü. Şifresiz iletişim başlı başına ciddi bir bulgudur (aşağıda).');
+  for (const a of areas) summary.push(a.dataUnavailable ? `- **${a.title}:** ⚠️ incelenemedi (veri kaynağına ulaşılamadı) — "temiz" anlamına gelmez` : `- **${a.title}:** ${RISK_WORD[a.level]} — ${a.headline}`);
   summary.push('- **Önerilen ilk adım:** En yüksek riskli alandan başlayın; her bulgu için adım adım hazır çözümler "AI Çözüm Önerileri" bölümünde sunulur.');
 
   const genelSentence =
@@ -477,10 +481,15 @@ export function combineReconAreas(ev: ReconEvidence): { findings: string; fixTex
     ? `## ${a.title}\n\n**${a.headline}**\n\n${a.body}\n`
     : `## ${a.title}\n\n**Genel risk seviyesi: ${RISK_WORD[a.level]} — ${a.headline}**\n\n${a.body}\n`).join('\n');
 
+  // (MASTER TABLO + ZAFİYET DAĞILIMI) http-only ise https_missing ŞİDDET-kolonlu tabloyla eklenir.
+  const httpsFindingSection = httpOnly
+    ? `## TESPİT EDİLEN RİSKLER\n\n| Bulgu | Şiddet | Açıklama |\n|-------|--------|----------|\n| HTTPS desteklenmiyor (şifresiz iletişim) | Yüksek | Hedef HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS. |\n\n`
+    : '';
+
   const findings =
     `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
-    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${genelSentence}\n\n` +
-    `${METHODOLOGY_SECTION}\n` +
+    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${httpOnly ? 'Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz taşınıyor (öncelikli olarak HTTPS’e geçilmelidir). ' : ''}${genelSentence}\n\n` +
+    `${httpsFindingSection}${METHODOLOGY_SECTION}\n` +
     `${areaSections}\n` +
     `${BEST_PRACTICES_SECTION}`;
 
@@ -492,6 +501,20 @@ export function combineReconAreas(ev: ReconEvidence): { findings: string; fixTex
 }
 
 export async function generateBundleReconReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+  // Protokol çözümle (cache'i ısıtır -> reconEvidence collectorları cachedOriginUrl ile http-only'de
+  // de çalışır) + http-only ise https_missing bulgusu üret.
+  const o = await resolveOrigin(host);
+  if (!o.reachable) return unscannableReconReport(host);
   const ev = await collectReconEvidence(host);
-  return combineReconAreas(ev);
+  return combineReconAreas(ev, { httpOnly: !o.httpsWorks });
+}
+
+function unscannableReconReport(host: string): { findings: string; fixText: string } {
+  const findings =
+    `## YÖNETİCİ ÖZETİ\n\n` +
+    `- **Genel risk seviyesi: İncelenemedi** — hedefe (${host}) bağlanılamadığı için keşif taraması yürütülemedi.\n` +
+    `- Bu sonuç sitenin GÜVENLİ olduğu anlamına GELMEZ; yalnızca kontrollerin çalıştırılamadığını gösterir.\n` +
+    `- **Önerilen ilk adım:** Alan adının yayında ve erişilebilir olduğunu doğrulayıp taramayı tekrarlayın.\n\n` +
+    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: İncelenemedi**\n\nHedefin 443 (HTTPS) ve 80 (HTTP) portlarına bağlantı kurulamadı. Bu rapor bir "temiz/güvenli" sonucu DEĞİLDİR; erişim sağlanınca yeniden taranmalıdır.\n`;
+  return { findings, fixText: '' };
 }
