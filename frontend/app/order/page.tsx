@@ -313,7 +313,7 @@ export default function OrderPage() {
         <>
           <strong>KVKK m. 9 — Yurt dışı aktarım (açık rıza):</strong> Tarama/analiz komutlarımın işlenmesi amacıyla
           kişisel verilerimin{needsAuthSel && <> ve sağladığım <strong>test hesabı kimlik bilgilerimin</strong></>}{' '}
-          <strong>yurt dışında yerleşik bir yapay zekâ hizmet sağlayıcısına (ABD)</strong> aktarılmasına açıkça rıza gösteriyorum.
+          <strong>yurt dışında yerleşik bir yapay zekâ hizmet sağlayıcısına</strong> aktarılmasına açıkça rıza gösteriyorum.
           {needsAuthSel && ' Kimlik bilgilerim şifreli saklanır ve tarama sonrası silinir.'}
         </>
       ),

@@ -22,7 +22,7 @@ export default function Page() {
       <h3>Paylaşım</h3>
       <p>
         Veriler yalnızca hizmetin gerektirdiği ölçüde paylaşılır: <strong>iyzico</strong> (ödeme,
-        yurt içi) ve <strong>yurt dışında yerleşik bir yapay zekâ hizmet sağlayıcısı (ABD)</strong>
+        yurt içi) ve <strong>yurt dışında yerleşik bir yapay zekâ hizmet sağlayıcısı</strong>
         (tarama/analiz komutlarının işlenmesi, yurt dışı — uygun güvence ile). Verilerinizi pazarlama
         amacıyla üçüncü kişilere satmayız.
       </p>

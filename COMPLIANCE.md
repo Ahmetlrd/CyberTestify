@@ -10,7 +10,7 @@ Son güncelleme: 2026-07-26 · Hukuki metin sürümü: `2026-07-26`
 
 ## 0. En yüksek riskli 4 nokta (özet)
 
-1. **[HUKUK/İŞ] Anthropic (ABD) yurt dışı veri aktarımı.** Her tarama Anthropic'e komut gönderir → rutin/sürekli aktarım. KVKK md.9 gereği **"veri sorumlusu→veri işleyen" standart sözleşmesi** + **5 iş günü Kurul bildirimi** gerekli. **Kısmen azaltıldı:** yapısal PII (email/telefon/TCKN/kart/IBAN) artık PentAGI kaynağında maskelenip öyle gidiyor (bkz HANDOFF.md PII bölümü); ama **isim/adres yakalanamıyor**, yani aktarım hâlâ kişisel veri içerebilir → standart sözleşme yine gerekli. Avukat bu kalıntı riski değerlendirmeli.
+1. **[HUKUK/İŞ] Yurt dışı veri aktarımı.** Her tarama Anthropic'e komut gönderir → rutin/sürekli aktarım. KVKK md.9 gereği **"veri sorumlusu→veri işleyen" standart sözleşmesi** + **5 iş günü Kurul bildirimi** gerekli. **Kısmen azaltıldı:** yapısal PII (email/telefon/TCKN/kart/IBAN) artık PentAGI kaynağında maskelenip öyle gidiyor (bkz HANDOFF.md PII bölümü); ama **isim/adres yakalanamıyor**, yani aktarım hâlâ kişisel veri içerebilir → standart sözleşme yine gerekli. Avukat bu kalıntı riski değerlendirmeli.
 2. **[HUKUK/KOD] Paylaşımlı hosting / 3. taraf altyapı.** Alan adı sahipliği, o alan adının barındığı **sunucuyu** tarama yetkisi vermez. → **3 katmanlı kapsam kilidi UYGULANDI** (bkz. `HANDOFF.md` + [[scope-enforcement]]): Seviye 3 (worker log izleme→stopFlow), Seviye 2 (hosting tipi + ham-ağ paket kilidi), **Seviye 1 (egress proxy — terminaller yalnız aktif flow'un kapsamına çıkabilir, concurrency=1)**. Kalan hardening: `internal:true` bypass-proof izolasyon (HANDOFF'ta anlatıldı).
 3. **[İŞ] PentAGI VXControl "Cloud Services" KAPALI tutulmalı.** AGPL/paid-service belirsizliği var. Yalnızca kendi Anthropic key'inle çalış; threat-intel/AI-support/premium Cloud bileşenlerini License Key olmadan kullanma.
 4. **[İŞ] Şirket + ETBİS + e-Arşiv + iyzico** zinciri kurulmadan ticari satış yapılamaz (fatura + tüketici mevzuatı).
@@ -120,7 +120,7 @@ Son güncelleme: 2026-07-26 · Hukuki metin sürümü: `2026-07-26`
 - ✅ **[KOD/GÜVENLİK] İzolasyon:** PentAGI ve tüm iç servisler dışarıya kapalı
   (yalnız Caddy 80/443). Kapsam kilidi (egress-proxy) prod'da da api/worker'ın
   `service_healthy` bağımlılığı — proxy'siz sistem ayağa kalkmaz. TLS: Let's Encrypt.
-- ✅ **[KVKK md.9 — yurt dışı aktarım] PII yaması canlıda:** Anthropic'e (ABD) veri
+- ✅ **[KVKK md.9 — yurt dışı aktarım] PII yaması canlıda:** Dışarıya veri
   gitmeden önce yapısal PII maskeleme yaması (`cybertestify/pentagi:pii`) production
   image'ında aktif (bkz `PATCHES.md`). Kalıntı risk (isim/adres) değişmedi.
 - 🔴 **[SÜREÇ] Acceptance testleri (canlı tarama + kapsam-403 + PII):** gerçek

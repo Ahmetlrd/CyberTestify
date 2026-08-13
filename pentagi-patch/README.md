@@ -2,7 +2,7 @@
 
 Bu dizin, PentAGI'ye uyguladığımız **PII (kişisel veri) redaksiyon** yamasını
 **sıfır bir makinede yeniden üretilebilir** biçimde içerir. Amaç: tarama
-içeriğindeki yapısal kişisel veri, veri Anthropic'e (ABD) gitmeden ÖNCE PentAGI
+içeriğindeki yapısal kişisel veri, veri dışarı gitmeden ÖNCE PentAGI
 kaynağında maskelensin. (Ayrıntı: repo kökündeki `HANDOFF.md` → PII bölümü.)
 
 ## Hedef PentAGI sürümü

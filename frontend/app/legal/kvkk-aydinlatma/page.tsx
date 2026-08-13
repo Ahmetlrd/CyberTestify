@@ -48,7 +48,7 @@ export default function Page() {
       <ul>
         <li><strong>iyzico</strong> — ödeme işleminin gerçekleştirilmesi (yurt içi)</li>
         <li>
-          <strong>Yurt dışında yerleşik bir yapay zekâ hizmet sağlayıcısı (ABD)</strong> — tarama/analiz
+          <strong>Yurt dışında yerleşik bir yapay zekâ hizmet sağlayıcısı</strong> — tarama/analiz
           komutlarının yapay zeka ile işlenmesi (<strong>yurt dışı aktarım</strong>). Bu aktarım, sipariş
           sırasında ayrıca vereceğiniz <strong>açık rızanızla</strong> (KVKK m. 9) gerçekleştirilir. Rıza
           vermezseniz tarama hizmeti sunulamaz.
@@ -59,7 +59,7 @@ export default function Page() {
           ifası kapsamında)
         </li>
         <li>
-          <strong>Google LLC (ABD)</strong> — yalnızca “Google ile giriş”i tercih ederseniz, kimlik
+          <strong>Google LLC</strong> — yalnızca “Google ile giriş”i tercih ederseniz, kimlik
           doğrulaması için (yurt dışı; kendi tercihinizle)
         </li>
         <li>Yetkili kamu kurum/kuruluşları (mevzuat gereği, talep halinde)</li>

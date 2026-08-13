@@ -145,7 +145,7 @@ bırakılan iki şey (ikisi de bu görevin kapsamı dışıydı, net olarak işa
 ## PII / veri minimizasyonu (2026-07-26)
 
 Tarama sırasında toplanan hedef içeriğindeki **yapısal kişisel veri**, veri
-Anthropic'e (ABD) gitmeden ÖNCE ve bizim DB'mize yazılmadan önce maskelenir.
+dışarı gitmeden ÖNCE ve bizim DB'mize yazılmadan önce maskelenir.
 
 **İki katman:**
 1. **PentAGI kaynağında (asıl kritik — ABD aktarımı):** Anthropic çağrısını
@@ -427,7 +427,7 @@ cap 30, hiç bulgu yazmadan kesildi). **Kök neden (iki katman):**
   talimatı (orchestrator), rapor şablonu tr/en (`report.ts` T sözlüğü).
 - Paket adı/açıklaması EN i18n (`scanPackages.PACKAGE_I18N`). Fiyat/menü `?region` ile.
 - 🔴 **`kvkk_hazirlik` EN/global menüde GİZLİ** (Türkiye'ye özel mevzuat). **TODO:**
-  ileride **GDPR (AB)** ve/veya **CCPA (ABD)** için ayrı, o mevzuata özel eşdeğer
+  ileride **GDPR** ve/veya **CCPA** için ayrı, o mevzuata özel eşdeğer
   paketler tanımlanmalı — `kvkk_hazirlik` şablonu örnek alınabilir ama madde
   eşlemeleri baştan yazılmalı.
 
