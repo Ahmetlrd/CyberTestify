@@ -155,7 +155,16 @@ function buildFormBody(ip: InputPoint, injectValue: string): string {
 const CRAWL_MAX_PAGES = 10;        // homepage + ~9 ic sayfa (link havuzundan)
 const CRAWL_HARD_CAP = 16;         // toplam sayfa (link + iyi-bilinen path) mutlak ust siniri
 const CRAWL_ASSET_RE = /\.(css|js|mjs|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|pdf|zip|rar|mp4|webm|webp|avif|json|xml|txt)(\?|$)/i;
-const WELL_KNOWN_PATHS = ['/search?q=cybertestify', '/contact', '/login', '/register', '/api/', '/products?id=1', '/urun?id=1', '/?id=1'];
+const WELL_KNOWN_PATHS = ['/search?q=cybertestify', '/contact', '/login', '/register', '/api/', '/products?id=1', '/urun?id=1', '/?id=1',
+  // (A) REST/API koleksiyon kalıpları — jenerik, hedefe özel DEĞİL; yalnız GET. Link olmayan
+  // API backend'lerinde uç keşfini artırır. Sabit-liste; CRAWL_HARD_CAP ve devre-kesici DEĞİŞMEZ.
+  '/rest/', '/api/v1/', '/v1/', '/v2/', '/rest/products', '/rest/users', '/api/products', '/api/users'];
+// (A+B+C) API keşfi sabitleri. Swagger/OpenAPI spec yolları (B) + REST koleksiyon probe'ları (A/C).
+// Hepsi YALNIZ GET; spec'te POST/PUT/DELETE görülse bile ASLA yazma isteği gönderilmez.
+const SWAGGER_PATHS = ['/swagger.json', '/openapi.json', '/api-docs', '/v2/api-docs', '/v3/api-docs', '/swagger/v1/swagger.json', '/api/swagger.json', '/v2/swagger.json', '/api/v3/openapi.json'];
+const REST_API_PROBE_PATHS = ['/rest/products', '/rest/users', '/api/products', '/api/users', '/api/v1/products', '/v1/products', '/products', '/users'];
+const API_SPEC_MAX_PATHS = 14; // spec'ten işlenecek en fazla yol (aşırı büyük spec'lere karşı)
+const API_SEED_MAX = 12;       // API keşfinden eklenen en fazla input + idEndpoint (kapsam sınırı)
 // (FAZ C+) GENEL authenticated SPA hash-route listesi — herhangi bir SPA'da login sonrası tipik hesap
 // alanları (Juice-Shop'a ÖZEL değil; yaygın rota adları). Yalnız oturum varken gezilir; olmayan rotalar
 // SPA shell döndürüp benzersiz-içerik dedup ile elenir. Login-arkası form/API'ler ancak bu rotalar
@@ -188,6 +197,9 @@ export type Surface = {
   // form kesfi bos kalir. Cozum: SUBMIT ETMEDEN render-edilmis DOM'dan form alanlarini (input/select/
   // textarea) OKU; ozellikle ilginc alanlari (role/isAdmin/price/coupon/gizli) isaretle. SALT-GOZLEM.
   domForms: Array<{ url: string; fields: string[]; interesting: string[] }>;
+  // (A+B+C) API/REST keşfi teşhis bilgisi (dürüstlük/log): spec bulundu mu, kaç yol işlendi.
+  apiSpecFound?: boolean;
+  apiSpecPaths?: number;
 };
 
 // Ağ-trafiğinde dosya-yükleme uç noktası işareti: path'te upload/file/avatar/image/attachment vb.
@@ -536,22 +548,116 @@ function prioritizeInputs<T extends Surface>(surf: T): T {
   return surf;
 }
 
+// ======================================================================================
+// (A+B+C) API/REST KEŞFİ — link/HTML olmasa da uç noktası çıkarır. YALNIZ GET.
+//  B) Swagger/OpenAPI spec'i (varsa) bulur, `paths`'ten gerçek uçları + query param'ları çıkarır.
+//  A) Bilinen REST koleksiyon yollarını GET ile dener.
+//  C) 200 + JSON dizi/obje dönen koleksiyon uçlarını ID-türetme (collectionBasesFrom) girdisine ekler.
+// "Kanıtla — istismar etme" AYNEN: hiçbir POST/PUT/DELETE gönderilmez; yalnız keşif/GET.
+// ======================================================================================
+function safeJsonParse(text: string): any {
+  const t = text.trim();
+  if (t.length > 3_000_000 || !(t.startsWith('{') || t.startsWith('['))) return null;
+  try { return JSON.parse(t); } catch { return null; }
+}
+// OpenAPI 3 (servers[].url) veya Swagger 2 (basePath) taban yolunu çıkar (host'u YOK say — kendi origin'imiz).
+function specBasePath(spec: any): string {
+  if (spec && typeof spec.basePath === 'string') return spec.basePath.replace(/\/+$/, '');
+  const srv = spec && Array.isArray(spec.servers) && spec.servers[0] && spec.servers[0].url;
+  if (typeof srv === 'string') { try { return new URL(srv, 'http://x').pathname.replace(/\/+$/, ''); } catch { return srv.startsWith('/') ? srv.replace(/\/+$/, '') : ''; } }
+  return '';
+}
+// Son (sayısal olmayan) segment koleksiyon-anlamlı mı? (/rest/products -> evet)
+function isCollectionPath(pathname: string): boolean {
+  const segs = pathname.replace(/\/+$/, '').replace(/\/\d{1,9}$/, '').split('/').filter(Boolean);
+  return segs.length >= 1 && COLLECTION_LAST_SEG_RE.test(segs[segs.length - 1]);
+}
+async function collectApiSurface(host: string, session?: AuthSession): Promise<{ inputs: InputPoint[]; idEndpoints: Surface['idEndpoints']; specFound: boolean; specPaths: number }> {
+  const origin = cachedOriginUrl(host);
+  const ctx = new ProbeCtx();
+  if (session) ctx.authHeaders = applyAuthHeaders({}, session);
+  const inputs: InputPoint[] = []; const seenIn = new Set<string>();
+  const idEndpoints: Surface['idEndpoints'] = []; const seenId = new Set<string>();
+  const addInput = (action: string, param: string, params: Record<string, string>) => {
+    const k = `GET ${action} ${param}`; if (seenIn.has(k) || inputs.length + idEndpoints.length >= API_SEED_MAX) return;
+    seenIn.add(k); inputs.push({ method: 'GET', action, param, params, source: 'url' });
+  };
+  const addId = (url: string, idVal: number) => {
+    let u: URL; try { u = new URL(url); } catch { return; }
+    const key = `p:${u.origin}${u.pathname.replace(/\/\d{1,9}\/?$/, '')}`;
+    if (seenId.has(key) || inputs.length + idEndpoints.length >= API_SEED_MAX) return;
+    seenId.add(key); idEndpoints.push({ url: u.toString(), idParam: 'path-id', idValue: idVal, kind: 'path' });
+  };
+
+  // --- B) Swagger/OpenAPI spec keşfi (ilk geçerli spec kazanır) ---
+  let specFound = false; let specPaths = 0;
+  for (const sp of SWAGGER_PATHS) {
+    if (ctx.stopped || specFound) break;
+    const r = await ctx.fetchOnce(origin + sp);
+    if (!r || r.status !== 200) continue;
+    const spec = safeJsonParse(r.text);
+    if (!spec || !spec.paths || typeof spec.paths !== 'object') continue;
+    specFound = true;
+    const base = specBasePath(spec);
+    for (const [rawPath, ops] of Object.entries<any>(spec.paths)) {
+      if (specPaths >= API_SPEC_MAX_PATHS || inputs.length + idEndpoints.length >= API_SEED_MAX) break;
+      if (!ops || typeof ops !== 'object' || !('get' in ops)) continue; // YALNIZ GET tanımlı uçlar
+      specPaths++;
+      const fullPath = (base + (rawPath.startsWith('/') ? rawPath : '/' + rawPath)).replace(/\/{2,}/g, '/');
+      const concrete = fullPath.replace(/\{[^}]+\}/g, '1'); // {id}/{username} -> 1 (güvenli örnek)
+      if (/\{[^}]+\}/.test(fullPath)) addId(origin + concrete, 1);          // path parametreli uç -> IDOR adayı
+      else if (isCollectionPath(concrete)) addId(origin + concrete.replace(/\/+$/, '') + '/1', 1); // koleksiyon -> türetme
+      const getOp = ops.get;
+      const qps = (getOp && Array.isArray(getOp.parameters) ? getOp.parameters : []).filter((p: any) => p && p.in === 'query' && p.name).map((p: any) => String(p.name)).slice(0, 4);
+      for (const q of qps) addInput(origin + concrete, q, { [q]: '1' });     // query param -> enjeksiyon adayı
+    }
+  }
+
+  // --- A+C) Bilinen REST koleksiyon yollarını GET dene; 200 + JSON ise ID-türetme girdisi yap ---
+  for (const p of REST_API_PROBE_PATHS) {
+    if (ctx.stopped || inputs.length + idEndpoints.length >= API_SEED_MAX) break;
+    const r = await ctx.fetchOnce(origin + p);
+    if (!r || r.status !== 200) continue;
+    if (safeJsonParse(r.text) === null) continue;                          // yalnız JSON dizi/obje döndürenler
+    if (isCollectionPath(p)) addId(origin + p.replace(/\/+$/, '') + '/1', 1);
+  }
+
+  return { inputs: inputs.slice(0, API_SEED_MAX), idEndpoints: idEndpoints.slice(0, API_SEED_MAX), specFound, specPaths };
+}
+// API keşfini mevcut yüzeye BİRLEŞTİR (dedup). Mevcut input/idEndpoint'ler korunur; yalnız YENİ eklenir.
+async function mergeApiSurface(surf: Surface, host: string, session?: AuthSession): Promise<Surface> {
+  const api = await collectApiSurface(host, session).catch(() => null);
+  if (!api) return surf;
+  const inK = (i: InputPoint) => `${i.method} ${i.action} ${i.param}`;
+  const seenIn = new Set(surf.inputs.map(inK));
+  for (const ip of api.inputs) { const k = inK(ip); if (!seenIn.has(k)) { seenIn.add(k); surf.inputs.push(ip); } }
+  const idK = (e: Surface['idEndpoints'][number]) => { try { const u = new URL(e.url); return `${e.kind}:${u.origin}${u.pathname.replace(/\/\d{1,9}\/?$/, '')}`; } catch { return e.url; } };
+  const seenId = new Set(surf.idEndpoints.map(idK));
+  for (const e of api.idEndpoints) { const k = idK(e); if (!seenId.has(k)) { seenId.add(k); surf.idEndpoints.push(e); } }
+  surf.apiSpecFound = api.specFound; surf.apiSpecPaths = api.specPaths;
+  return surf;
+}
+
 // HIBRIT: once hizli statik kesif; SPA supheli + statik input BULAMADIYSA headless'e dus.
 // (FAZ C) session verilirse -> DOĞRUDAN authenticated headless crawl (login-arkası yüzey).
 async function buildSurface(host: string, session?: AuthSession): Promise<Surface> {
+  let surf: Surface;
   if (session) {
     const hl = await crawlHeadless(host, session).catch(() => null);
-    if (hl && hl.ok) return prioritizeInputs(hl);      // authenticated render sonucu
-    return prioritizeInputs(await crawlSurface(host)); // headless yok/başarısız -> statik (unauth) fallback
+    surf = hl && hl.ok ? hl : await crawlSurface(host); // headless yok/başarısız -> statik (unauth) fallback
+  } else {
+    const stat = await crawlSurface(host);
+    const staticSurfaceCount = stat.inputs.length + stat.idEndpoints.length + stat.uploadForms.length + (stat.massAssignForm ? 1 : 0);
+    // Statik zaten input buldu -> headless GEREKSIZ (perf). Yalniz SPA supheli + 0 input -> headless.
+    if (stat.ok && staticSurfaceCount === 0 && stat.jsRendered) {
+      const hl = await crawlHeadless(host).catch(() => null);
+      surf = hl && hl.ok ? hl : stat;
+    } else surf = stat;
   }
-  const stat = await crawlSurface(host);
-  const staticSurfaceCount = stat.inputs.length + stat.idEndpoints.length + stat.uploadForms.length + (stat.massAssignForm ? 1 : 0);
-  // Statik zaten input buldu -> headless GEREKSIZ (perf). Yalniz SPA supheli + 0 input -> headless.
-  if (stat.ok && staticSurfaceCount === 0 && stat.jsRendered) {
-    const hl = await crawlHeadless(host).catch(() => null);
-    if (hl && hl.ok) return prioritizeInputs(hl); // render sonucu (input bulsa da bulmasa da) — daha guclu kapsam bilgisi
-  }
-  return prioritizeInputs(stat);
+  // (A+B+C) Crawl'dan SONRA API/REST keşfini birleştir — link/HTML olmasa da uç çıkar (YALNIZ GET).
+  // Hedefe ulaşıldıysa dener; ulaşılamadıysa (surf.ok=false) atlar -> "İncelenemedi" mantığı korunur.
+  if (surf.ok) surf = await mergeApiSurface(surf, host, session).catch(() => surf);
+  return prioritizeInputs(surf);
 }
 
 // In-flight cache: ayni host icin es zamanli 7 kontrol TEK crawl paylasir. (FAZ C) authenticated crawl
