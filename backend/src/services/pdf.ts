@@ -268,7 +268,7 @@ function reportIdentifiers(hostname: string, createdAt: Date): { reportNo: strin
 }
 
 type Sev = 'critical' | 'high' | 'medium' | 'low';
-type Finding = { title: string; sev: Sev; type?: FindingType; endpoint?: string; evidence?: string };
+type Finding = { title: string; sev: Sev; type?: FindingType; endpoint?: string; evidence?: string; confidence?: string };
 function normSev(s: string): Sev | null {
   const x = s.toLocaleLowerCase('tr');
   if (/krit[iı]k|critical/.test(x)) return 'critical';
@@ -353,6 +353,7 @@ function parseFindings(md: string, locale: 'tr' | 'en'): { rows: Finding[]; coun
     const nameCol = techCol !== -1 ? techCol : titleCol;
     // Kanıt/açıklama kolonu — kartın "Nasıl Tespit Edildi"/açıklama için GERÇEK veri.
     const evidCol = header.findIndex((h) => /kan[ıi]t|evidence|k[ıi]sa a[çc][ıi]klama|a[çc][ıi]klama|not\b/.test(h));
+    const confCol = header.findIndex((h) => /g[üu]ven\b|confidence/.test(h)); // güven kolonu (varsa)
     for (let r = 1; r < block.length; r++) {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue; // ayraç satırı
       const c = cells(block[r]);
@@ -360,20 +361,23 @@ function parseFindings(md: string, locale: 'tr' | 'en'): { rows: Finding[]; coun
       if (!sev) continue;
       const rawName = stripMd(c[nameCol] ?? c[titleCol] ?? '').replace(/^\d+[).]?\s*/, '');
       if (!rawName) continue;
-      // Sınıflandırma ÖNCE SATIRDAN (uç nokta+teknik+kanıt), olmazsa BÖLÜM başlığından. Böylece
-      // "Enjeksiyon (SQLi/XSS)" başlığındaki SQLi, XSS satırını kirletmez; ama "İş Mantığı Doğrulama"
-      // gibi satırı jenerik olan bulgular bölüm başlığından doğru sınıflanır.
-      const rowText = c.filter((_, idx) => idx !== sevCol).map(stripMd).join(' ');
-      const info = lookupFinding(rowText, locale) ?? lookupFinding(curSection, locale);
+      // Sınıflandırma: ŞİDDET ve KANIT/AÇIKLAMA kolonlarını DIŞLA. Açıklama metnindeki yabancı
+      // anahtar kelimeler (ör. CSP bulgusunun açıklamasında "XSS" geçmesi) bulguyu YANLIŞ türe
+      // eşliyordu (başlık "CSP eksik" ama master "Yansıyan XSS" gösteriyordu). Tür/başlık, uç
+      // nokta + teknik + başlık kolonlarından gelir; açıklama sınıflandırmayı KİRLETMEZ.
+      const classifyText = c.filter((_, idx) => idx !== sevCol && idx !== evidCol && idx !== confCol).map(stripMd).join(' ');
+      const info = lookupFinding(classifyText, locale) ?? lookupFinding(curSection, locale);
       const title = info ? info.label : (cleanTitle(rawName) || cleanTitle(curSection) || rawName);
       // Uç nokta: entry kolonundan (nameCol'dan farklıysa). "GET /rest/..." gibi.
       let endpoint = endpointCol !== -1 && endpointCol !== nameCol ? stripMd(c[endpointCol] ?? '') : '';
       if (endpoint.length > 60) endpoint = endpoint.slice(0, 60) + '…';
       const evidence = evidCol !== -1 ? stripMd(c[evidCol] ?? '') : '';
+      // Güven (varsa) — DÜŞÜK/dolaylı kanıtı master tabloda da görünür kılmak için (yalnız detay kartında değil).
+      const confidence = confCol !== -1 ? stripMd(c[confCol] ?? '') : '';
       const key = (info ? info.type : title.toLocaleLowerCase('tr')).slice(0, 48);
       if (seen.has(key)) continue;
       seen.add(key);
-      rows.push({ title, sev, type: info?.type, endpoint: endpoint || undefined, evidence: evidence || undefined });
+      rows.push({ title, sev, type: info?.type, endpoint: endpoint || undefined, evidence: evidence || undefined, confidence: confidence || undefined });
       counts[sev]++;
     }
   }
@@ -423,7 +427,10 @@ function buildMasterTable(rows: Finding[], locale: 'tr' | 'en', unscannable = fa
     body = sorted.map((f, idx) => {
       const sm = SEV_META[f.sev];
       // Başlığa UÇ NOKTA (varsa) — "SQL Enjeksiyon göstergesi — /rest/products/search?q". Payload/teknik master'da DEĞİL.
-      const titleCell = f.endpoint ? `${escapeHtml(f.title)} <span class="mt-ep">— ${escapeHtml(f.endpoint)}</span>` : escapeHtml(f.title);
+      // DÜŞÜK/dolaylı güven -> master'da AÇIKÇA işaretle (detay kartıyla sınırlı kalmasın).
+      const lowConf = /d[üu][şs][üu]k|low/i.test(f.confidence ?? '');
+      const confTag = lowConf ? ` <span class="mt-ep">· güven: düşük (dolaylı gösterge)</span>` : '';
+      const titleCell = (f.endpoint ? `${escapeHtml(f.title)} <span class="mt-ep">— ${escapeHtml(f.endpoint)}</span>` : escapeHtml(f.title)) + confTag;
       return `<tr><td>CT-${idx + 1}</td><td>${titleCell}</td><td>${open}</td><td class="${sm.cls}"><span class="sev-badge">${locale === 'tr' ? sm.tr : sm.en}</span></td></tr>`;
     }).join('');
   }

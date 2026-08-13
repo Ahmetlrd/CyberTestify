@@ -1179,7 +1179,7 @@ export async function collectBusinessLogicEvidence(host: string): Promise<Active
       if (!url) continue;
       const r = await ctx.fetchOnce(url); // GET-only (state degistirmez)
       if (r && r.status > 0 && r.status < 500 && !/oturum|login|giriş yap|unauthorized|403|yetkisiz/i.test(r.text.slice(0, 1500))) {
-        findings.push({ check: 'business_logic', inputPoint: (() => { try { return new URL(url).pathname; } catch { return s.inputPoint; } })(), vulnerable: true, technique: 'PentAGI ajanı seçti + backend GET ile doğruladı', evidence: `PentAGI ajanı bu uç noktayı iş-mantığı açısından ilginç seçti; backend GET ile erişilebilirliğini doğruladı (HTTP ${r.status}). Fiyat/miktar/rol gibi alanların sunucu-taraflı doğrulaması manuel test gerektirir (dönen veri gösterilmez).`, confidence: s.confidence === 'high' ? 'medium' : s.confidence, severity: s.severity === 'high' ? 'medium' : s.severity, sideEffectRisk: 'none' });
+        findings.push({ check: 'business_logic', inputPoint: (() => { try { return new URL(url).pathname; } catch { return s.inputPoint; } })(), vulnerable: true, technique: 'PentAGI ajanı seçti + backend GET ile doğruladı', evidence: `⚠️ DOLAYLI/ZAYIF GÖSTERGE — doğrudan zafiyet kanıtı DEĞİLDİR. Tek dayanak: bu uç nokta PentAGI ajanınca iş-mantığı açısından aday seçildi ve backend GET ile erişilebilir bulundu (HTTP ${r.status}). Fiyat/miktar/rol gibi alanların sunucu-taraflı doğrulanıp doğrulanmadığı TEST EDİLMEDİ; bu davranışsal bir işarettir, gerçek bir açık olup olmadığı KESİNLİKLE manuel doğrulama gerektirir (dönen veri gösterilmez).`, confidence: 'low', severity: s.severity === 'high' ? 'medium' : s.severity, sideEffectRisk: 'none' });
       }
     }
   }
@@ -1248,7 +1248,7 @@ export async function collectRaceMassAssignEvidence(host: string): Promise<Activ
       if (!url) continue;
       const r = await ctx.fetchOnce(url); // GET-only gozlem
       if (r && r.status > 0 && r.status < 500 && !/oturum|login|giriş yap|unauthorized|403|yetkisiz/i.test(r.text.slice(0, 1500))) {
-        findings.push({ check: 'race_massassign', inputPoint: (() => { try { return new URL(url).pathname; } catch { return s.inputPoint; } })(), vulnerable: true, technique: 'PentAGI ajanı seçti + backend GET ile gözlemledi', evidence: `PentAGI ajanı bu uç noktayı over-posting/eşzamanlılık açısından ilginç seçti; backend GET ile erişilebilirliğini gözlemledi (HTTP ${r.status}). Kesin doğrulama (yetki değişikliği/kupon tüketimi) yıkıcı olduğundan otomatik yapılmadı — manuel test önerilir.`, confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
+        findings.push({ check: 'race_massassign', inputPoint: (() => { try { return new URL(url).pathname; } catch { return s.inputPoint; } })(), vulnerable: true, technique: 'PentAGI ajanı seçti + backend GET ile gözlemledi', evidence: `⚠️ DOLAYLI/ZAYIF GÖSTERGE — doğrudan zafiyet kanıtı DEĞİLDİR. Tek dayanak: bu uç nokta PentAGI ajanınca over-posting/eşzamanlılık açısından aday seçildi ve backend GET ile erişilebilir bulundu (HTTP ${r.status}). Yetki değişikliği/kupon tüketimi gibi kesin doğrulama yıkıcı olduğundan YAPILMADI; gerçek bir açık olup olmadığı manuel test gerektirir.`, confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
       }
     }
   }

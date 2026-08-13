@@ -481,9 +481,17 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
     ? `## ${a.title}\n\n**${a.headline}**\n\n${a.body}\n`
     : `## ${a.title}\n\n**Genel risk seviyesi: ${RISK_WORD[a.level]} — ${a.headline}**\n\n${a.body}\n`).join('\n');
 
-  // (MASTER TABLO + ZAFİYET DAĞILIMI) http-only ise https_missing ŞİDDET-kolonlu tabloyla eklenir.
-  const httpsFindingSection = httpOnly
-    ? `## TESPİT EDİLEN RİSKLER\n\n| Bulgu | Şiddet | Açıklama |\n|-------|--------|----------|\n| HTTPS desteklenmiyor (şifresiz iletişim) | Yüksek | Hedef HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS. |\n\n`
+  // (MERKEZİ FINDINGS -> 2.1 Dağılım + 2.2 Master) http-only https_missing + RİSK TAŞIYAN keşif
+  // alanları (dangling subdomain / açık API / bilinen CVE) ŞİDDET-kolonlu TEK tabloda toplanır ki
+  // rozet=dağılım=master aynı bulgu setini yansıtsın (madde/bölüm-içi metin master'a girmiyordu).
+  const sevWord = (l: Level): string => (l === 'high' || l === 'medium-high' ? 'Yüksek' : l === 'medium' ? 'Orta' : 'Düşük');
+  const centralRows: string[] = [];
+  if (httpOnly) centralRows.push(`| HTTPS desteklenmiyor (şifresiz iletişim) | Yüksek | Hedef HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS. |`);
+  for (const a of available) {
+    if (levelRank(a.level) >= 1) centralRows.push(`| ${a.title} — ${a.headline.replace(/\|/g, '\\|')} | ${sevWord(a.level)} | Ayrıntı aşağıdaki “${a.title}” bölümündedir. |`);
+  }
+  const httpsFindingSection = centralRows.length
+    ? `## TESPİT EDİLEN RİSKLER\n\n| Bulgu | Şiddet | Açıklama |\n|-------|--------|----------|\n${centralRows.join('\n')}\n\n`
     : '';
 
   const findings =

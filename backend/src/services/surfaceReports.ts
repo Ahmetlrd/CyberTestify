@@ -24,6 +24,22 @@ function assemble(_title: string, level: Level, summaryBullets: string[], genelS
   );
 }
 
+// (MERKEZİ FINDINGS) Alt-kontrol "TESPİT EDİLEN RİSKLER" maddelerini ŞİDDET-kolonlu tabloya çevirir.
+// Neden: pdf.parseFindings YALNIZ şiddet-kolonlu tabloları toplar; bullet listesi 2.1 Dağılım / 2.2
+// Master'a GİRMEZ (rozet Yüksek der ama master "Temiz" gösterirdi — tutarsızlık). Tabloya çevirince
+// her alanın bulgusu tek merkezi master tabloda toplanır; rozet=dağılım=master aynı kaynaktan gelir.
+// Bullet formatı: "- **Yüksek — Başlık:** açıklama". Parse edilemeyen (temiz) satırlar metin kalır.
+function risksTable(risks: string[]): string {
+  const rows: string[] = [];
+  for (const r of risks) {
+    const m = r.match(/^-\s*\*\*\s*(Kritik|Yüksek|Orta|Düşük|Bilgilendirme)\s*[—–-]\s*([^:]+?)\s*:\s*\*\*\s*([\s\S]*)$/);
+    if (m) rows.push(`| ${m[2].trim()} | ${m[1]} | ${m[3].trim().replace(/\|/g, '\\|').replace(/\n+/g, ' ')} |`);
+  }
+  // Parse edilebilir hiç risk yoksa (temiz alan) eski metni koru -> parseFindings 0 sayar (doğru "temiz").
+  if (!rows.length) return risks.join('\n');
+  return `| Bulgu | Şiddet | Açıklama |\n|-------|--------|----------|\n${rows.join('\n')}`;
+}
+
 // ======================================================================================
 // 1) ssl_tls — SSL/TLS Yapılandırma Denetimi
 // ======================================================================================
@@ -80,7 +96,7 @@ export async function generateSslTlsReport(host: string): Promise<{ findings: st
         ? 'Taşıma güvenliği temelde sağlam; kısa vadede giderilmesi önerilen eksikler (ör. HSTS / yaklaşan yenileme) var.'
         : 'TLS/SSL yapılandırması güncel ve sağlam; rapor yalnızca küçük iyileştirme fırsatlarını listeler.';
 
-  const findings = assemble('SSL/TLS', level, bullets, genel, `${tlsSection}${protoSection}${hstsSection}## TESPİT EDİLEN RİSKLER\n\n${risks.join('\n')}\n`);
+  const findings = assemble('SSL/TLS', level, bullets, genel, `${tlsSection}${protoSection}${hstsSection}## TESPİT EDİLEN RİSKLER\n\n${risksTable(risks)}\n`);
   const fixText = buildTlsFix(host, { hstsMissing: !hstsPresent, weak: tls.weakProtocols });
   return { findings, fixText };
 }
@@ -154,7 +170,7 @@ export async function generateHeaderLeakReport(host: string): Promise<{ findings
         ? 'Önemli güvenlik başlığı eksiklikleri var; hassas dosya sızıntısı tespit edilmedi. Eksik başlıklar düşük maliyetli sunucu ayarlarıyla kapatılabilir.'
         : 'Güvenlik başlıkları büyük ölçüde mevcut ve dışarıdan erişilebilen hassas dosya bulunmadı.';
 
-  const findings = assemble('Başlıklar', level, bullets, genel, `${table}${leakSection}## TESPİT EDİLEN RİSKLER\n\n${risks.join('\n')}\n`);
+  const findings = assemble('Başlıklar', level, bullets, genel, `${table}${leakSection}## TESPİT EDİLEN RİSKLER\n\n${risksTable(risks)}\n`);
   const fixText = buildHeaderFixSuggestions(findings, host) + (exposedHits.length ? '\n\n' + buildExposedFileFix(exposedHits.map((e) => e.path)) : '');
   return { findings, fixText };
 }
@@ -238,7 +254,7 @@ export async function generateDnsEmailReport(host: string): Promise<{ findings: 
         ? 'E-posta kimlik doğrulama kayıtlarında (SPF/DMARC/DKIM) giderilmesi önerilen eksikler var. Bunlar kademeli olarak sıkılaştırılabilir.'
         : 'E-posta kimlik doğrulama kayıtları büyük ölçüde sağlam; rapor yalnızca küçük iyileştirmeleri listeler.';
 
-  const findings = assemble('DNS/E-posta', level, bullets, genel, `${spfSection}${dmarcSection}${dkimSection}${dnssecSection}## TESPİT EDİLEN RİSKLER\n\n${risks.join('\n')}\n`);
+  const findings = assemble('DNS/E-posta', level, bullets, genel, `${spfSection}${dmarcSection}${dkimSection}${dnssecSection}## TESPİT EDİLEN RİSKLER\n\n${risksTable(risks)}\n`);
   const fixText = buildDnsFix(host, dns);
   return { findings, fixText };
 }
@@ -296,7 +312,7 @@ export async function generateCorsCookieReport(host: string): Promise<{ findings
         ? 'CORS ve/veya çerez bayraklarında giderilmesi önerilen eksikler var; taşıma güvenliği açısından kritik değil ancak saldırı yüzeyini artırıyor.'
         : 'CORS ve çerez yapılandırması güvenli varsayılanlara yakın; rapor yalnızca küçük iyileştirmeleri listeler.';
 
-  const findings = assemble('CORS/Çerez', level, bullets, genel, `${corsSection}${cookieSection}## TESPİT EDİLEN RİSKLER\n\n${risks.join('\n')}\n`);
+  const findings = assemble('CORS/Çerez', level, bullets, genel, `${corsSection}${cookieSection}## TESPİT EDİLEN RİSKLER\n\n${risksTable(risks)}\n`);
   const fixText = buildCorsCookieFix(host, { credsWildcardDanger, wildcard: cors.wildcard, reflected: cors.reflected, insecure: insecureCookies.length > 0 });
   return { findings, fixText };
 }
@@ -376,7 +392,7 @@ export async function generateCspReport(host: string): Promise<{ findings: strin
         ? (present ? 'CSP mevcut ancak koruma değerini düşüren direktifler (unsafe-inline/unsafe-eval/wildcard) içeriyor; sıkılaştırılması önerilir.' : 'Uygulanan bir CSP yok (yok veya yalnızca Report-Only). XSS azaltması için enforce edilen bir politika önerilir.')
         : 'Content-Security-Policy mevcut ve makul yapılandırılmış; rapor yalnızca küçük iyileştirmeleri listeler.';
 
-  const findings = assemble('CSP', level, bullets, genel, `${statusSection}${analysisSection}## TESPİT EDİLEN RİSKLER\n\n${risks.join('\n')}\n`);
+  const findings = assemble('CSP', level, bullets, genel, `${statusSection}${analysisSection}## TESPİT EDİLEN RİSKLER\n\n${risksTable(risks)}\n`);
   const fixText = buildCspFix(host, { present, weak: weakFindings.length > 0 });
   return { findings, fixText };
 }

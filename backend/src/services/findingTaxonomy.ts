@@ -144,7 +144,9 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   { re: /session.?fixation|oturum sabit/i, type: 'session_fixation' },
   { re: /\bjwt\b|token b[üu]t[üu]nl[üu]k|alg\s*=\s*none/i, type: 'jwt' },
   { re: /sql|sqli/i, type: 'sqli' },
-  { re: /\bxss\b|cross.?site scripting|yans[ıi]yan/i, type: 'xss' },
+  // "X-XSS-Protection" bir GÜVENLİK BAŞLIĞI adıdır, XSS zafiyeti DEĞİL -> xss'e eşleşmesin
+  // (negatif lookahead: xss'ten hemen sonra "-protection" gelirse eşleşme). "yansıyan XSS" eşleşir.
+  { re: /\bxss\b(?!\s*[-–]?\s*protection)|cross.?site scripting|yans[ıi]yan/i, type: 'xss' },
   { re: /\bidor\b|yetkisiz nesne|nesne eri[şs]im|do[ğg]rudan nesne/i, type: 'idor' },
   { re: /\bssrf\b|sunucu.?tarafl[ıi] istek/i, type: 'ssrf' },
   { re: /a[çc][ıi]k y[öo]nlendirme|open.?redirect/i, type: 'open_redirect' },
