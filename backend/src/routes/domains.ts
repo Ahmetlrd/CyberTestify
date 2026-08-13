@@ -53,9 +53,20 @@ domainsRouter.post('/', requireAuth, async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
   const domain = await createDomainVerification(req.customerId!, parsed.data.hostname);
+  // Zaten ekli VE doğrulaması geçerliyse: yeniden DNS doğrulatma; net "zaten var" bilgisi dön.
+  const alreadyVerified = isVerificationStillValid(domain);
+  if (alreadyVerified) {
+    return res.json({
+      domainId: domain.id,
+      hostname: domain.hostname,
+      alreadyVerified: true,
+      message: `“${domain.hostname}” zaten ekli ve doğrulanmış — yeniden DNS doğrulaması gerekmez.`,
+    });
+  }
   res.json({
     domainId: domain.id,
     hostname: domain.hostname,
+    alreadyVerified: false,
     instructions: {
       type: 'DNS TXT',
       recordName: `_pentest-verify.${domain.hostname}`,

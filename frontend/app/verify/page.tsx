@@ -77,6 +77,7 @@ export default function VerifyHub() {
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   // (İŞ 2) Panel sekmeleri — dağınık iç içe bölümler yerine net ayrım.
   const [tab, setTab] = useState<'domains' | 'history'>('domains');
 
@@ -107,12 +108,15 @@ export default function VerifyHub() {
     if (!newHostname.trim() || busy) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       const res = await api.createDomain(newHostname.trim());
       setNewHostname('');
       setShowAdd(false);
       await refresh();
       setOpenId(res.domainId);
+      // Zaten ekli + doğrulanmışsa: onaylı kayıt KORUNUR (yeniden DNS doğrulama yok) + net bilgi.
+      if (res.alreadyVerified) setNotice(res.message || `“${res.hostname}” zaten ekli ve doğrulanmış.`);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -455,6 +459,11 @@ export default function VerifyHub() {
       )}
 
       {error && <p className="form-error mt-6">{error}</p>}
+      {notice && (
+        <p className="mt-6 rounded-card border border-emerald-300/50 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-800">
+          ✓ {notice}
+        </p>
+      )}
     </main>
   );
 }

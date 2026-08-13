@@ -63,8 +63,17 @@ export function generateVerificationToken(): string {
 
 export async function createDomainVerification(customerId: string, hostname: string) {
   const normalizedHost = normalizeHostname(hostname);
-  const token = generateVerificationToken();
 
+  // (FIX) Alan adı ZATEN VAR ve doğrulaması GEÇERLİ ise DOKUNMA — olduğu gibi döndür. Aksi halde
+  // (eski davranış) upsert'ün update dalı token'ı yeniler + verifiedAt/status'u sıfırlardı; yani
+  // onaylı bir alan adını "yeniden ekle" demek DOĞRULAMAYI SİLİP tekrar DNS doğrulamaya zorluyordu.
+  // Not: normalizeHostname şemayı (http/https) ve www.'yi soyar -> http:// ve https:// AYNI kayda iner.
+  const existing = await prisma.domain.findUnique({
+    where: { customerId_hostname: { customerId, hostname: normalizedHost } },
+  });
+  if (existing && isVerificationStillValid(existing)) return existing;
+
+  const token = generateVerificationToken();
   return prisma.domain.upsert({
     where: { customerId_hostname: { customerId, hostname: normalizedHost } },
     update: { verificationToken: token, status: 'pending', lastCheckedAt: null, verifiedAt: null },

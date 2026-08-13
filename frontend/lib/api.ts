@@ -47,7 +47,7 @@ export const api = {
   resetPassword: (token: string, password: string) =>
     request<{ ok: boolean; token: string }>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
   createDomain: (hostname: string) =>
-    request<{ domainId: string; instructions: { recordName: string; recordValue: string; note: string } }>(
+    request<{ domainId: string; hostname: string; alreadyVerified?: boolean; message?: string; instructions?: { recordName: string; recordValue: string; note: string } }>(
       '/domains',
       { method: 'POST', body: JSON.stringify({ hostname }) },
     ),
