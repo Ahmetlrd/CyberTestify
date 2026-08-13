@@ -9,6 +9,7 @@
 
 export type FindingType =
   | 'clickjacking' | 'mime_sniffing' | 'csp_missing' | 'referrer_policy' | 'hsts_missing'
+  | 'https_missing'
   | 'weak_tls' | 'weak_key' | 'cert' | 'version_disclosure' | 'exposed_files'
   | 'spf' | 'dmarc' | 'dkim' | 'dnssec'
   | 'cors' | 'cookie_flags'
@@ -36,6 +37,9 @@ export const FINDING_TAXONOMY: Record<FindingType, Entry> = {
   hsts_missing: { cwe: 'CWE-319', owasp: 'A05:2021 Security Misconfiguration',
     tr: 'İlk bağlantı HTTPS’e zorlanmadığından araya-girme (MITM) saldırısıyla trafik dinlenebilir/yönlendirilebilir.',
     en: 'Without forced HTTPS, traffic can be intercepted/redirected via man-in-the-middle.' },
+  https_missing: { cwe: 'CWE-319', owasp: 'A02:2021 Cryptographic Failures',
+    tr: 'Site HTTPS üzerinden yanıt vermiyor; sayfaya gelen/giden tüm trafik ŞİFRESİZ (düz metin) taşınıyor. Aynı ağdaki bir saldırgan trafiği dinleyebilir, oturum/şifre çalabilir veya içeriği değiştirebilir; modern tarayıcılar sayfayı "Güvenli değil" olarak işaretler.',
+    en: 'The site does not respond over HTTPS; all traffic is transmitted in CLEARTEXT. An attacker on the same network can eavesdrop, steal sessions/passwords, or tamper with content; modern browsers flag the page as "Not secure".' },
   weak_tls: { cwe: 'CWE-326', owasp: 'A02:2021 Cryptographic Failures',
     tr: 'Zayıf şifre paketleri trafik gizliliğini ve ileri gizliliği zayıflatır; protokol-düşürme saldırılarına açar.',
     en: 'Weak cipher suites weaken confidentiality and forward secrecy, enabling downgrade attacks.' },
@@ -154,6 +158,8 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   { re: /x-content-type-options|mime/i, type: 'mime_sniffing' },
   { re: /content-security-policy|\bcsp\b/i, type: 'csp_missing' },
   { re: /referrer-policy/i, type: 'referrer_policy' },
+  // https_missing hsts'ten ÖNCE: "HTTPS yok/desteklenmiyor/şifresiz/düz metin/http üzerinden".
+  { re: /https\s*(deste[ğg]i\s*)?(yok|eksik|desteklenm|zorlan|kurul)|[şs]ifresiz|d[üu]z\s*metin|cleartext|clear.?text|http\s*[- ]?only|yaln[ıi]z.*http\b/i, type: 'https_missing' },
   { re: /hsts|strict-transport/i, type: 'hsts_missing' },
   { re: /swagger|openapi|api dok[üu]|a[çc][ıi]k.*api/i, type: 'exposed_api_docs' },
   { re: /staging|hazırlık ortam|test ortam/i, type: 'staging_exposure' },
@@ -186,6 +192,7 @@ const FRIENDLY_LABEL: Record<FindingType, { tr: string; en: string }> = {
   csp_missing: { tr: 'Content-Security-Policy eksik', en: 'Missing Content-Security-Policy' },
   referrer_policy: { tr: 'Referrer-Policy eksik', en: 'Missing Referrer-Policy' },
   hsts_missing: { tr: 'HSTS (Strict-Transport-Security) eksik', en: 'Missing HSTS' },
+  https_missing: { tr: 'HTTPS desteklenmiyor (şifresiz iletişim)', en: 'HTTPS not supported (cleartext transmission)' },
   weak_tls: { tr: 'Zayıf TLS şifre yapılandırması', en: 'Weak TLS cipher configuration' },
   weak_key: { tr: 'Zayıf sertifika anahtar boyutu', en: 'Weak certificate key size' },
   cert: { tr: 'Sertifika yapılandırma sorunu', en: 'Certificate configuration issue' },
@@ -243,6 +250,9 @@ const FINDING_DETAIL: Record<FindingType, { tr: Detail; en: Detail }> = {
   hsts_missing: D(
     { desc: 'HSTS (Strict-Transport-Security) yok; tarayıcı HTTPS’e zorlanmıyor.', how: 'Yanıt başlıklarında Strict-Transport-Security gözlenmedi.', fix: '`Strict-Transport-Security: max-age=31536000; includeSubDomains` ekleyin (site tamamen HTTPS ise).' },
     { desc: 'No HSTS; browser not forced to HTTPS.', how: 'No Strict-Transport-Security observed.', fix: 'Add `Strict-Transport-Security: max-age=31536000; includeSubDomains` (if fully HTTPS).' }),
+  https_missing: D(
+    { desc: 'Site HTTPS üzerinden yanıt vermiyor; iletişim şifresiz (düz metin) HTTP ile yürüyor.', how: 'Hedefin 443 (HTTPS) portuna güvenli bağlantı kurulamadı; yalnızca 80 (HTTP) yanıt verdi. Tarama http:// üzerinden yürütüldü.', fix: 'Geçerli bir TLS sertifikası kurun (ücretsiz: Let’s Encrypt), tüm HTTP isteklerini kalıcı olarak (301) HTTPS’e yönlendirin ve HSTS başlığını ekleyin.' },
+    { desc: 'The site does not respond over HTTPS; communication runs over cleartext HTTP.', how: 'No secure connection could be established to port 443 (HTTPS); only port 80 (HTTP) responded. The scan was performed over http://.', fix: 'Install a valid TLS certificate (free: Let’s Encrypt), permanently redirect (301) all HTTP to HTTPS, and add the HSTS header.' }),
   weak_tls: D(
     { desc: 'Sunucu zayıf/eski TLS şifre paketlerini kabul ediyor.', how: 'TLS el sıkışması incelendi; zayıf cipher/eski protokol desteği gözlendi.', fix: 'Yalnız TLS 1.2+ ve ileri-gizlilikli AEAD (ECDHE+AES-GCM/ChaCha20) bırakın; CBC/3DES/RSA-kex kapatın.' },
     { desc: 'Server accepts weak/legacy TLS ciphers.', how: 'TLS handshake inspected; weak cipher/legacy protocol observed.', fix: 'Allow only TLS 1.2+ forward-secret AEAD suites; disable CBC/3DES/RSA-kex.' }),

@@ -27,6 +27,53 @@ export function apexDomain(host: string): string {
   return lastTwo;
 }
 
+// ---- PROTOKOL ÇÖZÜMLEME: hedef HTTPS'e mi HTTP'ye mi yanıt veriyor? (https→http fallback) -----
+// Bir hedef yalnız http:// ile açılıyorsa (443 kapalı/yanıtsız), tüm HTTP-tabanlı kontroller
+// http:// üzerinden çalışmalı. Ayrıca HTTPS'in HİÇ olmaması KENDİ BAŞINA bir bulgudur (https_eksik).
+// httpsWorks = 443'te TLS el sıkışması KURULDU mu (SERTİFİKA GEÇERLİLİĞİNDEN bağımsız; geçersiz
+//   sertifika HTTPS'i "yok" saymaz — o ayrı bir bulgu). reachable = en az bir şema yanıt verdi.
+export type TargetOrigin = { origin: string; scheme: 'https' | 'http' | null; httpsWorks: boolean; httpWorks: boolean; reachable: boolean };
+const originCache = new Map<string, TargetOrigin>();
+
+function tlsPortOpen(host: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v: boolean) => { if (!done) { done = true; resolve(v); } };
+    try {
+      const s = tls.connect({ host, port: 443, servername: host, rejectUnauthorized: false, timeout: TLS_TIMEOUT_MS }, () => { s.destroy(); finish(true); });
+      s.on('error', () => finish(false));
+      s.on('timeout', () => { s.destroy(); finish(false); });
+    } catch { finish(false); }
+  });
+}
+
+async function httpResponds(host: string): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), HTTP_TIMEOUT_MS);
+  try {
+    await fetch(`http://${host}/`, { signal: ctrl.signal, redirect: 'manual', headers: { 'user-agent': 'CyberTestify-PassiveCheck/1.0' } });
+    return true; // herhangi bir HTTP yanıtı (3xx/4xx/5xx dahil) = http açık
+  } catch { return false; } finally { clearTimeout(timer); }
+}
+
+// Hedefin çalışan şemasını (https tercihli) çözer. Cache'li (aynı rapor içinde birçok kez çağrılır).
+export async function resolveOrigin(host: string): Promise<TargetOrigin> {
+  const cached = originCache.get(host);
+  if (cached) return cached;
+  const httpsWorks = await tlsPortOpen(host);
+  let result: TargetOrigin;
+  if (httpsWorks) {
+    result = { origin: `https://${host}`, scheme: 'https', httpsWorks: true, httpWorks: false, reachable: true };
+  } else {
+    const httpWorks = await httpResponds(host);
+    result = httpWorks
+      ? { origin: `http://${host}`, scheme: 'http', httpsWorks: false, httpWorks: true, reachable: true }
+      : { origin: `https://${host}`, scheme: null, httpsWorks: false, httpWorks: false, reachable: false };
+  }
+  originCache.set(host, result);
+  return result;
+}
+
 // ---- HTTP: basliklar + Set-Cookie + HTML ------------------------------------------
 export type HttpEvidence = {
   ok: boolean;
@@ -35,14 +82,20 @@ export type HttpEvidence = {
   setCookies: string[];         // ham Set-Cookie satirlari
   html: string;
   contentType: string;
+  scheme: 'https' | 'http' | null; // hangi protokolle çekildi
+  httpsWorks: boolean;             // 443 açık mı (false + reachable => https_eksik bulgusu)
+  reachable: boolean;              // hedefe hiç ulaşıldı mı (false => "İncelenemedi", ASLA "temiz")
 };
 
 export async function collectHttp(host: string): Promise<HttpEvidence> {
   const headers = new Map<string, string>();
+  const o = await resolveOrigin(host);
+  const base: Pick<HttpEvidence, 'scheme' | 'httpsWorks' | 'reachable'> = { scheme: o.scheme, httpsWorks: o.httpsWorks, reachable: o.reachable };
+  if (!o.reachable) return { ok: false, headers, setCookies: [], html: '', contentType: '', ...base };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), HTTP_TIMEOUT_MS);
   try {
-    const res = await fetch(`https://${host}/`, {
+    const res = await fetch(`${o.origin}/`, {
       signal: ctrl.signal,
       redirect: 'follow',
       headers: { 'user-agent': 'CyberTestify-PassiveCheck/1.0', accept: 'text/html,*/*' },
@@ -59,9 +112,9 @@ export async function collectHttp(host: string): Promise<HttpEvidence> {
       const buf = Buffer.from(await res.arrayBuffer());
       html = (buf.length > MAX_HTML ? buf.subarray(0, MAX_HTML) : buf).toString('utf-8');
     } catch { /* govde okunamadi */ }
-    return { ok: true, status: res.status, headers, setCookies, html, contentType: headers.get('content-type') ?? '' };
+    return { ok: true, status: res.status, headers, setCookies, html, contentType: headers.get('content-type') ?? '', ...base };
   } catch {
-    return { ok: false, headers, setCookies: [], html: '', contentType: '' };
+    return { ok: false, headers, setCookies: [], html: '', contentType: '', ...base };
   } finally {
     clearTimeout(timer);
   }
@@ -72,10 +125,12 @@ export type CorsEvidence = { ok: boolean; testedOrigin: string; acao?: string; a
 const CORS_PROBE_ORIGIN = 'https://cybertestify-cors-probe.example';
 
 export async function collectCors(host: string): Promise<CorsEvidence> {
+  const o = await resolveOrigin(host);
+  if (!o.reachable) return { ok: false, testedOrigin: CORS_PROBE_ORIGIN, reflected: false, wildcard: false };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), HTTP_TIMEOUT_MS);
   try {
-    const res = await fetch(`https://${host}/`, {
+    const res = await fetch(`${o.origin}/`, {
       signal: ctrl.signal,
       redirect: 'manual',
       headers: { 'user-agent': 'CyberTestify-PassiveCheck/1.0', origin: CORS_PROBE_ORIGIN },
@@ -290,8 +345,10 @@ async function safeGetForExpose(url: string): Promise<{ ok: boolean; status: num
 
 export async function collectExposedFiles(host: string, homepageHtml: string): Promise<ExposedFileResult[]> {
   const out: ExposedFileResult[] = [];
+  const o = await resolveOrigin(host);
+  if (!o.reachable) return out; // hedefe ulaşılamadı -> "kontrol yapılamadı" (boş; ASLA "hepsi kapalı/temiz" değil)
   for (const path of EXPOSED_CANDIDATES) {
-    const fetched = await safeGetForExpose(`https://${host}${path}`);
+    const fetched = await safeGetForExpose(`${o.origin}${path}`);
     const { verdict, reason } = classifyExposedFile(path, fetched, homepageHtml);
     out.push({ path, exposed: verdict === 'exposed', reason });
   }

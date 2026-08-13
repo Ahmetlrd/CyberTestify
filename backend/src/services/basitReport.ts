@@ -11,6 +11,7 @@
  */
 import tls from 'node:tls';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
+import { resolveOrigin } from './surfaceEvidence.js';
 
 const FETCH_TIMEOUT_MS = 9000;
 const TLS_TIMEOUT_MS = 8000;
@@ -22,6 +23,9 @@ type Evidence = {
   headers: Map<string, string>; // lowercased
   html: string;
   tls: TlsInfo;
+  httpsWorks: boolean;   // 443 açık mı (false + reachable => https_missing bulgusu)
+  reachable: boolean;    // hedefe hiç ulaşıldı mı (false => "İncelenemedi", ASLA "temiz")
+  scheme: 'https' | 'http' | null;
 };
 
 type TlsInfo = {
@@ -89,13 +93,13 @@ function hostMatches(host: string, cn: string | undefined, san: string[]): boole
   });
 }
 
-// --- HTTP basliklari + HTML'i dogrudan cek ------------------------------------------
-async function fetchHome(host: string): Promise<{ ok: boolean; status?: number; headers: Map<string, string>; html: string }> {
+// --- HTTP basliklari + HTML'i dogrudan cek (ÇÖZÜLEN protokol üzerinden: https→http fallback) ---
+async function fetchHome(origin: string): Promise<{ ok: boolean; status?: number; headers: Map<string, string>; html: string }> {
   const headers = new Map<string, string>();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(`https://${host}/`, {
+    const res = await fetch(`${origin}/`, {
       signal: ctrl.signal,
       redirect: 'follow',
       headers: { 'user-agent': 'CyberTestify-PassiveCheck/1.0', accept: 'text/html,*/*' },
@@ -115,8 +119,12 @@ async function fetchHome(host: string): Promise<{ ok: boolean; status?: number; 
 }
 
 async function collectEvidence(host: string): Promise<Evidence> {
-  const [home, tlsInfo] = await Promise.all([fetchHome(host), fetchTls(host)]);
-  return { ok: home.ok, status: home.status, headers: home.headers, html: home.html, tls: tlsInfo };
+  const o = await resolveOrigin(host); // https tercihli; 443 kapalıysa http; ikisi de yoksa reachable=false
+  const [home, tlsInfo] = await Promise.all([
+    o.reachable ? fetchHome(o.origin) : Promise.resolve({ ok: false, status: undefined as number | undefined, headers: new Map<string, string>(), html: '' }),
+    fetchTls(host),
+  ]);
+  return { ok: home.ok, status: home.status, headers: home.headers, html: home.html, tls: tlsInfo, httpsWorks: o.httpsWorks, reachable: o.reachable, scheme: o.scheme };
 }
 
 // --- Teknoloji / bilgi ifsasi -------------------------------------------------------
@@ -190,17 +198,32 @@ const RISK_WORD = { low: 'Düşük', medium: 'Orta', high: 'Yüksek' } as const;
  */
 export async function generateBasitReport(hostname: string): Promise<{ findings: string; fixText: string } | null> {
   const ev = await collectEvidence(hostname);
-  if (!ev.ok && !ev.tls.found) return null; // ne HTTP ne TLS -> kanit yok, fallback
+
+  // (DÜRÜSTLÜK — c durumu) HEDEFE HİÇ ULAŞILAMADI: ne https(443) ne http ne TLS yanıt verdi.
+  // Bu KESİNLİKLE "temiz"/"düşük risk" DEĞİL, "İncelenemedi"dir (assessBasit nötr amber rozet basar).
+  if (!ev.reachable && !ev.tls.found) {
+    const findings =
+      `## YÖNETİCİ ÖZETİ\n\n` +
+      `- **Genel risk seviyesi: İncelenemedi** — hedefe (${hostname}) bağlanılamadığı için tarama yürütülemedi.\n` +
+      `- Bu sonuç sitenin GÜVENLİ olduğu anlamına GELMEZ; yalnızca kontrollerin çalıştırılamadığını gösterir.\n` +
+      `- **Önerilen ilk adım:** Alan adının yayında ve dışarıdan erişilebilir olduğunu doğrulayıp taramayı tekrarlayın.\n\n` +
+      `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: İncelenemedi**\n\n` +
+      `Hedefin 443 (HTTPS) ve 80 (HTTP) portlarına bağlantı kurulamadı (zaman aşımı veya bağlantı reddi). Bu nedenle güvenlik başlıkları ve TLS gibi pasif kontroller çalıştırılamadı. Alan adı doğru ve yayında ise bir güvenlik duvarı/erişim kısıtı taramayı engelliyor olabilir.\n\n` +
+      `## TARAMA DURUMU\n\nBu tarama **tamamlanamadı**: hedefe ulaşılamadı ve hiçbir kontrol veri toplayamadı. Bu rapor bir "temiz/güvenli" sonucu **DEĞİLDİR**; erişim sağlanınca yeniden taranmalıdır.\n`;
+    return { findings, fixText: '' };
+  }
 
   const { tech, disclosure } = detectTech(ev.headers, ev.html);
   const isSpa = tech.some((t) => /Vite|React|SPA/i.test(t));
+  const httpOnly = ev.reachable && !ev.httpsWorks; // https yok, http var -> https_missing bulgusu
 
   const absent = new Set<SecKey>();
   for (const k of SEC_KEYS) {
     const row = HEADER_ROWS.find((r) => r.key === k)!;
     if (!ev.headers.has(row.hdr)) absent.add(k);
   }
-  const level = riskLevel(absent, ev.tls);
+  // http-only (şifresiz iletişim) TEK BAŞINA ciddi bir bulgudur -> genel risk en az Yüksek.
+  const level = httpOnly ? 'high' : riskLevel(absent, ev.tls);
   const missingSec = SEC_KEYS.filter((k) => absent.has(k)).map((k) => HEADER_ROWS.find((r) => r.key === k)!.header);
 
   // Tablo
@@ -217,7 +240,9 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
   let tlsSection: string;
   const tlsInf = ev.tls;
   if (!tlsInf.found) {
-    tlsSection = 'TLS sertifika bilgisi elde edilemedi (443 portuna güvenli bağlantı kurulamadı).';
+    tlsSection = httpOnly
+      ? `⚠️ Bu hedef **HTTPS (443) üzerinden yanıt vermedi**; geçerli bir TLS sertifikası bulunamadı. Site yalnızca **şifresiz HTTP** üzerinden yayında (bkz. Tespit Edilen Riskler → “HTTPS desteklenmiyor”). Aşağıdaki başlık kontrolleri http:// üzerinden yürütülmüştür.`
+      : 'TLS sertifika bilgisi elde edilemedi (443 portuna güvenli bağlantı kurulamadı).';
   } else {
     const l: string[] = [];
     l.push(`- **Geçerlilik:** ${tlsInf.daysLeft != null ? (tlsInf.daysLeft >= 0 ? `Geçerli, ${tlsInf.daysLeft} gün kaldı` : `SÜRESİ DOLMUŞ (${Math.abs(tlsInf.daysLeft)} gün önce)`) : 'Belirlenemedi'}${tlsInf.notAfter ? ` (bitiş: ${tlsInf.notAfter})` : ''}`);
@@ -236,43 +261,52 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
   // Teknoloji
   const techSection = tech.length ? tech.map((t) => `- ${t}`).join('\n') : '- Yanıt başlıkları ve ana sayfa HTML’inde belirgin bir teknoloji imzası pasif olarak gözlemlenmedi.';
 
-  // Riskler (siddet genel seviyeyle tutarli)
-  const riskItems: string[] = [];
-  if (tlsInf.hostnameMatch === false) riskItems.push(`- **Yüksek — TLS hostname uyuşmazlığı:** Sertifika ${hostname} adına düzenlenmemiş. Ziyaretçiler tarayıcı güvenlik uyarısıyla karşılaşabilir ve siteye güveni azalır.`);
-  if (tlsInf.daysLeft != null && tlsInf.daysLeft < 0) riskItems.push('- **Yüksek — Sertifika süresi dolmuş:** Site tarayıcılarca güvensiz kabul edilir; ziyaretçi kaybına yol açar.');
+  // Riskler — MASTER TABLO + ZAFİYET DAĞILIMINA girmesi için ŞİDDET KOLONLU tablo (bullet değil).
+  // parseFindings (pdf.ts) yalnız şiddet-kolonlu tabloları sayar; böylece https_missing/eksik başlıklar
+  // "Temiz" değil GERÇEK bulgu olarak dağılıma/master'a düşer.
+  const risks: Array<{ bulgu: string; sev: string; aciklama: string }> = [];
+  if (httpOnly) risks.push({ bulgu: 'HTTPS desteklenmiyor (şifresiz iletişim)', sev: 'Yüksek', aciklama: `Site HTTPS'e yanıt vermiyor; sayfaya gelen/giden tüm trafik şifresiz (düz metin) taşınıyor — aynı ağdaki bir saldırgan trafiği dinleyebilir, oturum/şifre çalabilir veya içeriği değiştirebilir. Tarama http:// üzerinden yürütüldü.` });
+  if (tlsInf.hostnameMatch === false) risks.push({ bulgu: 'TLS hostname uyuşmazlığı', sev: 'Yüksek', aciklama: `Sertifika ${hostname} adına düzenlenmemiş; ziyaretçiler tarayıcı güvenlik uyarısıyla karşılaşabilir ve siteye güven azalır.` });
+  if (tlsInf.daysLeft != null && tlsInf.daysLeft < 0) risks.push({ bulgu: 'TLS sertifikası süresi dolmuş', sev: 'Yüksek', aciklama: 'Site tarayıcılarca güvensiz kabul edilir; ziyaretçi kaybına yol açar.' });
   const critList: string[] = missingSec.filter((h) => h === 'Content-Security-Policy' || h === 'X-Frame-Options');
   if (critList.length) {
-    // Siddet "Orta" — badge ile tutarli (baslik eksikligi savunma-derinligi boslugudur, aktif
-    // istismar kaniti degil). SPA'da CSP eksikligini vurgula ama panik dili kullanma.
     const spaNote = isSpa && critList.includes('Content-Security-Policy') ? ' Site JavaScript ağırlıklı bir SPA olduğundan CSP eksikliği XSS etkisini büyütür; önceliklendirilmesi önerilir.' : '';
-    riskItems.push(`- **Orta — Kritik güvenlik başlıkları eksik (${critList.join(', ')}):** XSS ve/veya clickjacking saldırılarına karşı tarayıcı seviyesinde savunma bulunmuyor.${spaNote}`);
+    risks.push({ bulgu: `Kritik güvenlik başlıkları eksik (${critList.join(', ')})`, sev: 'Orta', aciklama: `XSS ve/veya clickjacking saldırılarına karşı tarayıcı seviyesinde savunma bulunmuyor.${spaNote}` });
   }
   const otherMissing = missingSec.filter((h) => !critList.includes(h));
-  if (otherMissing.length) riskItems.push(`- **Orta — Ek güvenlik başlıkları eksik (${otherMissing.join(', ')}):** Savunma derinliği zayıf; tek tek düşük etkili olsa da birlikte saldırı yüzeyini genişletir.`);
-  if (disclosure.length) riskItems.push(`- **Bilgilendirme — Üçüncü taraf servis kimlikleri:** Ana sayfada ${disclosure.join('; ')} açıkça görülüyor. Bunlar istismar edilebilir açık değildir; yalnızca dış servis bağımlılıklarına dair farkındalık amacıyla listelenmiştir.`);
-  if (!riskItems.length) riskItems.push('- Belirgin bir güvenlik riski öne çıkmadı; rapor yalnızca küçük iyileştirme fırsatlarını listeler.');
+  if (otherMissing.length) risks.push({ bulgu: `Ek güvenlik başlıkları eksik (${otherMissing.join(', ')})`, sev: 'Orta', aciklama: 'Savunma derinliği zayıf; tek tek düşük etkili olsa da birlikte saldırı yüzeyini genişletir.' });
+  if (disclosure.length) risks.push({ bulgu: 'Üçüncü taraf servis kimlikleri', sev: 'Bilgilendirme', aciklama: `Ana sayfada ${disclosure.join('; ')} açıkça görülüyor. İstismar edilebilir açık değildir; yalnızca dış servis bağımlılıklarına dair farkındalık amacıyla listelenmiştir.` });
+
+  const riskSection = risks.length
+    ? `| Bulgu | Şiddet | Açıklama |\n|-------|--------|----------|\n${risks.map((r) => `| ${r.bulgu} | ${r.sev} | ${r.aciklama.replace(/\|/g, '\\|')} |`).join('\n')}`
+    : 'Belirgin bir güvenlik riski öne çıkmadı; rapor yalnızca küçük iyileştirme fırsatlarını listeler.';
 
   // Yonetici ozeti
   const tlsProblem = tlsInf.hostnameMatch === false ? 'TLS sertifikası bu alan adıyla eşleşmiyor' : tlsInf.daysLeft != null && tlsInf.daysLeft < 0 ? 'TLS sertifikasının süresi dolmuş' : '';
   const riskReason =
-    level === 'high'
-      ? `${tlsProblem} — ziyaretçilere doğrudan tarayıcı güvenlik uyarısı gösterebilir.`
-      : level === 'medium'
-        ? 'öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri var; taşıma güvenliği (TLS) sağlam.'
-        : 'ciddi/kritik bir açık öne çıkmadı; yalnızca küçük iyileştirme fırsatları var.';
+    httpOnly
+      ? 'site HTTPS desteklemiyor; iletişim şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir. Öncelikli olarak HTTPS’e geçilmelidir.'
+      : level === 'high'
+        ? `${tlsProblem} — ziyaretçilere doğrudan tarayıcı güvenlik uyarısı gösterebilir.`
+        : level === 'medium'
+          ? 'öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri var; taşıma güvenliği (TLS) sağlam.'
+          : 'ciddi/kritik bir açık öne çıkmadı; yalnızca küçük iyileştirme fırsatları var.';
   const bullets: string[] = [];
   bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${riskReason}`);
+  if (httpOnly) bullets.push('- ⚠️ Bu hedef HTTPS (443) üzerinden yanıt vermedi; tarama **http:// üzerinden** yürütüldü. HTTPS eksikliği başlı başına bir bulgudur (aşağıda).');
   if (missingSec.length) bullets.push(`- ${missingSec.length}/6 önemli güvenlik başlığı eksik: ${missingSec.join(', ')}.`);
   else bullets.push('- Önerilen güvenlik başlıklarının tamamı mevcut.');
   if (tlsInf.found) bullets.push(`- TLS ${tlsInf.hostnameMatch === false ? '⚠️ hostname uyuşmazlığı' : tlsInf.daysLeft != null && tlsInf.daysLeft >= 0 ? `geçerli (${tlsInf.daysLeft} gün)` : 'geçerli'}${tlsInf.protocol ? `, ${tlsInf.protocol}` : ''}.`);
-  bullets.push('- **Önerilen ilk adım:** Eksik HTTP güvenlik başlıklarını sunucu yapılandırmasına ekleyin; adım adım hazır komutlar "AI Çözüm Önerileri" eklentisinde sunulur.');
+  bullets.push('- **Önerilen ilk adım:** ' + (httpOnly ? 'Geçerli bir TLS sertifikası kurup tüm trafiği HTTPS’e taşıyın; ' : 'Eksik HTTP güvenlik başlıklarını sunucu yapılandırmasına ekleyin; ') + 'adım adım hazır komutlar "AI Çözüm Önerileri" eklentisinde sunulur.');
 
   const genel =
-    level === 'high'
-      ? 'Ziyaretçilere doğrudan güvenlik uyarısı gösterebilecek bir TLS sertifikası sorunu tespit edildi; acilen giderilmesi önerilir. Ayrıca eksik güvenlik başlıkları savunma derinliğini zayıflatıyor.'
-      : level === 'medium'
-        ? 'Öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri var; taşıma güvenliği (TLS/HTTPS) genel olarak sağlam. Eksik başlıklar tek başına siteyi ele geçirmez ancak XSS/clickjacking gibi saldırıların başarı şansını artırır ve düşük maliyetli sunucu ayarlarıyla kapatılabilir.'
-        : 'Ciddi/kritik bir güvenlik açığı öne çıkmadı; rapor öncelikle savunma derinliğini artıracak küçük iyileştirme fırsatlarını listeler.';
+    httpOnly
+      ? 'Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz (düz metin) HTTP ile yürüyor. Bu, aynı ağdaki bir saldırganın trafiği dinlemesine/değiştirmesine ve oturum/şifre çalmasına olanak tanıyan ciddi bir eksiktir; modern tarayıcılar siteyi "Güvenli değil" olarak işaretler. Öncelik, geçerli bir TLS sertifikasıyla HTTPS’e geçmek ve HTTP→HTTPS yönlendirmesi + HSTS eklemektir. Diğer başlık kontrolleri http:// üzerinden yürütülmüştür.'
+      : level === 'high'
+        ? 'Ziyaretçilere doğrudan güvenlik uyarısı gösterebilecek bir TLS sertifikası sorunu tespit edildi; acilen giderilmesi önerilir. Ayrıca eksik güvenlik başlıkları savunma derinliğini zayıflatıyor.'
+        : level === 'medium'
+          ? 'Öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri var; taşıma güvenliği (TLS/HTTPS) genel olarak sağlam. Eksik başlıklar tek başına siteyi ele geçirmez ancak XSS/clickjacking gibi saldırıların başarı şansını artırır ve düşük maliyetli sunucu ayarlarıyla kapatılabilir.'
+          : 'Ciddi/kritik bir güvenlik açığı öne çıkmadı; rapor öncelikle savunma derinliğini artıracak küçük iyileştirme fırsatlarını listeler.';
 
   const findings =
     `## YÖNETİCİ ÖZETİ\n\n${bullets.join('\n')}\n\n` +
@@ -280,7 +314,7 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
     `## HTTP GÜVENLİK BAŞLIKLARI\n\n| Başlık | Durum | Açıklama |\n|--------|-------|----------|\n${tableRows}\n\n` +
     `## TLS SERTİFİKA DURUMU\n\n${tlsSection}\n\n` +
     `## SUNUCU / TEKNOLOJİ İMZASI\n\n${techSection}\n\n` +
-    `## TESPİT EDİLEN RİSKLER\n\n${riskItems.join('\n')}\n`;
+    `## TESPİT EDİLEN RİSKLER\n\n${riskSection}\n`;
 
   const fixText = buildHeaderFixSuggestions(findings, hostname);
   return { findings, fixText };

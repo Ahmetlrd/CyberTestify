@@ -8,7 +8,7 @@
  * assessBasit bunu okuyup rozeti tutarli gosterir).
  */
 import {
-  collectHttp, collectTls, collectCors, collectDns, collectExposedFiles,
+  collectHttp, collectTls, collectCors, collectDns, collectExposedFiles, resolveOrigin,
   type TlsEvidence, type DnsEvidence,
 } from './surfaceEvidence.js';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
@@ -31,6 +31,7 @@ export async function generateSslTlsReport(host: string): Promise<{ findings: st
   const [http, tls] = await Promise.all([collectHttp(host), collectTls(host)]);
   if (!tls.found && !http.ok) return null;
 
+  const httpOnly = http.reachable && !http.httpsWorks; // HTTPS(443) yok, http var -> https_missing
   const hstsPresent = http.headers.has('strict-transport-security');
   const expired = tls.daysLeft != null && tls.daysLeft < 0;
   const veryClose = tls.daysLeft != null && tls.daysLeft >= 0 && tls.daysLeft < 15; // ESKALASYON
@@ -39,10 +40,12 @@ export async function generateSslTlsReport(host: string): Promise<{ findings: st
   const weak = tls.weakProtocols.length > 0;
 
   let level: Level = 'low';
-  if (expired || mismatch || weak || veryClose) level = 'high'; // <15 gun -> bir kademe YUKARI
+  if (httpOnly || expired || mismatch || weak || veryClose) level = 'high'; // http-only (şifresiz) = Yüksek
   else if (expiringSoon || !hstsPresent) level = 'medium';
 
-  const tlsSection = tlsBlock(host, tls);
+  const tlsSection = httpOnly
+    ? `## TLS SERTİFİKA DURUMU\n\n⚠️ Bu hedef **HTTPS (443) üzerinden yanıt vermedi**; geçerli bir TLS sertifikası bulunamadı. Site yalnızca **şifresiz HTTP** üzerinden yayında.\n\n`
+    : tlsBlock(host, tls);
   const protoSection =
     `## TLS PROTOKOL & CIPHER\n\n` +
     `- **Aktif protokol:** ${tls.protocol ?? 'tespit edilemedi'}${tls.protocol && /TLSv1\.[01]$/.test(tls.protocol) ? ' — ⚠️ zayıf' : ''}\n` +
@@ -55,6 +58,7 @@ export async function generateSslTlsReport(host: string): Promise<{ findings: st
       : `- **Durum:** Yok — Tarayıcıya HTTPS zorunluluğu bildirilmiyor; ilk isteklerde SSL-stripping/downgrade saldırısı riski var.\n\n`);
 
   const risks: string[] = [];
+  if (httpOnly) risks.push(`- **Yüksek — HTTPS desteklenmiyor (şifresiz iletişim):** Site HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor. Aynı ağdaki bir saldırgan dinleyebilir, oturum/şifre çalabilir veya içeriği değiştirebilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS.`);
   if (mismatch) risks.push(`- **Yüksek — Sertifika hostname uyuşmazlığı:** Sertifika ${host} adına düzenlenmemiş; ziyaretçiler tarayıcı güvenlik uyarısıyla karşılaşır.`);
   if (expired) risks.push('- **Yüksek — Sertifika süresi dolmuş:** Site tarayıcılarca güvensiz kabul edilir.');
   if (weak) risks.push(`- **Yüksek — Zayıf TLS sürümü:** ${tls.weakProtocols.join(', ')} destekleniyor. Bu sürümlerde bilinen zayıflıklar (POODLE/BEAST vb.) vardır; devre dışı bırakılmalı.`);
@@ -517,15 +521,34 @@ function detailOnly(findings: string): string {
 }
 
 export async function generateBundleSurfaceReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+  const o = await resolveOrigin(host);
+  // (DÜRÜSTLÜK — c durumu) HEDEFE HİÇ ULAŞILAMADI -> "İncelenemedi" raporu (ASLA "temiz"/"düşük").
+  if (!o.reachable) return unscannableSurfaceReport(host);
   // Her alan kendi kanitini toplar (bagimsiz, saf); paralel calistir, biri patlarsa null.
   const results = await Promise.all(BUNDLE_AREAS.map((a) => a.gen(host).catch(() => null)));
-  return combineSurfaceAreas(results);
+  return combineSurfaceAreas(results, { httpOnly: o.reachable && !o.httpsWorks });
+}
+
+// Hedefe ulaşılamadığında dürüst "İncelenemedi" raporu (pdf.ts assessBasit nötr amber rozet basar).
+function unscannableSurfaceReport(host: string): { findings: string; fixText: string } {
+  const findings =
+    `## YÖNETİCİ ÖZETİ\n\n` +
+    `- **Genel risk seviyesi: İncelenemedi** — hedefe (${host}) bağlanılamadığı için dış yüzey taraması yürütülemedi.\n` +
+    `- Bu sonuç sitenin GÜVENLİ olduğu anlamına GELMEZ; yalnızca kontrollerin çalıştırılamadığını gösterir.\n` +
+    `- **Önerilen ilk adım:** Alan adının yayında ve dışarıdan erişilebilir olduğunu doğrulayıp taramayı tekrarlayın.\n\n` +
+    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: İncelenemedi**\n\n` +
+    `Hedefin 443 (HTTPS) ve 80 (HTTP) portlarına bağlantı kurulamadı. 5 dış-yüzey alanının (TLS, güvenlik başlıkları, DNS/e-posta, CORS/çerez, CSP) hiçbiri veri toplayamadı. Bu rapor bir "temiz/güvenli" sonucu DEĞİLDİR; erişim sağlanınca yeniden taranmalıdır.\n`;
+  return { findings, fixText: '' };
 }
 
 // 5 alan sonucunu (bazilari null olabilir) TEK rapora birlestirir. Ayri fonksiyon: sentetik
 // verilerle (null-alan / worst-case) test edilebilsin diye. Hepsi null ise -> null (fallback).
-export function combineSurfaceAreas(results: Array<{ findings: string; fixText: string } | null>): { findings: string; fixText: string } | null {
+export function combineSurfaceAreas(
+  results: Array<{ findings: string; fixText: string } | null>,
+  opts?: { httpOnly?: boolean },
+): { findings: string; fixText: string } | null {
   if (results.every((r) => r === null)) return null; // hicbir alan veri toplayamadi -> fallback
+  const httpOnly = opts?.httpOnly ?? false;
 
   const levels: Array<Level | null> = results.map((r) => (r ? extractLevel(r.findings) : null));
   // WORST-CASE ALAN: en yuksek seviyeli alanin indexini bul — genel rozet + kutu/genel cumle
@@ -546,7 +569,13 @@ export function combineSurfaceAreas(results: Array<{ findings: string; fixText: 
   // zayif protokol veya DNS 2+ zayif) zaten baseWorst='high' verir, birikime gerek kalmaz.
   const mediumPlus = levels.filter((l) => l !== null && levelRank(l as Level) >= 1).length;
   const cumulative = baseWorst === 'medium-high' && mediumPlus >= 2;
-  const worst: Level = cumulative ? 'high' : baseWorst;
+  // (DÜRÜSTLÜK) http-only (şifresiz) = ciddi -> genel en az Yüksek. Kısmi tarama (2+ alan
+  // incelenemedi) -> ASLA "Düşük" gösterme (en az Orta), aksi halde yanlış-güvenli hissi verir.
+  const nullCount = results.filter((r) => r === null).length;
+  const partial = nullCount >= 2;
+  let worst: Level = cumulative ? 'high' : baseWorst;
+  if (httpOnly && levelRank(worst) < levelRank('high')) worst = 'high';
+  if (partial && worst === 'low') worst = 'medium';
 
   // --- YÖNETİCİ ÖZETİ (TEK, birlesik) ---
   const summary: string[] = [];
@@ -557,13 +586,16 @@ export function combineSurfaceAreas(results: Array<{ findings: string; fixText: 
         ? `- **Genel risk seviyesi: Yüksek** — 5 alan incelendi; birden fazla alan aynı anda risk taşıyor (en yükseği **${worstTitle}**${worstHl ? ` — ${worstHl}` : ''}).`
         : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — 5 alan incelendi; en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`,
   );
+  if (httpOnly) summary.push('- ⚠️ **HTTPS desteklenmiyor:** Hedef HTTPS (443) üzerinden yanıt vermedi; iletişim şifresiz (düz metin) taşınıyor. Tarama http:// üzerinden yürütüldü. Bu başlı başına ciddi bir bulgudur (aşağıda).');
   BUNDLE_AREAS.forEach((a, i) => {
     const r = results[i];
     const lv = levels[i];
-    if (!r || !lv) { summary.push(`- **${a.title}:** veri toplanamadı.`); return; }
+    // (c durumu) "veri toplanamadı" DÜRÜSTÇE ayrı: bu "temiz" DEĞİL, o alan İNCELENEMEDİ demektir.
+    if (!r || !lv) { summary.push(`- **${a.title}:** ⚠️ incelenemedi (bağlantı/sorgu başarısız) — "temiz" anlamına gelmez.`); return; }
     const hl = areaHeadline(r.findings);
     summary.push(`- **${a.title}:** ${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`);
   });
+  if (partial) summary.push(`- ⚠️ **Kısmi tarama:** ${nullCount}/5 alan incelenemedi; sonuç eksiktir, tam güvence vermez.`);
   summary.push('- **Önerilen ilk adım:** En yüksek riskli alandan başlayın; her bulgu için adım adım hazır komutlar "AI Çözüm Önerileri" bölümünde sunulur.');
 
   // GENEL DEĞERLENDİRME cumlesi worst-case ALANA ozgu (pdf.ts bunu ust kutuda da kullanir).
@@ -585,10 +617,16 @@ export function combineSurfaceAreas(results: Array<{ findings: string; fixText: 
     return `## ${a.title}\n\n${detailOnly(r.findings)}\n`;
   }).join('\n');
 
+  // (MASTER TABLO + ZAFİYET DAĞILIMI) https_missing ŞİDDET-KOLONLU tablo -> parseFindings sayar
+  // (bullet olan alan bölümleri sayılmaz). Böylece HTTPS eksikliği "temiz" değil GERÇEK bulgu olur.
+  const httpsFindingSection = httpOnly
+    ? `## TESPİT EDİLEN RİSKLER\n\n| Bulgu | Şiddet | Açıklama |\n|-------|--------|----------|\n| HTTPS desteklenmiyor (şifresiz iletişim) | Yüksek | Site HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir, oturum/şifre çalınabilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS. |\n\n`
+    : '';
+
   const findings =
     `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
-    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${genelSentence}\n\n` +
-    `${areaSections}`;
+    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${httpOnly ? 'Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz (düz metin) taşınıyor — öncelikli olarak geçerli bir TLS sertifikasıyla HTTPS’e geçilmelidir. Diğer alanlar http:// üzerinden incelenmiştir. ' : ''}${genelSentence}\n\n` +
+    `${httpsFindingSection}${areaSections}`;
 
   // --- AI ÇÖZÜM ÖNERİLERİ (5 alan TEK bolumde, alt-basliklarla) ---
   const fixParts = BUNDLE_AREAS.map((a, i) => {

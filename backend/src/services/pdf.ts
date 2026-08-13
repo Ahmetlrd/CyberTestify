@@ -163,6 +163,12 @@ export function assessBasit(
             : 'Ciddi/kritik bir güvenlik açığı öne çıkmadı; rapor yalnızca küçük iyileştirme fırsatlarını listeler.',
   });
 
+  // (0) TARANAMADI/İNCELENEMEDİ: hedefe hiç ulaşılamadıysa bu "temiz/düşük" DEĞİLDİR. Nötr bir
+  //     "İncelenemedi" rozeti göster (amber; ASLA yeşil-düşük). "Güvenli" imasından kaçınır.
+  if (/risk\s*seviyesi\s*[:：]\s*\**\s*incelenemedi|tarama\s*(yap[ıi]lamad|y[üu]r[üu]t[üu]lemed)/i.test(md.slice(0, 1500))) {
+    return { level: 'medium', label: 'İncelenemedi', sentence: 'Hedefe ulaşılamadığı için tarama yürütülemedi; bu sonuç sitenin GÜVENLİ olduğu anlamına GELMEZ. Erişim sağlanınca yeniden taranmalıdır.' };
+  }
+
   // (1) Rapor KOD-yazimi oldugundan GENEL DEĞERLENDİRME'deki ACIK "Risk Seviyesi: X"i oku —
   //     tek dogruluk kaynagi; rozet ile metin GARANTI tutarli. "Orta-Yüksek" ONCE eslesmeli.
   const m = md.slice(0, 1500).match(/risk\s*seviyesi\s*[:：]\s*\**\s*(orta[-\s]?y[uü]ksek|kr[iİ]t[iİ]k|y[uü]ksek|orta|d[uü][sş][uü]k)/i);
