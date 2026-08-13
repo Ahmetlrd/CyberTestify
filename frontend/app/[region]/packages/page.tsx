@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
+import { VISIBLE_REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 import { getDict, formatMoney } from '../../../config/i18n';
 import { JsonLd } from '../../../components/JsonLd';
 
@@ -15,7 +15,7 @@ type Bundle = {
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export function generateStaticParams() {
-  return REGION_CODES.map((region) => ({ region }));
+  return VISIBLE_REGION_CODES.map((region) => ({ region }));
 }
 
 export function generateMetadata({ params }: { params: { region: string } }) {

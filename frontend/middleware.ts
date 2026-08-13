@@ -1,12 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { DEFAULT_REGION, isRegionCode } from './config/regions';
+import { DEFAULT_REGION, isRegionCode, isVisibleRegion } from './config/regions';
 
 const YEAR = 60 * 60 * 24 * 365;
 
 /** Ziyaretçi için en uygun bölgeyi tespit et: cookie > coğrafi header > dil > tr. */
 function pickRegion(req: NextRequest): string {
+  // GEÇİCİ: Yalnızca GÖRÜNÜR bölgeler seçilebilir (şu an sadece tr). us/ae kapalı olduğu
+  // için cookie/geo/dil sinyalleri görünür değilse DEFAULT_REGION'a (tr) düşer.
   const cookie = req.cookies.get('region')?.value;
-  if (isRegionCode(cookie)) return cookie;
+  if (isVisibleRegion(cookie)) return cookie;
 
   // Vercel/Cloudflare gibi platformlar coğrafi konumu header olarak verir.
   const country = (
@@ -14,13 +16,12 @@ function pickRegion(req: NextRequest): string {
     req.headers.get('cf-ipcountry') ||
     ''
   ).toLowerCase();
-  if (isRegionCode(country)) return country;
+  if (isVisibleRegion(country)) return country;
 
-  // Dil sinyali: YALNIZCA Turkce tarayici -> tr; diger TUM diller -> us (EN + USD).
-  // (Geo-IP header'i bu altyapida (Caddy) gelmiyor; deterministik dil-tabanli kural.)
+  // Dil sinyali: Turkce tarayici -> tr; diger diller de (us/ae kapaliyken) tr'ye duser.
   const al = (req.headers.get('accept-language') ?? '').toLowerCase();
   if (al.includes('tr')) return 'tr';
-  if (al.trim()) return 'us'; // herhangi bir (Turkce olmayan) dil sinyali -> EN
+  if (al.trim() && isVisibleRegion('us')) return 'us'; // us acilinca otomatik geri gelir
 
   return DEFAULT_REGION;
 }
@@ -35,11 +36,16 @@ export function middleware(req: NextRequest) {
   headers.set('x-pathname', pathname);
   const pass = () => NextResponse.next({ request: { headers } });
 
-  // Zaten bölge önekli (/tr, /us, /ae): tercihi cookie'ye yaz, geç.
-  if (isRegionCode(seg)) {
+  // Bölge önekli GÖRÜNÜR rota (/tr): tercihi cookie'ye yaz, geç.
+  if (isVisibleRegion(seg)) {
     const res = pass();
     res.cookies.set('region', seg, { path: '/', maxAge: YEAR });
     return res;
+  }
+  // GEÇİCİ: Kapalı bölgeye doğrudan erişim (/us, /ae) -> aynı yolu görünür bölgeyle (tr) ver.
+  if (isRegionCode(seg)) {
+    const rest = pathname.slice(seg.length + 1); // "/us/packages" -> "/packages"
+    return NextResponse.redirect(new URL(`/${DEFAULT_REGION}${rest}`, req.url));
   }
 
   // Bölgeye özel (marketing) rotaları uygun bölgeye yönlendir.

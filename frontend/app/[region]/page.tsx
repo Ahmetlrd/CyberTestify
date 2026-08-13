@@ -3,13 +3,13 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { AutonomousSection } from '../../components/landing/AutonomousSection';
 import { JsonLd } from '../../components/JsonLd';
-import { REGION_CODES, isRegionCode, getRegion, type RegionConfig } from '../../config/regions';
+import { VISIBLE_REGION_CODES, isRegionCode, getRegion, type RegionConfig } from '../../config/regions';
 import { getDict, type Dict } from '../../config/i18n';
 
 const SITE = 'https://cybertestify.com';
 
 export function generateStaticParams() {
-  return REGION_CODES.map((region) => ({ region }));
+  return VISIBLE_REGION_CODES.map((region) => ({ region }));
 }
 
 // (SEO) Ana sayfa — bölgeye göre BENZERSİZ başlık/açıklama + canonical + OG (dürüst dil; "otonom pentest" YOK).
