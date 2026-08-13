@@ -200,6 +200,10 @@ export type Surface = {
   // (A+B+C) API/REST keşfi teşhis bilgisi (dürüstlük/log): spec bulundu mu, kaç yol işlendi.
   apiSpecFound?: boolean;
   apiSpecPaths?: number;
+  // (BÖLÜM B) Sayfa/script içinden çıkarılan API yol adayları (probe için) + kimlik-doğrulama-kilitli
+  // (401/403/auth-400) keşfedilen uç sayısı (şeffaflık: yüzey haritalandı ama kapsam dışı).
+  minedApiPaths?: string[];
+  apiAuthGated?: number;
 };
 
 // Ağ-trafiğinde dosya-yükleme uç noktası işareti: path'te upload/file/avatar/image/attachment vb.
@@ -315,7 +319,9 @@ async function crawlSurface(host: string): Promise<Surface> {
     if (!massAssignForm) massAssignForm = discoverMassAssignForm(host, pg.html);
     const df = discoverDomFormFields(pg.html); if (df) { const k = df.fields.join(','); if (!seenDf.has(k)) { seenDf.add(k); domForms.push({ url: pg.url, fields: df.fields, interesting: df.interesting }); } }
   }
-  return { ok: true, method: 'static', pagesScanned: pages.length, urlsFetched, jsRendered, homeHtml: home.html, homeHeaders: home.headers, inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [], apiReads: [], domForms: domForms.slice(0, 10) };
+  // (BÖLÜM B-2) Tüm taranan sayfalardan API yol adaylarını çıkar (probe'u mergeApiSurface yapar).
+  const minedApiPaths = [...new Set(pages.flatMap((pg) => mineApiPaths(pg.html)))].slice(0, 12);
+  return { ok: true, method: 'static', pagesScanned: pages.length, urlsFetched, jsRendered, homeHtml: home.html, homeHeaders: home.headers, inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [], apiReads: [], domForms: domForms.slice(0, 10), minedApiPaths };
 }
 
 // ======================================================================================
@@ -512,7 +518,8 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
       }
     }
 
-    return { ok: true, method: 'headless', pagesScanned: pages.length, urlsFetched: seenUrl.size, jsRendered: true, homeHtml, homeHeaders: new Map(), inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [...apiWrites].slice(0, 20), apiReads: [...apiReads].slice(0, 30), domForms: domForms.slice(0, 10) };
+    const minedApiPaths = [...new Set([homeHtml, ...pages.map((p) => p.html)].flatMap((h) => mineApiPaths(h)))].slice(0, 12);
+    return { ok: true, method: 'headless', pagesScanned: pages.length, urlsFetched: seenUrl.size, jsRendered: true, homeHtml, homeHeaders: new Map(), inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [...apiWrites].slice(0, 20), apiReads: [...apiReads].slice(0, 30), domForms: domForms.slice(0, 10), minedApiPaths };
   } catch {
     return null;
   } finally {
@@ -572,7 +579,23 @@ function isCollectionPath(pathname: string): boolean {
   const segs = pathname.replace(/\/+$/, '').replace(/\/\d{1,9}$/, '').split('/').filter(Boolean);
   return segs.length >= 1 && COLLECTION_LAST_SEG_RE.test(segs[segs.length - 1]);
 }
-async function collectApiSurface(host: string, session?: AuthSession): Promise<{ inputs: InputPoint[]; idEndpoints: Surface['idEndpoints']; specFound: boolean; specPaths: number }> {
+// (BÖLÜM B) Sayfa HTML'i + inline <script> metninden API yol ADAYLARINI çıkar (SALT-OKUNUR; JS
+// ÇALIŞTIRILMAZ). fetch()/axios/url: string literalleri + /rest//api//v1/ önekli yollar. Template
+// placeholder ({id}, :id, ${...}) ve asset yolları elenir. Yalnız keşif adayı üretir.
+const API_MINE_RE = /["'`](\/(?:rest|api|v\d+|graphql|products?|users?|orders?|accounts?|customers?|items?|invoices?|categories|vendors?)[\w/.-]*)["'`]/gi;
+function mineApiPaths(html: string): string[] {
+  if (!html) return [];
+  const found = new Set<string>();
+  for (const m of html.matchAll(API_MINE_RE)) {
+    let p = m[1];
+    if (/[{}]|:[a-zA-Z]|\$\{|\*|\s/.test(p)) continue;        // template/placeholder ele
+    try { if (CRAWL_ASSET_RE.test(new URL(p, 'http://x').pathname)) continue; } catch { continue; }
+    p = p.replace(/[?#].*$/, '').replace(/\/+$/, '');          // query/fragment/trailing slash at
+    if (p.length > 1 && p.length < 80) found.add(p);
+  }
+  return [...found].slice(0, 12);
+}
+async function collectApiSurface(host: string, session?: AuthSession, minedPaths: string[] = []): Promise<{ inputs: InputPoint[]; idEndpoints: Surface['idEndpoints']; specFound: boolean; specPaths: number; authGated: number }> {
   const origin = cachedOriginUrl(host);
   const ctx = new ProbeCtx();
   if (session) ctx.authHeaders = applyAuthHeaders({}, session);
@@ -613,20 +636,27 @@ async function collectApiSurface(host: string, session?: AuthSession): Promise<{
     }
   }
 
-  // --- A+C) Bilinen REST koleksiyon yollarını GET dene; 200 + JSON ise ID-türetme girdisi yap ---
-  for (const p of REST_API_PROBE_PATHS) {
-    if (ctx.stopped || inputs.length + idEndpoints.length >= API_SEED_MAX) break;
+  // --- A+C) Bilinen REST + (B-2) sayfadan çıkarılan koleksiyon yollarını GET dene ---
+  // 200 + JSON -> ID-türetme girdisi (C). 401/403/auth-400 -> "kimlik-doğrulama-kilitli yüzey"
+  // sayılır (B-3 şeffaflık: keşfedildi ama unauth kapsam dışı). Hepsi YALNIZ GET.
+  let authGated = 0; const seenProbe = new Set<string>();
+  const probePaths = [...REST_API_PROBE_PATHS, ...minedPaths].filter((p) => { const k = p.replace(/\/+$/, ''); if (seenProbe.has(k)) return false; seenProbe.add(k); return true; }).slice(0, 20);
+  for (const p of probePaths) {
+    if (ctx.stopped) break;
     const r = await ctx.fetchOnce(origin + p);
-    if (!r || r.status !== 200) continue;
-    if (safeJsonParse(r.text) === null) continue;                          // yalnız JSON dizi/obje döndürenler
+    if (!r || r.status === 0) continue;
+    // (B-3) auth-duvarı: 401/403 veya 400 + kimlik-doğrulama imalı gövde -> keşfedildi, kapsam dışı.
+    if (r.status === 401 || r.status === 403 || (r.status === 400 && /auth|yetki|token|credential|unauthor|kimlik/i.test(r.text.slice(0, 200)))) { authGated++; continue; }
+    if (inputs.length + idEndpoints.length >= API_SEED_MAX) continue;
+    if (r.status !== 200 || safeJsonParse(r.text) === null) continue;      // yalnız 200 + JSON dizi/obje
     if (isCollectionPath(p)) addId(origin + p.replace(/\/+$/, '') + '/1', 1);
   }
 
-  return { inputs: inputs.slice(0, API_SEED_MAX), idEndpoints: idEndpoints.slice(0, API_SEED_MAX), specFound, specPaths };
+  return { inputs: inputs.slice(0, API_SEED_MAX), idEndpoints: idEndpoints.slice(0, API_SEED_MAX), specFound, specPaths, authGated };
 }
 // API keşfini mevcut yüzeye BİRLEŞTİR (dedup). Mevcut input/idEndpoint'ler korunur; yalnız YENİ eklenir.
 async function mergeApiSurface(surf: Surface, host: string, session?: AuthSession): Promise<Surface> {
-  const api = await collectApiSurface(host, session).catch(() => null);
+  const api = await collectApiSurface(host, session, surf.minedApiPaths ?? []).catch(() => null);
   if (!api) return surf;
   const inK = (i: InputPoint) => `${i.method} ${i.action} ${i.param}`;
   const seenIn = new Set(surf.inputs.map(inK));
@@ -634,7 +664,7 @@ async function mergeApiSurface(surf: Surface, host: string, session?: AuthSessio
   const idK = (e: Surface['idEndpoints'][number]) => { try { const u = new URL(e.url); return `${e.kind}:${u.origin}${u.pathname.replace(/\/\d{1,9}\/?$/, '')}`; } catch { return e.url; } };
   const seenId = new Set(surf.idEndpoints.map(idK));
   for (const e of api.idEndpoints) { const k = idK(e); if (!seenId.has(k)) { seenId.add(k); surf.idEndpoints.push(e); } }
-  surf.apiSpecFound = api.specFound; surf.apiSpecPaths = api.specPaths;
+  surf.apiSpecFound = api.specFound; surf.apiSpecPaths = api.specPaths; surf.apiAuthGated = api.authGated;
   return surf;
 }
 
@@ -815,6 +845,7 @@ const SQLI_ERROR_PAYLOADS = ["'", '"', "' OR '1'='1", "')", "';"];
 const XSS_MARKER = 'cxt9137xmark';
 const XSS_PAYLOADS = [`${XSS_MARKER}"><cxmark>`, `${XSS_MARKER}'><cxmark>`, `${XSS_MARKER}" cxa=x`, `${XSS_MARKER}');cx//`];
 const INJ_MAX_INPUTS = 10; // API-tabanli input'lar eklendigi icin arttirildi
+const INJ_PATH_MAX = 6;    // (BÖLÜM B) test edilecek path-ID uc noktasi ust siniri
 
 export async function collectInjectionEvidence(host: string, session?: AuthSession): Promise<InjEvidence> {
   const surf = await discoverSurface(host, session);
@@ -876,9 +907,34 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
     }
   }
 
+  // --- (BÖLÜM B) PATH-ID hata-tabanlı SQLi: REST/Swagger keşfiyle bulunan path uçlarında (ör.
+  // /products/1) sayısal segmente zararsız tek tırnak eklenip yanıtta DB hata imzası aranır. YALNIZ
+  // GET; veri değişmez. Query/form input'ları ZATEN yukarıda test edildi -> path uçları burada.
+  const pathEps = surf.idEndpoints.filter((e) => e.kind === 'path').slice(0, INJ_PATH_MAX);
+  let pathTested = 0;
+  for (const ep of pathEps) {
+    if (ctx.stopped) break;
+    pathTested++;
+    const label = `GET ${(() => { try { return new URL(ep.url).pathname; } catch { return ep.url; } })()} [path-id]`;
+    let hit = false;
+    for (const q of ["'", "')", "' AND '1'='1"]) {
+      if (ctx.stopped || hit) break;
+      payloads++;
+      let injUrl: string;
+      try { const u = new URL(ep.url); u.pathname = u.pathname.replace(/(\d{1,9})(\/?)$/, `$1${q}$2`); injUrl = u.toString(); } catch { continue; }
+      const r = await ctx.fetchOnce(injUrl);
+      if (r && SQL_ERROR_RE.test(r.text)) {
+        hit = true;
+        const sig = r.text.match(SQL_ERROR_RE)?.[0] ?? 'SQL hata imzası';
+        findings.push({ inputPoint: label, type: 'SQLi', technique: 'error-based', evidence: `Path parametresine zararsız tek tırnak ("${q}") eklendiğinde yanıtta veritabanı hata imzası görüldü: "${sig.slice(0, 60)}"`, severity: 'high', confidence: 'high' });
+      }
+    }
+  }
+
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!inputs.length) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada test edilebilir GET parametresi veya form alanı bulunamadı (giriş noktası yok).` + spaHint(surf));
-  return { ok: true, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: surf.pagesScanned, inputsFound: inputs.length, inputsTested: tested, probesSent: ctx.sent, payloadsSent: payloads, findings, stopped: ctx.stopped, notes };
+  const totalTestable = inputs.length + pathEps.length;
+  if (!totalTestable) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada test edilebilir GET parametresi, form alanı veya path uç noktası bulunamadı (giriş noktası yok).` + spaHint(surf));
+  return { ok: true, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: surf.pagesScanned, inputsFound: totalTestable, inputsTested: tested + pathTested, probesSent: ctx.sent, payloadsSent: payloads, findings, stopped: ctx.stopped, notes };
 }
 
 // ======================================================================================

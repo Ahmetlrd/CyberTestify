@@ -314,6 +314,15 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
   summary.push(
     `- **Kapsam dürüstlüğü:** Bu paket kimlik doğrulaması olmadan (login yapılmadan) çalışır. Login gerektiren derin IDOR, iş mantığı ve yetki yükseltme senaryoları bu paketin kapsamı dışındadır. ${strongest}`,
   );
+  // (BÖLÜM B) API yüzeyi şeffaflığı: spec bulundu mu + keşfedilen ama kimlik-doğrulama-kilitli uç sayısı.
+  const apiSpecN = surf.apiSpecFound ? surf.apiSpecPaths ?? 0 : 0;
+  const apiGatedN = surf.apiAuthGated ?? 0;
+  if (apiSpecN > 0 || apiGatedN > 0) {
+    const parts: string[] = [];
+    if (apiSpecN > 0) parts.push(`OpenAPI/Swagger şeması bulundu ve **${apiSpecN}** uç noktası keşif kapsamına alındı`);
+    if (apiGatedN > 0) parts.push(`**${apiGatedN}** API uç noktası keşfedildi ancak **kimlik doğrulama gerektiriyor** (401/403) — kimlik-doğrulamalı derin test bu paketin kapsamı dışında olduğundan probe edilmedi (Tam Kapsamlı Pentest önerilir)`);
+    summary.push(`- **API saldırı yüzeyi:** ${parts.join('; ')}.`);
+  }
   ACTIVE_BUNDLE_MEMBERS.forEach((m, i) => {
     const r = runs[i]; const lv = levels[i];
     if (!r || !r.rep || !lv) { summary.push(`- **${m.title}:** veri toplanamadı (hedefe ulaşılamadı).`); return; }

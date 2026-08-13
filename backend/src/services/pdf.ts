@@ -278,7 +278,17 @@ function normSev(s: string): Sev | null {
   return null;
 }
 function stripMd(s: string): string {
-  return s.replace(/`([^`]*)`/g, '$1').replace(/\*\*([^*]*)\*\*/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_]/g, '').trim();
+  // (BÖLÜM A) Altçizgi düzeltmesi: `_` YALNIZ gerçek markdown italik işareti (kelime-sınırlı `_söz_`)
+  // iken temizlenir. Teknik terim/değişken içindeki intra-word `_` (ör. expose_php, X_Frame_Options,
+  // snake_case) KORUNUR — aksi halde "exposephp" gibi yanlış render oluşuyordu.
+  return s
+    .replace(/`([^`]*)`/g, '$1')                                  // inline code
+    .replace(/\*\*([^*]*)\*\*/g, '$1')                            // bold
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')                      // link -> metin
+    .replace(/\*([^*\n]+?)\*/g, '$1')                             // italik *söz*
+    .replace(/(^|[^\w`])_([^_\n]+?)_(?=[^\w`]|$)/g, '$1$2')       // italik _söz_ (SADECE kelime-sınırlı)
+    .replace(/\*/g, '')                                           // artık * temizle
+    .trim();
 }
 
 // (MÜŞTERİ-GÖRÜNÜR JARGON) "PentAGI" iç kod adı HİÇBİR müşteri-görünür yerde geçmemeli — konumlandırma
