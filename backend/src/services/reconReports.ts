@@ -450,24 +450,32 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
   // Birikimli risk (surface ile tutarli): en yuksek 'Orta-Yüksek' iken 2+ alan Orta+ ise -> Yüksek.
   const mediumPlus = available.filter((a) => levelRank(a.level) >= 1).length;
   const cumulative = baseWorst === 'medium-high' && mediumPlus >= 2;
-  let worst: Level = cumulative ? 'high' : baseWorst;
-  if (httpOnly && levelRank(worst) < 3) worst = 'high'; // http-only (şifresiz) = ciddi
+  const areaLevel: Level = cumulative ? 'high' : baseWorst;
+  // (HALÜSİNASYON GUARD) https_missing (Yüksek) 3 keşif ALANININ (subdomain/API/CMS) hiçbirine ait
+  // DEĞİLDİR — ayrı, bağımsız kontroldür. Eğer genel seviyeyi yükselten etken buysa, "en yüksek risk
+  // [alan] alanında" cümlesi TEMİZ bir alanı yüksek riskin kaynağıymış gibi göstermemeli.
+  const worstIsHttps = httpOnly && levelRank(areaLevel) < 3;
+  const worst: Level = worstIsHttps ? 'high' : areaLevel;
   const scannedNote = unavailableCount ? ` (${unavailableCount} alanda veri kaynağına ulaşılamadı)` : '';
 
   const summary: string[] = [];
   summary.push(
     worst === 'low'
       ? `- **Genel risk seviyesi: Düşük** — keşif yüzeyiniz ${available.length} alanda incelendi${scannedNote}; devralınabilir alt domain, açık hassas API veya sürümü kapsayan bilinen yüksek CVE öne çıkmadı. Dışarıdan görünen yüzeyiniz şu an için dar ve kontrollü görünüyor.`
-      : cumulative
-        ? `- **Genel risk seviyesi: Yüksek** — ${available.length} alan incelendi${scannedNote}; birden fazla alan aynı anda risk taşıyor (en yükseği **${worstArea.title}** — ${worstArea.headline}).`
-        : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — ${available.length} alan incelendi${scannedNote}; en yüksek risk **${worstArea.title}** alanında (${worstArea.headline}).`,
+      : worstIsHttps
+        ? `- **Genel risk seviyesi: Yüksek** — ${available.length} alan incelendi${scannedNote}; en yüksek risk **HTTPS/TLS yapılandırmasında** (HTTPS desteklenmiyor — şifresiz iletişim). Keşif alanlarının (alt domain, API, CMS) en yükseği **${worstArea.title}** (${RISK_WORD[worstArea.level]}); bu alanlarda öne çıkan ayrı bir risk yok.`
+        : cumulative
+          ? `- **Genel risk seviyesi: Yüksek** — ${available.length} alan incelendi${scannedNote}; birden fazla alan aynı anda risk taşıyor (en yükseği **${worstArea.title}** — ${worstArea.headline}).`
+          : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — ${available.length} alan incelendi${scannedNote}; en yüksek risk **${worstArea.title}** alanında (${worstArea.headline}).`,
   );
   if (httpOnly) summary.push('- ⚠️ **HTTPS desteklenmiyor:** Hedef HTTPS (443) üzerinden yanıt vermedi; keşif http:// üzerinden yürütüldü. Şifresiz iletişim başlı başına ciddi bir bulgudur (aşağıda).');
   for (const a of areas) summary.push(a.dataUnavailable ? `- **${a.title}:** ⚠️ incelenemedi (veri kaynağına ulaşılamadı) — "temiz" anlamına gelmez` : `- **${a.title}:** ${RISK_WORD[a.level]} — ${a.headline}`);
   summary.push('- **Önerilen ilk adım:** En yüksek riskli alandan başlayın; her bulgu için adım adım hazır çözümler "AI Çözüm Önerileri" bölümünde sunulur.');
 
   const genelSentence =
-    cumulative
+    worstIsHttps
+      ? `Keşif alanlarında (alt domain devralma, açık API, bilinen CVE) öne çıkan bir risk tespit edilmedi; genel değerlendirmeyi Yüksek'e taşıyan etken **şifresiz iletişimdir** (HTTPS desteklenmiyor — yukarıda). Aşağıda her alan ayrı ayrı raporlanmıştır.`
+      : cumulative
       ? `Birden fazla keşif alanı aynı anda risk taşıyor (en yükseği **${worstArea.title}** — ${worstArea.headline}); birikimli risk nedeniyle genel değerlendirme Yüksek. Aşağıda her alan ayrı ayrı raporlanmıştır.`
       : worst === 'high'
         ? `En yüksek risk **${worstArea.title}** alanında (${worstArea.headline}) tespit edildi; öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`

@@ -12,6 +12,7 @@
 import tls from 'node:tls';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
 import { resolveOrigin } from './surfaceEvidence.js';
+import { detectOutdatedSoftware } from './techEol.js';
 
 const FETCH_TIMEOUT_MS = 9000;
 const TLS_TIMEOUT_MS = 8000;
@@ -223,7 +224,12 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
     if (!ev.headers.has(row.hdr)) absent.add(k);
   }
   // http-only (şifresiz iletişim) TEK BAŞINA ciddi bir bulgudur -> genel risk en az Yüksek.
-  const level = httpOnly ? 'high' : riskLevel(absent, ev.tls);
+  // (HATA 4) EOL/eski yazılım imzası -> GERÇEK bulgu (bilgi metni değil). Sürüm imzasından türer.
+  const eolRisks = detectOutdatedSoftware(tech);
+  const eolRank = eolRisks.some((r) => r.sev === 'Yüksek') ? 2 : eolRisks.some((r) => r.sev === 'Orta') ? 1 : 0;
+  const baseLevel = httpOnly ? 'high' : riskLevel(absent, ev.tls);
+  const level: 'low' | 'medium' | 'high' =
+    eolRank > ({ low: 0, medium: 1, high: 2 } as const)[baseLevel] ? (eolRank === 2 ? 'high' : 'medium') : baseLevel;
   const missingSec = SEC_KEYS.filter((k) => absent.has(k)).map((k) => HEADER_ROWS.find((r) => r.key === k)!.header);
 
   // Tablo
@@ -268,6 +274,7 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
   if (httpOnly) risks.push({ bulgu: 'HTTPS desteklenmiyor (şifresiz iletişim)', sev: 'Yüksek', aciklama: `Site HTTPS'e yanıt vermiyor; sayfaya gelen/giden tüm trafik şifresiz (düz metin) taşınıyor — aynı ağdaki bir saldırgan trafiği dinleyebilir, oturum/şifre çalabilir veya içeriği değiştirebilir. Tarama http:// üzerinden yürütüldü.` });
   if (tlsInf.hostnameMatch === false) risks.push({ bulgu: 'TLS hostname uyuşmazlığı', sev: 'Yüksek', aciklama: `Sertifika ${hostname} adına düzenlenmemiş; ziyaretçiler tarayıcı güvenlik uyarısıyla karşılaşabilir ve siteye güven azalır.` });
   if (tlsInf.daysLeft != null && tlsInf.daysLeft < 0) risks.push({ bulgu: 'TLS sertifikası süresi dolmuş', sev: 'Yüksek', aciklama: 'Site tarayıcılarca güvensiz kabul edilir; ziyaretçi kaybına yol açar.' });
+  for (const e of eolRisks) risks.push({ bulgu: e.bulgu, sev: e.sev, aciklama: e.aciklama });
   const critList: string[] = missingSec.filter((h) => h === 'Content-Security-Policy' || h === 'X-Frame-Options');
   if (critList.length) {
     const spaNote = isSpa && critList.includes('Content-Security-Policy') ? ' Site JavaScript ağırlıklı bir SPA olduğundan CSP eksikliği XSS etkisini büyütür; önceliklendirilmesi önerilir.' : '';
@@ -283,14 +290,18 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
 
   // Yonetici ozeti
   const tlsProblem = tlsInf.hostnameMatch === false ? 'TLS sertifikası bu alan adıyla eşleşmiyor' : tlsInf.daysLeft != null && tlsInf.daysLeft < 0 ? 'TLS sertifikasının süresi dolmuş' : '';
+  // EOL, seviyeyi sürükleyen etkense (TLS/başlık sorunu yokken) badge gerekçesi EOL'i söylemeli.
+  const eolDrives = eolRank > ({ low: 0, medium: 1, high: 2 } as const)[baseLevel];
   const riskReason =
     httpOnly
       ? 'site HTTPS desteklemiyor; iletişim şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir. Öncelikli olarak HTTPS’e geçilmelidir.'
-      : level === 'high'
-        ? `${tlsProblem} — ziyaretçilere doğrudan tarayıcı güvenlik uyarısı gösterebilir.`
-        : level === 'medium'
-          ? 'öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri var; taşıma güvenliği (TLS) sağlam.'
-          : 'ciddi/kritik bir açık öne çıkmadı; yalnızca küçük iyileştirme fırsatları var.';
+      : eolDrives
+        ? 'eski/desteksiz yazılım sürümü ifşa ediliyor (aşağıdaki bulgu tablosunda); bilinen güvenlik açıkları yamasız kalabilir — güncel, desteklenen sürüme yükseltilmelidir.'
+        : level === 'high'
+          ? (tlsProblem ? `${tlsProblem} — ziyaretçilere doğrudan tarayıcı güvenlik uyarısı gösterebilir.` : 'öncelikli giderilmesi gereken yüksek etkili bir bulgu tespit edildi (aşağıda).')
+          : level === 'medium'
+            ? 'öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri var; taşıma güvenliği (TLS) sağlam.'
+            : 'ciddi/kritik bir açık öne çıkmadı; yalnızca küçük iyileştirme fırsatları var.';
   const bullets: string[] = [];
   bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${riskReason}`);
   if (httpOnly) bullets.push('- ⚠️ Bu hedef HTTPS (443) üzerinden yanıt vermedi; tarama **http:// üzerinden** yürütüldü. HTTPS eksikliği başlı başına bir bulgudur (aşağıda).');

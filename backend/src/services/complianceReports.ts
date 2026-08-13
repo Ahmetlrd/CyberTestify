@@ -428,7 +428,10 @@ function buildComplianceFix(ev: ComplianceEvidence, framework: string, o: { tlsB
   if (o.versionBanner) parts.push('### Sürüm ifşasını kapatın\n\nNginx: `server_tokens off;`; uygulama yanıtlarından `X-Powered-By`/`X-AspNet-Version` başlıklarını kaldırın; `<meta generator>` etiketini gizleyin.');
   if (o.exposed.length) parts.push(`### Açıkta kalan dosyalar\n\nErişimi engelleyin: ${o.exposed.map((p) => `\`${p}\``).join(', ')}.\n\n\`\`\`nginx\nlocation ~ /\\.(git|env|ht) { deny all; return 404; }\n\`\`\``);
   if (o.policyMissing) parts.push('### Politika sayfası\n\nErişilebilir bir gizlilik/güvenlik politikası sayfası yayınlayın.');
-  for (const e of o.extra ?? []) parts.push(`### ${e.split(/[.:]/)[0].slice(0, 60)}\n\n${e}`);
+  // (KESİK+TEKRAR GUARD) Eskiden her 'extra' için başlık = cümlenin ilk 60 karakteri (truncate) +
+  // hemen altında TAM cümle basılıyordu -> aynı öneri kesik+tam iki kez görünüyordu. Artık tek
+  // başlık altında, her öneri TEK ve TAM cümle olarak madde halinde.
+  if (o.extra?.length) parts.push(`### Ek öneriler\n\n${o.extra.map((e) => `- ${e}`).join('\n')}`);
   if (parts.length === 1) parts.push(`Dışarıdan gözlemlenen belirgin bir ${framework} eksikliği bulunmadı; mevcut yapılandırmayı sürdürün.`);
   return parts.join('\n\n');
 }

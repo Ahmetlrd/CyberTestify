@@ -143,7 +143,13 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   { re: /logout|[çc]ık[ıi][şs].*oturum|oturum ge[çc]ersiz/i, type: 'weak_logout' },
   { re: /session.?fixation|oturum sabit/i, type: 'session_fixation' },
   { re: /\bjwt\b|token b[üu]t[üu]nl[üu]k|alg\s*=\s*none/i, type: 'jwt' },
-  { re: /sql|sqli/i, type: 'sqli' },
+  // (HALÜSİNASYON GUARD) Açıkta dosya/kaynak (db.sql, dump.sql, .git, .env...) PASİF bir sızıntıdır;
+  // aktif-istismar imalı 'sqli/rce' kategorilerinden ÖNCE eşleşmeli. Yoksa dosya yolundaki "sql"
+  // kelimesi sqli'ye düşer ("SQL Enjeksiyon göstergesi" halüsinasyonu). CWE-538/200 ailesi.
+  { re: /hassas dosya|a[çc][ıi]kta.*dosya|eri[şs]ilebilir.*dosya|exposed file|\.git\b|\.env\b|\.sql\b|\.bak\b|\.old\b|\.zip\b|\bdump\b|\byedek\b|backup/i, type: 'exposed_files' },
+  // sqli SADECE gerçek enjeksiyon dili ile (aktif prob) — bare "sql" (dosya adı, mysql/postgresql,
+  // "db.sql") ASLA eşleşmesin. Aktif Doğrulama'nın "SQLi" (Tür kolonu) bulguları \bsqli\b ile geçer.
+  { re: /\bsqli\b|sql\s*enjeksiyon|sql\s*injection|sorguya\s*s[ıi]z|veritaban[ıi].*sorgu.*s[ıi]z/i, type: 'sqli' },
   // "X-XSS-Protection" bir GÜVENLİK BAŞLIĞI adıdır, XSS zafiyeti DEĞİL -> xss'e eşleşmesin
   // (negatif lookahead: xss'ten hemen sonra "-protection" gelirse eşleşme). "yansıyan XSS" eşleşir.
   { re: /\bxss\b(?!\s*[-–]?\s*protection)|cross.?site scripting|yans[ıi]yan/i, type: 'xss' },
@@ -167,8 +173,7 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   { re: /staging|hazırlık ortam|test ortam/i, type: 'staging_exposure' },
   { re: /takeover|devral|dangling/i, type: 'subdomain_takeover' },
   { re: /bak[ıi]m.?d[ıi][şs][ıi]|eski.*alt alan|unutulmu[şs]|\bold\b.*alt/i, type: 'stale_subdomain' },
-  { re: /cms|wordpress|eklenti|\bcve\b|s[üu]r[üu]m.*eski|outdated|g[üu]ncel olmayan/i, type: 'outdated_component' },
-  { re: /hassas dosya|a[çc][ıi]kta.*dosya|\.git|\.env|exposed file/i, type: 'exposed_files' },
+  { re: /cms|wordpress|eklenti|\bcve\b|s[üu]r[üu]m.*eski|outdated|g[üu]ncel olmayan|eol\b|desteksiz|desteklenmeyen/i, type: 'outdated_component' },
   { re: /\bspf\b/i, type: 'spf' },
   { re: /\bdmarc\b/i, type: 'dmarc' },
   { re: /\bdkim\b/i, type: 'dkim' },

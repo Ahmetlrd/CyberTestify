@@ -12,6 +12,7 @@ import {
   type TlsEvidence, type DnsEvidence,
 } from './surfaceEvidence.js';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
+import { detectOutdatedSoftware } from './techEol.js';
 
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
 type Level = 'low' | 'medium' | 'medium-high' | 'high';
@@ -133,9 +134,19 @@ export async function generateHeaderLeakReport(host: string): Promise<{ findings
   const missingCrit = missing.filter((h) => h.hdr === 'content-security-policy' || h.hdr === 'x-frame-options');
   const exposedHits = exposed.filter((e) => e.exposed);
 
+  // (HATA 4) EOL/eski yazılım imzası -> GERÇEK bulgu (sunucu/X-Powered-By/generator sürümünden).
+  const techStrings: string[] = [];
+  const srvHdr = http.headers.get('server'); if (srvHdr) techStrings.push(`Sunucu: ${srvHdr}`);
+  const xpbHdr = http.headers.get('x-powered-by'); if (xpbHdr) techStrings.push(`X-Powered-By: ${xpbHdr}`);
+  const genMeta = http.html?.match(/<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)/i)?.[1];
+  if (genMeta) techStrings.push(genMeta);
+  const eolRisks = detectOutdatedSoftware(techStrings);
+  const eolHigh = eolRisks.some((r) => r.sev === 'Yüksek');
+  const eolMed = eolRisks.some((r) => r.sev === 'Orta');
+
   let level: Level = 'low';
-  if (exposedHits.length) level = 'high';
-  else if (missingCrit.length || missing.length >= 3) level = 'medium';
+  if (exposedHits.length || eolHigh) level = 'high';
+  else if (missingCrit.length || missing.length >= 3 || eolMed) level = 'medium';
 
   const table =
     `## HTTP GÜVENLİK BAŞLIKLARI\n\n| Başlık | Durum | Açıklama |\n|--------|-------|----------|\n` +
@@ -152,22 +163,29 @@ export async function generateHeaderLeakReport(host: string): Promise<{ findings
 
   const risks: string[] = [];
   for (const e of exposedHits) risks.push(`- **Yüksek — Hassas dosya erişilebilir (\`${e.path}\`):** İçerik doğrulandı; yapılandırma/kaynak sızıntısı riski. Erişim derhal engellenmeli.`);
+  for (const e of eolRisks) risks.push(`- **${e.sev} — ${e.bulgu}:** ${e.aciklama}`);
   if (missingCrit.length) risks.push(`- **Orta — Kritik güvenlik başlıkları eksik (${missingCrit.map((h) => h.name).join(', ')}):** XSS/clickjacking’e karşı tarayıcı savunması zayıf.`);
   const otherMissing = missing.filter((h) => !missingCrit.includes(h));
   if (otherMissing.length) risks.push(`- **Orta — Ek başlıklar eksik (${otherMissing.map((h) => h.name).join(', ')}):** Savunma derinliği zayıf.`);
   if (!risks.length) risks.push('- Belirgin bir başlık/sızıntı sorunu öne çıkmadı.');
 
+  const highReason = exposedHits.length ? 'dışarıdan erişilebilir hassas dosya tespit edildi.' : 'eski/desteksiz yazılım sürümü ifşa ediliyor (aşağıda).';
+  const medReason = (missingCrit.length || missing.length >= 3) ? 'önemli güvenlik başlığı eksiklikleri var.' : 'güncel olmayan yazılım sürümü ifşa ediliyor (aşağıda).';
   const bullets: string[] = [];
-  bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'dışarıdan erişilebilir hassas dosya tespit edildi.' : level === 'medium' ? 'önemli güvenlik başlığı eksiklikleri var.' : 'ciddi bir sorun öne çıkmadı.'}`);
+  bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? highReason : level === 'medium' ? medReason : 'ciddi bir sorun öne çıkmadı.'}`);
   bullets.push(`- ${missing.length}/${SEC_HDRS.length} güvenlik başlığı eksik${missing.length ? `: ${missing.map((h) => h.name).join(', ')}` : ''}.`);
   bullets.push(`- Açıkta dosya: ${exposedHits.length ? `⚠️ ${exposedHits.map((e) => e.path).join(', ')}` : 'tespit edilmedi'}.`);
-  bullets.push('- **Önerilen ilk adım:** ' + (exposedHits.length ? 'Açıkta kalan dosyalara erişimi engelleyin ve ' : '') + 'eksik güvenlik başlıklarını ekleyin (hazır komutlar "AI Çözüm Önerileri" eklentisinde).');
+  if (eolRisks.length) bullets.push(`- ⚠️ Eski/desteksiz yazılım sürümü ifşası: ${eolRisks.map((e) => e.bulgu.replace(/^.*\(/, '(')).join(', ')}.`);
+  bullets.push('- **Önerilen ilk adım:** ' + (exposedHits.length ? 'Açıkta kalan dosyalara erişimi engelleyin ve ' : eolRisks.length ? 'İfşa edilen eski yazılımı güncel sürüme yükseltin ve ' : '') + 'eksik güvenlik başlıklarını ekleyin (hazır komutlar "AI Çözüm Önerileri" eklentisinde).');
 
+  const eolClause = eolRisks.length ? ` Ayrıca eski/desteksiz yazılım sürümü ifşa ediliyor (${eolRisks.map((e) => e.bulgu.replace(/^.*\(/, '(')).join(', ')}); güncel sürüme yükseltilmelidir.` : '';
   const genel =
     level === 'high'
-      ? 'Dışarıdan erişilebilen hassas bir dosya tespit edildi (içerik doğrulandı); öncelikli olarak erişimin engellenmesi gerekir. Ayrıca eksik güvenlik başlıkları savunmayı zayıflatıyor.'
+      ? (exposedHits.length
+          ? `Dışarıdan erişilebilen hassas bir dosya tespit edildi (içerik doğrulandı); öncelikli olarak erişimin engellenmesi gerekir.${eolClause} Ayrıca eksik güvenlik başlıkları savunmayı zayıflatıyor.`
+          : `Eski/desteksiz yazılım sürümü ifşa ediliyor; bilinen güvenlik açıkları yamasız kalabilir — öncelikli olarak güncel, desteklenen sürüme yükseltilmelidir.`)
       : level === 'medium'
-        ? 'Önemli güvenlik başlığı eksiklikleri var; hassas dosya sızıntısı tespit edilmedi. Eksik başlıklar düşük maliyetli sunucu ayarlarıyla kapatılabilir.'
+        ? `${(missingCrit.length || missing.length >= 3) ? 'Önemli güvenlik başlığı eksiklikleri var; hassas dosya sızıntısı tespit edilmedi. Eksik başlıklar düşük maliyetli sunucu ayarlarıyla kapatılabilir.' : 'Güncel olmayan bir yazılım sürümü ifşa ediliyor; desteklenen sürüme yükseltilmesi önerilir.'}${(missingCrit.length || missing.length >= 3) ? eolClause : ''}`
         : 'Güvenlik başlıkları büyük ölçüde mevcut ve dışarıdan erişilebilen hassas dosya bulunmadı.';
 
   const findings = assemble('Başlıklar', level, bullets, genel, `${table}${leakSection}## TESPİT EDİLEN RİSKLER\n\n${risksTable(risks)}\n`);
