@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { zodError } from '../httpErrors.js';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice, fixSuggestionListPrice, securityProfileFor, requiresTestCredentials, usesForeignAi } from '../services/scanPackages.js';
@@ -217,7 +218,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   }
 
   const parsed = createOrderSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
   const { domainId, packageKey, region } = parsed.data;
 
   const domain = await prisma.domain.findFirstOrThrow({
@@ -447,7 +448,7 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
   }
 
   const parsed = bundleOrderSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
   const { domainId, bundleKey, region } = parsed.data;
 
   const domain = await prisma.domain.findFirstOrThrow({ where: { id: domainId, customerId: req.customerId! } });
@@ -847,7 +848,7 @@ ordersRouter.post('/:orderId/invoice-request', requireAuth, async (req, res) => 
   if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı.' });
   if (!order.paidAt) return res.status(409).json({ error: 'Fatura talebi yalnızca ödemesi tamamlanmış siparişler için verilebilir.' });
   const parsed = invoiceSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
   const d = parsed.data;
   const data = {
     type: d.type,
@@ -885,7 +886,7 @@ ordersRouter.post('/:orderId/retry', requireAuth, async (req, res) => {
   if (order.attemptCount > 2) return res.status(409).json({ error: 'Bu tarama birden çok kez denendi. Lütfen iade talebinde bulunun.', tooManyAttempts: true });
 
   const parsed = retrySchema.safeParse(req.body ?? {});
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
 
   // Kimlik-doğrulamalı paket: yeni test hesabı bilgisi gerekir (eski tüketildi).
   if (requiresTestCredentials(order.package.key)) {

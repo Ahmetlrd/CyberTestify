@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { zodError } from '../httpErrors.js';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { getPackageDef, securityProfileFor } from '../services/scanPackages.js';
@@ -61,7 +62,7 @@ schedulesRouter.get('/', requireAuth, async (req, res) => {
 
 schedulesRouter.post('/', requireAuth, async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
   const { domainId, packageKey, intervalDays, runs, startAt, region } = parsed.data;
 
   // IS KURALI: haftaliktan sik tekrar YOK (maliyet + egress/concurrency yuku).

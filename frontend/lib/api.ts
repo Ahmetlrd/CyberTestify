@@ -6,6 +6,25 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// API hatasını her zaman TEMİZ, kullanıcı-dostu bir cümleye indirger — ham Zod objesini
+// ({fieldErrors,formErrors}) veya "[object Object]" ASLA gösterme (savunma katmanı; asıl temiz
+// mesaj backend httpErrors.zodError'dan gelir).
+function friendlyError(body: any, status: number): string {
+  const e = body?.error;
+  if (typeof e === 'string' && e.trim()) return e;
+  if (e && typeof e === 'object') {
+    const fe = (e as any).fieldErrors;
+    if (fe && typeof fe === 'object') {
+      for (const v of Object.values(fe)) if (Array.isArray(v) && v[0]) return String(v[0]);
+    }
+    if (Array.isArray((e as any).formErrors) && (e as any).formErrors[0]) return String((e as any).formErrors[0]);
+  }
+  if (typeof body?.message === 'string' && body.message.trim()) return body.message;
+  if (status === 401) return 'Oturumunuz sona ermiş görünüyor. Lütfen tekrar giriş yapın.';
+  if (status === 429) return 'Çok fazla deneme yapıldı. Lütfen biraz bekleyip tekrar deneyin.';
+  return 'İşlem şu an tamamlanamadı. Lütfen bilgileri kontrol edip tekrar deneyin.';
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -17,7 +36,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const msg = typeof body.error === 'string' ? body.error : body.error ? JSON.stringify(body.error) : `İstek başarısız: ${res.status}`;
+    const msg = friendlyError(body, res.status);
     const err = new Error(msg) as Error & { status?: number; emailUnverified?: boolean; needsCredentials?: boolean; tooManyAttempts?: boolean };
     err.status = res.status;
     if (body.emailUnverified) err.emailUnverified = true;   // (satin alma) e-posta dogrulama gerekli

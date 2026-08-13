@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { zodError } from '../httpErrors.js';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { decryptReport } from '../services/crypto.js';
@@ -20,7 +21,7 @@ const downloadSchema = z.object({ accessSecret: z.string().min(10) });
 // okunamamasini saglar.
 reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
   const parsed = downloadSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
 
   const report = await prisma.report.findFirstOrThrow({
     where: { orderId: req.params.orderId, order: { customerId: req.customerId! } },
@@ -151,7 +152,7 @@ reportsRouter.post('/:orderId/fix-suggestions/unlock', requireAuth, async (req, 
 // Cozum onerilerini indir — YALNIZCA unlock edilmisse + erisim sifresiyle.
 reportsRouter.post('/:orderId/fix-suggestions/download', requireAuth, async (req, res) => {
   const parsed = downloadSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
 
   const report = await prisma.report.findFirstOrThrow({
     where: { orderId: req.params.orderId, order: { customerId: req.customerId! } },

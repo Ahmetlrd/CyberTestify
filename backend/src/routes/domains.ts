@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { zodError } from '../httpErrors.js';
 import { prisma } from '../db.js';
 import {
   createDomainVerification,
@@ -50,7 +51,7 @@ domainsRouter.get('/', requireAuth, async (req, res) => {
 
 domainsRouter.post('/', requireAuth, async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
 
   const domain = await createDomainVerification(req.customerId!, parsed.data.hostname);
   // Zaten ekli VE doğrulaması geçerliyse: yeniden DNS doğrulatma; net "zaten var" bilgisi dön.

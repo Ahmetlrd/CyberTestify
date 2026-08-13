@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { zodError } from '../httpErrors.js';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -32,7 +33,7 @@ const registerSchema = credsSchema.extend({
 
 authRouter.post('/register', async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
   let customer;
@@ -71,7 +72,7 @@ authRouter.post('/register', async (req, res) => {
 
 authRouter.post('/login', async (req, res) => {
   const parsed = credsSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
 
   const customer = await prisma.customer.findUnique({ where: { email: parsed.data.email } });
   if (!customer || !(await bcrypt.compare(parsed.data.password, customer.passwordHash))) {

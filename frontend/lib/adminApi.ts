@@ -10,6 +10,18 @@ function adminHeaders(): Record<string, string> {
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
+// Hatayı her zaman TEMİZ bir cümleye indirger — ham Zod objesi / "[object Object]" gösterme.
+function friendlyAdminError(body: any, status: number, fallback: string): string {
+  const e = body?.error;
+  if (typeof e === 'string' && e.trim()) return e;
+  if (e && typeof e === 'object') {
+    const fe = (e as any).fieldErrors;
+    if (fe && typeof fe === 'object') for (const v of Object.values(fe)) if (Array.isArray(v) && v[0]) return String(v[0]);
+    if (Array.isArray((e as any).formErrors) && (e as any).formErrors[0]) return String((e as any).formErrors[0]);
+  }
+  return typeof body?.message === 'string' && body.message.trim() ? body.message : fallback;
+}
+
 async function areq<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -21,7 +33,7 @@ async function areq<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     const b = await res.json().catch(() => ({}));
-    throw new Error(b.error ? (typeof b.error === 'string' ? b.error : JSON.stringify(b.error)) : `İstek başarısız: ${res.status}`);
+    throw new Error(friendlyAdminError(b, res.status, 'İşlem şu an tamamlanamadı. Lütfen tekrar deneyin.'));
   }
   return res.json();
 }
@@ -58,7 +70,7 @@ export const adminApi = {
     }
     if (!res.ok) {
       const b = await res.json().catch(() => ({}));
-      throw new Error(b.error ? (typeof b.error === 'string' ? b.error : JSON.stringify(b.error)) : `Rapor alınamadı: ${res.status}`);
+      throw new Error(friendlyAdminError(b, res.status, 'Rapor şu an alınamadı. Lütfen tekrar deneyin.'));
     }
     return res.blob();
   },
