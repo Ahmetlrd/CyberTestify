@@ -13,7 +13,7 @@ import { initiateFixSuggestionPayment } from '../services/payment/iyzico.js';
 
 export const reportsRouter = Router();
 
-const downloadSchema = z.object({ accessSecret: z.string().min(10) });
+const downloadSchema = z.object({ accessSecret: z.string().min(10, 'Geçerli bir rapor erişim kodu girin.') });
 
 // Rapor indirme: musteri hem oturum acmis olmali (requireAuth) HEM DE
 // e-posta ile ayrica gonderilen tek seferlik erisim sifresini girmeli.

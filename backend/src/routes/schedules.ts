@@ -35,7 +35,7 @@ const createSchema = z.object({
     'autonomous_pentest',
   ]),
   intervalDays: z.number().int(),
-  runs: z.number().int().min(1).max(52), // pesin odenen tekrar sayisi (N)
+  runs: z.number({ invalid_type_error: 'Tekrar sayısı bir sayı olmalıdır.' }).int().min(1, 'Tekrar sayısı en az 1 olmalıdır.').max(52, 'Tekrar sayısı en fazla 52 olabilir.'), // pesin odenen tekrar sayisi (N)
   startAt: z.string().datetime().optional(), // ISO; ilk taramanin ILERI tarihi (yoksa hemen)
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
 });

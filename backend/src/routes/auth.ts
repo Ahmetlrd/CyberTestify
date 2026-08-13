@@ -22,7 +22,10 @@ async function issueEmailVerification(customerId: string, email: string): Promis
   await sendEmailVerification(email, code); // mailer no-throw
 }
 
-const credsSchema = z.object({ email: z.string().email(), password: z.string().min(8) });
+const credsSchema = z.object({
+  email: z.string().email('Geçerli bir e-posta adresi girin.'),
+  password: z.string().min(8, 'Şifre en az 8 karakter olmalıdır.'),
+});
 
 const registerSchema = credsSchema.extend({
   // Kullanim Kosullari + KVKK Aydinlatma metninin okundugunun teyidi (zorunlu).
@@ -87,8 +90,8 @@ authRouter.post('/login', async (req, res) => {
 // Her iki endpoint de '/auth' altinda oldugu icin authLimiter (rate-limit) korumasindadir
 // → brute-force / spam-mail engellenir. Enumeration korumasi: forgot HER ZAMAN 200 doner.
 
-const emailSchema = z.object({ email: z.string().email() });
-const resetSchema = z.object({ token: z.string().min(20), password: z.string().min(8) });
+const emailSchema = z.object({ email: z.string().email('Geçerli bir e-posta adresi girin.') });
+const resetSchema = z.object({ token: z.string().min(20, 'Sıfırlama bağlantısı geçersiz veya süresi dolmuş.'), password: z.string().min(8, 'Şifre en az 8 karakter olmalıdır.') });
 
 authRouter.post('/forgot-password', async (req, res) => {
   const parsed = emailSchema.safeParse(req.body);
@@ -136,7 +139,7 @@ authRouter.get('/me', requireAuth, async (req, res) => {
   res.json(c);
 });
 
-const codeSchema = z.object({ code: z.string().regex(/^\d{6}$/) });
+const codeSchema = z.object({ code: z.string().regex(/^\d{6}$/, '6 haneli doğrulama kodunu girin.') });
 
 authRouter.post('/verify-email', requireAuth, async (req, res) => {
   const parsed = codeSchema.safeParse(req.body);
