@@ -792,7 +792,9 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
       execMd = execMd.split('\n').filter((line) => {
         const bm = line.match(/^\s*[-*]\s+\*\*(.+?):\*\*/);
         if (!bm) return true; // madde değil -> tut
-        return /genel risk|kapsam|[öo]nerilen/.test(bm[1].toLocaleLowerCase('tr')); // yalnız üst-düzey madde tut
+        // yalnız üst-düzey madde tut (per-kontrol uzun listeyi at). "API saldırı yüzeyi" (Bölüm B —
+        // keşfedilen/auth-kilitli API uç sayısı) üst-düzey değer bilgisidir -> korunmalı.
+        return /genel risk|kapsam|[öo]nerilen|api sald/.test(bm[1].toLocaleLowerCase('tr'));
       }).join('\n');
     }
     const summaryBody = dedupeBlockquotes(md.render(execMd)) + (hasVuln ? buildPriorities(parsed!.rows, loc) : '');
