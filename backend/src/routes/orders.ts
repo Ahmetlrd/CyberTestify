@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice, fixSuggestionListPrice, securityProfileFor, requiresTestCredentials } from '../services/scanPackages.js';
+import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice, fixSuggestionListPrice, securityProfileFor, requiresTestCredentials, usesForeignAi } from '../services/scanPackages.js';
 import { validateConsentInput, activeTestScope, ACTIVE_TEST_CONSENT_VERSION, ACTIVE_TEST_RISK_ACK, hasValidActiveTestConsent } from '../services/activeTestConsent.js';
 import { storeTestCredential, hasTestCredential } from '../services/testCredentials.js';
 import { renderConsentPdf } from '../services/pdf.js';
@@ -56,6 +56,9 @@ ordersRouter.get('/packages', async (req, res) => {
           // (3) Ucretli "AI Cozum Onerileri" eklentisi fiyati + ustu-cizili anchor ("indirimli gibi").
           fixSuggestionPriceMinorUnit: fixSuggestionPrice(p),
           fixSuggestionListMinorUnit: fixSuggestionListPrice(p),
+          // (KVKK m.9) Bu paket yurt dışı AI'ya veri gönderiyor mu? Frontend m.9 açık rıza kutusunu
+          // yalnız true olanlarda gösterir/zorunlu kılar.
+          crossBorderAi: usesForeignAi(p.key),
           // "Yakında": listelenir ama satin ALINAMAZ (frontend CTA pasif + rozet).
           comingSoon: p.comingSoon ?? false,
           // SATIS MODELI: bundle-uyesi paketler tekil SATILAMAZ (basit_tarama HARIC). Frontend
@@ -101,6 +104,8 @@ ordersRouter.get('/bundles', async (req, res) => {
           ? memberInfo((b.selectableKeys ?? []).filter((k) => region === 'tr' || !b.trOnlyKeys?.includes(k)))
           : null,
         members: memberInfo(price.memberKeys),
+        // (KVKK m.9) Bundle kendisi ya da bir üyesi yurt dışı AI kullanıyorsa true.
+        crossBorderAi: usesForeignAi(b.key) || price.memberKeys.some((k) => usesForeignAi(k)),
         originalMinorUnit: price.originalMinorUnit,
         amountMinorUnit: price.amountMinorUnit,
         currency: price.currency,
@@ -181,10 +186,10 @@ const createOrderSchema = z.object({
   withdrawalWaived: z.literal(true, {
     errorMap: () => ({ message: 'Cayma hakki feragat beyani onaylanmalidir.' }),
   }),
-  // KVKK m.9 — yurt disi (Anthropic/ABD) veri aktarimina ACIK RIZA (ayri checkbox).
-  crossBorderTransfer: z.literal(true, {
-    errorMap: () => ({ message: 'Yurt disi veri aktarimina acik riza onaylanmalidir.' }),
-  }),
+  // KVKK m.9 — yurt disi AI aktarimina ACIK RIZA. Yalniz yurt disi AI kullanan paketlerde
+  // ZORUNLU (handler'da usesForeignAi ile denetlenir); deterministik paketlerde veri yurt
+  // disina gitmedigi icin bu riza GEREKMEZ (opsiyonel).
+  crossBorderTransfer: z.boolean().optional(),
   // Bolge (fiyat + para birimi). Yoksa tr.
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
   // (Is 2) true ise odeme yerine hesap kredisinden dus (yeterliyse). Yoksa normal odeme.
@@ -293,6 +298,12 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     });
   }
 
+  // (KVKK m.9) Yurt disi AI kullanan paketlerde acik riza ZORUNLU; diger paketlerde veri
+  // yurt disina gitmedigi icin GEREKMEZ (istenmez).
+  if (usesForeignAi(packageKey) && parsed.data.crossBorderTransfer !== true) {
+    return res.status(400).json({ error: 'Yurt disi veri aktarimina acik riza onaylanmalidir.' });
+  }
+
   // Bolgesel fiyat + para birimi (config-driven; bkz services/pricing.ts).
   const { amountMinorUnit, currency } = getPricing(packageKey, region);
 
@@ -311,7 +322,8 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
     ownershipConfirmedAt: new Date(),
     distanceContractAcceptedAt: new Date(),
     withdrawalWaivedAt: new Date(),
-    crossBorderConsentAt: new Date(), // KVKK m.9 yurt disi (Anthropic/ABD) acik riza zaman damgasi
+    // KVKK m.9 yurt disi acik riza — YALNIZ yurt disi AI kullanan pakette anlamli (aksi halde null).
+    crossBorderConsentAt: usesForeignAi(packageKey) ? new Date() : null,
     consentIp: req.ip ?? null,
     consentVersion: config.legalVersion,
   };
@@ -411,7 +423,8 @@ const bundleOrderSchema = z.object({
   ownershipConfirmed: z.literal(true),
   distanceContractAccepted: z.literal(true),
   withdrawalWaived: z.literal(true),
-  crossBorderTransfer: z.literal(true), // KVKK m.9 yurt disi (Anthropic/ABD) acik riza
+  // KVKK m.9: yalniz yurt disi AI kullanan bundle'da ZORUNLU (handler'da denetlenir); digerinde opsiyonel.
+  crossBorderTransfer: z.boolean().optional(),
   region: z.enum(['tr', 'us', 'ae']).optional().default('tr'),
   // (FAZ A/E) kimlik-doğrulamalı bundle (bundle_full_pentest) için 3 EK onay da taşınır (yoksa Zod
   // bilinmeyen alanları kırpar -> backend "credentialSharingAccepted yok" der; canlı bug buydu).
@@ -454,6 +467,13 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
   const anyActiveLight = memberDefs.some((m) => m.profile === 'active-light' || m.profile === 'active-verify-only');
   const hasAuthScan = memberKeys.includes('authenticated_scan');
 
+  // (KVKK m.9) Bundle'in kendisi VEYA herhangi bir uyesi yurt disi AI kullaniyorsa acik riza ZORUNLU;
+  // aksi halde (tamamen deterministik bundle) veri yurt disina gitmez, riza GEREKMEZ.
+  const bundleForeignAi = usesForeignAi(bundle.key) || memberKeys.some((k) => usesForeignAi(k));
+  if (bundleForeignAi && parsed.data.crossBorderTransfer !== true) {
+    return res.status(400).json({ error: 'Yurt disi veri aktarimina acik riza onaylanmalidir.' });
+  }
+
   // Tek yetkilendirme beyani TUM active-light uyeleri kapsar (ekstra adim YOK). (FAZ A) kimlik-
   // doğrulamalı üye (authenticated_scan) varsa 3 EK onay da ZORUNLU.
   if (anyActiveLight) {
@@ -481,7 +501,8 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
     ownershipConfirmedAt: new Date(),
     distanceContractAcceptedAt: new Date(),
     withdrawalWaivedAt: new Date(),
-    crossBorderConsentAt: new Date(), // KVKK m.9 yurt disi (Anthropic/ABD) acik riza zaman damgasi
+    // KVKK m.9 yurt disi acik riza — YALNIZ yurt disi AI kullanan bundle'da anlamli (aksi halde null).
+    crossBorderConsentAt: bundleForeignAi ? new Date() : null,
     consentIp: req.ip ?? null,
     consentVersion: config.legalVersion,
   };

@@ -13,6 +13,7 @@ type ActiveTest = { scope: { does: string[]; doesNot: string[] }; riskText: stri
 type Pkg = {
   key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string;
   securityProfile?: 'passive' | 'active-light'; activeTest?: ActiveTest | null; comingSoon?: boolean; bundleOnly?: boolean;
+  crossBorderAi?: boolean; // yurt dışı AI'ya veri gidiyor mu (KVKK m.9 açık rıza gerekli mi)
 };
 
 // datetime-local `min` icin yerel saatte YYYY-MM-DDTHH:mm — gecmis tarihleri
@@ -69,7 +70,6 @@ export default function OrderPage() {
   const [crossBorderConsent, setCrossBorderConsent] = useState(false); // AYRI: KVKK m.9 yurt disi acik riza
   const [kvkkConsent, setKvkkConsent] = useState(false); // Gizlilik + KVKK Aydinlatma
   const [showContract, setShowContract] = useState(false);
-  const allConsents = authConsent && contractConsent && withdrawalConsent && crossBorderConsent && kvkkConsent;
 
   // Düzenli (periyodik) tarama seçeneği
   const [recurring, setRecurring] = useState(false);
@@ -142,6 +142,10 @@ export default function OrderPage() {
   // hukuken AYRI checkbox olarak kalır; kalanlar tek "genel kabul" altında gruplanır.
   const isActiveLightSel = isActiveLight || selectedBundle?.category === 'active-light';
   const needsAuthSel = needsAuthCreds || !!selectedBundle?.members?.some((m: any) => m.key === 'authenticated_scan');
+  // (KVKK m.9) Seçili paket/bundle yurt dışı AI'ya veri gönderiyor mu? Sadece o zaman m.9 açık rıza gerekir.
+  const selUsesForeignAi = !!(selectedBundle ? selectedBundle.crossBorderAi : selectedPkg?.crossBorderAi);
+  const allConsents =
+    authConsent && contractConsent && withdrawalConsent && kvkkConsent && (!selUsesForeignAi || crossBorderConsent);
   // Grup 1 — Genel kabul (ownership + mesafeli/ön-bilgi + KVKK aydınlatma + [aktif-test riski] + [test hesabı beyanı]).
   const groupGeneralChecked =
     authConsent && contractConsent && kvkkConsent && (!isActiveLightSel || atRisk) && (!needsAuthSel || (testAcct && elevRisk));
@@ -150,8 +154,9 @@ export default function OrderPage() {
     if (isActiveLightSel) setAtRisk(v);
     if (needsAuthSel) { setTestAcct(v); setElevRisk(v); }
   };
-  // Grup 2 — AYRI: KVKK m.9 yurt dışı açık rıza (tarama verileri + [test hesabı kimlik bilgileri]).
-  const groupCrossBorderChecked = crossBorderConsent && (!needsAuthSel || credShare);
+  // Grup 2 — AYRI: KVKK m.9 yurt dışı açık rıza. YALNIZ yurt dışı AI kullanan pakette gösterilir/
+  // zorunludur; deterministik paketlerde veri yurt dışına gitmediği için gerekmez (otomatik geçer).
+  const groupCrossBorderChecked = !selUsesForeignAi || (crossBorderConsent && (!needsAuthSel || credShare));
   const setGroupCrossBorder = (v: boolean) => { setCrossBorderConsent(v); if (needsAuthSel) setCredShare(v); };
   // Grup 3 — AYRI: mesafeli satış cayma hakkı feragati (withdrawalConsent) — doğrudan.
   // (Aktif Doğrulama Paketi) düşük-kapsam uyarısı gösterilecek mi (ön-kontrol düşük sinyal döndüyse).
@@ -305,19 +310,19 @@ export default function OrderPage() {
         </>
       ),
     },
-    {
-      // AYRI (hukuken): KVKK m.9 yurt dışı açık rıza — tarama verileri + (varsa) test hesabı kimlik bilgileri.
-      checked: groupCrossBorderChecked,
-      set: setGroupCrossBorder,
-      node: (
-        <>
-          <strong>KVKK m. 9 — Yurt dışı aktarım (açık rıza):</strong> Tarama/analiz komutlarımın işlenmesi amacıyla
-          kişisel verilerimin{needsAuthSel && <> ve sağladığım <strong>test hesabı kimlik bilgilerimin</strong></>}{' '}
-          <strong>yurt dışında yerleşik bir yapay zekâ hizmet sağlayıcısına</strong> aktarılmasına açıkça rıza gösteriyorum.
-          {needsAuthSel && ' Kimlik bilgilerim şifreli saklanır ve tarama sonrası silinir.'}
-        </>
-      ),
-    },
+    // AYRI (hukuken): yurt dışı AI açık rızası — YALNIZ yurt dışı AI kullanan pakette gösterilir
+    // (deterministik paketlerde veri yurt dışına gitmediği için bu kutu hiç çıkmaz).
+    ...(selUsesForeignAi
+      ? [{
+          checked: groupCrossBorderChecked,
+          set: setGroupCrossBorder,
+          node: (
+            <>
+              <strong>Yapay zekâ analizi:</strong> Bu pakette tarama verilerim{needsAuthSel && <> ve verdiğim <strong>test hesabı bilgilerim</strong></>}, analiz için <strong>yurt dışında yerleşik bir yapay zekâ hizmetine</strong> aktarılır; buna açıkça rıza gösteriyorum.{needsAuthSel && ' Bilgilerim şifreli saklanır ve tarama sonrası silinir.'}
+            </>
+          ),
+        }]
+      : []),
     {
       // AYRI (hukuken): mesafeli satış cayma hakkı feragati (Mesafeli Sözleşmeler Yön. m.15/ğ).
       checked: withdrawalConsent,

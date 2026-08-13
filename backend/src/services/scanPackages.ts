@@ -111,6 +111,22 @@ export function requiresTestCredentials(packageKey: string): boolean {
   try { return getPackageDef(packageKey).requiresTestCredentials === true; } catch { return false; }
 }
 
+// YURT DIŞI AI AKTARIMI (KVKK m.9): YALNIZ bu paketler tarama/analiz verisini yurt dışında
+// yerleşik bir AI (advisory LLM) hizmet sağlayıcısına gönderir → m.9 AÇIK RIZA sadece bunlarda
+// gerekir. Diğer paketler tamamen backend-deterministiktir; yurt dışına hiçbir veri gitmez.
+// Kaynak: advisoryLlm.callAdvisoryLlm çağıran akışlar — authAgentChecks (full pentest) +
+// agentAdvisor (activeVerifyEvidence İş Mantığı/Race → active_verify).
+const FOREIGN_AI_PACKAGES = new Set<string>([
+  'bundle_full_pentest',
+  'bundle_active_verify',
+  'autonomous_pentest',
+  'business_logic_verify',
+  'race_massassign_verify',
+]);
+export function usesForeignAi(key: string | undefined | null): boolean {
+  return !!key && FOREIGN_AI_PACKAGES.has(key);
+}
+
 export type SecurityProfile = 'passive' | 'active-light' | 'active-verify-only' | 'authenticated-light';
 
 // Paketin guvenlik profili — belirtilmezse GUVENLI varsayilan 'passive'.
