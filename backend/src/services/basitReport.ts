@@ -296,7 +296,17 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
   if (httpOnly) bullets.push('- ⚠️ Bu hedef HTTPS (443) üzerinden yanıt vermedi; tarama **http:// üzerinden** yürütüldü. HTTPS eksikliği başlı başına bir bulgudur (aşağıda).');
   if (missingSec.length) bullets.push(`- ${missingSec.length}/6 önemli güvenlik başlığı eksik: ${missingSec.join(', ')}.`);
   else bullets.push('- Önerilen güvenlik başlıklarının tamamı mevcut.');
-  if (tlsInf.found) bullets.push(`- TLS ${tlsInf.hostnameMatch === false ? '⚠️ hostname uyuşmazlığı' : tlsInf.daysLeft != null && tlsInf.daysLeft >= 0 ? `geçerli (${tlsInf.daysLeft} gün)` : 'geçerli'}${tlsInf.protocol ? `, ${tlsInf.protocol}` : ''}.`);
+  if (tlsInf.found) {
+    const tlsState =
+      tlsInf.hostnameMatch === false
+        ? '⚠️ sertifika hostname uyuşmazlığı (bkz. Kontrol Özeti)'
+        : tlsInf.daysLeft != null && tlsInf.daysLeft < 0
+        ? `⚠️ sertifika SÜRESİ DOLMUŞ (${Math.abs(tlsInf.daysLeft)} gün önce — bkz. Kontrol Özeti)`
+        : tlsInf.daysLeft != null && tlsInf.daysLeft >= 0
+        ? `sertifikası geçerli (${tlsInf.daysLeft} gün)`
+        : 'sertifika geçerlilik durumu belirlenemedi';
+    bullets.push(`- TLS ${tlsState}${tlsInf.protocol ? `, ${tlsInf.protocol}` : ''}.`);
+  }
   bullets.push('- **Önerilen ilk adım:** ' + (httpOnly ? 'Geçerli bir TLS sertifikası kurup tüm trafiği HTTPS’e taşıyın; ' : 'Eksik HTTP güvenlik başlıklarını sunucu yapılandırmasına ekleyin; ') + 'adım adım hazır komutlar "AI Çözüm Önerileri" eklentisinde sunulur.');
 
   const genel =

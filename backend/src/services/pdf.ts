@@ -406,7 +406,7 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en', uns
   }).join('');
   // (DÜRÜSTLÜK) Hedefe ulaşılamadıysa 0/0/0/0 "temiz" DEĞİL "incelenemedi"dir — açıkça belirt.
   const intro = unscannable
-    ? (locale === 'tr' ? '⚠️ Hedefe ulaşılamadığı için kontroller çalıştırılamadı; aşağıdaki sıfırlar bir güvenlik değerlendirmesi <strong>DEĞİLDİR</strong> (0 = incelenemedi, “temiz” değil).' : '⚠️ The target could not be reached, so checks did not run; the zeros below are <strong>NOT</strong> a security assessment (0 = not scanned, not "clean").')
+    ? (locale === 'tr' ? '⚠️ Kontroller anlamlı şekilde çalıştırılamadı (hedefe ulaşılamadı veya test edilebilir bir yüzey/giriş noktası bulunamadı); aşağıdaki sıfırlar bir güvenlik değerlendirmesi <strong>DEĞİLDİR</strong> (0 = incelenemedi, “temiz” değil).' : '⚠️ Checks could not run meaningfully (target unreachable, or no testable surface/entry point found); the zeros below are <strong>NOT</strong> a security assessment (0 = not scanned, not "clean").')
     : total === 0
     ? (locale === 'tr' ? 'Bu taramada açık bir zafiyet göstergesi tespit edilmedi. Çalıştırılan kontroller ve gözlemler aşağıdaki bölümlerde ayrıntılıdır.' : 'No open vulnerability indicator was detected in this scan. Executed checks and observations are detailed in the sections below.')
     : (locale === 'tr' ? `Bu taramada toplam <strong>${total}</strong> bulgu göstergesi tespit edildi; şiddet dağılımı aşağıdadır.` : `A total of <strong>${total}</strong> finding indicators were detected; the severity distribution is below.`);
@@ -424,7 +424,7 @@ function buildMasterTable(rows: Finding[], locale: 'tr' | 'en', unscannable = fa
   let body: string;
   if (unscannable) {
     // (DÜRÜSTLÜK) Hedefe ulaşılamadı -> "Temiz" satırı YERİNE açık uyarı; nötr gri "İncelenemedi" (risk rengi YOK).
-    body = `<tr><td>—</td><td colspan="2">${locale === 'tr' ? 'Hedefe ulaşılamadığı için kontroller çalıştırılamadı — sonuç değerlendirilemez (“temiz” anlamına gelmez).' : 'The target could not be reached, so checks did not run — result cannot be assessed (does not mean "clean").'}</td><td><span class="sev-badge" style="background:#6B7280">${locale === 'tr' ? 'İncelenemedi' : 'Not scanned'}</span></td></tr>`;
+    body = `<tr><td>—</td><td colspan="2">${locale === 'tr' ? 'Kontroller anlamlı şekilde çalıştırılamadı (hedefe ulaşılamadı veya test edilebilir bir yüzey/giriş noktası bulunamadı) — sonuç değerlendirilemez (“güvenli/temiz” anlamına gelmez).' : 'Checks could not run meaningfully (target unreachable, or no testable surface/entry point found) — result cannot be assessed (does not mean "safe/clean").'}</td><td><span class="sev-badge" style="background:#6B7280">${locale === 'tr' ? 'İncelenemedi' : 'Not scanned'}</span></td></tr>`;
   } else if (sorted.length === 0) {
     body = `<tr><td>—</td><td colspan="2">${locale === 'tr' ? 'Bu taramada açık zafiyet göstergesi tespit edilmedi.' : 'No open vulnerability indicator detected in this scan.'}</td><td><span class="sev-badge" style="background:#1C6B60">${locale === 'tr' ? 'Temiz' : 'Clean'}</span></td></tr>`;
   } else {

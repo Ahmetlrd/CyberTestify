@@ -19,12 +19,19 @@ export const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta
 export type Level = 'low' | 'medium' | 'medium-high' | 'high';
 export function levelRank(l: Level): number { return l === 'high' ? 3 : l === 'medium-high' ? 2 : l === 'medium' ? 1 : 0; }
 
-function assemble(level: Level, summaryBullets: string[], genelSentence: string, sections: string): string {
+function assemble(level: Level, summaryBullets: string[], genelSentence: string, sections: string, unscannable = false): string {
   return (
     `## YÖNETİCİ ÖZETİ\n\n${summaryBullets.join('\n')}\n\n` +
-    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[level]}**\n\n${genelSentence}\n\n` +
+    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${unscannable ? 'İncelenemedi' : RISK_WORD[level]}**\n\n${genelSentence}\n\n` +
     `${sections}`
   );
+}
+
+// (DÜRÜSTLIK — tekil aktif-doğrulama paketleri) Hedef erişilebilir ama test edilebilir bir giriş
+// noktası (parametre/form/ID) yoksa: sonuç "Düşük/Temiz" DEĞİL, nötr "İncelenemedi"dir. İlk özet
+// maddesini de İncelenemedi'ye çevirir ki rozet (assessBasit) + Master aynı işareti okusun.
+function noTestableSurfaceBullet(what: string): string {
+  return `- **Genel risk seviyesi: İncelenemedi** — hedefe ulaşıldı ancak ${what}; gerçek doğrulama probu çalıştırılamadı. Bu sonuç sitenin **güvenli olduğu anlamına GELMEZ** — yalnızca test edilebilir bir yüzey bulunamadığını gösterir.`;
 }
 
 const SCOPE_NOTE_ACTIVE =
@@ -52,11 +59,14 @@ export async function generateInjectionVerifyReport(host: string): Promise<{ fin
 export function buildInjectionReport(ev: InjEvidence): { findings: string; fixText: string } | null {
   if (!ev.ok) return null;
   const level = injLevel(ev);
+  const noSurface = level === 'low' && !ev.inputsFound;
   const sqli = ev.findings.filter((f) => f.type === 'SQLi');
   const xss = ev.findings.filter((f) => f.type === 'XSS');
 
   const bullets = [
-    `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'aktif doğrulama ile enjeksiyon zafiyeti KANITLANDI.' : level === 'medium-high' || level === 'medium' ? 'olası bir enjeksiyon göstergesi bulundu (bağlama göre doğrulama önerilir).' : ev.inputsFound ? 'test edilen giriş noktalarında enjeksiyon kanıtı bulunamadı.' : 'taranan sayfalarda test edilebilir giriş noktası saptanmadı.'}`,
+    noSurface
+      ? noTestableSurfaceBullet('taranan sayfalarda **test edilebilir bir GET parametresi veya form alanı saptanmadı**')
+      : `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'aktif doğrulama ile enjeksiyon zafiyeti KANITLANDI.' : level === 'medium-high' || level === 'medium' ? 'olası bir enjeksiyon göstergesi bulundu (bağlama göre doğrulama önerilir).' : 'test edilen giriş noktalarında enjeksiyon kanıtı bulunamadı.'}`,
     `- Taranan sayfa/uç nokta: **${ev.pagesScanned}** · Test edilen giriş noktası: **${ev.inputsFound}** · Gönderilen payload: **${ev.payloadsSent}** (toplam ${ev.probesSent} istek) · SQLi bulgusu: ${sqli.length} · XSS bulgusu: ${xss.length}.`,
     '- **Önerilen ilk adım:** ' + (ev.findings.length ? 'Kanıtlanan giriş noktalarını parametreli sorgu / çıktı kodlaması ile kapatın; hazır adımlar "AI Çözüm Önerileri" bölümünde.' : 'Girdi doğrulama ve çıktı kodlamasını standart hale getirin; hazır sertleştirme adımları "AI Çözüm Önerileri" bölümünde.'),
   ];
@@ -86,7 +96,7 @@ export function buildInjectionReport(ev: InjEvidence): { findings: string; fixTe
     : '## BULGULAR\n\nTest edilen giriş noktalarında enjeksiyon kanıtı bulunamadı.\n\n';
 
   const notes = ev.notes.length ? ev.notes.map((n) => `> ${n}`).join('\n') + '\n\n' : '';
-  const findings = assemble(level, bullets, genel, `${method}${table}${notes}${SCOPE_NOTE_ACTIVE}\n`);
+  const findings = assemble(level, bullets, genel, `${method}${table}${notes}${SCOPE_NOTE_ACTIVE}\n`, noSurface);
 
   const fixText = ev.findings.length
     ? '### Enjeksiyon (SQLi/XSS) — düzeltme\n\n' + [
@@ -122,9 +132,12 @@ export async function generateIdorVerifyReport(host: string): Promise<{ findings
 export function buildIdorReport(ev: IdorEvidence): { findings: string; fixText: string } | null {
   if (!ev.ok) return null;
   const level = idorLevel(ev);
+  const noSurface = level === 'low' && !ev.candidates;
 
   const bullets = [
-    `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'medium-high' ? 'kimlik doğrulaması olmadan komşu ID ile farklı kaynağa erişim göstergesi bulundu.' : level === 'medium' ? 'zayıf bir numaralandırma göstergesi bulundu (manuel doğrulama gerekli).' : ev.candidates ? 'test edilen ID’li uç noktalarda yetkisiz erişim göstergesi bulunmadı.' : 'test edilebilir ID’li uç nokta saptanmadı.'}`,
+    noSurface
+      ? noTestableSurfaceBullet('ana sayfada **tahmin edilebilir/sayısal ID içeren test edilebilir bir uç nokta bulunamadı**')
+      : `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'medium-high' ? 'kimlik doğrulaması olmadan komşu ID ile farklı kaynağa erişim göstergesi bulundu.' : level === 'medium' ? 'zayıf bir numaralandırma göstergesi bulundu (manuel doğrulama gerekli).' : 'test edilen ID’li uç noktalarda yetkisiz erişim göstergesi bulunmadı.'}`,
     `- Taranan sayfa/uç nokta: **${ev.pagesScanned}** · Aday ID uç noktası: **${ev.candidates}** · Gönderilen probe: **${ev.probesSent}** · Bulgu: ${ev.findings.length}.`,
     '- **Önerilen ilk adım:** ' + (ev.findings.length ? 'Nesne-düzeyi yetkilendirme kontrolü ekleyin; hazır adımlar "AI Çözüm Önerileri" bölümünde.' : 'Nesne-düzeyi yetkilendirmeyi standart hale getirin; hazır adımlar "AI Çözüm Önerileri" bölümünde.'),
   ];
@@ -160,7 +173,7 @@ export function buildIdorReport(ev: IdorEvidence): { findings: string; fixText: 
     : '## BULGULAR\n\nTest edilen ID’li uç noktalarda yetkisiz erişim göstergesi bulunamadı.\n\n';
 
   const notes = ev.notes.length ? ev.notes.map((n) => `> ${n}`).join('\n') + '\n\n' : '';
-  const findings = assemble(level, bullets, genel, `${method}${table}${scopeLimit}${notes}${SCOPE_NOTE_ACTIVE}\n`);
+  const findings = assemble(level, bullets, genel, `${method}${table}${scopeLimit}${notes}${SCOPE_NOTE_ACTIVE}\n`, noSurface);
 
   const fixText = ev.findings.length
     ? '### Yetkisiz Erişim (IDOR) — düzeltme\n\n' + [
@@ -242,6 +255,18 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
   const confirmedHigh = runs.filter((r, i) => r?.rep && levels[i] === 'high').length;
   const dataOk = runs.filter((r) => r?.rep).length;
   const noInputs = totalInputs === 0;
+  // (DÜRÜSTLÜK — "ulaşıldı ama test edilemedi" alt-durumu) Hedef ERİŞİLEBİLİR olsa da
+  // kontrollerin çoğu ya veri toplayamadı ya da test edilebilir giriş noktası bulamadıysa,
+  // bu "test edildi, temiz çıktı" DEĞİLDİR. Rozet/Master'ı yeşil-Düşük'e DÜŞÜRME; nötr "İncelenemedi".
+  // (worst==='low' koşulu: gerçek bir bulgu çıktıysa onu bastırmayız — bulguyu raporlarız.)
+  const notTestable = runs.filter((r) => !r || !r.rep || (r.inputs ?? 0) === 0).length;
+  const insufficientCoverage = notTestable / ACTIVE_BUNDLE_MEMBERS.length >= 0.7;
+  // http-only'de enjekte edilen https_missing GERÇEK bir Yüksek bulgudur -> ASLA "İncelenemedi" deme (guard).
+  const noRealTest = !httpOnly && worst === 'low' && (noInputs || insufficientCoverage);
+  // Rozet = master'daki en yüksek severity. http-only Yüksek https_missing üretir -> verdict en az Yüksek olmalı
+  // (yoksa rozet "Düşük" iken master "Yüksek" çelişir). noRealTest ise nötr "İncelenemedi".
+  const verdictLevel: Level = httpOnly && levelRank(worst) < levelRank('high') ? 'high' : worst;
+  const verdictWord = noRealTest ? 'İncelenemedi' : RISK_WORD[verdictLevel];
 
   // --- ÜST ÖZET KUTUSU (ilk sayfa; gerçek N/M/P; input yoksa "gerçek prob yok" netliği) ---
   const box =
@@ -272,9 +297,13 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
   // --- YÖNETİCİ ÖZETİ ---
   const summary: string[] = [];
   summary.push(
-    worst === 'low'
+    noRealTest
+      ? `- **Genel risk seviyesi: İncelenemedi** — hedefe ulaşıldı ancak ${noInputs ? '**test edilebilir bir giriş noktası (parametre/form/ID) bulunamadı**' : `kontrollerin çoğu (${notTestable}/${ACTIVE_BUNDLE_MEMBERS.length}) veri toplayamadı veya test edilebilir yüzey bulamadı`}; gerçek doğrulama probu çalıştırılamadı. Bu sonuç sitenin **güvenli olduğu anlamına GELMEZ** — yalnızca bu paketin bu hedefte test edilebilir bir yüzey bulamadığını gösterir.`
+      : httpOnly && worst === 'low'
+      ? `- **Genel risk seviyesi: Yüksek** — hedef HTTPS desteklemiyor (şifresiz iletişim); bu tek başına yüksek riskli bir bulgudur. Aktif kontroller http:// üzerinden yürütüldü ve ek doğrulanmış kritik/yüksek zafiyet öne çıkmadı.`
+      : verdictLevel === 'low'
       ? `- **Genel risk seviyesi: Düşük** — 7 kontrol kategorisinin tamamı değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`
-      : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`,
+      : `- **Genel risk seviyesi: ${RISK_WORD[verdictLevel]}** — en yüksek risk **${worstTitle || 'HTTPS eksikliği'}** alanında${worstHl ? ` (${worstHl})` : ''}.`,
   );
   // DÜRÜSTLÜK (dinamik — gerçek en yüksek ciddiyetli kontrolden türer): bu paketin kimlik-doğrulamasız
   // kapsam sınırını AÇIKÇA belirt + en güçlü sonucu (bulgu varsa) veya "zafiyet bulunamadı"yı bildir.
@@ -299,7 +328,9 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
   summary.push('- **Önerilen ilk adım:** Çalıştırılan kontrollerdeki bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.');
 
   const genel =
-    (worst === 'low'
+    (noRealTest
+      ? '7 aktif doğrulama kontrol kategorisi denendi ancak bu hedefte **test edilebilir bir yüzey bulunamadığından** gerçek doğrulama probu çalıştırılamadı; sonuç **değerlendirilemedi** ("güvenli/temiz" anlamına gelmez).'
+      : worst === 'low'
       ? '7 aktif doğrulama kontrol kategorisinin tamamı değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.'
       : `Çalıştırılan kontrollerde en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi/doğrulanması önerilir.`) +
     (noInputs
@@ -322,7 +353,7 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
   const findings =
     `${box}\n\n` +
     `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}${httpsSummaryNote}\n\n` +
-    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${genelHttps}${genel}\n\n` +
+    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${verdictWord}**\n\n${genelHttps}${genel}\n\n` +
     `${httpsFindingSection}${controlTable}\n` +
     `${sections}`;
 
@@ -362,9 +393,12 @@ function buildActiveCheckReport(ev: ActiveCheckEvidence, cfg: CheckCfg): { findi
   if (!ev.ok) return null;
   const level = levelFromFindings(ev.findings);
   const has = ev.findings.length > 0;
+  const noSurface = level === 'low' && !has && ev.inputsFound === 0;
 
   const bullets = [
-    `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'aktif doğrulama ile zafiyet göstergesi KANITLANDI.' : level === 'medium-high' ? 'dikkat gerektiren bir gösterge bulundu (manuel doğrulama önerilir).' : has ? 'yalnızca düşük-önemli gözlem(ler) bulundu.' : 'belirgin bir zafiyet göstergesi bulunamadı.'}`,
+    noSurface
+      ? noTestableSurfaceBullet('bu kontrol için **test edilebilir bir giriş/uç nokta saptanmadı**')
+      : `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'aktif doğrulama ile zafiyet göstergesi KANITLANDI.' : level === 'medium-high' ? 'dikkat gerektiren bir gösterge bulundu (manuel doğrulama önerilir).' : has ? 'yalnızca düşük-önemli gözlem(ler) bulundu.' : 'belirgin bir zafiyet göstergesi bulunamadı.'}`,
     `- Taranan sayfa/uç nokta: **${ev.pagesScanned}** · İncelenen giriş/uç nokta: **${ev.inputsFound}** · Gönderilen probe: **${ev.probesSent}** · Bulgu: ${ev.findings.length}.`,
     '- **Önerilen ilk adım:** ' + (has ? 'Bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.' : 'Sertleştirme adımları "AI Çözüm Önerileri" bölümünde.'),
   ];
@@ -382,7 +416,7 @@ function buildActiveCheckReport(ev: ActiveCheckEvidence, cfg: CheckCfg): { findi
     ? '> **Yan etki uyarısı:** Bu kontroldeki bir/birkaç probe, hedefte bir kayıt/dosya oluşturmuş **olabilir** (yan-etki riski "olası" olarak işaretlenenler). Bu, "kanıtla — istismar etme" ilkesi gereği tek seferlik ve zararsız içerikle yapılmıştır; yine de kontrol edip gerekirse temizlemeniz önerilir.\n\n'
     : '';
   const notes = ev.notes.length ? ev.notes.map((n) => `> ${n}`).join('\n') + '\n\n' : '';
-  const findings = assemble(level, bullets, genel, `${method}${table}${confNote}${sideEffectNote}${notes}${SCOPE_NOTE_ACTIVE}\n`);
+  const findings = assemble(level, bullets, genel, `${method}${table}${confNote}${sideEffectNote}${notes}${SCOPE_NOTE_ACTIVE}\n`, noSurface);
 
   const fixText = has
     ? `### ${cfg.fixTitle} — düzeltme\n\n` + cfg.fixFound.map((l) => `- ${l}`).join('\n')
