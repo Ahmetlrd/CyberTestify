@@ -427,8 +427,9 @@ function buildMasterTable(rows: Finding[], locale: 'tr' | 'en', unscannable = fa
     body = sorted.map((f, idx) => {
       const sm = SEV_META[f.sev];
       // Başlığa UÇ NOKTA (varsa) — "SQL Enjeksiyon göstergesi — /rest/products/search?q". Payload/teknik master'da DEĞİL.
-      // DÜŞÜK/dolaylı güven -> master'da AÇIKÇA işaretle (detay kartıyla sınırlı kalmasın).
-      const lowConf = /d[üu][şs][üu]k|low/i.test(f.confidence ?? '');
+      // DÜŞÜK/dolaylı güven -> master'da AÇIKÇA işaretle (detay kartıyla sınırlı kalmasın). Hem "Güven"
+      // kolonundan hem de kanıt metnindeki "DOLAYLI/ZAYIF GÖSTERGE" ifadesinden tespit et (sağlam).
+      const lowConf = /d[üu][şs][üu]k|low/i.test(f.confidence ?? '') || /dolayl[ıi][\s/]*zay[ıi]f g[öo]sterge|zay[ıi]f g[öo]sterge|doğrudan.*kan[ıi]t.*de[ğg]il/i.test(f.evidence ?? '');
       const confTag = lowConf ? ` <span class="mt-ep">· güven: düşük (dolaylı gösterge)</span>` : '';
       const titleCell = (f.endpoint ? `${escapeHtml(f.title)} <span class="mt-ep">— ${escapeHtml(f.endpoint)}</span>` : escapeHtml(f.title)) + confTag;
       return `<tr><td>CT-${idx + 1}</td><td>${titleCell}</td><td>${open}</td><td class="${sm.cls}"><span class="sev-badge">${locale === 'tr' ? sm.tr : sm.en}</span></td></tr>`;
