@@ -108,8 +108,12 @@ export async function collectJwtAnalysis(host: string, session: AuthSession): Pr
 // (Form-POST agresiflik) giriş baypası payload çeşitliliği artırıldı — hepsi salt kimlik-doğrulama
 // atlatma göstergesi arar; oturum ele geçirilmez/kullanılmaz. Kayıt oluşturmaz (login ucu).
 const SQLI_LOGIN_PAYLOADS = [`' OR '1'='1`, `' OR 1=1--`, `admin'--`, `' OR '1'='1'-- -`, `") OR ("1"="1`, `' OR 'a'='a`, `admin' #`];
-const TOKEN_INDICATOR_RE = /"(token|authentication|jwt|access_token|accessToken|bearer)"\s*:/i;
-const LOGIN_FAIL_RE = /(invalid|hatal|geçersiz|unauthor|yanlış|incorrect|denied|reddedil|401|403)/i;
+// (Soru 2 düzeltmesi) POZİTİF başarı göstergesi ZORUNLU: yalnız "2xx + hata-metni-yok" YETMEZ (var-olmayan
+// uçta/genel 200 fallback'te yanlış-pozitif üretirdi). Auth token, "logged in/oturum açıldı/welcome" veya
+// success:true gibi AÇIK bir başarı sinyali aranır (AltoroMutual /api/login gerçek bypass'ında da bunlar var).
+const POSITIVE_AUTH_RE = /"(token|authentication|authorization|jwt|access_?token|accessToken|bearer|sessionId|session_id)"\s*:\s*"?[^"\s,}]{6,}|logged\s?in|login successful|giriş başarılı|oturum aç[ıi]ld|welcome\b|hoş\s?geldin|"success"\s*:\s*(?:true|"(?!false))/i;
+const TOKEN_INDICATOR_RE = /"(token|authentication|authorization|jwt|access_token|accessToken|bearer)"\s*:/i;
+const LOGIN_FAIL_RE = /(invalid|hatal|geçersiz|unauthor|yanlış|incorrect|denied|reddedil|not found in our system|401|403)/i;
 
 /**
  * Login formuna baypas SQLi GÖSTERGESİ (full_pentest + active_verify). Login POST'u zaten izinlidir.
@@ -130,8 +134,13 @@ export async function collectLoginBypassEvidence(host: string, loginUrl?: string
   const notes: string[] = [];
   const rnd = crypto.randomBytes(6).toString('hex');
   const bodyOf = (id: string, pw: string) => JSON.stringify({ email: id, username: id, password: pw });
+  // POZİTİF başarı sinyali ŞART (yalnız 2xx değil) — yanlış-pozitife karşı.
   const isSuccess = (r: { status: number; text: string } | null) =>
-    !!r && r.status >= 200 && r.status < 300 && (TOKEN_INDICATOR_RE.test(r.text) || (!LOGIN_FAIL_RE.test(r.text.slice(0, 400)) && r.text.length > 20));
+    !!r && r.status >= 200 && r.status < 300 && POSITIVE_AUTH_RE.test(r.text) && !LOGIN_FAIL_RE.test(r.text.slice(0, 400));
+  // Kanıt için güvenli özet: token/authorization DEĞERLERİNİ redakte et, başarı ibaresini göster.
+  const safeSnippet = (text: string) => text
+    .replace(/("(?:token|authorization|authentication|jwt|access_?token|accessToken|bearer|sessionId|session_id)"\s*:\s*")[^"]+"/gi, '$1***"')
+    .replace(/\s+/g, ' ').trim().slice(0, 140);
 
   let testedEndpoint: string | null = null;
   for (const url of candidates) {
@@ -141,13 +150,15 @@ export async function collectLoginBypassEvidence(host: string, loginUrl?: string
     if (!control || control.status === 404 || control.status === 0) continue; // bu uç login değil
     testedEndpoint = url;
     if (isSuccess(control)) { notes.push(`\`${new URL(url).pathname}\` uydurma kimlikle de başarı döndürdü — güvenilir baypas ölçümü yapılamadı (bu uç atlandı).`); continue; }
-    // (b) SQLi payload'ları — biri kontrolün AKSİNE başarı/token dönerse GÖSTERGE.
+    // (b) SQLi payload'ları — biri kontrolün AKSİNE POZİTİF başarı sinyali (token/"logged in") dönerse GÖSTERGE.
     for (const payload of SQLI_LOGIN_PAYLOADS) {
       if (ctx.stopped) break;
       const r = await ctx.fetchOnce(url, { method: 'POST', body: bodyOf(payload, `x-${rnd}`), contentType: 'application/json' });
-      if (isSuccess(r)) {
-        findings.push({ check: 'login_bypass', inputPoint: `POST ${new URL(url).pathname}`, vulnerable: true, technique: `giriş baypası (SQLi göstergesi: \`${payload}\`)`,
-          evidence: `Giriş formuna \`${payload}\` gönderildiğinde, geçersiz kimlik denemesinin AKSİNE oturum/başarı yanıtı (token/2xx) alındı — SQL enjeksiyonuyla kimlik doğrulama atlatma GÖSTERGESİ. Kesin doğrulama manuel test gerektirir; oturum ele geçirme/istismar YAPILMADI.`, confidence: 'medium', severity: 'high', sideEffectRisk: 'none' });
+      if (isSuccess(r) && r) {
+        const strongToken = TOKEN_INDICATOR_RE.test(r.text) || /"authorization"\s*:/i.test(r.text);
+        findings.push({ check: 'login_bypass', inputPoint: `POST ${new URL(url).pathname}`, vulnerable: true, technique: `giriş baypası (SQLi: \`${payload}\`)`,
+          evidence: `Kontrol (geçersiz kimlik) → HTTP ${control.status} (başarısız). SQLi payload \`${payload}\` → HTTP ${r.status} + AÇIK başarı sinyali: "${safeSnippet(r.text)}". Kimlik doğrulama SQL enjeksiyonuyla ATLATILIYOR${strongToken ? ' (oturum/authorization token döndü — güçlü kanıt)' : ''}. Oturum ele geçirme/istismar YAPILMADI; token değeri raporda gösterilmez (redakte).`,
+          confidence: strongToken ? 'high' : 'medium', severity: 'high', sideEffectRisk: 'none' });
         break;
       }
     }

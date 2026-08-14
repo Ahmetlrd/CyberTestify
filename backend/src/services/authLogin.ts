@@ -18,6 +18,7 @@ import { resolveOrigin, cachedOriginUrl } from './surfaceEvidence.js';
 import { consumeTestCredential, type TestCredentialInput } from './testCredentials.js';
 import { sendAuthLoginFailed } from './mailer.js';
 import { type AuthSession, type CookieFlag, applyAuthHeaders, parseSetCookie } from './authSession.js';
+import { logScanStep } from './scanLogger.js';
 import { prisma } from '../db.js';
 
 export { applyAuthHeaders } from './authSession.js';
@@ -297,6 +298,17 @@ export async function login(host: string, creds: TestCredentialInput): Promise<A
   let attempts = 0;
   let sawTwoFactor = false;
   let sawEndpoint = false;
+  // (Şeffaflık — Soru 1) Login denemesini scan-log'a yaz. ŞİFRE/kimlik ASLA yazılmaz; yalnız sonuç+yöntem.
+  // authLogin puppeteer/fetch login'i probe-akışından AYRIdır; bu adım olmadan log'da görünmüyordu.
+  const done = (res: AuthResult): AuthResult => {
+    logScanStep({
+      step: 'Kimlik doğrulama (login)', method: 'POST', level: res.ok ? 'info' : 'warn',
+      summary: res.ok
+        ? `TEST hesabıyla oturum AÇILDI (yöntem: ${res.session.method}, ${res.attempts} deneme) — kimlik bilgileri loglanmaz`
+        : `Login sonucu: ${res.reason} (${res.attempts} deneme) — kimlik bilgileri loglanmaz`,
+    });
+    return res;
+  };
   const surf = await discoverSurface(host).catch(() => null);
   const candidates = surf ? loginCandidates(host, surf) : WELL_KNOWN_LOGIN.map((p) => sameHostAbs(p, host)).filter(Boolean) as string[];
 
@@ -311,7 +323,7 @@ export async function login(host: string, creds: TestCredentialInput): Promise<A
     if (r === null) continue;             // ağ hatası VEYA SPA-HTML — endpoint sayılmaz
     sawEndpoint = true;
     if (r.twoFactor) sawTwoFactor = true;
-    if ('session' in r) return { ok: true, session: r.session, attempts };
+    if ('session' in r) return done({ ok: true, session: r.session, attempts });
   }
 
   // 2) headless form-login — HER ZAMAN dene. SPA/form-only/Firebase (IndexedDB token) için tek
@@ -321,12 +333,12 @@ export async function login(host: string, creds: TestCredentialInput): Promise<A
   if (r) {
     if (r.formFound) sawEndpoint = true;   // login formu render oldu -> endpoint var (creds yanlışsa bad_credentials)
     if (r.twoFactor) sawTwoFactor = true;
-    if (r.session) return { ok: true, session: r.session, attempts };
+    if (r.session) return done({ ok: true, session: r.session, attempts });
   }
 
-  if (sawTwoFactor) return { ok: false, reason: 'two_factor', attempts };
-  if (!sawEndpoint) return { ok: false, reason: 'no_login_endpoint', attempts };
-  return { ok: false, reason: 'bad_credentials', attempts };
+  if (sawTwoFactor) return done({ ok: false, reason: 'two_factor', attempts });
+  if (!sawEndpoint) return done({ ok: false, reason: 'no_login_endpoint', attempts });
+  return done({ ok: false, reason: 'bad_credentials', attempts });
 }
 
 // --- SESSION_CACHE (host başına TEK login; 7+ kontrol paylaşır) ---------------
