@@ -190,6 +190,9 @@ export function formCategory(action: string, fields: string[]): FormCategory {
   // parola + (tekrar/e-posta) alanı + login DEĞİLSE -> kayıt formu (hesap oluşturur).
   if (hasPw && fields.some((f) => /confirm|repeat|again|tekrar|email|e-?posta|mail/i.test(f)) && !has(/login|signin|sign.?in|giris|giriş|logon/)) return 'signup';
   if (has(/contact|iletisim|iletişim|message|mesaj/) && fields.some((f) => /email|e-?posta|mail|subject|konu|message|mesaj/i.test(f))) return 'contact';
+  // (İş A) Action yolu NET bir login ucu ise (parola alanı görünmese bile — çok adımlı/SPA login,
+  // ör. önce yalnız kullanıcı adı istenen akış), signup DEĞİLSE login say. Login mass-assign hedefi değildir.
+  if (has(/\/(login|signin|sign-in|log-in|logon|auth\/login)(\b|\/|\?|$)/) && !has(/signup|sign-?up|register|kayit|kayıt/)) return 'login';
   // login: parola alanı + login-benzeri eylem/kullanıcı alanı. Bypass testi GÜVENLİ (kayıt oluşturmaz).
   if (hasPw && (has(/login|signin|sign.?in|giris|giriş|logon|authenticate|oturum|logon/) || fields.some((f) => /user|kullanic|kullanıc|email|login|logon/i.test(f)))) return 'login';
   if (fields.some((f) => /^(q|s|query|search|ara|arama|keyword|kelime|term|filter|filtre|sort|siralama|sıralama|category|kategori)$/i.test(f)) || has(/search|\bara\b|filter|filtre|sorgu/)) return 'search';
@@ -1548,15 +1551,24 @@ export async function collectRaceMassAssignEvidence(host: string): Promise<Activ
   const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
   if (base) ctx.baseline = base.ms;
 
-  // (FORM-POST GÜVENLİK KAPISI — KRİTİK) Mass-assignment hedefi genelde kayıt/profil formudur; bu forma
-  // gerçek POST GERÇEK HESAP OLUŞTURABİLİR. YASAK türe giriyorsa POST atma; şeffaf not düş. Kimlik-doğrulamalı
-  // (kapsam sözleşmeli) mass-assignment testi Tam Kapsamlı Pentest kapsamındadır.
-  const massForbidden = form ? forbiddenFormReason(form.action, form.fields) : null;
-  if (form && massForbidden) {
+  // (FORM-POST GÜVENLİK KAPISI — KRİTİK) Mass-assignment (over-posting) YALNIZ gerçek KAYIT/GÜNCELLEME
+  // formunda anlamlıdır. İki ayrı sebeple POST atlanır:
+  //  (a) YASAK tür (kayıt/iletişim/parola/ödeme/abonelik) -> gerçek POST kalıcı hesap/e-posta/kayıt yaratır.
+  //  (b) login/arama formu -> mass-assignment HEDEFİ DEĞİLDİR (login zaten "Giriş Baypası" kontrolünde
+  //      test edilir); over-posting alanı eklemek yanıltıcı sinyal üretir. Bunlar da atlanır.
+  // Geriye YALNIZ 'other' (yasak-olmayan, login/arama-olmayan) create/update formu kalır — pre-auth'ta
+  // nadirdir; yoksa bu kontrol o hedefte "İncelenemedi" (güvenli test edilebilir giriş noktası yok).
+  const massCat = form ? formCategory(form.action, form.fields) : null;
+  const massBlockReason = !form ? null
+    : (forbiddenFormReason(form.action, form.fields)
+       ?? (massCat === 'login' ? 'giriş (login) formu — mass-assignment/over-posting hedefi değildir (Giriş Baypası kontrolünde ayrıca test edilir)'
+           : massCat === 'search' ? 'arama/filtre formu — kayıt/güncelleme (over-posting) hedefi değildir'
+           : null));
+  if (form && massBlockReason) {
     let p = form.action; try { p = new URL(form.action).pathname; } catch { /* ham */ }
-    notes.push(`Mass-assignment adayı form (${p}) güvenlik gereği gerçek POST testinden HARİÇ tutuldu: ${massForbidden}. Bu tür form POST'u kalıcı kayıt oluşturacağından yalnızca kimlik-doğrulamalı, kapsam-sözleşmeli Tam Kapsamlı Pentest'te test edilebilir.`);
+    notes.push(`Mass-assignment adayı form (${p}) gerçek POST testinden HARİÇ tutuldu: ${massBlockReason}. Güvenli, YASAK olmayan bir kayıt/güncelleme (over-posting) giriş noktası bulunmadığından bu kontrol bu hedefte kimlik-doğrulaması olmadan güvenle test edilemedi (kimlik-doğrulamalı derin test Tam Kapsamlı Pentest kapsamındadır).`);
   }
-  if (form && !massForbidden) {
+  if (form && !massBlockReason) {
     // Sahte/test verisi + fazladan isAdmin/role alani. TEK POST, retry YOK.
     const usp = new URLSearchParams();
     for (const f of form.fields) usp.set(f, /email/i.test(f) ? `cybertestify-probe+${randToken().slice(0, 8)}@example.com` : 'cybertestify-test');
@@ -1592,5 +1604,8 @@ export async function collectRaceMassAssignEvidence(host: string): Promise<Activ
   if (agentUsed) notes.push('Bu kontrol, keşfedilen yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnızca yapılandırılmış öneri üretir; hiçbir yıkıcı/state-değiştiren istek advisory tarafından tetiklenmez, tüm istekler backend’in güvenli fonksiyonlarından geçer).');
   if (ctx.stopped) notes.push(ctx.stopped);
   if (!form) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada mass-assignment için uygun (tamamlama/ödeme dışı) kayıt/profil formu bulunamadı.` + spaHint(surf));
-  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: form ? 1 : 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed };
+  // (İş A düzeltmesi) POST engellendiyse (yasak/login/arama) GERÇEK test yapılmadı -> inputsFound=0 ki
+  // Pozitif Güvence/kontrol tablosu bunu "Temiz" değil "İncelenemedi/Kapsam dışı" göstersin (dürüstlük).
+  const massTested = !!form && !massBlockReason;
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: massTested ? 1 : 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed };
 }

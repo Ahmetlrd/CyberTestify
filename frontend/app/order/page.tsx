@@ -518,10 +518,16 @@ export default function OrderPage() {
           (düşük-sinyal ön-kontrol uyarısından bağımsız; o uyarı ek olarak gösterilir). */}
       {selectedBundle?.key === 'bundle_active_verify' && (
         <div className="mt-3 rounded-card border border-line bg-brand-50/50 px-4 py-3 text-sm text-ink-soft">
-          <strong className="text-ink">Kapsam:</strong> Bu paket kimlik doğrulaması gerektirmeyen
-          (login olmadan test edilebilen) yüzeyde çalışır. Login sonrası ortaya çıkan derin
-          yetkilendirme/iş mantığı zafiyetleri bu paketin kapsamı dışındadır; sonuçlar hedefin
-          yapısına göre değişir.
+          <strong className="text-ink">Kapsam:</strong> Bu paket, kimlik doğrulaması{' '}
+          <strong>gerektirmeyen dış yüzeye</strong> odaklanır — herkese açık uç noktalar (açık
+          formlar/API’lar, arama, login/kayıt akışının kendisi) üzerindeki enjeksiyon, yetkilendirme ve
+          mantık risklerini hedefler. IDOR / İş Mantığı / Race-Mass-Assignment kontrolleri{' '}
+          <strong>yalnızca login-öncesi erişilebilir yüzeyde</strong> (ör. genel API’lar, herkese açık
+          id-tabanlı uç noktalar) çalıştırılır — bu nedenle bu kategorilerde bazı hedeflerde{' '}
+          <strong>sınırlı veya “İncelenemedi”</strong> sonuç normal ve beklenendir (siteye özgü yüzey
+          azlığından; motor eksikliğinden değil). Login-<strong>sonrası</strong>, oturum içi derin
+          yetkilendirme/iş mantığı zafiyetleri bu paketin kapsamı dışındadır ve{' '}
+          <strong>Tam Kapsamlı Pentest</strong> paketinde ele alınır.
         </div>
       )}
 

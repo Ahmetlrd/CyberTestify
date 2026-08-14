@@ -333,7 +333,7 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
     ? `Bu taramada en güçlü sonuç **${worstTitle}** alanında tespit edilmiştir.`
     : 'Bu taramada doğrulanmış bir zafiyet tespit edilmemiştir.';
   summary.push(
-    `- **Kapsam dürüstlüğü:** Bu paket kimlik doğrulaması olmadan (login yapılmadan) çalışır. Login gerektiren derin IDOR, iş mantığı ve yetki yükseltme senaryoları bu paketin kapsamı dışındadır. ${strongest}`,
+    `- **Kapsam dürüstlüğü:** Bu paket, kimlik doğrulaması **gerektirmeyen dış yüzeye** odaklanır — herkese açık uç noktalar (açık formlar/API'lar, arama, login/kayıt akışının kendisi). IDOR / İş Mantığı / Race-Mass-Assignment kontrolleri **yalnızca login-öncesi erişilebilir yüzeyde** (ör. genel API'lar, herkese açık id-tabanlı uç noktalar) çalışır; bu nedenle bu kategorilerde bazı hedeflerde **sınırlı veya "İncelenemedi"** sonuç normal ve beklenendir (siteye özgü yüzey azlığından; motor eksikliğinden değil). Login-**sonrası** oturum içi derin yetkilendirme/iş mantığı zafiyetleri kapsam dışıdır, **Tam Kapsamlı Pentest**'te ele alınır. ${strongest}`,
   );
   // (BÖLÜM B) API yüzeyi şeffaflığı: spec bulundu mu + keşfedilen ama kimlik-doğrulama-kilitli uç sayısı.
   const apiSpecN = surf.apiSpecFound ? surf.apiSpecPaths ?? 0 : 0;
@@ -410,7 +410,7 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
     `> **Üç-durum ayrımı (dürüstlük):** ✅ *Temiz* = kontrol çalıştı, kanıt bulunamadı · ⚠️ *Bulgu var* = yukarıda detaylı · ⚠️ *İncelenemedi* = test edilebilir giriş noktası bulunamadı (güvenli anlamına GELMEZ).\n\n` +
     `### Bu paket NE değerlendirir, NE değerlendirmez\n\n` +
     `**EDER ("kanıtla — istismar etme" ilkesiyle; zararsız, veri-değiştirmeyen problar):** SQLi/XSS enjeksiyonu, yetkisiz erişim (IDOR), SSRF, dosya yükleme, iş mantığı, race/mass-assignment ve RCE/komut enjeksiyonu göstergeleri — kimlik doğrulaması **gerektirmeyen** yüzeyde, keşfedilen ${pagesScanned} sayfada.\n\n` +
-    `**ETMEZ:** Veri değiştiren/silen istismar, ödeme tamamlama veya gerçek RCE çalıştırma **yapılmaz** (yalnızca gösterge/kanıt toplanır). Login sonrası derin IDOR, yetki yükseltme ve kimlik-doğrulamalı iş mantığı zafiyetleri bu paketin **dışındadır** — bunlar **Tam Kapsamlı Pentest** (kimlik-doğrulamalı, kapsam sözleşmeli) kapsamındadır. Bir kontrolde "bulgu yok", aktif istismar bilinçli olarak sınırlı/pasif-güvenli tutulduğu için **güvenli olduğunu KANITLAMAZ**.\n\n`;
+    `**ETMEZ:** Veri değiştiren/silen istismar, ödeme tamamlama veya gerçek RCE çalıştırma **yapılmaz** (yalnızca gösterge/kanıt toplanır). IDOR / İş Mantığı / Race-Mass-Assignment kontrolleri **yalnızca login-öncesi erişilebilir yüzeyde** çalışır; **login-SONRASI** oturum içi derin yetkilendirme/yetki-yükseltme/iş-mantığı zafiyetleri bu paketin **dışındadır** — bunlar **Tam Kapsamlı Pentest** (kimlik-doğrulamalı, kapsam sözleşmeli) kapsamındadır. Bu nedenle bu üç kategoride bazı hedeflerde **sınırlı veya "İncelenemedi"** sonuç normal ve beklenendir (siteye özgü yüzey azlığından; motor eksikliğinden değil). Bir kontrolde "bulgu yok", aktif istismar bilinçli olarak sınırlı/pasif-güvenli tutulduğu için **güvenli olduğunu KANITLAMAZ**.\n\n`;
 
   const findings =
     `${box}\n\n` +
