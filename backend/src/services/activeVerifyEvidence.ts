@@ -1179,8 +1179,19 @@ export type VFinding = {
 export type ActiveCheckEvidence = { ok: boolean; pagesScanned: number; inputsFound: number; probesSent: number; findings: VFinding[]; stopped: string | null; notes: string[]; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' };
 
 // (İş Mantığı + Race) SINIRLI PentAGI ajan onerileri — host basina TEK cagri, iki kontrol PAYLASIR.
+// (Bölüm 2 — İZOLE/DENEYSEL advisory) Advisory (PentAGI-tarzı LLM önceliklendirme sinyali) yalnızca
+// AÇIKÇA izin verilen hedeflerde çalışır — VARSAYILAN: KAPALI. ACTIVE_VERIFY_ADVISOR_HOSTS env'i virgülle
+// ayrılmış host listesi (ör. "testaspnet.vulnweb.com"); boş/tanımsız -> advisory HER hedefte kapalı ve
+// kontroller %100 deterministik çalışır. Canlıya default açık DEĞİL (kritik: uzak LLM'e yüzey verisi
+// gönderme yalnız izin verilen deney hedeflerinde). Advisory'nin önerdiği confidence/severity ASLA
+// doğrudan kabul edilmez (çağıran kod nötrler); nihai sınıflandırma deterministik taxonomy'nindir.
+function advisorAllowed(host: string): boolean {
+  const allow = (process.env.ACTIVE_VERIFY_ADVISOR_HOSTS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return allow.includes(host.toLowerCase());
+}
 const AGENT_CACHE = new Map<string, { at: number; p: Promise<AgentSuggestion[] | null> }>();
 function getAgentScenarios(host: string, surf: Surface): Promise<AgentSuggestion[] | null> {
+  if (!advisorAllowed(host)) return Promise.resolve(null); // izole: default KAPALI -> deterministik fallback
   const c = AGENT_CACHE.get(host);
   if (c && Date.now() - c.at < 180_000) return c.p;
   const forms = [...(surf.massAssignForm ? [surf.massAssignForm.action] : []), ...surf.uploadForms.map((f) => f.action)];
