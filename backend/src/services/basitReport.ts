@@ -363,13 +363,46 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
           ? 'Öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri var; taşıma güvenliği (TLS/HTTPS) genel olarak sağlam. Eksik başlıklar tek başına siteyi ele geçirmez ancak XSS/clickjacking gibi saldırıların başarı şansını artırır ve düşük maliyetli sunucu ayarlarıyla kapatılabilir.'
           : 'Ciddi/kritik bir güvenlik açığı öne çıkmadı; rapor öncelikle savunma derinliğini artıracak küçük iyileştirme fırsatlarını listeler.';
 
+  // (TUTARLILIK — disclaimer) Diğer 3 pasif paketle AYNI konumda (Yönetici Özeti'nin hemen altında).
+  const disclaimer =
+    `> **Kapsam ve sınır:** Bu paket **pasif, GET-tabanlı** bir dış gözlemdir; hiçbir aktif istismar veya prob denenmemiştir. Bir alanda "bulgu yok" ifadesi, aktif test yapılmadığı için **güvenli olduğunu KANITLAMAZ** — yalnızca dışarıdan gözlemlenen yapılandırmanın temiz olduğunu gösterir.\n\n`;
+
+  // (BÖLÜM 2 — POZİTİF GÜVENCE) Diğer 3 pakete ÖLÇEKLİ: yalnız header/TLS/sürüm alanları, üç-durum.
+  // "Sorun bulunamadı"yı da şeffaf kıl — SADECE gerçek veriden. Kapsam GENİŞLEMEZ (yeni tür eklenmez).
+  const hdrState = missingSec.length
+    ? `⚠️ Bulgu var (${missingSec.length}/6 önerilen başlık eksik — yukarıda detaylı)`
+    : `✅ Sorun bulunmadı (6/6 önerilen başlık mevcut)`;
+  const tlsAssState = httpOnly
+    ? '⚠️ Bulgu var (HTTPS yanıt vermedi — şifresiz iletişim)'
+    : !tlsInf.found
+      ? '⚠️ İncelenemedi (443’e güvenli bağlantı kurulamadı — “temiz” DEĞİL)'
+      : tlsInf.hostnameMatch === false || (tlsInf.daysLeft != null && tlsInf.daysLeft < 0)
+        ? '⚠️ Bulgu var (sertifika sorunu — yukarıda detaylı)'
+        : '✅ Sorun bulunmadı (geçerli sertifika, hostname uyumlu)';
+  const verAssState = eolRisks.length
+    ? '⚠️ Bulgu var (eski/desteksiz sürüm imzası — yukarıda detaylı)'
+    : '✅ Sorun bulunmadı (bilinen eski/EOL sürüm imzası saptanmadı)';
+  const assuranceSection =
+    `## POZİTİF GÜVENCE — KONTROL EDİLEN ALANLAR\n\n` +
+    `Bulgu çıkmayan alanlar da dâhil, Basit Tarama kontrolleri ana sayfa dâhil **${pageCount} benzersiz sayfada** gerçekten çalıştırıldı. Aşağıdaki tablo, "sorun bulunamadı" sonuçlarını da şeffaf biçimde gösterir:\n\n` +
+    `| Kontrol Alanı | Sonuç |\n|---------------|-------|\n` +
+    `| HTTP güvenlik başlıkları (${pageCount} sayfada) | ${hdrState} |\n` +
+    `| TLS / sertifika | ${tlsAssState} |\n` +
+    `| Sunucu/yazılım sürüm imzası (${pageCount} sayfada) | ${verAssState} |\n\n` +
+    `> **Üç-durum ayrımı (dürüstlük):** ✅ *Sorun bulunmadı* = kontrol çalıştı, temiz çıktı · ⚠️ *Bulgu var* = yukarıda detaylı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).\n\n` +
+    `### Bu paket NE kontrol EDER, NE ETMEZ\n\n` +
+    `**EDER (pasif — yalnız GET ile sayfa çekme, hiçbir prob/payload gönderilmez):** HTTP güvenlik başlıkları, TLS/sertifika durumu (geçerlilik · hostname · TLS sürümü), sunucu-yazılım sürüm imzası ve bilinen eski/EOL sürüm tespiti — keşfedilen ${pageCount} sayfada.\n\n` +
+    `**ETMEZ:** CORS politikası, çerez bayrağı detayı, Content-Security-Policy analizi, DNS/e-posta kayıtları (SPF/DKIM/DMARC) ve açıkta hassas dosya taraması **Dış Yüzey** paketindedir; KVKK/PCI/ISO çerçeve-eşlemesi **Uyum** paketinde; subdomain/API/CVE keşfi **Keşif** paketinde; aktif zafiyet doğrulaması (SQLi/XSS/IDOR prob’u) **Aktif Doğrulama** ve **Tam Kapsamlı Pentest** paketlerinde ele alınır. Bu rapor pasif gözleme dayanır; "bulgu yok", aktif istismar denenmediği için **güvenli olduğunu KANITLAMAZ**.\n\n`;
+
   const findings =
     `## YÖNETİCİ ÖZETİ\n\n${bullets.join('\n')}\n\n` +
+    disclaimer +
     `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[level]}**\n\n${genel}\n\n` +
     `## HTTP GÜVENLİK BAŞLIKLARI\n\n| Başlık | Durum | Açıklama |\n|--------|-------|----------|\n${tableRows}\n\n` +
     `## TLS SERTİFİKA DURUMU\n\n${tlsSection}\n\n` +
     `## SUNUCU / TEKNOLOJİ İMZASI\n\n${techSection}\n\n` +
-    `## TESPİT EDİLEN RİSKLER\n\n${riskSection}\n`;
+    `## TESPİT EDİLEN RİSKLER\n\n${riskSection}\n\n` +
+    assuranceSection;
 
   const fixText = buildHeaderFixSuggestions(findings, hostname);
   return { findings, fixText };
