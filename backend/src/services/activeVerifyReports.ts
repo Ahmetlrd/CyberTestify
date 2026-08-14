@@ -290,7 +290,10 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
     if (r.inputs === 0) return 'Giriş noktası yok (Kapsam dışı)';
     return '✓ Zafiyet kanıtı yok';
   };
-  const confCell = (r: MemberRun | null, conf: string): string => (r && r.rep && r.inputs > 0 ? conf : 'Kapsam dışı');
+  // (R6 GÜVEN/KAPSAM TUTARLILIĞI) Kontrol GERÇEK bir bulgu ürettiyse (fc>0) Güven "Kapsam dışı"
+  // OLAMAZ — statusOf zaten "⚠ gösterge" der; ikisi çelişmesin. inputs=0 ama gözlemsel bulgu (fc>0)
+  // olan İş Mantığı/Race gibi kontroller için de gerçek güven seviyesi gösterilir.
+  const confCell = (r: MemberRun | null, conf: string): string => (r && r.rep && (r.inputs > 0 || r.fc > 0) ? conf : 'Kapsam dışı');
   const tableRows = ACTIVE_BUNDLE_MEMBERS.map((m, i) => `| ${m.title} | ${statusOf(runs[i], levels[i])} | ${confCell(runs[i], m.conf)} |`).join('\n');
   const controlTable = `## KONTROL ÖZETİ\n\n| Kontrol | Sonuç | Güven |\n|---------|-------|-------|\n${tableRows}\n\n> Güven yalnızca gerçekten test çalıştırılan (giriş noktası bulunan) kontroller için gösterilir; giriş noktası bulunamayan kontroller **Kapsam dışı**dır. Test edilenlerde: SSRF/RCE dolaylı (zaman-tabanlı, OOB yok) → Orta; gözlemsel (Dosya Yükleme/İş Mantığı/Race) → Düşük; Enjeksiyon hata/yansıma-tabanlı → Yüksek.\n`;
 

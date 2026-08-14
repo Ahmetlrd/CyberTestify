@@ -267,8 +267,8 @@ function reportIdentifiers(hostname: string, createdAt: Date): { reportNo: strin
   return { reportNo: `CT-${y}${mo}${d}-${h.slice(0, 4)}`, verifyCode: `${h.slice(4, 8)}-${h.slice(8, 12)}` };
 }
 
-type Sev = 'critical' | 'high' | 'medium' | 'low';
-type Finding = { title: string; sev: Sev; type?: FindingType; endpoint?: string; evidence?: string; confidence?: string };
+export type Sev = 'critical' | 'high' | 'medium' | 'low';
+export type Finding = { title: string; sev: Sev; type?: FindingType; endpoint?: string; evidence?: string; confidence?: string };
 function normSev(s: string): Sev | null {
   const x = s.toLocaleLowerCase('tr');
   if (/krit[iı]k|critical/.test(x)) return 'critical';
@@ -335,7 +335,7 @@ function cleanTitle(raw: string): string {
   return t;
 }
 
-function parseFindings(md: string, locale: 'tr' | 'en'): { rows: Finding[]; counts: Record<Sev, number> } {
+export function parseFindings(md: string, locale: 'tr' | 'en'): { rows: Finding[]; counts: Record<Sev, number> } {
   const counts: Record<Sev, number> = { critical: 0, high: 0, medium: 0, low: 0 };
   const rows: Finding[] = [];
   const seen = new Set<string>();

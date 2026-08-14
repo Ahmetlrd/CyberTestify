@@ -141,6 +141,8 @@ export function buildHeaderFixSuggestions(findingsMd: string, hostname: string):
   const nextHeaders = keys.map((k) => `          { key: '${HV[k].name}', value: '${HV[k].value}' }`).join(',\n');
   // Apache (.htaccess)
   const apache = keys.map((k) => `Header always set ${HV[k].name} "${HV[k].value}"`).join('\n');
+  // IIS (web.config) — ASP.NET/Windows sunucular için (imza IIS ise platform-uygun tek blok).
+  const iis = keys.map((k) => `      <add name="${HV[k].name}" value="${HV[k].value}" />`).join('\n');
 
   return (
     `Aşağıdaki öneriler, ${hostname} ana sayfasında tespit edilen eksik güvenlik başlıklarını gidermeye yöneliktir. ` +
@@ -165,6 +167,8 @@ export function buildHeaderFixSuggestions(findingsMd: string, hostname: string):
     '```\n\n' +
     `**Apache — \`.htaccess\` (mod_headers):**\n\n` +
     '```apache\n' + `${apache}\n` + '```\n\n' +
+    `**IIS / ASP.NET — \`web.config\`:**\n\n` +
+    '```xml\n' + `<configuration>\n  <system.webServer>\n    <httpProtocol>\n      <customHeaders>\n${iis}\n      </customHeaders>\n    </httpProtocol>\n  </system.webServer>\n</configuration>\n` + '```\n\n' +
     `Değişikliklerden sonra tarayıcı geliştirici araçları (Network sekmesi) veya \`curl -I https://${hostname}\` ile başlıkların yanıta eklendiğini doğrulayın.`
   );
 }

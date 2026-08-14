@@ -95,8 +95,10 @@ export const FINDING_TAXONOMY: Record<FindingType, Entry> = {
     tr: 'Kısıtsız dosya yükleme ile zararlı dosya sunucuya yerleştirilip çalıştırılabilir; sistem ele geçirme riski.',
     en: 'Unrestricted upload can place and execute a malicious file on the server; system compromise risk.' },
   business_logic: { cwe: 'CWE-840', owasp: 'A04:2021 Insecure Design',
-    tr: 'İş mantığı manipülasyonu (ör. negatif miktar, çift indirim) finansal kayba ve muhasebe tutarsızlığına yol açabilir.',
-    en: 'Business-logic manipulation (e.g., negative quantity, double discount) can cause financial loss and accounting inconsistency.' },
+    // (BAĞLAM-NÖTR) Hedef türü bilinmediğinden e-ticarete özgü örnek (negatif miktar/indirim) yerine
+    // genel iş-akışı/yetki dili; maddi kayıp yalnız finansal akış VARSA koşullu belirtilir.
+    tr: 'İş akışı/yetki manipülasyonu (ör. adım atlama, istemci-tarafı değer değişikliği, yetkisiz işlem) iş sürecine veya veri bütünlüğüne zarar verebilir; finansal/işlemsel bir akış varsa maddi kayba yol açabilir.',
+    en: 'Workflow/authorization manipulation (e.g., step-skipping, client-side value tampering, unauthorized action) can harm the business process or data integrity; where a financial/transactional flow exists, it may cause monetary loss.' },
   race: { cwe: 'CWE-362', owasp: 'A04:2021 Insecure Design',
     tr: 'Yarış durumu ile tek-kullanımlık işlemler (kupon/kredi) çift işlenebilir; doğrudan finansal kayıp riski.',
     en: 'A race condition can double-process single-use operations (coupons/credits); direct financial loss risk.' },
@@ -153,7 +155,10 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   // "X-XSS-Protection" bir GÜVENLİK BAŞLIĞI adıdır, XSS zafiyeti DEĞİL -> xss'e eşleşmesin
   // (negatif lookahead: xss'ten hemen sonra "-protection" gelirse eşleşme). "yansıyan XSS" eşleşir.
   { re: /\bxss\b(?!\s*[-–]?\s*protection)|cross.?site scripting|yans[ıi]yan/i, type: 'xss' },
-  { re: /\bidor\b|yetkisiz nesne|nesne eri[şs]im|do[ğg]rudan nesne/i, type: 'idor' },
+  // NOT: "IDOR" tr-locale'de "ıdor" (noktasız ı) olur -> \b[iı]dor. "Yetkisiz erişim" (IDOR bölüm
+  // adı) + "numaralandırılabilir" (IDOR gözlem dili) de eşleşmeli; aksi halde /Comments.aspx?id=0
+  // gibi bulgular sınıflanamayıp ÇIPLAK URL başlık + detay kartı EKSİK kalıyordu.
+  { re: /\b[iı]dor\b|yetkisiz (nesne|eri[şs]im)|nesne eri[şs]im|numaraland[ıi]r[ıi]labilir|do[ğg]rudan nesne/i, type: 'idor' },
   { re: /\bssrf\b|sunucu.?tarafl[ıi] istek/i, type: 'ssrf' },
   { re: /a[çc][ıi]k y[öo]nlendirme|open.?redirect/i, type: 'open_redirect' },
   { re: /\brce\b|uzaktan kod|komut [çc]al[ıi][şs]t[ıi]r/i, type: 'rce' },

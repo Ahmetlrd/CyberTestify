@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import * as pentagi from '../pentagi/client.js';
 import { encryptReport, generateReportAccessSecret } from './crypto.js';
 import { redactAll } from './piiRedaction.js';
+import { validateAndRepairReport } from './reportValidator.js';
 import { FIX_SUGGESTIONS_DELIM, getPackageDef, securityProfileFor } from './scanPackages.js';
 import { hasPassiveExtras, runPassiveExtras, renderPassiveExtrasMarkdown, PASSIVE_EXTRAS_DELIM } from './passiveExtras.js';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
@@ -418,10 +419,19 @@ export async function generateAndStoreReport(flowId: string) {
     console.error('[passiveExtras] ek kontroller uretilemedi (rapor yine de olusur):', err);
   }
 
-  const markdown = redactAll(
+  const rawMarkdown = redactAll(
     renderReportMarkdown(flow.order.domain.hostname, flow.order.package.displayName, findings, logs.screenshots, locale, flow.order.package.key) +
       extrasBlock,
   );
+
+  // (QA KATMANI) PDF/teslimattan ÖNCE deterministik yapısal bütünlük doğrulaması + onarımı (LLM'siz):
+  // yarım/çıplak-URL bulguyu çıkar, devre-kesici şeffaflığını ekle, rozet=master çelişkisini yakala.
+  // Onarılmış markdown teslim edilir; kritik tutarsızlıkta (blocked) admin-onay kapısına alarm bırakılır.
+  const qa = validateAndRepairReport(rawMarkdown, { packageKey: flow.order.package.key, locale, fixText, hostname: flow.order.domain.hostname });
+  if (qa.blocked) {
+    console.error(`[report-validator][ALARM] ${flow.orderId} (${flow.order.package.key}): KRİTİK yapısal tutarsızlık — awaiting_admin_review kapısında insan denetimi gerekir.`);
+  }
+  const markdown = qa.markdown;
 
   const accessSecret = generateReportAccessSecret();
   const base = encryptReport(Buffer.from(markdown, 'utf-8'), accessSecret);
