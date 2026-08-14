@@ -7,7 +7,8 @@
  *
  * GUVENLIK (hedefi koru — E maddesi):
  *  - Input noktasi basina az sayida probe; istekler arasi min gecikme (DoS'lamamak icin).
- *  - Devre kesici: art arda 3+ 5xx -> DUR; yanit suresi baseline'in 3 katini asarsa -> DUR
+ *  - Devre kesici: art arda 5+ 5xx -> DUR (form-POST agresifligi icin 3'ten 5'e cekildi; hedefin
+ *    GERCEKTEN cokmesini onleyecek alt sinir KORUNUR); yanit suresi baseline'in 3 katini asarsa -> DUR
  *    (zaman-tabanli SQLi probe'u HARIC — orada gecikme zaten beklenen kanit); 429/WAF-blok -> DUR.
  *  - Yalniz hedef host; harici host'a ASLA istek yok; redirect izlenmez.
  *  - SQLi: yalniz tek-tirnak (hata imzasi) + tek zaman-tabanli dogrulama. Veri cekme YOK.
@@ -31,7 +32,7 @@ const HEADLESS_PRECHECK_TIMEOUT_MS = 6000; // odeme-oncesi TEK-sayfa on-kontrol 
 const MIN_DELAY_MS = 1200;         // istekler arasi min bekleme (hedefi yormamak)
 const REQ_TIMEOUT_MS = 10000;
 const MAX_INPUTS = 6;              // taranacak input noktasi ust siniri (statik kesif ic havuz)
-const MAX_PROBES_PER_CHECK = 220;  // kontrol basina TOPLAM prob tavani (genisleyen giris-noktasi kapsami icin arttirildi; devre kesici/rate-limit AYNEN korunur — sinirsiz DEGIL)
+const MAX_PROBES_PER_CHECK = 280;  // kontrol basina TOPLAM prob tavani (form-POST agresiflik + payload cesitliligi icin 220->280; bu bir IS TAVANI, zarar-koruma DEGIL — asil koruma 5xx/yavaslama/429 devre kesici)
 const SLOW_FACTOR = 3;             // baseline * 3'u asan yanit -> devre kesici (zaman-tabanli haric)
 const SLOW_FLOOR_MS = 2500;        // baseline cok kucukse gurultuden kacinmak icin taban
 const TIME_PROBE_DELAY_S = 3;      // zaman-tabanli SQLi gecikme saniyesi
@@ -73,7 +74,7 @@ export class ProbeCtx {
       const buf = Buffer.from(await res.arrayBuffer());
       const text = (buf.length > 200_000 ? buf.subarray(0, 200_000) : buf).toString('utf-8');
       // --- Devre kesici degerlendirmesi ---
-      if (res.status >= 500) { this.consec5xx++; if (this.consec5xx >= 3) this.stopped = 'Hedef art arda 3+ kez 5xx döndürdü (hedefe zarar veriyor olabiliriz — otomatik durduruldu).'; }
+      if (res.status >= 500) { this.consec5xx++; if (this.consec5xx >= 5) this.stopped = 'Hedef art arda 5+ kez 5xx döndürdü (hedefe zarar veriyor olabiliriz — otomatik durduruldu).'; }
       else this.consec5xx = 0;
       if (res.status === 429) this.stopped = 'Hedef 429 (hız sınırı) döndürdü — otomatik durduruldu.';
       if (res.status === 403 && /cloudflare|access denied|request blocked|web application firewall|mod_security|incapsula|sucuri|forbidden/i.test(text)) this.stopped = 'WAF/güvenlik duvarı bloğu (403) algılandı — bu kontrol durduruldu.';
@@ -153,6 +154,46 @@ function buildFormBody(ip: InputPoint, injectValue: string): string {
   const usp = new URLSearchParams();
   for (const [k, v] of Object.entries(ip.params)) usp.set(k, k === ip.param ? injectValue : (v || 'test'));
   return usp.toString();
+}
+
+// ======================================================================================
+// (FORM-POST GÜVENLİK KAPISI) Gerçek POST göndermeden ÖNCE formu sınıflandır. Kalıcı/geri-alınamaz
+// yan etki üreten form TÜRLERİNE (yorum/iletişim/kayıt/parola-sıfırlama/ödeme/abonelik) ASLA POST
+// gönderilmez — bunlar müşteriye/üçüncü kişiye gerçek kayıt/e-posta/hesap/finansal etki yaratır.
+// login/arama/filtre ve bu listeye GİRMEYEN formlar test edilebilir. Muğlaksa GÜVENLİ tarafta kal.
+// ======================================================================================
+export type FormCategory = 'login' | 'search' | 'other' | 'comment' | 'contact' | 'signup' | 'password_reset' | 'payment' | 'subscribe';
+const FORBIDDEN_FORM_CATS = new Set<FormCategory>(['comment', 'contact', 'signup', 'password_reset', 'payment', 'subscribe']);
+const FORBIDDEN_REASON: Record<string, string> = {
+  comment: 'yorum/mesaj yayınlama (kalıcı içerik oluşturur)',
+  contact: 'iletişim formu (gerçek e-posta gönderir)',
+  signup: 'kayıt/hesap oluşturma (kalıcı hesap oluşturur)',
+  password_reset: 'parola sıfırlama (gerçek kullanıcıya e-posta/SMS tetikler)',
+  payment: 'sepet/ödeme/checkout (finansal etki)',
+  subscribe: 'abonelik/bülten (kalıcı kayıt + e-posta)',
+};
+// Ortak kapı: form YASAK türe giriyorsa okunur sebep, değilse null (POST'a izin var).
+export function forbiddenFormReason(action: string, fields: string[]): string | null {
+  const cat = formCategory(action, fields);
+  return FORBIDDEN_FORM_CATS.has(cat) ? (FORBIDDEN_REASON[cat] ?? cat) : null;
+}
+export function formCategory(action: string, fields: string[]): FormCategory {
+  const hay = (action + ' ' + fields.join(' ')).toLowerCase();
+  const has = (re: RegExp) => re.test(hay);
+  const hasPw = fields.some((f) => /pass|sifre|şifre|pwd/i.test(f));
+  // Sıra ÖNEMLİ: en riskli/özgül kalıplar önce (forgot-password login'e benzeyebilir).
+  if (has(/forgot|reset|recover|sifre.?sifirla|şifre.?sıfırla|password.?reset|lost.?password|unuttu/)) return 'password_reset';
+  if (has(/checkout|\bcart\b|sepet|basket|\bpay\b|payment|odeme|ödeme|billing|fatura|\border\b|sipari[sş]|credit.?card|kredi.?kart|iban/)) return 'payment';
+  if (has(/comment|yorum|review|degerlendir|değerlendir|feedback|guestbook|rating|\breply\b|geri.?bildirim|contact.?us/)) return 'comment';
+  if (has(/subscribe|newsletter|abone|bulten|bülten|mailing.?list/)) return 'subscribe';
+  if (has(/signup|sign.?up|register|kayit|kayıt|create.?account|hesap.?olustur|hesap.?oluştur|\bjoin\b|uye.?ol|üye.?ol/)) return 'signup';
+  // parola + (tekrar/e-posta) alanı + login DEĞİLSE -> kayıt formu (hesap oluşturur).
+  if (hasPw && fields.some((f) => /confirm|repeat|again|tekrar|email|e-?posta|mail/i.test(f)) && !has(/login|signin|sign.?in|giris|giriş|logon/)) return 'signup';
+  if (has(/contact|iletisim|iletişim|message|mesaj/) && fields.some((f) => /email|e-?posta|mail|subject|konu|message|mesaj/i.test(f))) return 'contact';
+  // login: parola alanı + login-benzeri eylem/kullanıcı alanı. Bypass testi GÜVENLİ (kayıt oluşturmaz).
+  if (hasPw && (has(/login|signin|sign.?in|giris|giriş|logon|authenticate|oturum|logon/) || fields.some((f) => /user|kullanic|kullanıc|email|login|logon/i.test(f)))) return 'login';
+  if (fields.some((f) => /^(q|s|query|search|ara|arama|keyword|kelime|term|filter|filtre|sort|siralama|sıralama|category|kategori)$/i.test(f)) || has(/search|\bara\b|filter|filtre|sorgu/)) return 'search';
+  return 'other';
 }
 
 // ======================================================================================
@@ -848,7 +889,7 @@ export function discoveryMethodNote(surf: Surface): string {
 const SQL_ERROR_RE = /(SQL syntax|mysql_fetch|mysqli|you have an error in your sql|ORA-\d{4,5}|PLS-\d|PostgreSQL.*ERROR|pg_query|SQLite3?::|SQLITE_ERROR|SQLITE_CONSTRAINT|no such column|near ".{0,40}": syntax error|unrecognized token|SQLSTATE\[|Microsoft OLE DB Provider|ODBC SQL Server|Unclosed quotation mark|quoted string not properly terminated|syntax error at or near|Warning: pg_|Warning: mysql|Sequelize\w*Error)/i;
 
 export type InjFinding = { inputPoint: string; type: 'SQLi' | 'XSS'; technique: 'error-based' | 'time-based' | 'reflection'; evidence: string; severity: 'high' | 'medium' | 'low'; confidence: 'high' | 'medium' | 'low' };
-export type InjEvidence = { ok: boolean; baseUrl: string; pagesScanned: number; inputsFound: number; inputsTested: number; probesSent: number; payloadsSent: number; findings: InjFinding[]; stopped: string | null; notes: string[]; verboseError?: { endpoint: string; sig: string } };
+export type InjEvidence = { ok: boolean; baseUrl: string; pagesScanned: number; inputsFound: number; inputsTested: number; probesSent: number; payloadsSent: number; findings: InjFinding[]; stopped: string | null; notes: string[]; verboseError?: { endpoint: string; sig: string }; formsTested: number; formsSkipped: Array<{ action: string; reason: string }> };
 
 // (İŞ B) ZATEN toplanan hata yanıtı GÖVDESİNDE ayrıntılı-hata-sayfası imzası — UYDURMA YOK, yalnız
 // GERÇEK yanıtı okur. KONSERVATİF: jenerik "500" değil; framework hata-sayfası/stack-trace/dosya-yolu
@@ -860,17 +901,18 @@ export type InjEvidence = { ok: boolean; baseUrl: string; pagesScanned: number; 
 const VERBOSE_ERROR_RE = /Server Error in .{0,60}Application|\.NET Framework Version|Stack Trace:|System\.(Data\.SqlClient|Web\.HttpException|NullReferenceException|InvalidOperationException)|[A-Za-z]:\\(inetpub|Windows|wwwroot|Users)\\|(?:Fatal error|Warning|Parse error|Notice):.{0,200}?\bon line \d+|Traceback \(most recent call last\)|\bat [\w.$/]+\([\w$]+\.java:\d+\)|\b(?:mysql_fetch_(?:array|assoc|row)|mysqli?_query|pg_query)\s*\(|supplied argument is not a valid MySQL/i;
 
 // Zararsiz, veri-degistirmeyen SQLi HATA-tetikleyici varyantlari (yalniz response'ta hata imzasi arar).
-const SQLI_ERROR_PAYLOADS = ["'", '"', "' OR '1'='1", "')", "';"];
+// (FORM-POST agresiflik) cesitlilik bir kademe artirildi: comment/parantez/backslash varyantlari da.
+const SQLI_ERROR_PAYLOADS = ["'", '"', "' OR '1'='1", "')", "';", "' OR 1=1-- -", '\\', '"))'];
 // Context-aware zararsiz XSS isaret payload'lari (JS CALISTIRMAZ; yalniz kacirilmadan yansima kontrolu).
-// tag-context, single-quote-attr, double-quote-attr, URL/js-context marker'lari.
+// tag-context, single-quote-attr, double-quote-attr, URL/js-context, SVG/onerror marker'lari.
 const XSS_MARKER = 'cxt9137xmark';
-const XSS_PAYLOADS = [`${XSS_MARKER}"><cxmark>`, `${XSS_MARKER}'><cxmark>`, `${XSS_MARKER}" cxa=x`, `${XSS_MARKER}');cx//`];
+const XSS_PAYLOADS = [`${XSS_MARKER}"><cxmark>`, `${XSS_MARKER}'><cxmark>`, `${XSS_MARKER}" cxa=x`, `${XSS_MARKER}');cx//`, `${XSS_MARKER}</title><cxmark>`];
 const INJ_MAX_INPUTS = 26; // (İş B.1) giris noktasi kapsami +%30 (20->26); devre kesici/rate-limit AYNEN korunur
 const INJ_PATH_MAX = 16;   // (İş B.1) path-ID uc noktasi ust siniri 12->16
 
 export async function collectInjectionEvidence(host: string, session?: AuthSession): Promise<InjEvidence> {
   const surf = await discoverSurface(host, session);
-  if (!surf.ok) return { ok: false, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: 0, inputsFound: 0, inputsTested: 0, probesSent: 0, payloadsSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'] };
+  if (!surf.ok) return { ok: false, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: 0, inputsFound: 0, inputsTested: 0, probesSent: 0, payloadsSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'], formsTested: 0, formsSkipped: [] };
   const inputs = surf.inputs.slice(0, INJ_MAX_INPUTS);
   const ctx = new ProbeCtx();
   ctx.label = "Enjeksiyon (SQLi/XSS) Doğrulama";
@@ -879,6 +921,9 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
   const notes: string[] = [];
   let tested = 0;
   let payloads = 0;
+  // (FORM-POST GÜVENLİK KAPISI) Kalıcı yan-etkili form türlerine POST ATMA; test edilen/atlanan formları izle.
+  const testedFormActions = new Set<string>();
+  const skippedForms = new Map<string, string>(); // action -> okunur sebep (YASAK)
   // (İŞ B) Toplanan yanıt gövdelerinde ayrıntılı-hata-sayfası imzası (ilk eşleşme saklanır; redakte).
   let verboseError: { endpoint: string; sig: string } | null = null;
   const scanVerbose = (url: string, r: ProbeResult | null) => {
@@ -887,6 +932,14 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
     if (m) { try { verboseError = { endpoint: new URL(url).pathname, sig: m[0].replace(/\s+/g, ' ').slice(0, 120) }; } catch { verboseError = { endpoint: url, sig: m[0].slice(0, 120) }; } }
   };
 
+  // (FORM-POST ŞEFFAFLIĞI) YASAK formları ÖNCEDEN sınıflandır — devre kesici erken dursa bile atlanan
+  // formlar rapora tam yansısın (ve loop bu formlara zaten POST atmaz).
+  for (const ip of inputs) {
+    if (ip.method === 'POST' && ip.source === 'form') {
+      const cat = formCategory(ip.action, Object.keys(ip.params));
+      if (FORBIDDEN_FORM_CATS.has(cat) && !skippedForms.has(ip.action)) skippedForms.set(ip.action, FORBIDDEN_REASON[cat] ?? cat);
+    }
+  }
   const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
   if (base) ctx.baseline = base.ms;
   const send = async (ip: InputPoint, val: string, expectSlow = false): Promise<ProbeResult | null> => {
@@ -900,6 +953,13 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
 
   for (const ip of inputs) {
     if (ctx.stopped) break;
+    // (FORM-POST GÜVENLİK KAPISI) POST form ise ÖNCE sınıflandır; YASAK türe (yorum/iletişim/kayıt/
+    // parola-sıfırlama/ödeme/abonelik) gerçek POST ATMA — kalıcı/geri-alınamaz yan etki yaratır.
+    if (ip.method === 'POST' && ip.source === 'form') {
+      const cat = formCategory(ip.action, Object.keys(ip.params));
+      if (FORBIDDEN_FORM_CATS.has(cat)) { if (!skippedForms.has(ip.action)) skippedForms.set(ip.action, FORBIDDEN_REASON[cat] ?? cat); continue; }
+      testedFormActions.add(ip.action);
+    }
     tested++;
     const label = `${ip.method} ${new URL(ip.action).pathname}?${ip.param}`;
 
@@ -970,7 +1030,10 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
   if (ctx.stopped) notes.push(ctx.stopped);
   const totalTestable = inputs.length + pathEps.length;
   if (!totalTestable) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada test edilebilir GET parametresi, form alanı veya path uç noktası bulunamadı (giriş noktası yok).` + spaHint(surf));
-  return { ok: true, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: surf.pagesScanned, inputsFound: totalTestable, inputsTested: tested + pathTested, probesSent: ctx.sent, payloadsSent: payloads, findings, stopped: ctx.stopped, notes, verboseError: verboseError ?? undefined };
+  const seenSkip = new Set<string>();
+  const formsSkipped = [...skippedForms.entries()].map(([action, reason]) => { let p = action; try { p = new URL(action).pathname; } catch { /* ham */ } return { action: p, reason }; }).filter((f) => { const k = `${f.action}|${f.reason}`; if (seenSkip.has(k)) return false; seenSkip.add(k); return true; });
+  if (formsSkipped.length) notes.push(`Güvenlik gereği ${formsSkipped.length} form gerçek POST testinden HARİÇ tutuldu (kalıcı yan etki riski): ${formsSkipped.map((f) => `${f.action} (${f.reason})`).join('; ')}.`);
+  return { ok: true, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: surf.pagesScanned, inputsFound: totalTestable, inputsTested: tested + pathTested, probesSent: ctx.sent, payloadsSent: payloads, findings, stopped: ctx.stopped, notes, verboseError: verboseError ?? undefined, formsTested: testedFormActions.size, formsSkipped };
 }
 
 // ======================================================================================
@@ -1275,6 +1338,8 @@ export async function collectSsrfEvidence(host: string, session?: AuthSession): 
 
   for (const ip of inputs) {
     if (ctx.stopped) break;
+    // (FORM-POST GÜVENLİK KAPISI) YASAK türdeki forma gerçek POST atma.
+    if (ip.method === 'POST' && ip.source === 'form' && forbiddenFormReason(ip.action, Object.keys(ip.params))) continue;
     const token = randToken();
     const echoUrl = `${OOB_ECHO_BASE}/oob/echo/${token}`;
     // HARD-GUARD: probe URL yalniz kendi echo host'umuz olabilir; ic ag ASLA.
@@ -1312,6 +1377,8 @@ export async function collectRceEvidence(host: string, session?: AuthSession): P
 
   for (const ip of inputs) {
     if (ctx.stopped) break;
+    // (FORM-POST GÜVENLİK KAPISI) YASAK türdeki forma gerçek POST atma.
+    if (ip.method === 'POST' && ip.source === 'form' && forbiddenFormReason(ip.action, Object.keys(ip.params))) continue;
     const label = `${ip.method} ${new URL(ip.action).pathname}?${ip.param}`;
     let hit = false;
     for (const payload of RCE_SLEEP_PAYLOADS.slice(0, 3)) { // input basina en fazla 3 zaman-tabanli deneme, retry YOK
@@ -1371,6 +1438,9 @@ export async function collectFileUploadEvidence(host: string): Promise<ActiveChe
 
   for (const f of forms) {
     if (ctx.stopped) break;
+    // (FORM-POST GÜVENLİK KAPISI) Yükleme formu aslında kayıt/iletişim/yorum formuysa (ör. avatar-yükleme
+    // içeren signup, ekli iletişim formu) gerçek POST atma — kalıcı hesap/e-posta/kayıt yaratabilir.
+    if (forbiddenFormReason(f.action, [f.fileField, ...f.otherFields])) continue;
     // Zararsiz, INERT, cift-uzantili test dosyasi (calistirilamaz). GERI CAGIRILMAZ.
     const { body, contentType } = buildMultipart(f.fileField, 'cybertestify_probe.php.txt', 'text/plain', 'CYBERTESTIFY-UPLOAD-PROBE (inert, non-executable test file)', f.otherFields);
     const r = await ctx.fetchOnce(f.action, { method: 'POST', body, contentType }); // tek deneme, retry YOK
@@ -1478,7 +1548,15 @@ export async function collectRaceMassAssignEvidence(host: string): Promise<Activ
   const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
   if (base) ctx.baseline = base.ms;
 
-  if (form) {
+  // (FORM-POST GÜVENLİK KAPISI — KRİTİK) Mass-assignment hedefi genelde kayıt/profil formudur; bu forma
+  // gerçek POST GERÇEK HESAP OLUŞTURABİLİR. YASAK türe giriyorsa POST atma; şeffaf not düş. Kimlik-doğrulamalı
+  // (kapsam sözleşmeli) mass-assignment testi Tam Kapsamlı Pentest kapsamındadır.
+  const massForbidden = form ? forbiddenFormReason(form.action, form.fields) : null;
+  if (form && massForbidden) {
+    let p = form.action; try { p = new URL(form.action).pathname; } catch { /* ham */ }
+    notes.push(`Mass-assignment adayı form (${p}) güvenlik gereği gerçek POST testinden HARİÇ tutuldu: ${massForbidden}. Bu tür form POST'u kalıcı kayıt oluşturacağından yalnızca kimlik-doğrulamalı, kapsam-sözleşmeli Tam Kapsamlı Pentest'te test edilebilir.`);
+  }
+  if (form && !massForbidden) {
     // Sahte/test verisi + fazladan isAdmin/role alani. TEK POST, retry YOK.
     const usp = new URLSearchParams();
     for (const f of form.fields) usp.set(f, /email/i.test(f) ? `cybertestify-probe+${randToken().slice(0, 8)}@example.com` : 'cybertestify-test');

@@ -215,10 +215,10 @@ export function buildIdorReport(ev: IdorEvidence): { findings: string; fixText: 
 // rapora yerlestirir. Diger 5 uyenin deterministik generator'i YOK -> sessizce bos/hatali sonuc
 // yerine NET "henuz olgunlasmadi" notu basar (Grok/tuketici-durustlugu geregi).
 // Her uye: collector'i calistir (sayac icin) + section'i kur. Tumu gercek (7/7).
-type MemberRun = { rep: { findings: string; fixText: string } | null; pages: number; inputs: number; probes: number; fc: number };
+type MemberRun = { rep: { findings: string; fixText: string } | null; pages: number; inputs: number; probes: number; fc: number; formsTested?: number; formsSkipped?: Array<{ action: string; reason: string }> };
 type ActiveMember = { key: string; title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; run: (host: string) => Promise<MemberRun> };
 const ACTIVE_BUNDLE_MEMBERS: ActiveMember[] = [
-  { key: 'injection_verify', title: 'Enjeksiyon (SQLi/XSS) Doğrulama', conf: 'Yüksek', run: async (h) => { const ev = await collectInjectionEvidence(h); return { rep: buildInjectionReport(ev), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
+  { key: 'injection_verify', title: 'Enjeksiyon (SQLi/XSS) Doğrulama', conf: 'Yüksek', run: async (h) => { const ev = await collectInjectionEvidence(h); return { rep: buildInjectionReport(ev), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length, formsTested: ev.formsTested, formsSkipped: ev.formsSkipped }; } },
   { key: 'idor_verify', title: 'Yetkisiz Erişim (IDOR) Doğrulama', conf: 'Orta', run: async (h) => { const ev = await collectIdorEvidence(h); return { rep: buildIdorReport(ev), pages: ev.pagesScanned, inputs: ev.candidates, probes: ev.probesSent, fc: ev.findings.length }; } },
   { key: 'ssrf_verify', title: 'SSRF Doğrulama', conf: 'Orta', run: async (h) => { const ev = await collectSsrfEvidence(h); return { rep: buildActiveCheckReport(ev, SSRF_CFG), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
   { key: 'file_upload_verify', title: 'Dosya Yükleme Doğrulama', conf: 'Düşük', run: async (h) => { const ev = await collectFileUploadEvidence(h); return { rep: buildActiveCheckReport(ev, UPLOAD_CFG), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
@@ -392,10 +392,21 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
     else sonuc = '⚠️ İncelenemedi (test edilebilir giriş noktası bulunamadı — “temiz” DEĞİL)';
     return `| ${m.title} | ${r ? r.inputs : '—'} | ${r ? r.probes : '—'} | ${sonuc} |`;
   }).join('\n');
+  // (FORM-POST ŞEFFAFLIĞI) Kaç form gerçek POST ile test edildi, kaçı YASAK listesi gereği atlandı (neden).
+  const injRun = runs[0]; // injection_verify = 0. index
+  const formsTested = injRun?.formsTested ?? 0;
+  const formsSkipped = injRun?.formsSkipped ?? [];
+  const formLine =
+    (formsTested > 0 || formsSkipped.length > 0)
+      ? `\n**Form POST testi:** **${formsTested}** forma (login/arama/filtre vb.) gerçek POST payload’ı gönderildi. ` +
+        (formsSkipped.length
+          ? `**${formsSkipped.length}** form ise güvenlik gereği (kalıcı/geri-alınamaz yan etki riski) gerçek POST testinden **hariç tutuldu**: ${formsSkipped.map((f) => `\`${f.action}\` (${f.reason})`).join('; ')}. Bu formlar "kanıtla — istismar etme" ilkesi gereği hiç POST edilmez; kimlik-doğrulamalı/kapsam-sözleşmeli test **Tam Kapsamlı Pentest** kapsamındadır.`
+          : `YASAK listesine (yorum/iletişim/kayıt/parola-sıfırlama/ödeme/abonelik) giren form saptanmadı.`)
+      : '';
   const assuranceSection =
     `## POZİTİF GÜVENCE — DENENEN AKTİF DOĞRULAMA YÖNTEMLERİ\n\n` +
     `Bulgu çıkmayan kontroller de dâhil, ${ACTIVE_BUNDLE_MEMBERS.length} aktif kontrol kategorisinin her biri keşfedilen yüzeyde gerçekten çalıştırıldı (toplam **${totalProbes}** istek, **${pagesScanned}** benzersiz sayfa). Aşağıdaki tablo, "bulgu yok" sonuçlarını da — kaç giriş noktası denendi, kaçında kanıt bulunamadı — şeffaf gösterir:\n\n` +
-    `| Kontrol | Denenen giriş noktası | Gönderilen istek | Sonuç |\n|---------|-----------------------|------------------|-------|\n${assuranceRows}\n\n` +
+    `| Kontrol | Denenen giriş noktası | Gönderilen istek | Sonuç |\n|---------|-----------------------|------------------|-------|\n${assuranceRows}\n${formLine}\n\n` +
     `> **Üç-durum ayrımı (dürüstlük):** ✅ *Temiz* = kontrol çalıştı, kanıt bulunamadı · ⚠️ *Bulgu var* = yukarıda detaylı · ⚠️ *İncelenemedi* = test edilebilir giriş noktası bulunamadı (güvenli anlamına GELMEZ).\n\n` +
     `### Bu paket NE değerlendirir, NE değerlendirmez\n\n` +
     `**EDER ("kanıtla — istismar etme" ilkesiyle; zararsız, veri-değiştirmeyen problar):** SQLi/XSS enjeksiyonu, yetkisiz erişim (IDOR), SSRF, dosya yükleme, iş mantığı, race/mass-assignment ve RCE/komut enjeksiyonu göstergeleri — kimlik doğrulaması **gerektirmeyen** yüzeyde, keşfedilen ${pagesScanned} sayfada.\n\n` +
