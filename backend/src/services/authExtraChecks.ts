@@ -143,12 +143,15 @@ export async function collectLoginBypassEvidence(host: string, loginUrl?: string
     .replace(/\s+/g, ' ').trim().slice(0, 140);
 
   let testedEndpoint: string | null = null;
+  let testedCount = 0;
   for (const url of candidates) {
     if (ctx.stopped) break;
+    if (testedCount >= 4) break; // en fazla 4 GERÇEK login ucu test et (devre kesiciyi koru)
     // (a) Kontrol: kesinlikle geçersiz kimlik -> başarısız olmalı (uç gerçekten login mi + baseline).
     const control = await ctx.fetchOnce(url, { method: 'POST', body: bodyOf(`nouser+${rnd}@example.com`, `wrong-${rnd}`), contentType: 'application/json' });
     if (!control || control.status === 404 || control.status === 0) continue; // bu uç login değil
     testedEndpoint = url;
+    testedCount++;
     if (isSuccess(control)) { notes.push(`\`${new URL(url).pathname}\` uydurma kimlikle de başarı döndürdü — güvenilir baypas ölçümü yapılamadı (bu uç atlandı).`); continue; }
     // (b) SQLi payload'ları — biri kontrolün AKSİNE POZİTİF başarı sinyali (token/"logged in") dönerse GÖSTERGE.
     for (const payload of SQLI_LOGIN_PAYLOADS) {
@@ -162,7 +165,8 @@ export async function collectLoginBypassEvidence(host: string, loginUrl?: string
         break;
       }
     }
-    break; // bir gerçek login ucu yeterli
+    if (findings.length) break; // baypas bulundu -> yeter. Aksi halde diğer adayları da dene (ör. form
+    // ucu /login.jsp bypass etmese de gerçek injectable /api/login sonraki adaydadır — erken durma).
   }
 
   if (!testedEndpoint) notes.push('Test edilebilir bir giriş (login) ucu bulunamadı — giriş baypası göstergesi kontrolü uygulanamadı.');
