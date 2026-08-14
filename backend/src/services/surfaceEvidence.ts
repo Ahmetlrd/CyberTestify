@@ -10,6 +10,7 @@
  * Her kontrol ASLA throw ETMEZ (izole); ulasilamayan veri "tespit edilemedi" olur.
  */
 import tls from 'node:tls';
+import { createHash } from 'node:crypto';
 import { classifyExposedFile } from './passiveExtras.js';
 import { logScanStep } from './scanLogger.js';
 
@@ -131,6 +132,88 @@ export async function collectHttp(host: string): Promise<HttpEvidence> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// ============================================================================
+// (BÖLÜM 1 — ÇOK SAYFA KAPSAMI) Pasif paketlerin KENDİ kontrollerini ana sayfa DIŞINDA da
+// çalıştırabilmesi için paylaşılan sayfa toplayıcı. YALNIZ GET; sayfa üst sınırı + istekler-arası
+// bekleme + devre kesici (art arda 5xx). Her sayfanın BAŞLIK + gövdesi + Set-Cookie'si döner.
+// Hiçbir prob/payload GÖNDERMEZ — sadece keşfedilen sayfaları çeker (pasif). Aktif Doğrulama'nın
+// prob/payload'ıyla KARIŞTIRILMAZ (paket farklılaşması korunur — bu yalnız GET-çekme).
+// ============================================================================
+export type PageEvidence = { url: string; status: number; headers: Map<string, string>; html: string; setCookies: string[] };
+const PAGES_MAX = 15;            // toplanacak benzersiz sayfa üst sınırı (sonsuz büyüme YOK)
+const PAGES_MIN_DELAY_MS = 250;  // istekler arası bekleme (hedefe nazik)
+const PAGE_ASSET_RE = /\.(css|js|mjs|png|jpe?g|gif|svg|ico|woff2?|ttf|eot|pdf|zip|rar|mp4|webm|webp|avif|json|xml|txt)(\?|$)/i;
+
+async function fetchPage(url: string): Promise<PageEvidence | null> {
+  const headers = new Map<string, string>();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), HTTP_TIMEOUT_MS);
+  const t0 = Date.now();
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, redirect: 'follow', headers: { 'user-agent': 'CyberTestify-PassiveCheck/1.0', accept: 'text/html,*/*' } });
+    res.headers.forEach((v, k) => headers.set(k.toLowerCase(), v));
+    let setCookies: string[] = [];
+    try {
+      const gsc = (res.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie;
+      if (typeof gsc === 'function') setCookies = gsc.call(res.headers);
+      else if (headers.has('set-cookie')) setCookies = [headers.get('set-cookie')!];
+    } catch { /* yoksa boş */ }
+    let html = '';
+    try { const buf = Buffer.from(await res.arrayBuffer()); html = (buf.length > MAX_HTML ? buf.subarray(0, MAX_HTML) : buf).toString('utf-8'); } catch { /* gövde okunamadı */ }
+    logScanStep({ step: 'Çok-sayfa kapsam', method: 'GET', url, status: res.status, durationMs: Date.now() - t0, sizeBytes: html.length, level: res.status >= 500 ? 'warn' : 'info' });
+    return { url, status: res.status, headers, html, setCookies };
+  } catch (err) {
+    logScanStep({ step: 'Çok-sayfa kapsam', method: 'GET', url, status: 0, durationMs: Date.now() - t0, level: 'error', summary: `İstek hatası: ${String((err as Error)?.name ?? 'err')}` });
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Ana sayfa + keşfedilen iç linkler (aynı host, asset/fragment hariç) — en fazla maxPages benzersiz
+// içerikli sayfa. Devre kesici: art arda 3+ 5xx -> durur. Ana sayfaya erişilemezse boş döner.
+export async function collectPages(host: string, maxPages = PAGES_MAX): Promise<PageEvidence[]> {
+  const o = await resolveOrigin(host);
+  if (!o.reachable) return [];
+  const homeUrl = `${o.origin}/`;
+  const home = await fetchPage(homeUrl);
+  if (!home || home.status === 0) return [];
+  const pages: PageEvidence[] = [home];
+  const md5 = (s: string) => createHash('md5').update(s).digest('hex');
+  const seenHash = new Set<string>([md5(home.html)]);
+  const seenUrl = new Set<string>([homeUrl]);
+  // ana sayfadan iç link keşfi
+  const targets: string[] = [];
+  const hostBare = host.replace(/^www\./, '');
+  for (const m of home.html.matchAll(/href\s*=\s*["']([^"'#]+)["']/gi)) {
+    if (targets.length >= maxPages * 3) break;
+    let abs: string;
+    try { abs = m[1].startsWith('http') ? m[1] : new URL(m[1].replace(/&amp;/g, '&'), homeUrl).toString(); } catch { continue; }
+    try {
+      const u = new URL(abs);
+      if (u.hostname.replace(/^www\./, '') !== hostBare) continue; // yalnız aynı host
+      if (PAGE_ASSET_RE.test(u.pathname)) continue;
+      const norm = `${u.origin}${u.pathname}${u.search}`;
+      if (!seenUrl.has(norm)) { seenUrl.add(norm); targets.push(norm); }
+    } catch { /* atla */ }
+  }
+  let consec5xx = 0;
+  for (const t of targets) {
+    if (pages.length >= maxPages) break;
+    await new Promise((r) => setTimeout(r, PAGES_MIN_DELAY_MS)); // rate-limit (nazik)
+    const p = await fetchPage(t);
+    if (!p) continue;
+    if (p.status >= 500) { consec5xx++; if (consec5xx >= 3) { logScanStep({ step: 'Çok-sayfa kapsam', level: 'circuit_breaker', summary: 'Art arda 3+ 5xx — çok-sayfa toplama durduruldu.' }); break; } }
+    else consec5xx = 0;
+    if (p.status !== 200 || !p.html) continue;
+    const h = md5(p.html);
+    if (seenHash.has(h)) continue; // aynı içerik (SPA shell / kopya) -> benzersiz sayma
+    seenHash.add(h);
+    pages.push(p);
+  }
+  return pages;
 }
 
 // ---- CORS: Origin ile probe -------------------------------------------------------

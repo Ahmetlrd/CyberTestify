@@ -11,7 +11,7 @@
  */
 import tls from 'node:tls';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
-import { resolveOrigin } from './surfaceEvidence.js';
+import { resolveOrigin, collectPages } from './surfaceEvidence.js';
 import { detectOutdatedSoftware } from './techEol.js';
 
 const FETCH_TIMEOUT_MS = 9000;
@@ -223,9 +223,33 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
     const row = HEADER_ROWS.find((r) => r.key === k)!;
     if (!ev.headers.has(row.hdr)) absent.add(k);
   }
+  // (BÖLÜM 1 — ÇOK-SAYFA KAPSAMI) AYNI kontrolleri (güvenlik başlıkları + sürüm imzası) ana sayfa
+  // DIŞINDA keşfedilen sayfalarda da uygula. PAKET FARKLILAŞMASI KORUNUR: HÂLÂ yalnız header/TLS/
+  // sürüm imzası — CORS/çerez/CSP/DNS/hassas-dosya EKLENMEZ (bunlar Dış Yüzey'e özeldir). Yalnız
+  // GET-çekme; hiçbir prob/payload gönderilmez.
+  const pages = await collectPages(hostname, 12);
+  const pageCount = Math.max(1, pages.length);
+  const allTech = new Set<string>(tech);
+  const headerAbsentCount = new Map<SecKey, number>(); // kaç sayfada eksik
+  for (const pg of pages) {
+    for (const k of SEC_KEYS) { const row = HEADER_ROWS.find((r) => r.key === k)!; if (!pg.headers.has(row.hdr)) headerAbsentCount.set(k, (headerAbsentCount.get(k) ?? 0) + 1); }
+    detectTech(pg.headers, pg.html).tech.forEach((t) => allTech.add(t));
+  }
+  // Sayfaya-ÖZGÜ sapma: ana sayfada MEVCUT ama bazı alt sayfalarda EKSİK kritik başlık(lar).
+  const perPageMissing: string[] = [];
+  if (pageCount > 1) {
+    for (const k of ['csp', 'xfo'] as SecKey[]) {
+      const row = HEADER_ROWS.find((r) => r.key === k)!;
+      const absentOn = headerAbsentCount.get(k) ?? 0;
+      if (ev.headers.has(row.hdr) && absentOn > 0) perPageMissing.push(`${row.header} (${absentOn}/${pageCount} sayfada)`);
+    }
+  }
+  const cov = (k: SecKey) => (pageCount > 1 ? ` (${headerAbsentCount.get(k) ?? pageCount}/${pageCount} taranan sayfada eksik)` : '');
+
   // http-only (şifresiz iletişim) TEK BAŞINA ciddi bir bulgudur -> genel risk en az Yüksek.
   // (HATA 4) EOL/eski yazılım imzası -> GERÇEK bulgu (bilgi metni değil). Sürüm imzasından türer.
-  const eolRisks = detectOutdatedSoftware(tech);
+  // ÇOK-SAYFA: sürüm imzası birden fazla sayfanın BİRLEŞİMİNDEN (bir sürüm yalnız alt sayfada olabilir).
+  const eolRisks = detectOutdatedSoftware([...allTech]);
   const eolRank = eolRisks.some((r) => r.sev === 'Yüksek') ? 2 : eolRisks.some((r) => r.sev === 'Orta') ? 1 : 0;
   const baseLevel = httpOnly ? 'high' : riskLevel(absent, ev.tls);
   const level: 'low' | 'medium' | 'high' =
@@ -275,13 +299,22 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
   if (tlsInf.hostnameMatch === false) risks.push({ bulgu: 'TLS hostname uyuşmazlığı', sev: 'Yüksek', aciklama: `Sertifika ${hostname} adına düzenlenmemiş; ziyaretçiler tarayıcı güvenlik uyarısıyla karşılaşabilir ve siteye güven azalır.` });
   if (tlsInf.daysLeft != null && tlsInf.daysLeft < 0) risks.push({ bulgu: 'TLS sertifikası süresi dolmuş', sev: 'Yüksek', aciklama: 'Site tarayıcılarca güvensiz kabul edilir; ziyaretçi kaybına yol açar.' });
   for (const e of eolRisks) risks.push({ bulgu: e.bulgu, sev: e.sev, aciklama: e.aciklama });
+  const keyOf = (headerName: string): SecKey | undefined => HEADER_ROWS.find((r) => r.header === headerName)?.key as SecKey | undefined;
+  const covFor = (headerNames: string[]): string => {
+    if (pageCount <= 1) return '';
+    const counts = headerNames.map((h) => { const k = keyOf(h); return k ? headerAbsentCount.get(k) ?? pageCount : pageCount; });
+    const n = Math.max(...counts);
+    return ` Taranan ${pageCount} benzersiz sayfanın ${n === pageCount ? 'TAMAMINDA' : `${n}/${pageCount}'sinde`} eksik.`;
+  };
   const critList: string[] = missingSec.filter((h) => h === 'Content-Security-Policy' || h === 'X-Frame-Options');
   if (critList.length) {
     const spaNote = isSpa && critList.includes('Content-Security-Policy') ? ' Site JavaScript ağırlıklı bir SPA olduğundan CSP eksikliği XSS etkisini büyütür; önceliklendirilmesi önerilir.' : '';
-    risks.push({ bulgu: `Kritik güvenlik başlıkları eksik (${critList.join(', ')})`, sev: 'Orta', aciklama: `XSS ve/veya clickjacking saldırılarına karşı tarayıcı seviyesinde savunma bulunmuyor.${spaNote}` });
+    risks.push({ bulgu: `Kritik güvenlik başlıkları eksik (${critList.join(', ')})`, sev: 'Orta', aciklama: `XSS ve/veya clickjacking saldırılarına karşı tarayıcı seviyesinde savunma bulunmuyor.${covFor(critList)}${spaNote}` });
   }
   const otherMissing = missingSec.filter((h) => !critList.includes(h));
-  if (otherMissing.length) risks.push({ bulgu: `Ek güvenlik başlıkları eksik (${otherMissing.join(', ')})`, sev: 'Orta', aciklama: 'Savunma derinliği zayıf; tek tek düşük etkili olsa da birlikte saldırı yüzeyini genişletir.' });
+  if (otherMissing.length) risks.push({ bulgu: `Ek güvenlik başlıkları eksik (${otherMissing.join(', ')})`, sev: 'Orta', aciklama: `Savunma derinliği zayıf; tek tek düşük etkili olsa da birlikte saldırı yüzeyini genişletir.${covFor(otherMissing)}` });
+  // (BÖLÜM 1) SAYFAYA-ÖZGÜ tutarsızlık: ana sayfada MEVCUT bir kritik başlık bazı alt sayfalarda EKSİK.
+  if (perPageMissing.length) risks.push({ bulgu: 'Sayfaya özgü güvenlik başlığı tutarsızlığı', sev: 'Orta', aciklama: `Ana sayfada mevcut olan bir/birkaç kritik başlık bazı iç sayfalarda gönderilmiyor: ${perPageMissing.join(', ')}. Başlık politikası tüm yollarda tutarlı uygulanmalı (ör. sunucu bloğu genelinde, tek uç noktada değil).` });
   if (disclosure.length) risks.push({ bulgu: 'Üçüncü taraf servis kimlikleri', sev: 'Bilgilendirme', aciklama: `Ana sayfada ${disclosure.join('; ')} açıkça görülüyor. İstismar edilebilir açık değildir; yalnızca dış servis bağımlılıklarına dair farkındalık amacıyla listelenmiştir.` });
 
   const riskSection = risks.length
@@ -306,6 +339,7 @@ export async function generateBasitReport(hostname: string): Promise<{ findings:
   bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${riskReason}`);
   if (httpOnly) bullets.push('- ⚠️ Bu hedef HTTPS (443) üzerinden yanıt vermedi; tarama **http:// üzerinden** yürütüldü. HTTPS eksikliği başlı başına bir bulgudur (aşağıda).');
   if (missingSec.length) bullets.push(`- ${missingSec.length}/6 önemli güvenlik başlığı eksik: ${missingSec.join(', ')}.`);
+  if (pageCount > 1) bullets.push(`- **Kapsam:** Güvenlik başlığı ve sürüm imzası kontrolleri, ana sayfa dâhil **${pageCount} benzersiz sayfada** yürütüldü (tek sayfa değil).`);
   else bullets.push('- Önerilen güvenlik başlıklarının tamamı mevcut.');
   if (tlsInf.found) {
     const tlsState =
