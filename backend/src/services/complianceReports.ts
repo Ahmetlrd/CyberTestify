@@ -425,7 +425,17 @@ function buildComplianceFix(ev: ComplianceEvidence, framework: string, o: { tlsB
   if (o.tlsBad || ev.tls.weakProtocols.length) parts.push(`### Şifreleme (TLS)\n\nYalnızca TLS 1.2+ kabul edin${ev.tls.weakProtocols.length ? ` (gözlemlenen zayıf: ${ev.tls.weakProtocols.join(', ')})` : ''}; sertifikayı geçerli/otomatik-yenilenir (certbot/ACME) tutun.\n\n\`\`\`nginx\nssl_protocols TLSv1.2 TLSv1.3;\nssl_prefer_server_ciphers on;\n\`\`\``);
   if (o.missingHdrs.length) parts.push(`### Güvenlik başlıkları\n\n\`\`\`nginx\n${o.missingHdrs.map((h) => `add_header ${HNAME[h]} "${HVAL[h]}" always;`).join('\n')}\n\`\`\``);
   if (o.insecureCookies) parts.push('### Çerez bayrakları\n\nOturum çerezlerine `Secure; HttpOnly; SameSite=Lax` ekleyin.');
-  if (o.versionBanner) parts.push('### Sürüm ifşasını kapatın\n\nNginx: `server_tokens off;`; uygulama yanıtlarından `X-Powered-By`/`X-AspNet-Version` başlıklarını kaldırın; `<meta generator>` etiketini gizleyin.');
+  if (o.versionBanner) {
+    // (İŞ A — PLATFORM FARKINDALIĞI) Sunucu imzası IIS/ASP.NET ise Nginx yeterli değil; AYNI web.config
+    // bloğunu (Dış Yüzey/Basit ile tutarlı) ekle. customErrors="On" ayrıca ayrıntılı hata sayfası
+    // (versiyon/dosya yolu) ifşasını da kapatır (CWE-209).
+    const srvSig = `${ev.http.headers.get('server') ?? ''} ${ev.http.headers.get('x-powered-by') ?? ''} ${ev.http.headers.get('x-aspnet-version') ?? ''} ${ev.versionDisclosure.join(' ')}`;
+    const isIis = /microsoft-iis|asp\.net|x-aspnet/i.test(srvSig);
+    const iisBlock = isIis
+      ? '\n\n**IIS / ASP.NET — `web.config`** (sürüm başlıklarını kaldır + ayrıntılı hata sayfasını kapat):\n\n```xml\n<configuration>\n  <system.webServer>\n    <security>\n      <requestFiltering removeServerHeader="true" />\n    </security>\n    <httpProtocol>\n      <customHeaders>\n        <remove name="X-Powered-By" />\n        <remove name="X-AspNet-Version" />\n      </customHeaders>\n    </httpProtocol>\n  </system.webServer>\n  <system.web>\n    <httpRuntime enableVersionHeader="false" />\n    <customErrors mode="On" />\n  </system.web>\n</configuration>\n```'
+      : '';
+    parts.push('### Sürüm ifşasını kapatın\n\nNginx: `server_tokens off;`; uygulama yanıtlarından `X-Powered-By`/`X-AspNet-Version` başlıklarını kaldırın; `<meta generator>` etiketini gizleyin.' + iisBlock);
+  }
   if (o.exposed.length) parts.push(`### Açıkta kalan dosyalar\n\nErişimi engelleyin: ${o.exposed.map((p) => `\`${p}\``).join(', ')}.\n\n\`\`\`nginx\nlocation ~ /\\.(git|env|ht) { deny all; return 404; }\n\`\`\``);
   if (o.policyMissing) parts.push('### Politika sayfası\n\nErişilebilir bir gizlilik/güvenlik politikası sayfası yayınlayın.');
   // (KESİK+TEKRAR GUARD) Eskiden her 'extra' için başlık = cümlenin ilk 60 karakteri (truncate) +

@@ -848,7 +848,12 @@ export function discoveryMethodNote(surf: Surface): string {
 const SQL_ERROR_RE = /(SQL syntax|mysql_fetch|mysqli|you have an error in your sql|ORA-\d{4,5}|PLS-\d|PostgreSQL.*ERROR|pg_query|SQLite3?::|SQLITE_ERROR|SQLITE_CONSTRAINT|no such column|near ".{0,40}": syntax error|unrecognized token|SQLSTATE\[|Microsoft OLE DB Provider|ODBC SQL Server|Unclosed quotation mark|quoted string not properly terminated|syntax error at or near|Warning: pg_|Warning: mysql|Sequelize\w*Error)/i;
 
 export type InjFinding = { inputPoint: string; type: 'SQLi' | 'XSS'; technique: 'error-based' | 'time-based' | 'reflection'; evidence: string; severity: 'high' | 'medium' | 'low'; confidence: 'high' | 'medium' | 'low' };
-export type InjEvidence = { ok: boolean; baseUrl: string; pagesScanned: number; inputsFound: number; inputsTested: number; probesSent: number; payloadsSent: number; findings: InjFinding[]; stopped: string | null; notes: string[] };
+export type InjEvidence = { ok: boolean; baseUrl: string; pagesScanned: number; inputsFound: number; inputsTested: number; probesSent: number; payloadsSent: number; findings: InjFinding[]; stopped: string | null; notes: string[]; verboseError?: { endpoint: string; sig: string } };
+
+// (İŞ B) ZATEN toplanan hata yanıtı GÖVDESİNDE ayrıntılı-hata-sayfası imzası — UYDURMA YOK, yalnız
+// GERÇEK yanıtı okur. KONSERVATİF: jenerik "500" değil; framework hata-sayfası/stack-trace/dosya-yolu
+// imzaları. "ASP.NET" gibi normal sayfalarda da geçen genel kelimeler DIŞARIDA (yanlış-pozitif önle).
+const VERBOSE_ERROR_RE = /Server Error in .{0,60}Application|\.NET Framework Version|Stack Trace:|System\.(Data\.SqlClient|Web\.HttpException|NullReferenceException|InvalidOperationException)|[A-Za-z]:\\(inetpub|Windows|wwwroot|Users)\\|Fatal error:.{0,80}on line \d+|Warning:.{0,80}on line \d+|Traceback \(most recent call last\)|\bat [\w.$/]+\([\w$]+\.java:\d+\)/i;
 
 // Zararsiz, veri-degistirmeyen SQLi HATA-tetikleyici varyantlari (yalniz response'ta hata imzasi arar).
 const SQLI_ERROR_PAYLOADS = ["'", '"', "' OR '1'='1", "')", "';"];
@@ -870,13 +875,24 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
   const notes: string[] = [];
   let tested = 0;
   let payloads = 0;
+  // (İŞ B) Toplanan yanıt gövdelerinde ayrıntılı-hata-sayfası imzası (ilk eşleşme saklanır; redakte).
+  let verboseError: { endpoint: string; sig: string } | null = null;
+  const scanVerbose = (url: string, r: ProbeResult | null) => {
+    if (verboseError || !r || !r.text) return;
+    const m = r.text.match(VERBOSE_ERROR_RE);
+    if (m) { try { verboseError = { endpoint: new URL(url).pathname, sig: m[0].replace(/\s+/g, ' ').slice(0, 120) }; } catch { verboseError = { endpoint: url, sig: m[0].slice(0, 120) }; } }
+  };
 
   const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
   if (base) ctx.baseline = base.ms;
-  const send = async (ip: InputPoint, val: string, expectSlow = false): Promise<ProbeResult | null> =>
-    ip.method === 'GET'
-      ? ctx.fetchOnce(buildGetUrl(ip, val), { expectSlow })
-      : ctx.fetchOnce(ip.action, { method: 'POST', body: buildFormBody(ip, val), contentType: 'application/x-www-form-urlencoded', expectSlow });
+  const send = async (ip: InputPoint, val: string, expectSlow = false): Promise<ProbeResult | null> => {
+    const url = ip.method === 'GET' ? buildGetUrl(ip, val) : ip.action;
+    const r = ip.method === 'GET'
+      ? await ctx.fetchOnce(url, { expectSlow })
+      : await ctx.fetchOnce(ip.action, { method: 'POST', body: buildFormBody(ip, val), contentType: 'application/x-www-form-urlencoded', expectSlow });
+    scanVerbose(url, r); // GERÇEK yanıt gövdesini imza için tara (ek istek YOK)
+    return r;
+  };
 
   for (const ip of inputs) {
     if (ctx.stopped) break;
@@ -936,6 +952,7 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
       let injUrl: string;
       try { const u = new URL(ep.url); u.pathname = u.pathname.replace(/(\d{1,9})(\/?)$/, `$1${q}$2`); injUrl = u.toString(); } catch { continue; }
       const r = await ctx.fetchOnce(injUrl);
+      scanVerbose(injUrl, r); // (İŞ B) path-ID probe yanıtını da ayrıntılı-hata imzası için tara
       if (r && SQL_ERROR_RE.test(r.text)) {
         hit = true;
         const sig = r.text.match(SQL_ERROR_RE)?.[0] ?? 'SQL hata imzası';
@@ -947,7 +964,7 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
   if (ctx.stopped) notes.push(ctx.stopped);
   const totalTestable = inputs.length + pathEps.length;
   if (!totalTestable) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada test edilebilir GET parametresi, form alanı veya path uç noktası bulunamadı (giriş noktası yok).` + spaHint(surf));
-  return { ok: true, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: surf.pagesScanned, inputsFound: totalTestable, inputsTested: tested + pathTested, probesSent: ctx.sent, payloadsSent: payloads, findings, stopped: ctx.stopped, notes };
+  return { ok: true, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: surf.pagesScanned, inputsFound: totalTestable, inputsTested: tested + pathTested, probesSent: ctx.sent, payloadsSent: payloads, findings, stopped: ctx.stopped, notes, verboseError: verboseError ?? undefined };
 }
 
 // ======================================================================================

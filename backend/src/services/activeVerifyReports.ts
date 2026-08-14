@@ -62,10 +62,16 @@ export function buildInjectionReport(ev: InjEvidence): { findings: string; fixTe
   const noSurface = level === 'low' && !ev.inputsFound;
   const sqli = ev.findings.filter((f) => f.type === 'SQLi');
   const xss = ev.findings.filter((f) => f.type === 'XSS');
+  // (İŞ B) Ayrıntılı-hata-sayfası bilgi ifşası (CWE-209) — enjeksiyon DEĞİL, AYRI bir gerçek bulgu.
+  // Enjeksiyon güvenini YÜKSELTMEZ; yalnız rapor seviyesini en az Orta yapar ki rozet=master tutarlı olsun.
+  const hasVerbose = !!ev.verboseError && !noSurface;
+  const reportLevel: Level = levelRank(level) >= levelRank('medium') ? level : hasVerbose ? 'medium' : level;
 
   const bullets = [
     noSurface
       ? noTestableSurfaceBullet('taranan sayfalarda **test edilebilir bir GET parametresi veya form alanı saptanmadı**')
+      : level === 'low' && hasVerbose
+      ? `- **Genel risk seviyesi: Orta** — test edilen giriş noktalarında **doğrudan enjeksiyon kanıtı bulunamadı**; ancak hedef, hatalı girdide **ayrıntılı hata sayfası** döndürerek framework sürümü/sunucu dosya yolu ifşa ediyor (bilgi sızıntısı — aşağıda).`
       : `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'aktif doğrulama ile enjeksiyon zafiyeti KANITLANDI.' : level === 'medium-high' || level === 'medium' ? 'olası bir enjeksiyon göstergesi bulundu (bağlama göre doğrulama önerilir).' : 'test edilen giriş noktalarında enjeksiyon kanıtı bulunamadı.'}`,
     `- Taranan sayfa/uç nokta: **${ev.pagesScanned}** · Test edilen giriş noktası: **${ev.inputsFound}** · Gönderilen payload: **${ev.payloadsSent}** (toplam ${ev.probesSent} istek) · SQLi bulgusu: ${sqli.length} · XSS bulgusu: ${xss.length}.`,
     '- **Önerilen ilk adım:** ' + (ev.findings.length ? 'Kanıtlanan giriş noktalarını parametreli sorgu / çıktı kodlaması ile kapatın; hazır adımlar "AI Çözüm Önerileri" bölümünde.' : 'Girdi doğrulama ve çıktı kodlamasını standart hale getirin; hazır sertleştirme adımları "AI Çözüm Önerileri" bölümünde.'),
@@ -95,8 +101,13 @@ export function buildInjectionReport(ev: InjEvidence): { findings: string; fixTe
       ev.findings.map((f) => `| ${f.inputPoint} | ${f.type} | ${f.technique === 'error-based' ? 'hata-tabanlı' : f.technique === 'time-based' ? 'zaman-tabanlı' : 'yansıma'} | ${f.evidence.replace(/\|/g, '\\|')} | ${RISK_WORD[f.severity]} |`).join('\n') + '\n\n'
     : '## BULGULAR\n\nTest edilen giriş noktalarında enjeksiyon kanıtı bulunamadı.\n\n';
 
+  // (İŞ B) GERÇEK yanıt gövdesinden saptanan ayrıntılı-hata-sayfası bilgi ifşası -> ŞİDDET-kolonlu tablo
+  // (parseFindings -> master/dağılım/detay kartı). Redakte + kısaltılmış kanıt; UYDURMA YOK.
+  const verboseSection = hasVerbose
+    ? `## TESPİT EDİLEN RİSKLER\n\n| Bulgu | Şiddet | Açıklama |\n|-------|--------|----------|\n| Ayrıntılı hata sayfası bilgi ifşası | Orta | Doğrulama probu sırasında **${ev.verboseError!.endpoint}** ucundan dönen hata yanıtının GÖVDESİNDE ayrıntılı hata-sayfası imzası saptandı (framework sürümü / sunucu dosya yolu / stack trace). Kanıt (kısaltılmış): \`${ev.verboseError!.sig.replace(/\|/g, '\\|').replace(/`/g, "'")}\` Üretimde ayrıntılı hata sayfaları kapatılmalıdır (CWE-209). |\n\n`
+    : '';
   const notes = ev.notes.length ? ev.notes.map((n) => `> ${n}`).join('\n') + '\n\n' : '';
-  const findings = assemble(level, bullets, genel, `${method}${table}${notes}${SCOPE_NOTE_ACTIVE}\n`, noSurface);
+  const findings = assemble(reportLevel, bullets, genel, `${method}${table}${verboseSection}${notes}${SCOPE_NOTE_ACTIVE}\n`, noSurface);
 
   const fixText = ev.findings.length
     ? '### Enjeksiyon (SQLi/XSS) — düzeltme\n\n' + [

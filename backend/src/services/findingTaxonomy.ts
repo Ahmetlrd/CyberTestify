@@ -10,7 +10,7 @@
 export type FindingType =
   | 'clickjacking' | 'mime_sniffing' | 'csp_missing' | 'referrer_policy' | 'hsts_missing'
   | 'https_missing'
-  | 'weak_tls' | 'weak_key' | 'cert' | 'version_disclosure' | 'exposed_files'
+  | 'weak_tls' | 'weak_key' | 'cert' | 'version_disclosure' | 'verbose_error' | 'exposed_files'
   | 'spf' | 'dmarc' | 'dkim' | 'dnssec'
   | 'cors' | 'cookie_flags'
   | 'sqli' | 'xss' | 'idor' | 'ssrf' | 'open_redirect' | 'rce' | 'file_upload'
@@ -52,6 +52,9 @@ export const FINDING_TAXONOMY: Record<FindingType, Entry> = {
   version_disclosure: { cwe: 'CWE-200', owasp: 'A05:2021 Security Misconfiguration',
     tr: 'Sürüm/teknoloji ifşası, saldırganın o bileşene ait bilinen açıkları doğrudan hedeflemesini kolaylaştırır.',
     en: 'Version/tech disclosure helps attackers target known vulnerabilities of that component.' },
+  verbose_error: { cwe: 'CWE-209', owasp: 'A05:2021 Security Misconfiguration',
+    tr: 'Ayrıntılı hata sayfası (stack trace / framework sürümü / sunucu dosya yolu) saldırgana iç yapı hakkında bilgi verir ve sonraki saldırıları kolaylaştırır.',
+    en: 'A verbose error page (stack trace / framework version / server file path) reveals internal structure to attackers and eases follow-up attacks.' },
   exposed_files: { cwe: 'CWE-538', owasp: 'A05:2021 Security Misconfiguration',
     tr: 'Kaynak kodu, yedek veya gizli anahtar gibi hassas dosyalar dışa açık; kimlik bilgisi/sistem sırrı sızıntısı riski.',
     en: 'Sensitive files (source, backups, secrets) are exposed; risk of credential/secret leakage.' },
@@ -186,6 +189,7 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   { re: /zay[ıi]f.*cipher|cipher.*zay[ıi]f|weak.*tls|weak.*cipher|zay[ıi]f.*tls|3des|\brc4\b/i, type: 'weak_tls' },
   { re: /rsa.*(1024|2048)|anahtar boyut|key size/i, type: 'weak_key' },
   { re: /sertifika|certificate|hostname e[şs]le|son kullanma|expir/i, type: 'cert' },
+  { re: /ayr[ıi]nt[ıi]l[ıi] hata|hata sayfas[ıi].*if[şs]a|verbose error|stack trace|error page/i, type: 'verbose_error' },
   { re: /s[üu]r[üu]m if[şs]a|version disclosure|server.*banner|server_tokens|banner/i, type: 'version_disclosure' },
 ];
 
@@ -209,6 +213,7 @@ const FRIENDLY_LABEL: Record<FindingType, { tr: string; en: string }> = {
   weak_key: { tr: 'Zayıf sertifika anahtar boyutu', en: 'Weak certificate key size' },
   cert: { tr: 'Sertifika yapılandırma sorunu', en: 'Certificate configuration issue' },
   version_disclosure: { tr: 'Sürüm/teknoloji ifşası', en: 'Version/technology disclosure' },
+  verbose_error: { tr: 'Ayrıntılı hata sayfası bilgi ifşası', en: 'Verbose error page information disclosure' },
   exposed_files: { tr: 'Açıkta hassas dosya', en: 'Exposed sensitive file' },
   spf: { tr: 'SPF kaydı eksik/zayıf', en: 'Missing/weak SPF record' },
   dmarc: { tr: 'DMARC kaydı eksik', en: 'Missing DMARC record' },
@@ -277,6 +282,9 @@ const FINDING_DETAIL: Record<FindingType, { tr: Detail; en: Detail }> = {
   version_disclosure: D(
     { desc: 'Sunucu/teknoloji sürümü başlık veya sayfada ifşa oluyor.', how: 'Server / X-Powered-By başlıkları ve sayfa imzaları incelendi.', fix: 'Sürüm başlıklarını gizleyin (`server_tokens off`, X-Powered-By kaldır).' },
     { desc: 'Server/tech version disclosed via header or page.', how: 'Server / X-Powered-By headers and page signatures inspected.', fix: 'Hide version headers (`server_tokens off`, remove X-Powered-By).' }),
+  verbose_error: D(
+    { desc: 'Uygulama, hatalı/beklenmedik girdide ayrıntılı bir hata sayfası döndürüyor; framework sürümü, sunucu dosya yolu veya stack trace ifşa oluyor.', how: 'Doğrulama probları sırasında dönen hata yanıtının GÖVDESİ, framework hata-sayfası imzaları (ör. "Server Error in", ".NET Framework Version", fiziksel dosya yolu, stack trace) için tarandı — GERÇEK yanıttan.', fix: 'Üretimde ayrıntılı hata sayfalarını kapatın (ör. ASP.NET `<customErrors mode="On" />` / `<httpErrors errorMode="Custom" />`; PHP `display_errors=Off`); son kullanıcıya jenerik hata sayfası gösterin, ayrıntıyı yalnız sunucu loguna yazın.' },
+    { desc: 'On malformed/unexpected input the app returns a verbose error page leaking framework version, server file path, or stack trace.', how: 'The error response BODY collected during verification probes was scanned for framework error-page signatures (e.g., "Server Error in", ".NET Framework Version", physical file path, stack trace) — from the REAL response.', fix: 'Disable verbose errors in production (e.g., ASP.NET `<customErrors mode="On" />`; PHP `display_errors=Off`); show a generic error page and log details server-side only.' }),
   exposed_files: D(
     { desc: 'Hassas dosya (.git/.env/yedek) dışarıya açık.', how: 'Yaygın hassas yollar tek GET ile denendi; içerik ana sayfadan farklı/gerçek dosya gözlendi.', fix: 'Bu yolları engelleyin; kaynak/yedek/sır dosyalarını web-kökünden çıkarın.' },
     { desc: 'Sensitive file (.git/.env/backup) exposed.', how: 'Common sensitive paths probed with a single GET; a real file distinct from the homepage was observed.', fix: 'Block these paths; move source/backup/secret files out of web root.' }),
