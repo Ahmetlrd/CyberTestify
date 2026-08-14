@@ -12,7 +12,7 @@
  * her CVE ID'si `CVE-YYYY-NNNN+` regex'i ile dogrulanir. Turkce rapor cumlesini HER ZAMAN kod yazar.
  * Her kontrol ASLA throw ETMEZ (izole); ulasilamayan veri "tespit edilemedi" olur.
  */
-import { apexDomain, collectHttp, cachedOriginUrl, type HttpEvidence } from './surfaceEvidence.js';
+import { apexDomain, collectHttp, cachedOriginUrl, collectPages, type HttpEvidence, type PageEvidence } from './surfaceEvidence.js';
 
 const HTTP_TIMEOUT_MS = 9000;
 const CRTSH_TIMEOUT_MS = 20000;
@@ -225,7 +225,36 @@ export type ApiEvidence = {
   tried: Array<{ path: string; status: number }>; // denenen TUM yollar + HTTP durumu (rapor tam-liste tablosu)
   reachable: Array<{ path: string; status: number; kind: 'spec' | 'ui' | 'graphql' }>;
   spec?: ApiSpec;
+  // (BÖLÜM 1 — SİTE HARİTASI BESLEMESİ) collectPages'in bulduğu sayfalardan çıkarılan aday yollar.
+  pagesScanned: number;                 // keşif için değerlendirilen benzersiz sayfa
+  minedTried: Array<{ path: string; source: string; status: number; sensitive: boolean }>; // site-haritasından türeyen + denenen adaylar
 };
+
+// (BÖLÜM 1) Keşfedilen sayfaların link/script/form referanslarından API + idari-görünümlü YOL ADAYLARINI
+// çıkar (kaynağıyla birlikte). PASİF: yalnız string çıkarımı; payload YOK. Aday YOLLARIN VARLIĞI sonradan
+// GET ile denenir (Keşif'in kendi "bu uç var mı" tespiti — Dış Yüzey'in dosya-içerik kontrolü DEĞİL).
+const API_LIKE_RE = /^\/(?:api|rest|v\d+|graphql|swagger|openapi|oauth|auth|gateway)(?:\/|$|\.)/i;
+export function minePathCandidatesFromPages(pages: PageEvidence[], host: string): Array<{ path: string; source: string; sensitive: boolean; api: boolean }> {
+  const out = new Map<string, { path: string; source: string; sensitive: boolean; api: boolean }>();
+  const hostBare = host.replace(/^www\./, '');
+  const consider = (raw: string, sourcePath: string) => {
+    if (!raw || out.size >= 20) return;
+    let p: string;
+    try { const u = new URL(raw, `http://${host}/`); if (u.hostname.replace(/^www\./, '') !== hostBare) return; p = u.pathname; } catch { return; }
+    if (!p.startsWith('/') || p.length < 2 || p.length > 80 || /[{}<>*\s]|\.\.|:[a-z]/i.test(p)) return;
+    const api = API_LIKE_RE.test(p);
+    const sensitive = SENSITIVE_RE.test(p);
+    if (!api && !sensitive) return; // yalnız API veya idari-görünümlü yollar (gürültü değil)
+    const key = p.replace(/\/+$/, '');
+    if (!out.has(key)) out.set(key, { path: p, source: sourcePath, sensitive, api });
+  };
+  for (const pg of pages) {
+    let src = '/'; try { src = new URL(pg.url).pathname; } catch { /* */ }
+    for (const m of pg.html.matchAll(/(?:href|src|action)\s*=\s*["']([^"'#?]+)/gi)) consider(m[1].replace(/&amp;/g, '&'), src);
+    for (const m of pg.html.matchAll(/["'`](\/(?:api|rest|v\d+|graphql|admin|internal)[\w/.-]*)["'`]/gi)) consider(m[1], src); // inline script string literalleri
+  }
+  return [...out.values()].slice(0, 15);
+}
 
 function parseOpenApi(path: string, json: unknown): ApiSpec | null {
   const doc = json as Record<string, any>;
@@ -252,7 +281,7 @@ function parseOpenApi(path: string, json: unknown): ApiSpec | null {
   return { path, title: info.title, version: info.version, endpointCount, sensitive: sensitive.slice(0, 40), hasGlobalAuth };
 }
 
-export async function collectApi(host: string): Promise<ApiEvidence> {
+export async function collectApi(host: string, mined: Array<{ path: string; source: string; sensitive: boolean; api: boolean }> = [], pagesScanned = 1): Promise<ApiEvidence> {
   const results = await pMap(API_PATHS, 8, async (path) => {
     const r = await safeGet(`${cachedOriginUrl(host)}${path}`);
     return { path, r };
@@ -260,6 +289,17 @@ export async function collectApi(host: string): Promise<ApiEvidence> {
   const reachable: ApiEvidence['reachable'] = [];
   let spec: ApiSpec | undefined;
   let anyOk = false;
+  // (BÖLÜM 1) Site-haritasından türeyen adayları da dene (varlık/durum + api-benzeri ise şema parse).
+  const minedTried: ApiEvidence['minedTried'] = [];
+  const minedProbe = await pMap(mined, 6, async (c) => ({ c, r: await safeGet(`${cachedOriginUrl(host)}${c.path}`) }));
+  for (const { c, r } of minedProbe) {
+    if (r.status > 0) anyOk = true;
+    minedTried.push({ path: c.path, source: c.source, status: r.status, sensitive: c.sensitive });
+    if (c.api && r.status === 200 && r.text) {
+      const looksJson = r.contentType.includes('json') || /^\s*[{[]/.test(r.text);
+      if (looksJson) { let j: unknown; try { j = JSON.parse(r.text); } catch { j = null; } const parsed = j ? parseOpenApi(c.path, j) : null; if (parsed) { reachable.push({ path: c.path, status: r.status, kind: 'spec' }); if (!spec || parsed.endpointCount > spec.endpointCount) spec = parsed; } }
+    }
+  }
   for (const { path, r } of results) {
     if (r.status > 0) anyOk = true;
     if (r.status !== 200 || !r.text) continue;
@@ -289,7 +329,7 @@ export async function collectApi(host: string): Promise<ApiEvidence> {
     if (/swagger-ui|swaggerui|redoc|openapi|api documentation|swagger\.json|api-docs/i.test(r.text)) reachable.push({ path, status: r.status, kind: 'ui' });
   }
   const tried = results.map(({ path, r }) => ({ path, status: r.status }));
-  return { ok: anyOk, tried, reachable, spec };
+  return { ok: anyOk, tried, reachable, spec, pagesScanned, minedTried };
 }
 
 // ======================================================================================
@@ -470,9 +510,13 @@ export type ReconEvidence = { host: string; sub: SubEvidence; api: ApiEvidence; 
 
 export async function collectReconEvidence(host: string): Promise<ReconEvidence> {
   const http = await collectHttp(host);
+  // (BÖLÜM 1) PAYLAŞILAN site haritası (in-flight cache — Dış Yüzey/Uyum ile AYNI crawl, tekrar GET seli
+  // YOK) -> API/idari-görünümlü yol adaylarını çıkar ve API/Swagger keşfini ZENGİNLEŞTİR (sabit listeye EK).
+  const pages = await collectPages(host).catch(() => [] as PageEvidence[]);
+  const mined = minePathCandidatesFromPages(pages, host);
   const [sub, api, cms] = await Promise.all([
     collectSubdomains(host).catch(() => ({ ok: false, dataSource: 'unavailable', total: 0, resolved: 0, subdomains: [], cnames: [], managedCnames: [], dangling: [] } as SubEvidence)),
-    collectApi(host).catch(() => ({ ok: false, tried: [], reachable: [] } as ApiEvidence)),
+    collectApi(host, mined, Math.max(1, pages.length)).catch(() => ({ ok: false, tried: [], reachable: [], pagesScanned: Math.max(1, pages.length), minedTried: [] } as ApiEvidence)),
     collectCms(host, http).catch(() => ({ ok: false, evidence: [], extras: [], cveOk: false, cveTotal: 0, cves: [] } as CmsEvidence)),
   ]);
   return { host, sub, api, cms };

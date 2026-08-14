@@ -276,6 +276,22 @@ function buildApiArea(ev: ApiEvidence): Area {
   }
   lines.push('');
 
+  // (BÖLÜM 1 — SİTE HARİTASI BESLEMESİ) Keşfedilen sayfalardan çıkarılan API/idari-görünümlü aday yollar.
+  if (ev.minedTried && ev.minedTried.length) {
+    const sensFound = ev.minedTried.filter((m) => m.status === 200 && m.sensitive);
+    lines.push(`### Site haritasından türetilen yol adayları (${ev.pagesScanned} sayfadan ${ev.minedTried.length} aday)\n`);
+    lines.push('Sabit liste **dışında**, keşfedilen sayfalardaki link/script/form referanslarından çıkarılan API/idari-görünümlü yollar da GET ile **yalnız varlık** açısından denendi (payload/enjeksiyon YOK — Keşif yalnız "bu uç var mı" tespiti yapar):');
+    lines.push('');
+    lines.push('| Aday Yol | Kaynak sayfa | HTTP | Not |');
+    lines.push('|----------|--------------|------|-----|');
+    for (const m of ev.minedTried.slice(0, 15)) {
+      const not = m.status === 200 ? (m.sensitive ? '⚠️ mevcut (idari-görünümlü)' : 'mevcut') : (m.status === 401 || m.status === 403) ? 'korumalı (kimlik doğrulama istiyor)' : m.status === 0 ? 'yanıt yok' : 'yok/404';
+      lines.push(`| ${m.path} | ${m.source} | ${m.status || '—'} | ${not} |`);
+    }
+    lines.push('');
+    if (sensFound.length) lines.push(`> **${sensFound.length}** idari/hassas-görünümlü yol site haritasından keşfedildi ve erişilebilir (HTTP 200). Bu yolların YETKİ kontrolü **Aktif Doğrulama / Tam Pentest** ile doğrulanmalıdır — Keşif yalnız varlığı tespit eder, yetki testi yapmaz.\n`);
+  }
+
   if (spec) {
     lines.push('### API şeması detayı\n');
     lines.push(`- Şema yolu: \`${spec.path}\``);
@@ -502,11 +518,27 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
     ? `## TESPİT EDİLEN RİSKLER\n\n| Bulgu | Şiddet | Açıklama |\n|-------|--------|----------|\n${centralRows.join('\n')}\n\n`
     : '';
 
+  // (BÖLÜM 2 — POZİTİF GÜVENCE) Keşif çoğu hedefte temiz çıkar; NE denendiğini GERÇEK sayılarla göster.
+  const paScanned = ev.api.pagesScanned ?? 1;
+  const apiTriedTotal = (ev.api.tried?.length ?? 0) + (ev.api.minedTried?.length ?? 0);
+  const minedSensExists = (ev.api.minedTried ?? []).filter((m) => m.status === 200 && m.sensitive).length;
+  const subRow = !ev.sub.ok ? '⚠️ İncelenemedi (veri kaynağına ulaşılamadı — “temiz” DEĞİL)' : ev.sub.dangling.length ? `⚠️ ${ev.sub.dangling.length} devralınabilir (dangling) alt domain` : `✅ ${ev.sub.total} alt domain kaydı denendi; devralma göstergesi bulunamadı`;
+  const apiRow = !ev.api.ok ? '⚠️ İncelenemedi' : ev.api.spec ? `⚠️ Herkese açık API şeması bulundu (${ev.api.spec.endpointCount} uç nokta)` : ev.api.reachable.length ? `⚠️ ${ev.api.reachable.length} API dokümantasyon arayüzü açık` : `✅ ${apiTriedTotal} yol denendi (${ev.api.tried.length} sabit + ${ev.api.minedTried?.length ?? 0} site-haritası adayı, ${paScanned} sayfadan); herkese açık API şeması bulunamadı`;
+  const cmsRow = !ev.cms.ok ? '⚠️ İncelenemedi' : ev.cms.cms ? (ev.cms.cveTotal ? `⚠️ ${ev.cms.cms}${ev.cms.version ? ' ' + ev.cms.version : ''} — bilinen ${ev.cms.cveTotal} CVE eşleşti` : `✅ ${ev.cms.cms}${ev.cms.version ? ' ' + ev.cms.version : ''} tespit edildi; sürümü kapsayan bilinen yüksek CVE eşleşmedi`) : `✅ Bilinen bir CMS/çatı parmak izi tespit edilmedi`;
+  const assuranceSection =
+    `## POZİTİF GÜVENCE — DENENEN KEŞİF YÖNTEMLERİ\n\n` +
+    `Keşif çoğu sağlıklı hedefte temiz çıkar; bu bölüm "bir şey bulunamadı" sonucunu da ŞEFFAF kılar — GERÇEKTEN ne denendiğini gösterir (ana sayfa dâhil **${paScanned} sayfa** site haritası dahil):\n\n` +
+    `| Keşif Alanı | Sonuç |\n|-------------|-------|\n| Subdomain-Takeover Taraması | ${subRow} |\n| API & Swagger Keşfi | ${apiRow} |\n| CMS / Framework CVE Eşleşmesi | ${cmsRow} |${minedSensExists ? `\n| Site-haritası yol keşfi | ⚠️ ${minedSensExists} idari-görünümlü yol erişilebilir (yetki testi Aktif Doğrulama kapsamı) |` : ''}\n\n` +
+    `> **Üç-durum ayrımı (dürüstlük):** ✅ *Gösterge bulunamadı* = yöntem çalıştı, temiz · ⚠️ *Gösterge var* = yukarıda ayrıntılı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).\n\n` +
+    `### Bu paket NE değerlendirir, NE değerlendirmez\n\n` +
+    `**DEĞERLENDİRİR (pasif keşif — yalnız GET, dış kaynak):** alt domain envanteri + devralma (dangling CNAME), herkese açık API/Swagger/OpenAPI dokümanı, CMS/çatı parmak izi + bilinen CVE eşleşmesi (NVD), site haritasından türeyen API/idari-görünümlü yolların VARLIK tespiti — ${paScanned} sayfa üzerinden.\n\n` +
+    `**DEĞERLENDİRMEZ:** aktif enjeksiyon/IDOR/XSS doğrulaması ve keşfedilen uçlara yetki testi (**Aktif Doğrulama / Tam Pentest** kapsamı), HTTP güvenlik başlığı/CORS/çerez/CSP detayı (**Basit Tarama / Dış Yüzey** kapsamı), KVKK/PCI/ISO çerçeve-eşleme (**Uyum** kapsamı). Bir alanda "gösterge bulunamadı" ifadesi **güvenli olduğunuzu KANITLAMAZ** — yalnız denenen pasif yöntemlerle bir gösterge çıkmadığını gösterir.\n\n`;
+
   const findings =
     `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
     `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${httpOnly ? 'Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz taşınıyor (öncelikli olarak HTTPS’e geçilmelidir). ' : ''}${genelSentence}\n\n` +
     `${httpsFindingSection}${METHODOLOGY_SECTION}\n` +
-    `${areaSections}\n` +
+    `${areaSections}\n${assuranceSection}` +
     `${BEST_PRACTICES_SECTION}`;
 
   const fixText =
