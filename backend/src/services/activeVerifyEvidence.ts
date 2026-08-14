@@ -31,7 +31,7 @@ const HEADLESS_PRECHECK_TIMEOUT_MS = 6000; // odeme-oncesi TEK-sayfa on-kontrol 
 const MIN_DELAY_MS = 1200;         // istekler arasi min bekleme (hedefi yormamak)
 const REQ_TIMEOUT_MS = 10000;
 const MAX_INPUTS = 6;              // taranacak input noktasi ust siniri (statik kesif ic havuz)
-const MAX_PROBES_PER_CHECK = 130;  // kontrol basina TOPLAM prob tavani (API-input'larla genisleyen kapsam icin; sinirsiz DEGIL)
+const MAX_PROBES_PER_CHECK = 220;  // kontrol basina TOPLAM prob tavani (genisleyen giris-noktasi kapsami icin arttirildi; devre kesici/rate-limit AYNEN korunur — sinirsiz DEGIL)
 const SLOW_FACTOR = 3;             // baseline * 3'u asan yanit -> devre kesici (zaman-tabanli haric)
 const SLOW_FLOOR_MS = 2500;        // baseline cok kucukse gurultuden kacinmak icin taban
 const TIME_PROBE_DELAY_S = 3;      // zaman-tabanli SQLi gecikme saniyesi
@@ -199,7 +199,7 @@ export type Surface = {
   homeHtml: string;
   homeHeaders: Map<string, string>;
   inputs: InputPoint[];
-  idEndpoints: Array<{ url: string; idParam: string; idValue: number; kind: 'query' | 'path' }>;
+  idEndpoints: Array<{ url: string; idParam: string; idValue: number; kind: 'query' | 'path'; siblingIds?: number[] }>;
   uploadForms: Array<{ action: string; fileField: string; otherFields: string[]; source?: 'dom' | 'network' }>;
   massAssignForm: { action: string; fields: string[] } | null;
   apiWrites: string[];        // GOZLEMLENEN durum-degistiren API uclari ("POST /rest/user/login") — PROBE EDILMEZ
@@ -853,7 +853,11 @@ export type InjEvidence = { ok: boolean; baseUrl: string; pagesScanned: number; 
 // (İŞ B) ZATEN toplanan hata yanıtı GÖVDESİNDE ayrıntılı-hata-sayfası imzası — UYDURMA YOK, yalnız
 // GERÇEK yanıtı okur. KONSERVATİF: jenerik "500" değil; framework hata-sayfası/stack-trace/dosya-yolu
 // imzaları. "ASP.NET" gibi normal sayfalarda da geçen genel kelimeler DIŞARIDA (yanlış-pozitif önle).
-const VERBOSE_ERROR_RE = /Server Error in .{0,60}Application|\.NET Framework Version|Stack Trace:|System\.(Data\.SqlClient|Web\.HttpException|NullReferenceException|InvalidOperationException)|[A-Za-z]:\\(inetpub|Windows|wwwroot|Users)\\|Fatal error:.{0,80}on line \d+|Warning:.{0,80}on line \d+|Traceback \(most recent call last\)|\bat [\w.$/]+\([\w$]+\.java:\d+\)/i;
+// (10/10 Bölüm 1.4) Host-agnostik: .NET + PHP + Python + Java imzaları. PHP Warning/Fatal mesaj gövdesi
+// tipik olarak 100+ karakter (fonksiyon adı + dosya yolu) olduğundan "on line N"e kadar mesafe 200'e açıldı
+// (aksi halde en yaygın PHP hatası kaçırılıyordu). "Warning:"/"Fatal error:" ÖN EKİ + "on line \d+" şartı
+// yanlış-pozitifi düşük tutar. Ek olarak ham PHP/MySQL sızıntı imzaları (mysql_*, ODBC/JDBC hata metni).
+const VERBOSE_ERROR_RE = /Server Error in .{0,60}Application|\.NET Framework Version|Stack Trace:|System\.(Data\.SqlClient|Web\.HttpException|NullReferenceException|InvalidOperationException)|[A-Za-z]:\\(inetpub|Windows|wwwroot|Users)\\|(?:Fatal error|Warning|Parse error|Notice):.{0,200}?\bon line \d+|Traceback \(most recent call last\)|\bat [\w.$/]+\([\w$]+\.java:\d+\)|\b(?:mysql_fetch_(?:array|assoc|row)|mysqli?_query|pg_query)\s*\(|supplied argument is not a valid MySQL/i;
 
 // Zararsiz, veri-degistirmeyen SQLi HATA-tetikleyici varyantlari (yalniz response'ta hata imzasi arar).
 const SQLI_ERROR_PAYLOADS = ["'", '"', "' OR '1'='1", "')", "';"];
@@ -861,8 +865,8 @@ const SQLI_ERROR_PAYLOADS = ["'", '"', "' OR '1'='1", "')", "';"];
 // tag-context, single-quote-attr, double-quote-attr, URL/js-context marker'lari.
 const XSS_MARKER = 'cxt9137xmark';
 const XSS_PAYLOADS = [`${XSS_MARKER}"><cxmark>`, `${XSS_MARKER}'><cxmark>`, `${XSS_MARKER}" cxa=x`, `${XSS_MARKER}');cx//`];
-const INJ_MAX_INPUTS = 10; // API-tabanli input'lar eklendigi icin arttirildi
-const INJ_PATH_MAX = 6;    // (BÖLÜM B) test edilecek path-ID uc noktasi ust siniri
+const INJ_MAX_INPUTS = 20; // (10/10 Bölüm 1) daha fazla query/form giris noktasi taransin (devre kesici korunur)
+const INJ_PATH_MAX = 12;   // (10/10 Bölüm 1) test edilecek path-ID uc noktasi ust siniri arttirildi
 
 export async function collectInjectionEvidence(host: string, session?: AuthSession): Promise<InjEvidence> {
   const surf = await discoverSurface(host, session);
@@ -972,12 +976,16 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
 // ======================================================================================
 export type IdorFinding = { endpoint: string; idParam: string; observation: string; differentResource: boolean; severity: 'high' | 'medium' | 'low' };
 export type IdorEvidence = { ok: boolean; pagesScanned: number; candidates: number; endpointsTested: number; probesSent: number; findings: IdorFinding[]; stopped: string | null; notes: string[] };
-const IDOR_MAX = 10;
+const IDOR_MAX = 16; // (10/10 Bölüm 1) daha fazla ID'li uc nokta test edilsin
 
 // Ana sayfa HTML'inden sayisal/predictable ID iceren URL adaylarini bul.
-function discoverIdEndpoints(host: string, html: string): Array<{ url: string; idParam: string; idValue: number; kind: 'query' | 'path' }> {
-  const out: Array<{ url: string; idParam: string; idValue: number; kind: 'query' | 'path' }> = [];
+// (10/10 Bölüm 1.2) Ayrica AYNI koleksiyon ucu icin sayfada GORULEN tum gercek ID'leri (siblingIds)
+// toplar — IDOR testinde rastgele/komsu tahmin yerine sitenin KENDI verisinden gorulen ID'lerle denenir.
+function discoverIdEndpoints(host: string, html: string): Array<{ url: string; idParam: string; idValue: number; kind: 'query' | 'path'; siblingIds?: number[] }> {
+  const out: Array<{ url: string; idParam: string; idValue: number; kind: 'query' | 'path'; key: string }> = [];
   const seen = new Set<string>();
+  const idsByKey = new Map<string, Set<number>>();
+  const addId = (key: string, val: number) => { let s = idsByKey.get(key); if (!s) { s = new Set(); idsByKey.set(key, s); } s.add(val); };
   for (const m of html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)) {
     const abs = absUrl(m[1].replace(/&amp;/g, '&'), host);
     if (!abs) continue;
@@ -987,18 +995,24 @@ function discoverIdEndpoints(host: string, html: string): Array<{ url: string; i
       for (const [k, v] of u.searchParams.entries()) {
         if (/^\d{1,9}$/.test(v) && /(^id$|_id$|^user|^account|^order|^invoice|^p$|^pid$|^uid$)/i.test(k)) {
           const key = `q:${u.origin}${u.pathname}:${k}`;
-          if (!seen.has(key)) { seen.add(key); out.push({ url: u.toString(), idParam: k, idValue: parseInt(v, 10), kind: 'query' }); }
+          addId(key, parseInt(v, 10)); // her gorulen ID'yi (ilk olmasa da) koleksiyona ekle
+          if (!seen.has(key)) { seen.add(key); out.push({ url: u.toString(), idParam: k, idValue: parseInt(v, 10), kind: 'query', key }); }
         }
       }
       // (b) path'te sayisal segment (/user/123, /orders/45)
       const pm = u.pathname.match(/^(.*\/)(\d{1,9})(\/?)$/);
       if (pm) {
         const key = `p:${u.origin}${pm[1]}`;
-        if (!seen.has(key)) { seen.add(key); out.push({ url: u.toString(), idParam: pm[1].replace(/^.*\/([^/]+)\/$/, '$1') || 'path-id', idValue: parseInt(pm[2], 10), kind: 'path' }); }
+        addId(key, parseInt(pm[2], 10));
+        if (!seen.has(key)) { seen.add(key); out.push({ url: u.toString(), idParam: pm[1].replace(/^.*\/([^/]+)\/$/, '$1') || 'path-id', idValue: parseInt(pm[2], 10), kind: 'path', key }); }
       }
     } catch { /* atla */ }
   }
-  return out.slice(0, MAX_INPUTS);
+  // GERCEK sibling ID'leri ekle (orijinalden farkli, en fazla 5 — gercekci IDOR denemesi icin).
+  return out.slice(0, MAX_INPUTS).map(({ key, ...e }) => {
+    const siblings = [...(idsByKey.get(key) ?? [])].filter((v) => v !== e.idValue).slice(0, 5);
+    return siblings.length ? { ...e, siblingIds: siblings } : e;
+  });
 }
 // Koleksiyon-benzeri uçtan sıralı sayısal ID TÜRETME (item 1). /rest/products/search gibi liste
 // uçlarından /rest/products/{1..N} türetilir; ardışık ID'ler aynı JSON yapısında FARKLI içerik
@@ -1094,6 +1108,22 @@ export async function collectIdorEvidence(host: string, session?: AuthSession): 
       findings.push({ endpoint: epLabel, idParam: ep.idParam, observation: `Kimlik doğrulaması olmadan komşu ID (${neighborVal}) için 200 yanıt ve ${how}. Numaralandırılabilir kaynak erişimi (olası IDOR) göstergesi.`, differentResource: true, severity: sameShapeDiffContent ? 'medium' : 'low' });
     } else if (nb.status === 200 && !nbNF && origNF) {
       findings.push({ endpoint: epLabel, idParam: ep.idParam, observation: `Komşu ID (${neighborVal}) için 200 yanıt döndü; orijinal ID erişilebilir bir kaynak vermemişti — numaralandırma ile erişilebilir kayıt göstergesi (manuel doğrulama önerilir).`, differentResource: true, severity: 'low' });
+    }
+    // (10/10 Bölüm 1.2) GERÇEK-ID denemesi: rastgele/komşu tahmin yerine, sitenin KENDİ sayfalarında
+    // GÖRÜLEN gerçek ID'lerle test (ör. bir listeleme sayfasında geçen id=5, id=8...). Daha güçlü kanıt.
+    for (const realId of (ep.siblingIds ?? []).slice(0, 3)) {
+      if (ctx.stopped) break;
+      const rr = await ctx.fetchOnce(withId(ep.url, ep.kind, ep.idParam, realId));
+      if (!rr || ctx.stopped) continue;
+      const rNF = looksLikeNotFound(rr.status, rr.text);
+      const rShape = tryJsonShape(rr.text);
+      const rSameShapeDiff = oShape !== null && rShape !== null && oShape === rShape && md5(orig.text) !== md5(rr.text) && orig.text.trim().length > 2;
+      const rDiff = rr.status === 200 && !rNF && (rSameShapeDiff || Math.abs(rr.len - orig.len) > 64);
+      if (rDiff && !origNF) {
+        const how = rSameShapeDiff ? 'aynı YAPIDA (JSON iskeleti) ancak FARKLI İÇERİKLİ yanıt döndü (dönen veri raporda gösterilmez)' : 'orijinalden farklı içerikli yanıt döndü';
+        findings.push({ endpoint: epLabel, idParam: ep.idParam, observation: `Kimlik doğrulaması olmadan, sitenin KENDİ sayfalarında GÖRÜLEN gerçek bir ID (${realId}) için ${how}. Rastgele/komşu tahmin değil — koleksiyonda gözlemlenen gerçekçi ID ile erişildi (daha güçlü IDOR göstergesi).`, differentResource: true, severity: rSameShapeDiff ? 'medium' : 'low' });
+        break; // ilk gerçek-ID kanıtı yeterli; ek prob gönderme
+      }
     }
   }
 

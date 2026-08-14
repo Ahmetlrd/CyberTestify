@@ -96,9 +96,16 @@ export function buildInjectionReport(ev: InjEvidence): { findings: string; fixTe
     '',
   ].join('\n');
 
+  // (10/10 Bölüm 1.3 + 3) Güven + GEREKÇE ayrı kolonda: yansıma (ham/kodlanmış) ile hata-tabanlı/zaman-tabanlı
+  // AYRI güven kategorileri olarak gösterilir — "dolaylı gösterge" ile "doğrudan kanıt" karıştırılmaz.
+  const injConf = (f: InjEvidence['findings'][number]): string =>
+    f.technique === 'error-based' ? 'Yüksek — yanıtta veritabanı hata imzası (doğrudan kanıt)'
+    : f.technique === 'time-based' ? 'Orta — zaman-tabanlı/dolaylı; OOB doğrulama altyapısı yok'
+    : f.confidence === 'high' ? 'Orta-Yüksek — işaret dizesi HAM (kaçırılmamış) yansıdı; güçlü XSS göstergesi (JS yürütülmediğinden istismar kanıtlanmadı)'
+    : 'Düşük — yansıdı ancak kodlanmış/kaçırılmış; bağlama bağlı zayıf gösterge';
   const table = ev.findings.length
-    ? '## BULGULAR\n\n| Giriş Noktası | Tür | Teknik | Kanıt | Ciddiyet |\n|---------------|-----|--------|-------|----------|\n' +
-      ev.findings.map((f) => `| ${f.inputPoint} | ${f.type} | ${f.technique === 'error-based' ? 'hata-tabanlı' : f.technique === 'time-based' ? 'zaman-tabanlı' : 'yansıma'} | ${f.evidence.replace(/\|/g, '\\|')} | ${RISK_WORD[f.severity]} |`).join('\n') + '\n\n'
+    ? '## BULGULAR\n\n| Giriş Noktası | Tür | Teknik | Kanıt | Güven (gerekçe) | Ciddiyet |\n|---------------|-----|--------|-------|-----------------|----------|\n' +
+      ev.findings.map((f) => `| ${f.inputPoint} | ${f.type} | ${f.technique === 'error-based' ? 'hata-tabanlı' : f.technique === 'time-based' ? 'zaman-tabanlı' : 'yansıma'} | ${f.evidence.replace(/\|/g, '\\|')} | ${injConf(f)} | ${RISK_WORD[f.severity]} |`).join('\n') + '\n\n'
     : '## BULGULAR\n\nTest edilen giriş noktalarında enjeksiyon kanıtı bulunamadı.\n\n';
 
   // (İŞ B) GERÇEK yanıt gövdesinden saptanan ayrıntılı-hata-sayfası bilgi ifşası -> ŞİDDET-kolonlu tablo
@@ -373,11 +380,32 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
   const httpsSummaryNote = httpOnly ? '\n- ⚠️ **HTTPS desteklenmiyor:** Hedef HTTPS (443) üzerinden yanıt vermedi; aktif doğrulama http:// üzerinden yürütüldü. Şifresiz iletişim başlı başına ciddi bir bulgudur.' : '';
   const genelHttps = httpOnly ? 'Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz (düz metin) taşınıyor — öncelikli olarak HTTPS’e geçilmelidir. ' : '';
 
+  // (10/10 Bölüm 3 — POZİTİF GÜVENCE) Diğer 4 pakete AYNI üç-durum formatı, Aktif Doğrulama'ya özel:
+  // her kontrol türü için "kaç giriş noktası denendi, kaçında kanıt bulunamadı". SADECE gerçek sayaçlardan.
+  const assuranceRows = ACTIVE_BUNDLE_MEMBERS.map((m, i) => {
+    const r = runs[i]; const lv = levels[i];
+    let sonuc: string;
+    if (!r || !r.rep) sonuc = '⚠️ İncelenemedi (veri toplanamadı — “temiz” DEĞİL)';
+    else if (r.fc > 0 && lv === 'high') sonuc = `⚠️ Bulgu var (${r.fc} — zafiyet göstergesi; yukarıda)`;
+    else if (r.fc > 0) sonuc = `⚠️ Bulgu var (${r.fc} — sınırlı/dolaylı gösterge; yukarıda)`;
+    else if (r.inputs > 0) sonuc = `✅ Temiz (${r.inputs} giriş noktası denendi, kanıt bulunamadı)`;
+    else sonuc = '⚠️ İncelenemedi (test edilebilir giriş noktası bulunamadı — “temiz” DEĞİL)';
+    return `| ${m.title} | ${r ? r.inputs : '—'} | ${r ? r.probes : '—'} | ${sonuc} |`;
+  }).join('\n');
+  const assuranceSection =
+    `## POZİTİF GÜVENCE — DENENEN AKTİF DOĞRULAMA YÖNTEMLERİ\n\n` +
+    `Bulgu çıkmayan kontroller de dâhil, ${ACTIVE_BUNDLE_MEMBERS.length} aktif kontrol kategorisinin her biri keşfedilen yüzeyde gerçekten çalıştırıldı (toplam **${totalProbes}** istek, **${pagesScanned}** benzersiz sayfa). Aşağıdaki tablo, "bulgu yok" sonuçlarını da — kaç giriş noktası denendi, kaçında kanıt bulunamadı — şeffaf gösterir:\n\n` +
+    `| Kontrol | Denenen giriş noktası | Gönderilen istek | Sonuç |\n|---------|-----------------------|------------------|-------|\n${assuranceRows}\n\n` +
+    `> **Üç-durum ayrımı (dürüstlük):** ✅ *Temiz* = kontrol çalıştı, kanıt bulunamadı · ⚠️ *Bulgu var* = yukarıda detaylı · ⚠️ *İncelenemedi* = test edilebilir giriş noktası bulunamadı (güvenli anlamına GELMEZ).\n\n` +
+    `### Bu paket NE değerlendirir, NE değerlendirmez\n\n` +
+    `**EDER ("kanıtla — istismar etme" ilkesiyle; zararsız, veri-değiştirmeyen problar):** SQLi/XSS enjeksiyonu, yetkisiz erişim (IDOR), SSRF, dosya yükleme, iş mantığı, race/mass-assignment ve RCE/komut enjeksiyonu göstergeleri — kimlik doğrulaması **gerektirmeyen** yüzeyde, keşfedilen ${pagesScanned} sayfada.\n\n` +
+    `**ETMEZ:** Veri değiştiren/silen istismar, ödeme tamamlama veya gerçek RCE çalıştırma **yapılmaz** (yalnızca gösterge/kanıt toplanır). Login sonrası derin IDOR, yetki yükseltme ve kimlik-doğrulamalı iş mantığı zafiyetleri bu paketin **dışındadır** — bunlar **Tam Kapsamlı Pentest** (kimlik-doğrulamalı, kapsam sözleşmeli) kapsamındadır. Bir kontrolde "bulgu yok", aktif istismar bilinçli olarak sınırlı/pasif-güvenli tutulduğu için **güvenli olduğunu KANITLAMAZ**.\n\n`;
+
   const findings =
     `${box}\n\n` +
     `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}${httpsSummaryNote}\n\n` +
     `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${verdictWord}**\n\n${genelHttps}${genel}\n\n` +
-    `${httpsFindingSection}${controlTable}\n` +
+    `${httpsFindingSection}${controlTable}\n${assuranceSection}` +
     `${sections}`;
 
   const fixParts = ACTIVE_BUNDLE_MEMBERS.map((m, i) => {
