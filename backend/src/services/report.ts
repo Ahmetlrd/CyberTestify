@@ -5,6 +5,7 @@ import * as pentagi from '../pentagi/client.js';
 import { encryptReport, generateReportAccessSecret } from './crypto.js';
 import { redactAll } from './piiRedaction.js';
 import { validateAndRepairReport } from './reportValidator.js';
+import { logScanStep } from './scanLogger.js';
 import { FIX_SUGGESTIONS_DELIM, getPackageDef, securityProfileFor } from './scanPackages.js';
 import { hasPassiveExtras, runPassiveExtras, renderPassiveExtrasMarkdown, PASSIVE_EXTRAS_DELIM } from './passiveExtras.js';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
@@ -348,11 +349,14 @@ export async function generateAndStoreReport(flowId: string) {
 
   const detGen = DETERMINISTIC_GENERATORS[flow.order.package.key];
   if (detGen) {
+    logScanStep({ step: 'Rapor üretimi', summary: `paket=${flow.order.package.key} · deterministik üretici başladı (hedef=${flow.order.domain.hostname})` });
+    const _tGen = Date.now();
     try {
       const built = await detGen(flow.order.domain.hostname);
       if (built) {
         findings = built.findings;
         fixText = built.fixText;
+        logScanStep({ step: 'Rapor üretimi', durationMs: Date.now() - _tGen, summary: `bulgu markdown üretildi (${built.findings.length} karakter)` });
         console.log(`[report][DET] ${flow.order.package.key}: rapor KOD-toplanmis kanittan DETERMINISTIK uretildi (ajan ciktisi kullanilmadi).`);
       } else {
         console.warn(`[report][DET] ${flow.order.package.key}: hedefe ulasilamadi (kanit yok) -> ajan/ham-kanit yoluna dusuluyor.`);
@@ -428,6 +432,10 @@ export async function generateAndStoreReport(flowId: string) {
   // yarım/çıplak-URL bulguyu çıkar, devre-kesici şeffaflığını ekle, rozet=master çelişkisini yakala.
   // Onarılmış markdown teslim edilir; kritik tutarsızlıkta (blocked) admin-onay kapısına alarm bırakılır.
   const qa = validateAndRepairReport(rawMarkdown, { packageKey: flow.order.package.key, locale, fixText, hostname: flow.order.domain.hostname });
+  for (const issue of qa.issues) {
+    logScanStep({ step: 'QA doğrulama', level: issue.level === 'block' ? 'error' : issue.level === 'fix' ? 'warn' : 'info', rule: issue.rule, summary: `${issue.message} -> ${issue.action}` });
+  }
+  logScanStep({ step: 'QA doğrulama', summary: `tamamlandı (fix=${qa.issues.filter((i) => i.level === 'fix').length} warn=${qa.issues.filter((i) => i.level === 'warn').length} block=${qa.issues.filter((i) => i.level === 'block').length})` });
   if (qa.blocked) {
     console.error(`[report-validator][ALARM] ${flow.orderId} (${flow.order.package.key}): KRİTİK yapısal tutarsızlık — awaiting_admin_review kapısında insan denetimi gerekir.`);
   }

@@ -19,6 +19,7 @@ import puppeteer from 'puppeteer-core';
 import { collectHttp, resolveOrigin, cachedOriginUrl } from './surfaceEvidence.js';
 import { requestAgentScenarios, type AgentSuggestion } from './agentAdvisor.js';
 import { type AuthSession, applyAuthHeaders } from './authSession.js';
+import { logScanStep } from './scanLogger.js';
 
 // Headless render (SPA keşfi) — PDF üretimiyle AYNI sistem Chromium'unu kullanır (ek kurulum yok).
 const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
@@ -46,10 +47,16 @@ export class ProbeCtx {
   sent = 0;
   // (FAZ C) authenticated bağlam: verilirse HER probe'a Cookie/Authorization eklenir (session-aware).
   authHeaders?: Record<string, string>;
+  // (GÖZLEMLENEBİLİRLİK) log adımı adı (hangi kontrol probe atıyor). Collector set eder (ör. "Enjeksiyon Doğrulama").
+  label = 'Aktif prob';
   private last = 0;
   async fetchOnce(url: string, opts: { method?: 'GET' | 'POST'; body?: string; contentType?: string; expectSlow?: boolean } = {}): Promise<ProbeResult | null> {
     if (this.stopped) return null;
-    if (this.sent >= MAX_PROBES_PER_CHECK) { this.stopped = `Toplam prob üst sınırına (${MAX_PROBES_PER_CHECK}) ulaşıldı — otomatik durduruldu.`; return null; }
+    if (this.sent >= MAX_PROBES_PER_CHECK) {
+      this.stopped = `Toplam prob üst sınırına (${MAX_PROBES_PER_CHECK}) ulaşıldı — otomatik durduruldu.`;
+      logScanStep({ step: this.label, level: 'circuit_breaker', summary: this.stopped });
+      return null;
+    }
     const wait = MIN_DELAY_MS - (Date.now() - this.last);
     if (wait > 0) await sleep(wait);
     this.last = Date.now();
@@ -71,10 +78,14 @@ export class ProbeCtx {
       if (res.status === 429) this.stopped = 'Hedef 429 (hız sınırı) döndürdü — otomatik durduruldu.';
       if (res.status === 403 && /cloudflare|access denied|request blocked|web application firewall|mod_security|incapsula|sucuri|forbidden/i.test(text)) this.stopped = 'WAF/güvenlik duvarı bloğu (403) algılandı — bu kontrol durduruldu.';
       if (!opts.expectSlow && this.baseline > 0 && ms > SLOW_FACTOR * this.baseline && ms > SLOW_FLOOR_MS) this.stopped = `Yanıt süresi baseline'ın ${SLOW_FACTOR} katını aştı (hedef yavaşlıyor — otomatik durduruldu).`;
+      // (GÖZLEMLENEBİLİRLİK) her prob: method+URL (maskeli) + status + süre + boyut. body loglanmaz.
+      logScanStep({ step: this.label, method: opts.method ?? 'GET', url, status: res.status, durationMs: ms, sizeBytes: buf.length, level: this.stopped ? 'circuit_breaker' : res.status >= 500 ? 'warn' : 'info', summary: this.stopped ?? undefined });
       return { status: res.status, ms, text, len: buf.length };
-    } catch {
+    } catch (err) {
       this.sent++;
-      return { status: 0, ms: Date.now() - t0, text: '', len: 0 };
+      const ms = Date.now() - t0;
+      logScanStep({ step: this.label, method: opts.method ?? 'GET', url, status: 0, durationMs: ms, level: 'error', summary: `İstek hatası: ${String((err as Error)?.name ?? 'err')}` });
+      return { status: 0, ms, text: '', len: 0 };
     } finally {
       clearTimeout(timer);
     }
@@ -287,6 +298,7 @@ async function crawlSurface(host: string): Promise<Surface> {
 
   // Sayfalari cek — AYNI icerikli (hash) sayfayi tekrar SAYMA (SPA catch-all tek shell dondurur).
   const ctx = new ProbeCtx();
+  ctx.label = "Keşif/Crawl";
   const md5 = (s: string) => createHash('md5').update(s).digest('hex');
   const seenUrl = new Set<string>([homeUrl]);
   const seenHash = new Set<string>([md5(home.html)]);
@@ -852,6 +864,7 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
   if (!surf.ok) return { ok: false, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: 0, inputsFound: 0, inputsTested: 0, probesSent: 0, payloadsSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'] };
   const inputs = surf.inputs.slice(0, INJ_MAX_INPUTS);
   const ctx = new ProbeCtx();
+  ctx.label = "Enjeksiyon (SQLi/XSS) Doğrulama";
   if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
   const findings: InjFinding[] = [];
   const notes: string[] = [];
@@ -1024,6 +1037,7 @@ export async function collectIdorEvidence(host: string, session?: AuthSession): 
   if (!surf.ok) return { ok: false, pagesScanned: 0, candidates: 0, endpointsTested: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'] };
   const eps = surf.idEndpoints.slice(0, IDOR_MAX);
   const ctx = new ProbeCtx();
+  ctx.label = "Yetkisiz Erişim (IDOR) Doğrulama";
   if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
   const findings: IdorFinding[] = [];
   const notes: string[] = [];

@@ -107,6 +107,19 @@ adminRouter.get('/orders/:id', async (req, res) => {
   res.json(o);
 });
 
+// --- (GÖZLEMLENEBİLİRLİK) Tarama adım-adım logu — admin "arkada ne oldu" görsün ---------------
+// Kronolojik (seq) sıralı; en fazla 5000 satır. Best-effort yazıldığı için bazı taramalarda boş olabilir.
+adminRouter.get('/orders/:id/logs', async (req, res) => {
+  const logs = await prisma.scanLog.findMany({
+    where: { orderId: req.params.id },
+    orderBy: { seq: 'asc' },
+    take: 5000,
+    select: { seq: true, ts: true, step: true, level: true, method: true, url: true, status: true, durationMs: true, sizeBytes: true, rule: true, severity: true, summary: true },
+  });
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, select: { domain: { select: { hostname: true } }, package: { select: { displayName: true, key: true } }, status: true } });
+  res.json({ order, count: logs.length, logs });
+});
+
 // --- (E) IADE olarak isaretle (admin-only; iyzico iadesi ELLE yapilir) --------
 // Iyzico panelinden iadeyi yaptiktan sonra admin bu aksiyonla siparisi 'refunded'
 // isaretler + musteriye iade bildirim e-postasi gonderir. requireAdmin arkasindadir.

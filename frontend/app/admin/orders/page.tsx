@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { adminApi } from '../../../lib/adminApi';
 import { H1, Table, Pager, StatusBadge, fmtDate } from '../../../components/admin/ui';
 
@@ -136,6 +137,12 @@ export default function AdminOrders() {
                       {busy === o.id + ':retry' ? '…' : 'Yeniden dene'}
                     </button>
                   )}
+                  <Link
+                    href={`/admin/orders/${o.id}/logs`}
+                    style={{ padding: '4px 10px', borderRadius: 6, background: '#334155', color: '#e2e8f0', border: '1px solid #475569', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}
+                  >
+                    Tarama Logu
+                  </Link>
                   {o.status === 'refunded' ? (
                     <span style={{ color: '#94a3b8', fontSize: 12 }}>iade edildi</span>
                   ) : (

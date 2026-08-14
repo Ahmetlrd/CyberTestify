@@ -11,6 +11,7 @@
  */
 import tls from 'node:tls';
 import { classifyExposedFile } from './passiveExtras.js';
+import { logScanStep } from './scanLogger.js';
 
 const HTTP_TIMEOUT_MS = 9000;
 const TLS_TIMEOUT_MS = 8000;
@@ -79,6 +80,7 @@ export async function resolveOrigin(host: string): Promise<TargetOrigin> {
       : { origin: `https://${host}`, scheme: null, httpsWorks: false, httpWorks: false, reachable: false };
   }
   originCache.set(host, result);
+  logScanStep({ step: 'Protokol çözümleme', url: host, level: result.reachable ? 'info' : 'warn', summary: `scheme=${result.scheme ?? 'yok'} httpsWorks=${result.httpsWorks} reachable=${result.reachable}` });
   return result;
 }
 
@@ -99,9 +101,10 @@ export async function collectHttp(host: string): Promise<HttpEvidence> {
   const headers = new Map<string, string>();
   const o = await resolveOrigin(host);
   const base: Pick<HttpEvidence, 'scheme' | 'httpsWorks' | 'reachable'> = { scheme: o.scheme, httpsWorks: o.httpsWorks, reachable: o.reachable };
-  if (!o.reachable) return { ok: false, headers, setCookies: [], html: '', contentType: '', ...base };
+  if (!o.reachable) { logScanStep({ step: 'Ana sayfa (HTTP)', method: 'GET', url: `${o.origin}/`, status: 0, level: 'warn', summary: 'Hedefe ulaşılamadı (reachable=false)' }); return { ok: false, headers, setCookies: [], html: '', contentType: '', ...base }; }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), HTTP_TIMEOUT_MS);
+  const _t0 = Date.now();
   try {
     const res = await fetch(`${o.origin}/`, {
       signal: ctrl.signal,
@@ -120,8 +123,10 @@ export async function collectHttp(host: string): Promise<HttpEvidence> {
       const buf = Buffer.from(await res.arrayBuffer());
       html = (buf.length > MAX_HTML ? buf.subarray(0, MAX_HTML) : buf).toString('utf-8');
     } catch { /* govde okunamadi */ }
+    logScanStep({ step: 'Ana sayfa (HTTP)', method: 'GET', url: `${o.origin}/`, status: res.status, durationMs: Date.now() - _t0, sizeBytes: html.length, summary: `başlıklar alındı (${headers.size}); Set-Cookie: ${setCookies.length}` });
     return { ok: true, status: res.status, headers, setCookies, html, contentType: headers.get('content-type') ?? '', ...base };
-  } catch {
+  } catch (err) {
+    logScanStep({ step: 'Ana sayfa (HTTP)', method: 'GET', url: `${o.origin}/`, status: 0, durationMs: Date.now() - _t0, level: 'error', summary: `İstek hatası: ${String((err as Error)?.name ?? 'err')}` });
     return { ok: false, headers, setCookies: [], html: '', contentType: '', ...base };
   } finally {
     clearTimeout(timer);

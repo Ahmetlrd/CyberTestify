@@ -3,6 +3,7 @@ import { config, validateScopeLockConfig } from './config.js';
 import * as pentagi from './pentagi/client.js';
 import { getPackageDef, securityProfileFor } from './services/scanPackages.js';
 import { generateAndStoreReport } from './services/report.js';
+import { runWithScanLog, purgeOldScanLogs } from './services/scanLogger.js';
 import { sendReportReady } from './services/mailer.js';
 import { publishDailyIfDue } from './services/blog.js';
 import { findOutOfScope, findForbiddenMethods, forbiddenMethodsForProfile, detectScriptDebugLoop, detectRepeatedFetch } from './services/scope.js';
@@ -48,6 +49,7 @@ async function teardownFlowContainer(pentagiFlowId: string) {
 
 // Sipariş henüz terminal DEĞİLSE net biçimde başarısız işaretle (kimlik bilgisi tüketilmiş olabilir).
 const TERMINAL_ORDER = new Set(['scan_failed', 'scan_completed', 'report_delivered', 'report_purged', 'scope_violation', 'refunded']);
+let lastLogRetentionAt = 0; // (gözlemlenebilirlik) log retention'ı günde bir kez çalıştırmak için guard
 async function failOrderIfPending(orderId: string, reason: string): Promise<void> {
   const o = await prisma.order.findUnique({ where: { id: orderId }, select: { status: true } });
   if (!o || TERMINAL_ORDER.has(o.status)) return;
@@ -112,7 +114,7 @@ async function tick() {
         if (claim.count !== 1) continue; // zaten üretimde/işlendi -> tekrar tüketme
         let res: Awaited<ReturnType<typeof generateAndStoreReport>>;
         try {
-          res = await generateAndStoreReport(flow.id);
+          res = await runWithScanLog(flow.orderId, flow.id, () => generateAndStoreReport(flow.id));
         } catch (genErr) {
           console.error(`[worker] deterministik rapor üretimi hata (sipariş ${flow.orderId}):`, genErr);
           await prisma.flow.update({ where: { id: flow.id }, data: { status: 'error', finishedAt: new Date(), errorMessage: String((genErr as Error)?.message ?? genErr).slice(0, 300) } }).catch(() => {});
@@ -350,7 +352,7 @@ async function tick() {
         }
 
         // Rapor uret (siparisi scan_completed yapar, ham veriyi PentAGI'den siler).
-        const res = await generateAndStoreReport(flow.id);
+        const res = await runWithScanLog(flow.orderId, flow.id, () => generateAndStoreReport(flow.id));
         // generateAndStoreReport flow.status'u degistirmez; burada 'finished'
         // yapiyoruz ki bir sonraki tick'te tekrar islenmesin.
         await prisma.flow.update({ where: { id: flow.id }, data: { status: 'finished', finishedAt: new Date() } });
@@ -438,6 +440,11 @@ async function main() {
       // 1 saatten eski test kimlik bilgilerini temizle (ciphertext=null). Normal yolda orchestrator
       // zaten kullanır kullanmaz siler; bu, o silme atlanırsa devreye giren yedek katmandır.
       await purgeExpiredCredentials();
+      // (GÖZLEMLENEBİLİRLİK RETENTION) Günde bir kez 60 günden eski tarama loglarını temizle.
+      if (Date.now() - lastLogRetentionAt > 24 * 60 * 60 * 1000) {
+        lastLogRetentionAt = Date.now();
+        await purgeOldScanLogs(60);
+      }
     } catch (err) {
       console.error('[worker] Test kimlik bilgisi temizligi sirasinda hata:', err);
     }

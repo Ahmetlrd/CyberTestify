@@ -313,6 +313,7 @@ model Order {
   invoiceRequest    InvoiceRequest?    // (Fatura talebi — MANUEL) ödeme sonrası opsiyonel
   activeTestConsent ActiveTestConsent? // (Faz 3) active-light paketlerde zorunlu
   testCredentials   TestCredential[]   // (Tam Kapsamlı Pentest — FAZ A) şifreli test hesabı kimlik bilgileri
+  scanLogs          ScanLog[]          // (Gözlemlenebilirlik) taramanın adım-adım yapılandırılmış logu
 
   // Bu siparis bir periyodik taramadan otomatik olusturulduysa, kaynak kayit.
   scheduledScanId String?
@@ -481,4 +482,30 @@ model BlogPost {
 
   @@index([status, createdAt])
   @@index([status, publishedAt])
+}
+
+// (GÖZLEMLENEBİLİRLİK) Taramanın adım-adım YAPILANDIRILMIŞ logu — admin panelde "arkada ne oldu"
+// sorusuna KANITLA cevap için. Best-effort yazılır (log hatası taramayı ASLA durdurmaz). Response
+// body TAM loglanmaz; yalnız status/süre/boyut + kısa özet. Hassas header değerleri maskelidir.
+// Retention: worker periyodik olarak eski kayıtları siler (sonsuza kadar biriktirilmez).
+model ScanLog {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  seq       Int      // taramaya özel artan sıra (kronolojik gösterim için)
+  ts        DateTime // adımın gerçekleştiği an
+  step      String   // kontrol/adım adı (ör. "Enjeksiyon Doğrulama", "TLS Kontrolü")
+  level     String   @default("info") // info | warn | error | circuit_breaker
+  method    String?  // GET/POST
+  url       String?  // istek URL'i (hassas query/header değerleri maskeli)
+  status    Int?     // HTTP status
+  durationMs Int?    // yanıt süresi
+  sizeBytes Int?     // yanıt boyutu
+  rule      String?  // tetiklenen taxonomy anahtarı/kural (ör. "missing_hsts", "R5")
+  severity  String?  // atanan şiddet/güven
+  summary   String?  // kısa özet (eşleşen header, regex parçası, hata mesajı, devre-kesici nedeni)
+  createdAt DateTime @default(now())
+
+  @@index([orderId, seq])
+  @@index([createdAt]) // retention temizliği için
 }

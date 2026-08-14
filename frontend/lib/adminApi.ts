@@ -55,6 +55,8 @@ export const adminApi = {
       `/admin/orders?page=${page}${status ? `&status=${status}` : ''}`,
     ),
   order: (id: string) => areq<any>(`/admin/orders/${id}`),
+  // (GÖZLEMLENEBİLİRLİK) Taramanın adım-adım logu (kronolojik).
+  scanLogs: (id: string) => areq<{ order: any; count: number; logs: any[] }>(`/admin/orders/${id}/logs`),
   // (E) Iade olarak isaretle — 'refunded' + musteriye iade bildirim maili (backend).
   refundOrder: (id: string) => areq<{ ok: boolean; mailed?: boolean; alreadyRefunded?: boolean }>(`/admin/orders/${id}/refund`, { method: 'POST' }),
 
