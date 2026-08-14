@@ -794,7 +794,8 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
         if (!bm) return true; // madde değil -> tut
         // yalnız üst-düzey madde tut (per-kontrol uzun listeyi at). "API saldırı yüzeyi" (Bölüm B —
         // keşfedilen/auth-kilitli API uç sayısı) üst-düzey değer bilgisidir -> korunmalı.
-        return /genel risk|kapsam|[öo]nerilen|api sald/.test(bm[1].toLocaleLowerCase('tr'));
+        // DİKKAT: tr-locale'de "API" -> "apı" (NOKTASIZ ı, U+0131). Bu yüzden ap[ıi] (her iki i).
+        return /genel risk|kapsam|[öo]nerilen|ap[ıi] sald/.test(bm[1].toLocaleLowerCase('tr'));
       }).join('\n');
     }
     const summaryBody = dedupeBlockquotes(md.render(execMd)) + (hasVuln ? buildPriorities(parsed!.rows, loc) : '');
