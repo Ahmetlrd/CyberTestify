@@ -865,8 +865,8 @@ const SQLI_ERROR_PAYLOADS = ["'", '"', "' OR '1'='1", "')", "';"];
 // tag-context, single-quote-attr, double-quote-attr, URL/js-context marker'lari.
 const XSS_MARKER = 'cxt9137xmark';
 const XSS_PAYLOADS = [`${XSS_MARKER}"><cxmark>`, `${XSS_MARKER}'><cxmark>`, `${XSS_MARKER}" cxa=x`, `${XSS_MARKER}');cx//`];
-const INJ_MAX_INPUTS = 20; // (10/10 Bölüm 1) daha fazla query/form giris noktasi taransin (devre kesici korunur)
-const INJ_PATH_MAX = 12;   // (10/10 Bölüm 1) test edilecek path-ID uc noktasi ust siniri arttirildi
+const INJ_MAX_INPUTS = 26; // (İş B.1) giris noktasi kapsami +%30 (20->26); devre kesici/rate-limit AYNEN korunur
+const INJ_PATH_MAX = 16;   // (İş B.1) path-ID uc noktasi ust siniri 12->16
 
 export async function collectInjectionEvidence(host: string, session?: AuthSession): Promise<InjEvidence> {
   const surf = await discoverSurface(host, session);
@@ -922,10 +922,12 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
       payloads++;
       const xr = await send(ip, xp);
       if (xr && xr.text.includes(xp)) {
-        findings.push({ inputPoint: label, type: 'XSS', technique: 'reflection', evidence: 'Zararsız işaret dizesi yanıt HTML’inde KAÇIRILMADAN (unencoded) yansıdı — yansıyan XSS göstergesi.', severity: 'high', confidence: 'high' });
+        // (İş B.3) TAM yansıma: payload (< > " dâhil) AYNEN, encode edilmeden döndü -> yüksek güven.
+        findings.push({ inputPoint: label, type: 'XSS', technique: 'reflection', evidence: 'İşaret dizesi yanıt HTML’inde TAM ve ENCODE EDİLMEDEN yansıdı (özel karakterler `< > "` kaçırılmadan döndü) — yüksek güvenli yansıyan XSS göstergesi.', severity: 'high', confidence: 'high' });
         break;
       } else if (xr && xr.text.includes(XSS_MARKER)) {
-        findings.push({ inputPoint: label, type: 'XSS', technique: 'reflection', evidence: 'İşaret dizesi yansıdı ancak kodlanmış/kısmen kaçırılmış görünüyor — bağlama göre risk; manuel doğrulama önerilir.', severity: 'low', confidence: 'low' });
+        // (İş B.3) KISMİ yansıma: yalnız işaret dizesi döndü, özel karakterler kaçırılmış/encode edilmiş -> düşük güven.
+        findings.push({ inputPoint: label, type: 'XSS', technique: 'reflection', evidence: 'İşaret dizesi yansıdı ancak KISMİ/ENCODE EDİLMİŞ (özel karakterler `< > "` kaçırılmış) — bağlama bağlı düşük güvenli gösterge; manuel doğrulama önerilir.', severity: 'low', confidence: 'low' });
         break;
       }
     }
@@ -976,7 +978,27 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
 // ======================================================================================
 export type IdorFinding = { endpoint: string; idParam: string; observation: string; differentResource: boolean; severity: 'high' | 'medium' | 'low' };
 export type IdorEvidence = { ok: boolean; pagesScanned: number; candidates: number; endpointsTested: number; probesSent: number; findings: IdorFinding[]; stopped: string | null; notes: string[] };
-const IDOR_MAX = 16; // (10/10 Bölüm 1) daha fazla ID'li uc nokta test edilsin
+const IDOR_MAX = 22; // (İş B.1) daha fazla ID'li uc nokta test edilsin (16->22)
+// (İş B.2) IDOR yalnız strict discoverIdEndpoints'e değil, KEŞFEDİLEN TÜM id-parametreli GET giriş
+// noktalarına genişletilir. id-benzeri parametre adları (sayısal değer şart değil — yoksa 1 varsayılır).
+const ID_LIKE_PARAM_RE = /(^id$|_id$|^user|^account|^order|^invoice|^p$|^pid$|^uid$|^num$|^no$|^item|^product|^news|^cat$|^category|^page$|^record|^ref$|^doc)/i;
+function idorEndpointKey(url: string): string { try { const u = new URL(url); return `${u.origin}${u.pathname}`; } catch { return url; } }
+function idorCandidatesFrom(surf: Surface): Surface['idEndpoints'] {
+  const out: Surface['idEndpoints'] = [...surf.idEndpoints];
+  const seen = new Set(out.map((e) => `${e.kind}:${idorEndpointKey(e.url)}:${e.idParam}`));
+  for (const ip of surf.inputs) {
+    if (ip.method !== 'GET' || !ID_LIKE_PARAM_RE.test(ip.param)) continue;
+    const rawVal = ip.params?.[ip.param];
+    const idValue = rawVal && /^\d{1,9}$/.test(rawVal) ? parseInt(rawVal, 10) : 1; // sayısal değilse 1'den başla
+    let url: string;
+    try { const u = new URL(ip.action); u.searchParams.set(ip.param, String(idValue)); url = u.toString(); } catch { continue; }
+    const key = `query:${idorEndpointKey(url)}:${ip.param}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ url, idParam: ip.param, idValue, kind: 'query' });
+  }
+  return out;
+}
 
 // Ana sayfa HTML'inden sayisal/predictable ID iceren URL adaylarini bul.
 // (10/10 Bölüm 1.2) Ayrica AYNI koleksiyon ucu icin sayfada GORULEN tum gercek ID'leri (siblingIds)
@@ -1066,7 +1088,7 @@ function looksLikeNotFound(status: number, text: string): boolean {
 export async function collectIdorEvidence(host: string, session?: AuthSession): Promise<IdorEvidence> {
   const surf = await discoverSurface(host, session);
   if (!surf.ok) return { ok: false, pagesScanned: 0, candidates: 0, endpointsTested: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi (bağlantı kurulamadı).'] };
-  const eps = surf.idEndpoints.slice(0, IDOR_MAX);
+  const eps = idorCandidatesFrom(surf).slice(0, IDOR_MAX); // (İş B.2) tüm id-parametreli GET uçları
   const ctx = new ProbeCtx();
   ctx.label = "Yetkisiz Erişim (IDOR) Doğrulama";
   if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe

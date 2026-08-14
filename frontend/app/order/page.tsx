@@ -793,17 +793,20 @@ export default function OrderPage() {
               )}
               {showLowScopeWarning && (
                 <div className="mt-4 rounded-card border-2 border-amber-400 bg-amber-50 p-4 text-sm">
-                  <p className="font-bold text-amber-900">⚠️ Ön kontrol sonucu</p>
+                  <p className="font-bold text-amber-900">⚠️ Önemli Ön Kontrol</p>
                   <p className="mt-1 leading-relaxed text-amber-900/90">
-                    Sitenizde otomatik hızlı taramada <strong>çok az/hiç test edilebilir giriş noktası</strong> (form,
-                    parametre, ID) tespit edilemedi. Bu genellikle sitenin <strong>JavaScript ile render edilen (SPA)</strong> bir
-                    yapıya sahip olmasından kaynaklanır. Tarama sırasında daha derin bir headless analiz de yapılacaktır, ancak
-                    sonuç yine de çoğu kontrolde <strong>"kapsam dışı"</strong> çıkabilir. Bu durumda ödenen tutar, çalıştırılan
-                    kontrollerin kendisi için değil, <strong>kapsamlı bir değerlendirme sürecinin tamamı</strong> için alınır.
+                    Sitenizde otomatik hızlı taramada <strong>test edilebilir giriş noktası</strong> (form, query
+                    parametresi, sayısal ID içeren uç nokta) <strong>neredeyse hiç bulunamadı</strong>. Bu genellikle
+                    sitenin <strong>JavaScript ile render edilen (SPA)</strong> bir yapıya sahip olmasından kaynaklanır.
+                  </p>
+                  <p className="mt-2 leading-relaxed text-amber-900/90">
+                    Tarama yine de çalıştırılacaktır, ancak çoğu kontrol <strong>"kapsam dışı / incelenemedi"</strong>{' '}
+                    olarak sonuçlanabilir. Ödenen tutar <strong>bulgu garantisi değildir</strong>; kapsamlı bir
+                    değerlendirme sürecinin tamamı içindir.
                   </p>
                   <label className="mt-3 flex cursor-pointer items-start gap-2 font-medium text-amber-900">
                     <input type="checkbox" checked={lowScopeAck} onChange={(e) => setLowScopeAck(e.target.checked)} className="mt-0.5" />
-                    <span>Yine de devam etmek istiyorum.</span>
+                    <span>Devam etmek istiyorum.</span>
                   </label>
                 </div>
               )}
