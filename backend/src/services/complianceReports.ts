@@ -7,7 +7,7 @@
  * gibi kesin hukuki hüküm KURULMAZ; yalnızca "dışarıdan gözlemlenebilir" teknik gösterge
  * var/yok olarak raporlanır (Gözlemlendi / Gözlemlenmedi / İnceleme gerekli).
  */
-import { collectHttp, collectTls, collectExposedFiles, resolveOrigin, cachedOriginUrl, type HttpEvidence, type TlsEvidence, type ExposedFileResult } from './surfaceEvidence.js';
+import { collectHttp, collectTls, collectExposedFiles, resolveOrigin, cachedOriginUrl, collectPages, type HttpEvidence, type TlsEvidence, type ExposedFileResult } from './surfaceEvidence.js';
 import { unscannableReport } from './unscannable.js';
 
 type Level = 'low' | 'medium' | 'high';
@@ -75,6 +75,10 @@ type ComplianceEvidence = {
   securityTxt: boolean;
   httpsRedirect: 'yes' | 'no' | 'unknown';
   httpOnly: boolean; // HTTPS(443) yok -> şifresiz iletişim (KVKK m.12 / PCI Req 4 / ISO A.8.24 eksiği)
+  // (BÖLÜM 1 — ÇOK SAYFA) keşfedilen sayfaların BİRLEŞİMİNDEN toplanan sinyaller (çerçeve-eşleme bağlamında).
+  pagesScanned: number;      // ana sayfa dâhil taranan benzersiz sayfa
+  allSetCookies: string[];   // TÜM sayfalarda gözlemlenen Set-Cookie'lerin birleşimi (çerez bayrağı analizi)
+  insecureCookiePages: number; // Secure/HttpOnly eksik çerez GÖZLEMLENEN sayfa sayısı
 };
 
 async function fetchPageText(url: string, redirect: RequestRedirect = 'follow'): Promise<{ ok: boolean; status: number; html: string; location?: string }> {
@@ -103,6 +107,20 @@ const TRACKER_DATA: Record<string, string> = {
   'LinkedIn Insight': 'dönüşüm ve profil eşleme',
   'TikTok Pixel': 'dönüşüm ve kimlik eşleme',
 };
+
+// (BÖLÜM 1) Çerez rıza banner'ı + izleyici tespiti — sayfa-bazlı tekrar kullanılır (çok-sayfa kapsam).
+const COOKIE_BANNER_RE = /(cookieconsent|cookie-consent|cookie-banner|çerez.{0,25}(kabul|onay|tercih|ayar)|kabul et.{0,12}çerez|accept.{0,8}cookies|onetrust|cookiebot|iubenda|klaro|tarteaucitron)/i;
+function detectTrackers(html: string): string[] {
+  const t: string[] = [];
+  if (/googletagmanager|GTM-[A-Z0-9]+/i.test(html)) t.push('Google Tag Manager');
+  if (/google-analytics|gtag\/js|\bG-[A-Z0-9]{6,}\b/.test(html)) t.push('Google Analytics');
+  if (/connect\.facebook\.net|fbq\(/i.test(html)) t.push('Facebook Pixel');
+  if (/clarity\.ms/i.test(html)) t.push('Microsoft Clarity');
+  if (/static\.hotjar|hj\(/i.test(html)) t.push('Hotjar');
+  if (/snap\.licdn\.com|_linkedin_partner_id/i.test(html)) t.push('LinkedIn Insight');
+  if (/analytics\.tiktok|ttq\./i.test(html)) t.push('TikTok Pixel');
+  return t;
+}
 
 function analyzeForms(html: string): Form[] {
   const forms: Form[] = [];
@@ -179,15 +197,26 @@ export async function collectComplianceEvidence(host: string): Promise<Complianc
   const httpOnly = o.reachable && !o.httpsWorks; // HTTPS(443) yok -> şifresiz iletişim (KVKK m.12 / PCI Req 4 eksiği)
 
   // KVKK: cerez banner / izleyiciler / iletisim
-  const cookieBanner = /(cookieconsent|cookie-consent|cookie-banner|çerez.{0,25}(kabul|onay|tercih|ayar)|kabul et.{0,12}çerez|accept.{0,8}cookies|onetrust|cookiebot|iubenda|klaro|tarteaucitron)/i.test(html);
-  const trackers: string[] = [];
-  if (/googletagmanager|GTM-[A-Z0-9]+/i.test(html)) trackers.push('Google Tag Manager');
-  if (/google-analytics|gtag\/js|\bG-[A-Z0-9]{6,}\b/.test(html)) trackers.push('Google Analytics');
-  if (/connect\.facebook\.net|fbq\(/i.test(html)) trackers.push('Facebook Pixel');
-  if (/clarity\.ms/i.test(html)) trackers.push('Microsoft Clarity');
-  if (/static\.hotjar|hj\(/i.test(html)) trackers.push('Hotjar');
-  if (/snap\.licdn\.com|_linkedin_partner_id/i.test(html)) trackers.push('LinkedIn Insight');
-  if (/analytics\.tiktok|ttq\./i.test(html)) trackers.push('TikTok Pixel');
+  let cookieBanner = COOKIE_BANNER_RE.test(html);
+  const trackerSet = new Set<string>(detectTrackers(html));
+
+  // (BÖLÜM 1 — ÇOK SAYFA) KVKK/PCI/ISO sinyalleri sayfa-bazlı değişir (kişisel-veri formu /signup'ta,
+  // çerez /login'de, izleyici alt sayfalarda). Keşfedilen sayfaların BİRLEŞİMİNDEN topla. PASİF: yalnız
+  // GET (paylaşılan crawl). Çıktı YİNE çerçeve-eşleme bağlamında değerlendirilir (ham teknik liste değil).
+  const pages = await collectPages(host);
+  const pageCount = Math.max(1, pages.length);
+  const allSetCookies = new Set<string>(http.setCookies);
+  const allFormsAgg = [...analyzeForms(html)];
+  let insecureCookiePages = http.setCookies.map(parseCookieFlags).some((c) => !c.secure || !c.httpOnly) ? 1 : 0;
+  for (const pg of pages) {
+    if (pg.url.replace(/\/$/, '') === `${cachedOriginUrl(host)}`.replace(/\/$/, '')) continue; // ana sayfa zaten sayıldı
+    if (!cookieBanner && COOKIE_BANNER_RE.test(pg.html)) cookieBanner = true;
+    detectTrackers(pg.html).forEach((t) => trackerSet.add(t));
+    analyzeForms(pg.html).forEach((f) => allFormsAgg.push(f));
+    pg.setCookies.forEach((c) => allSetCookies.add(c));
+    if (pg.setCookies.map(parseCookieFlags).some((c) => !c.secure || !c.httpOnly)) insecureCookiePages++;
+  }
+  const trackers = [...trackerSet];
 
   let contactFound = CONTACT_RE.test(html);
   let contactWhere = contactFound ? 'ana sayfa' : '';
@@ -204,8 +233,9 @@ export async function collectComplianceEvidence(host: string): Promise<Complianc
   return {
     http, tls, exposed,
     policyFound: policy.found, policyWhere: policy.where,
-    cookieBanner, trackers, preConsentCookies: http.setCookies.length, contactFound, contactWhere,
-    forms: analyzeForms(html),
+    cookieBanner, trackers, preConsentCookies: allSetCookies.size, contactFound, contactWhere,
+    forms: allFormsAgg,
+    pagesScanned: pageCount, allSetCookies: [...allSetCookies], insecureCookiePages,
     thirdPartyDomains: thirdPartyDomains(html, host),
     versionDisclosure: versionDisclosure(http.headers, html),
     stagingTraces: stagingTraces(html, http.headers),
@@ -244,7 +274,7 @@ function buildKvkkArea(ev: ComplianceEvidence): Area {
   const durum = (b: boolean) => (b ? 'Gözlemlendi' : 'Gözlemlenmedi');
   const rows = [
     `| Aydınlatma yükümlülüğü (m.10) | ${ev.policyFound ? `Gizlilik/aydınlatma metni erişilebilir (${ev.policyWhere})` : 'Kontrol edilen sayfalarda (ana sayfa + yaygın yollar) gözlemlenmedi'} | ${durum(ev.policyFound)} | Erişilebilir bir aydınlatma metni/gizlilik politikası yayınlayın |`,
-    `| Açık rıza — çerezler (m.5) | ${ev.cookieBanner ? 'Çerez rıza banner’ı gözlemlendi' : 'Çerez rıza banner’ı gözlemlenmedi'}${ev.preConsentCookies > 0 ? `; ana sayfa yanıtında rızadan önce ${ev.preConsentCookies} çerez bırakılıyor` : ''} | ${ev.cookieBanner && ev.preConsentCookies === 0 ? 'Gözlemlendi' : 'İnceleme gerekli'} | Rıza öncesi izleyici çerez bırakmayın; açık rıza banner’ı ekleyin |`,
+    `| Açık rıza — çerezler (m.5) | ${ev.cookieBanner ? 'Çerez rıza banner’ı gözlemlendi' : 'Çerez rıza banner’ı gözlemlenmedi'}${ev.preConsentCookies > 0 ? `; taranan ${ev.pagesScanned} sayfada rızadan önce toplam ${ev.preConsentCookies} çerez bırakılıyor` : ''} | ${ev.cookieBanner && ev.preConsentCookies === 0 ? 'Gözlemlendi' : 'İnceleme gerekli'} | Rıza öncesi izleyici çerez bırakmayın; açık rıza banner’ı ekleyin |`,
     `| Üçüncü taraf aktarım/izleyiciler (m.8-9) | ${ev.trackers.length ? 'Gözlemlenen: ' + ev.trackers.join(', ') : 'Ana sayfada belirgin izleyici gözlemlenmedi'} | ${ev.trackers.length ? (ev.cookieBanner ? 'Gözlemlendi (rıza mekanizması var)' : 'İnceleme gerekli') : 'Gözlemlenmedi'} | İzleyicileri açık rızaya bağlayın; aydınlatmada açıkça belirtin |`,
     `| Veri sorumlusu / VERBIS (m.16) | ${ev.contactFound ? `İletişim/veri sorumlusu bilgisi gözlemlendi (${ev.contactWhere})` : 'Kontrol edilen sayfalarda gözlemlenmedi'} | ${durum(ev.contactFound)} | Veri sorumlusu kimliği ve iletişim/VERBIS bilgisini yayınlayın |`,
     ev.httpOnly
@@ -260,7 +290,7 @@ function buildKvkkArea(ev: ComplianceEvidence): Area {
 
   // Form gözlemi
   const formSection = ev.forms.length
-    ? `## FORM GÖZLEMİ (kişisel veri toplama)\n\n- Ana sayfada ${ev.forms.length} form gözlemlendi; ${dataForms.length} tanesi kişisel veri (e-posta/parola) alanı içeriyor.\n` +
+    ? `## FORM GÖZLEMİ (kişisel veri toplama)\n\n- Taranan ${ev.pagesScanned} sayfada ${ev.forms.length} form gözlemlendi; ${dataForms.length} tanesi kişisel veri (e-posta/parola) alanı içeriyor.\n` +
       `- Form gönderimi: ${ev.forms.some((f) => f.insecureAction) ? '⚠️ en az bir form HTTP (şifresiz) adrese gönderiyor' : 'gözlemlenen formlar güvenli (HTTPS/görece) adrese gönderiyor'}.\n` +
       `- Aydınlatma/rıza referansı: ${ev.policyFound ? 'sitede aydınlatma metni erişilebilir' : 'kişisel veri toplayan form(lar) varken aydınlatma metni gözlemlenmedi — form yanında açık rıza/aydınlatma bağlantısı önerilir'}.\n\n`
     : '## FORM GÖZLEMİ\n\n- Ana sayfada kişisel veri toplayan form gözlemlenmedi.\n\n';
@@ -287,7 +317,7 @@ function buildKvkkArea(ev: ComplianceEvidence): Area {
     `${CAUTION}\n\n## DEĞERLENDİRME (Ne gördük / Ne görmedik)\n\n${comment}\n\n## KVKK GÖZLEM TABLOSU\n\n| KVKK İlkesi/Konu | Gözlem | Durum | Öneri |\n|------------------|--------|-------|-------|\n${rows}\n\n${trackerDetail}${formSection}${SCOPE.kvkk}\n`);
   const fixText = buildKvkkFix(ev, { policyMissing: !ev.policyFound, bannerMissing: !ev.cookieBanner, trackingNoConsent, contactMissing: !ev.contactFound, preConsentCookies: ev.preConsentCookies });
   const priorities: Priority[] = [];
-  if (trackingNoConsent) priorities.push({ sev: 'high', text: 'KVKK — Çerez açık rızası ekleyin ve rıza öncesi izleyici çerezleri durdurun.', horizon: 'medium', impact: 'En yüksek yasal risk — uygulamada en sık idari yaptırıma konu olan eksiklik' });
+  if (trackingNoConsent) priorities.push({ sev: 'high', text: 'KVKK — Çerez açık rızası ekleyin ve rıza öncesi izleyici çerezleri durdurun.', horizon: 'medium', impact: 'KVKK m.5 (açık rıza) ihlali göstergesi — Kurul’un uygulamada en sık idari para cezası uyguladığı eksiklik' });
   if (!ev.policyFound) priorities.push({ sev: 'medium', text: 'KVKK — Erişilebilir aydınlatma metni / gizlilik politikası yayınlayın.', horizon: 'medium', impact: 'Şeffaflık yükümlülüğünü karşılar (m.10)' });
   if (!ev.contactFound) priorities.push({ sev: 'medium', text: 'KVKK — Veri sorumlusu ve iletişim bilgisini sitede erişilebilir kılın.', horizon: 'quick', impact: 'Düşük eforlu; VERBIS/şeffaflık için gerekli' });
   return { findings, fixText, priorities };
@@ -300,7 +330,7 @@ function buildPciArea(ev: ComplianceEvidence): Area {
   const { tls, http } = ev;
   const exposedHits = ev.exposed.filter((e) => e.exposed);
   const missingHdrs = SEC_HDRS.slice(0, 4).filter((h) => !http.headers.has(h.h)); // HSTS/CSP/XFO/XCTO
-  const cookies = http.setCookies.map(parseCookieFlags);
+  const cookies = ev.allSetCookies.map(parseCookieFlags); // (ÇOK SAYFA) tüm sayfaların çerezleri
   const insecureCookies = cookies.filter((c) => !c.secure || !c.httpOnly);
   const versionBanner = ev.versionDisclosure.length > 0;
   const tlsBad = ev.httpOnly || tls.hostnameMatch === false || (tls.daysLeft != null && tls.daysLeft < 0) || tls.weakProtocols.length > 0;
@@ -318,7 +348,7 @@ function buildPciArea(ev: ComplianceEvidence): Area {
       : `| Req 4.2.1 — Aktarımda güçlü şifreleme | TLS ${tls.protocol ?? 'tespit edilemedi'}${tls.weakProtocols.length ? `, zayıf sürüm: ${tls.weakProtocols.join(', ')}` : ''}${tls.daysLeft != null ? `, sertifika ${tls.daysLeft >= 0 ? tls.daysLeft + ' gün' : 'SÜRESİ DOLMUŞ'}` : ''} | ${st(tlsBad)} | TLS 1.2+ zorunlu; sertifikayı geçerli tutun |`,
     `| Req 4.1 — HTTPS zorunluluğu | HSTS: ${http.headers.has('strict-transport-security') ? 'var' : 'yok'}; HTTP→HTTPS yönlendirme: ${ev.httpsRedirect === 'yes' ? 'var' : ev.httpsRedirect === 'no' ? '⚠️ yok (HTTP 200 dönüyor)' : 'belirlenemedi'} | ${st(!http.headers.has('strict-transport-security') || ev.httpsRedirect === 'no')} | HSTS ekleyin + tüm HTTP’yi HTTPS’e yönlendirin |`,
     `| Req 6.4 — Güvenlik başlıkları | ${missingHdrs.length ? 'Eksik: ' + missingHdrs.map((h) => h.n).join(', ') : 'HSTS/CSP/X-Frame/X-Content-Type mevcut'} | ${st(missingHdrs.length >= 2, missingHdrs.length === 1)} | Eksik güvenlik başlıklarını ekleyin |`,
-    `| Req 8 — Oturum/çerez + otomatik doldurma | ${cookies.length ? `${insecureCookies.length}/${cookies.length} çerezde Secure/HttpOnly eksik` : 'Ana sayfada Set-Cookie gözlemlenmedi'}${pwAutocomplete ? '; parola alanında autocomplete kapatılmamış' : ''} | ${st(insecureCookies.length > 0 || pwAutocomplete)} | Çerez bayrakları + parola alanında autocomplete="off" |`,
+    `| Req 8 — Oturum/çerez + otomatik doldurma | ${cookies.length ? `${insecureCookies.length}/${cookies.length} çerezde Secure/HttpOnly eksik (${ev.pagesScanned} sayfada gözlemlenen çerezler)` : `Taranan ${ev.pagesScanned} sayfada Set-Cookie gözlemlenmedi`}${pwAutocomplete ? '; parola alanında autocomplete kapatılmamış' : ''} | ${st(insecureCookies.length > 0 || pwAutocomplete)} | Çerez bayrakları + parola alanında autocomplete="off" |`,
     `| Req 2.2 — Güvenli yapılandırma (sürüm ifşası) | ${ev.versionDisclosure.length ? ev.versionDisclosure.join('; ') : 'Belirgin sürüm ifşası gözlemlenmedi'} | ${st(versionBanner)} | Sürüm/teknoloji banner’larını gizleyin |`,
     `| Req 6.5 — Test/staging izleri | ${ev.stagingTraces.length ? '⚠️ ' + ev.stagingTraces.join('; ') : 'Belirgin test/staging/debug izi gözlemlenmedi'} | ${st(ev.stagingTraces.length > 0)} | Debug/kaynak-haritası/test izlerini üretimden kaldırın |`,
     `| Req 3 — Veri ifşası (açıkta dosya) | ${exposedHits.length ? '⚠️ Açık: ' + exposedHits.map((e) => e.path).join(', ') : 'Yaygın hassas yollar erişilebilir değil'} | ${st(exposedHits.length > 0)} | Açıkta kalan dosyalara erişimi engelleyin |`,
@@ -346,10 +376,10 @@ function buildPciArea(ev: ComplianceEvidence): Area {
   const fixText = buildComplianceFix(ev, 'PCI-DSS', { tlsBad, missingHdrs: missingHdrs.map((h) => h.h), insecureCookies: insecureCookies.length > 0, versionBanner, exposed: exposedHits.map((e) => e.path), extra: [...(ev.httpsRedirect === 'no' ? ['HTTP→HTTPS yönlendirmesi ekleyin (tüm trafiği HTTPS’e zorlayın).'] : []), ...(pwAutocomplete ? ['Parola/hassas form alanlarına `autocomplete="off"` (veya `new-password`) ekleyin.'] : []), ...(ev.stagingTraces.length ? ['Debug modunu kapatın; kaynak haritalarını (sourceMappingURL) ve test/staging izlerini üretimden kaldırın.'] : [])] });
   const priorities: Priority[] = [];
   if (exposedHits.length) priorities.push({ sev: 'high', text: `PCI-DSS (Req 3) — Açıkta kalan dosyalara erişimi engelleyin: ${exposedHits.map((e) => e.path).join(', ')}.`, horizon: 'quick', impact: 'Doğrudan veri ifşası riski' });
-  if (tlsBad) priorities.push({ sev: 'high', text: 'PCI-DSS (Req 4) — TLS’i güçlendirin (zayıf sürüm/sertifika sorununu giderin).', horizon: 'quick', impact: 'Aktarımda kart verisi güvenliği için kritik' });
+  if (tlsBad) priorities.push({ sev: 'high', text: 'PCI-DSS (Req 4) — TLS’i güçlendirin (zayıf sürüm/sertifika sorununu giderin).', horizon: 'quick', impact: 'Kart verisi aktarım güvenliği; bir QSA/ASV denetiminde Req 4 “yetersiz (fail)” işaretlenebilir' });
   if (ev.stagingTraces.length) priorities.push({ sev: 'high', text: 'PCI-DSS (Req 6) — Test/staging/debug izlerini üretimden kaldırın.', horizon: 'quick', impact: 'Saldırı yüzeyini ve bilgi ifşasını azaltır' });
   if (missingHdrs.length >= 2) priorities.push({ sev: 'medium', text: 'PCI-DSS (Req 6.4) — Eksik güvenlik başlıklarını ekleyin.', horizon: 'quick', impact: 'XSS/clickjacking yüzeyini kapatır' });
-  if (ev.httpsRedirect === 'no') priorities.push({ sev: 'medium', text: 'PCI-DSS (Req 4.1) — Tüm HTTP trafiğini HTTPS’e yönlendirin + HSTS.', horizon: 'quick', impact: 'Şifresiz erişimi engeller' });
+  if (ev.httpsRedirect === 'no') priorities.push({ sev: 'medium', text: 'PCI-DSS (Req 4.1) — Tüm HTTP trafiğini HTTPS’e yönlendirin + HSTS.', horizon: 'quick', impact: 'Şifresiz erişim açık; Req 4.1 (güçlü şifreleme zorunluluğu) uyumu için giderilmeli' });
   if (pwAutocomplete) priorities.push({ sev: 'medium', text: 'PCI-DSS (Req 8) — Parola/hassas form alanlarında autocomplete’i kapatın.', horizon: 'quick', impact: 'Paylaşımlı cihazda kimlik sızıntısını azaltır' });
   return { findings, fixText, priorities };
 }
@@ -460,7 +490,7 @@ function buildKvkkFix(ev: ComplianceEvidence, o: { policyMissing: boolean; banne
 // ======================================================================================
 const AREA_TITLES = ['KVKK Ön Uyum Kontrolü', 'PCI-DSS Hazırlık Ön-Değerlendirmesi', 'ISO 27001 Hazırlık Kontrol Listesi'];
 
-export function combineComplianceAreas(results: Array<{ findings: string; fixText: string } | null>, priorities: Priority[] = []): { findings: string; fixText: string } | null {
+export function combineComplianceAreas(results: Array<{ findings: string; fixText: string } | null>, priorities: Priority[] = [], pageCount = 1): { findings: string; fixText: string } | null {
   if (results.every((r) => r === null)) return null;
   const levels = results.map((r) => (r ? extractLevel(r.findings) : null));
   const ranked = levels.map((lv, i) => ({ lv, i })).filter((x): x is { lv: Level; i: number } => x.lv !== null).sort((a, b) => levelRank(b.lv) - levelRank(a.lv));
@@ -508,9 +538,29 @@ export function combineComplianceAreas(results: Array<{ findings: string; fixTex
       (medium.length ? `### 🗓️ Orta Vadeli (içerik/süreç/entegrasyon gerektirir)\n\n${renderGroup(medium)}\n\n` : '')
     : '';
 
+  // (BÖLÜM 4 — GÜÇLENDİRİLMİŞ DISCLAIMER) Yönetici Özeti'nin EN ÜSTÜNDE göze çarpan uyarı kutusu.
+  const disclaimerBox =
+    `> ### ⚠️ Önemli — Bu rapor resmî bir uyum beyanı DEĞİLDİR\n` +
+    `> Bu rapor bir **KVKK denetimi**, **PCI DSS sertifikasyonu** veya **ISO 27001 belgelendirmesi DEĞİLDİR.** Yalnızca **dışarıdan gözlemlenebilir** hazırlık eksiklerini ilgili çerçevelerle (KVKK / PCI-DSS / ISO 27001) eşler. Resmî uyum denetimi/beyanı yerine **GEÇMEZ**; nihai değerlendirme için yetkili uzman (KVKK danışmanı / PCI QSA / ISO belgelendirme kuruluşu) gereklidir.\n\n`;
+
+  // (BÖLÜM 2 — POZİTİF GÜVENCE) üç-durum + "ne değerlendirir/ne değerlendirmez". SADECE gerçek veriden.
+  const assuranceRows = AREA_TITLES.map((t, i) => {
+    const lv = levels[i]; const r = results[i];
+    const state = !r || !lv ? '⚠️ İncelenemedi (veri toplanamadı — “uygun” DEĞİL)' : lv === 'low' ? '✅ Dışarıdan belirgin eksik bulunmadı' : `⚠️ Hazırlık eksiği var (${RISK_WORD[lv]} — yukarıda ayrıntılı)`;
+    return `| ${t} | ${state} |`;
+  }).join('\n');
+  const assuranceSection =
+    `## POZİTİF GÜVENCE — İNCELENEN ÇERÇEVELER\n\n` +
+    `Bu ön-değerlendirme, ana sayfa dâhil **${pageCount} benzersiz sayfada** dışarıdan gözlemlenebilir hazırlık göstergelerini üç çerçeveyle eşledi. "Eksik bulunamadı" sonuçları da şeffaf gösterilir:\n\n` +
+    `| Çerçeve | Sonuç |\n|---------|-------|\n${assuranceRows}\n\n` +
+    `> **Üç-durum ayrımı (dürüstlük):** ✅ *Belirgin eksik yok* = kontrol çalıştı, temiz · ⚠️ *Eksik var* = yukarıda ayrıntılı · ⚠️ *İncelenemedi* = veri toplanamadı (uyumlu anlamına GELMEZ).\n\n` +
+    `### Bu paket NE değerlendirir, NE değerlendirmez\n\n` +
+    `**DEĞERLENDİRİR (pasif — yalnız GET ile dış gözlem):** aydınlatma/gizlilik metni varlığı, çerez rıza banner'ı, izleyiciler + rıza ilişkisi, kişisel-veri formları, HTTPS/taşıma güvenliği, çerez bayrakları, veri sorumlusu/iletişim bilgisi — keşfedilen ${pageCount} sayfada, ilgili KVKK/PCI/ISO maddeleriyle eşlenerek.\n\n` +
+    `**DEĞERLENDİRMEZ:** iç veri envanteri, saklama/imha politikası, veri işleme sözleşmeleri, ağ segmentasyonu/CDE (PCI), ISMS dokümantasyonu, resmî ASV/QSA taraması, aktif zafiyet testi. Bunlar iç denetim + yetkili uzman gerektirir. Bir çerçevede "eksik bulunamadı" ifadesi, **uyumlu olduğunuzu KANITLAMAZ** — yalnız dışarıdan gözlemlenen göstergelerin temiz olduğunu gösterir.\n\n`;
+
   const findings =
-    `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
-    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${genelSentence}\n\n${prioritySection}${areaSections}`;
+    `## YÖNETİCİ ÖZETİ\n\n${disclaimerBox}${summary.join('\n')}\n\n` +
+    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${genelSentence}\n\n${prioritySection}${areaSections}\n${assuranceSection}`;
 
   const fixParts = AREA_TITLES.map((t, i) => {
     const r = results[i];
@@ -530,5 +580,5 @@ export async function generateBundleComplianceReport(host: string): Promise<{ fi
   // 3 cerceve AYNI kanittan (tek-sefer toplandi) — saf builder'lar.
   const areas = [buildKvkkArea(ev), buildPciArea(ev), buildIsoArea(ev)];
   const priorities = areas.flatMap((a) => a.priorities);
-  return combineComplianceAreas(areas.map((a) => ({ findings: a.findings, fixText: a.fixText })), priorities);
+  return combineComplianceAreas(areas.map((a) => ({ findings: a.findings, fixText: a.fixText })), priorities, ev.pagesScanned);
 }
