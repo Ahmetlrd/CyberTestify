@@ -1,3 +1,4 @@
+import './tlsBypass.js'; // EN BAŞTA: bad-cert hedeflere fetch() TypeError ile düşmesin (kapsam ön-kontrolü dahil)
 import express from 'express';
 import 'express-async-errors'; // async handler'lardaki throw'lari hata middleware'ine yonlendirir
 import helmet from 'helmet';

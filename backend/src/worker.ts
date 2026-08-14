@@ -1,3 +1,4 @@
+import './tlsBypass.js'; // EN BAŞTA: bad-cert hedeflere fetch() TypeError ile düşmesin (güvenlik tarayıcı)
 import { prisma } from './db.js';
 import { config, validateScopeLockConfig } from './config.js';
 import * as pentagi from './pentagi/client.js';
