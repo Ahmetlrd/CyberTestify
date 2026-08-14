@@ -172,9 +172,22 @@ async function fetchPage(url: string): Promise<PageEvidence | null> {
   }
 }
 
+// (IN-FLIGHT CACHE) Aynı host için eş zamanlı 5 dış-yüzey alanı + basit TEK crawl paylaşır (hedefe
+// 5 kez değil 1 kez GET seli gider). Kısa TTL — tek tarama penceresi. Test hook ile temizlenir.
+const PAGES_CACHE = new Map<string, { at: number; p: Promise<PageEvidence[]> }>();
+const PAGES_TTL_MS = 120_000;
+export function __clearPagesCache(host?: string): void { if (host) PAGES_CACHE.delete(host); else PAGES_CACHE.clear(); }
+
 // Ana sayfa + keşfedilen iç linkler (aynı host, asset/fragment hariç) — en fazla maxPages benzersiz
 // içerikli sayfa. Devre kesici: art arda 3+ 5xx -> durur. Ana sayfaya erişilemezse boş döner.
-export async function collectPages(host: string, maxPages = PAGES_MAX): Promise<PageEvidence[]> {
+export function collectPages(host: string, maxPages = PAGES_MAX): Promise<PageEvidence[]> {
+  const cached = PAGES_CACHE.get(host);
+  if (cached && Date.now() - cached.at < PAGES_TTL_MS) return cached.p;
+  const p = collectPagesUncached(host, maxPages);
+  PAGES_CACHE.set(host, { at: Date.now(), p });
+  return p;
+}
+async function collectPagesUncached(host: string, maxPages = PAGES_MAX): Promise<PageEvidence[]> {
   const o = await resolveOrigin(host);
   if (!o.reachable) return [];
   const homeUrl = `${o.origin}/`;
@@ -223,24 +236,22 @@ const CORS_PROBE_ORIGIN = 'https://cybertestify-cors-probe.example';
 export async function collectCors(host: string): Promise<CorsEvidence> {
   const o = await resolveOrigin(host);
   if (!o.reachable) return { ok: false, testedOrigin: CORS_PROBE_ORIGIN, reflected: false, wildcard: false };
+  return collectCorsForUrl(`${o.origin}/`);
+}
+
+// (BÖLÜM 1 — SAYFA-BAZLI CORS) Belirli bir URL'e zararsız bir Origin başlığıyla GET atıp CORS
+// yanıt başlıklarını okur (payload YOK — yalnız Origin request-header'ı; pasif). Farklı path'ler
+// (ör. /api/) farklı CORS politikasına sahip olabilir; bu, sayfa-bazlı değerlendirmeyi sağlar.
+export async function collectCorsForUrl(url: string): Promise<CorsEvidence> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), HTTP_TIMEOUT_MS);
+  const t0 = Date.now();
   try {
-    const res = await fetch(`${o.origin}/`, {
-      signal: ctrl.signal,
-      redirect: 'manual',
-      headers: { 'user-agent': 'CyberTestify-PassiveCheck/1.0', origin: CORS_PROBE_ORIGIN },
-    });
+    const res = await fetch(url, { signal: ctrl.signal, redirect: 'manual', headers: { 'user-agent': 'CyberTestify-PassiveCheck/1.0', origin: CORS_PROBE_ORIGIN } });
     const acao = res.headers.get('access-control-allow-origin') ?? undefined;
     const acac = res.headers.get('access-control-allow-credentials') ?? undefined;
-    return {
-      ok: true,
-      testedOrigin: CORS_PROBE_ORIGIN,
-      acao,
-      acac,
-      reflected: acao === CORS_PROBE_ORIGIN,
-      wildcard: acao === '*',
-    };
+    logScanStep({ step: 'CORS kontrolü', method: 'GET', url, status: res.status, durationMs: Date.now() - t0, summary: `ACAO=${acao ?? 'yok'} ACAC=${acac ?? 'yok'}` });
+    return { ok: true, testedOrigin: CORS_PROBE_ORIGIN, acao, acac, reflected: acao === CORS_PROBE_ORIGIN, wildcard: acao === '*' };
   } catch {
     return { ok: false, testedOrigin: CORS_PROBE_ORIGIN, reflected: false, wildcard: false };
   } finally {

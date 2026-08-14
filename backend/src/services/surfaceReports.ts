@@ -8,8 +8,8 @@
  * assessBasit bunu okuyup rozeti tutarli gosterir).
  */
 import {
-  collectHttp, collectTls, collectCors, collectDns, collectExposedFiles, resolveOrigin,
-  type TlsEvidence, type DnsEvidence,
+  collectHttp, collectTls, collectCors, collectCorsForUrl, collectDns, collectExposedFiles, resolveOrigin,
+  collectPages, type PageEvidence, type CorsEvidence, type TlsEvidence, type DnsEvidence,
 } from './surfaceEvidence.js';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
 import { detectOutdatedSoftware } from './techEol.js';
@@ -134,12 +134,21 @@ export async function generateHeaderLeakReport(host: string): Promise<{ findings
   const missingCrit = missing.filter((h) => h.hdr === 'content-security-policy' || h.hdr === 'x-frame-options');
   const exposedHits = exposed.filter((e) => e.exposed);
 
+  // (BÖLÜM 1 — ÇOK SAYFA) Güvenlik başlığı varlığı + sürüm imzası, keşfedilen sayfaların BİRLEŞİMİNDEN
+  // değerlendirilir (PASİF, paylaşılan crawl'dan; ek prob YOK). EOL için sürüm alt sayfada da çıkabilir.
+  const hlPages = await collectPages(host);
+  const hlPageCount = Math.max(1, hlPages.length);
+  const hdrAbsentCount = new Map<string, number>();
+  for (const pg of hlPages) for (const h of SEC_HDRS) if (!pg.headers.has(h.hdr)) hdrAbsentCount.set(h.hdr, (hdrAbsentCount.get(h.hdr) ?? 0) + 1);
+  const hdrCov = (hdrs: { hdr: string }[]) => (hlPageCount > 1 ? ` (${Math.max(...hdrs.map((h) => hdrAbsentCount.get(h.hdr) ?? hlPageCount))}/${hlPageCount} sayfada eksik)` : '');
+
   // (HATA 4) EOL/eski yazılım imzası -> GERÇEK bulgu (sunucu/X-Powered-By/generator sürümünden).
   const techStrings: string[] = [];
   const srvHdr = http.headers.get('server'); if (srvHdr) techStrings.push(`Sunucu: ${srvHdr}`);
   const xpbHdr = http.headers.get('x-powered-by'); if (xpbHdr) techStrings.push(`X-Powered-By: ${xpbHdr}`);
   const genMeta = http.html?.match(/<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)/i)?.[1];
   if (genMeta) techStrings.push(genMeta);
+  for (const pg of hlPages) { const s = pg.headers.get('server'); if (s) techStrings.push(`Sunucu: ${s}`); const x = pg.headers.get('x-powered-by'); if (x) techStrings.push(`X-Powered-By: ${x}`); }
   const eolRisks = detectOutdatedSoftware(techStrings);
   const eolHigh = eolRisks.some((r) => r.sev === 'Yüksek');
   const eolMed = eolRisks.some((r) => r.sev === 'Orta');
@@ -164,9 +173,9 @@ export async function generateHeaderLeakReport(host: string): Promise<{ findings
   const risks: string[] = [];
   for (const e of exposedHits) risks.push(`- **Yüksek — Hassas dosya erişilebilir (\`${e.path}\`):** İçerik doğrulandı; yapılandırma/kaynak sızıntısı riski. Erişim derhal engellenmeli.`);
   for (const e of eolRisks) risks.push(`- **${e.sev} — ${e.bulgu}:** ${e.aciklama}`);
-  if (missingCrit.length) risks.push(`- **Orta — Kritik güvenlik başlıkları eksik (${missingCrit.map((h) => h.name).join(', ')}):** XSS/clickjacking’e karşı tarayıcı savunması zayıf.`);
+  if (missingCrit.length) risks.push(`- **Orta — Kritik güvenlik başlıkları eksik (${missingCrit.map((h) => h.name).join(', ')}):** XSS/clickjacking’e karşı tarayıcı savunması zayıf.${hdrCov(missingCrit)}`);
   const otherMissing = missing.filter((h) => !missingCrit.includes(h));
-  if (otherMissing.length) risks.push(`- **Orta — Ek başlıklar eksik (${otherMissing.map((h) => h.name).join(', ')}):** Savunma derinliği zayıf.`);
+  if (otherMissing.length) risks.push(`- **Orta — Ek başlıklar eksik (${otherMissing.map((h) => h.name).join(', ')}):** Savunma derinliği zayıf.${hdrCov(otherMissing)}`);
   if (!risks.length) risks.push('- Belirgin bir başlık/sızıntı sorunu öne çıkmadı.');
 
   const highReason = exposedHits.length ? 'dışarıdan erişilebilir hassas dosya tespit edildi.' : 'eski/desteksiz yazılım sürümü ifşa ediliyor (aşağıda).';
@@ -280,47 +289,73 @@ export async function generateDnsEmailReport(host: string): Promise<{ findings: 
 // ======================================================================================
 // 4) cors_cookie — CORS & Çerez Güvenliği
 // ======================================================================================
-export async function generateCorsCookieReport(host: string): Promise<{ findings: string; fixText: string } | null> {
-  const [http, cors] = await Promise.all([collectHttp(host), collectCors(host)]);
-  if (!http.ok && !cors.ok) return null;
+const CORS_SEV = (c: CorsEvidence): number => ((c.wildcard || c.reflected) && /true/i.test(c.acac ?? '') ? 3 : c.wildcard || c.reflected ? 2 : c.acao ? 1 : 0);
 
-  const credsWildcardDanger = (cors.wildcard || cors.reflected) && /true/i.test(cors.acac ?? '');
-  const cookies = http.setCookies.map(parseCookie);
-  const insecureCookies = cookies.filter((c) => !c.secure || !c.httpOnly);
-  const sameSiteNone = cookies.filter((c) => c.sameSite === 'none' && !c.secure);
+export async function generateCorsCookieReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+  // (BÖLÜM 1 — ÇOK SAYFA) CORS ve çerez politikaları PATH-BAZLI değişebilir (/api altında farklı,
+  // statik sayfada farklı). Keşfedilen sayfaların HER BİRİNDE çerez bayraklarını + CORS'u değerlendir.
+  // PASİF: yalnız GET (+ zararsız Origin request-header'ı); prob/payload YOK.
+  const pages = await collectPages(host);
+  if (!pages.length) return null; // hedefe ulaşılamadı -> alan null; bundle "İncelenemedi"e düşer
+  const pageCount = pages.length;
+  const pathOf = (u: string) => { try { return new URL(u).pathname + (new URL(u).search || ''); } catch { return u; } };
+
+  // --- ÇEREZLER: tüm sayfalardaki Set-Cookie'leri çerez ADINA göre birleştir; en GÜVENSİZ hâli tut,
+  //     hangi sayfalarda set edildiğini kaydet. (Grok kritiği: her çerez ayrı ayrı, hangi bayrak eksik.)
+  const cookieMap = new Map<string, { c: Cookie; onPages: Set<string> }>();
+  for (const pg of pages) for (const raw of pg.setCookies) {
+    const c = parseCookie(raw);
+    const e = cookieMap.get(c.name);
+    if (!e) cookieMap.set(c.name, { c, onPages: new Set([pathOf(pg.url)]) });
+    else { e.onPages.add(pathOf(pg.url)); e.c = { name: c.name, secure: e.c.secure && c.secure, httpOnly: e.c.httpOnly && c.httpOnly, sameSite: e.c.sameSite ?? c.sameSite }; }
+  }
+  const cookieEntries = [...cookieMap.values()];
+  const insecureCookies = cookieEntries.filter((e) => !e.c.secure || !e.c.httpOnly);
+  const sameSiteNone = cookieEntries.filter((e) => e.c.sameSite === 'None' && !e.c.secure);
+
+  // --- CORS: her sayfada zararsız Origin probe (en fazla 10 sayfa). En kötü + sayfa-özel sapma.
+  const corsPer: Array<{ path: string; cors: CorsEvidence }> = [];
+  for (const pg of pages.slice(0, 10)) corsPer.push({ path: pathOf(pg.url), cors: await collectCorsForUrl(pg.url) });
+  const corsOkList = corsPer.filter((x) => x.cors.ok);
+  const worst = corsOkList.reduce<{ path: string; cors: CorsEvidence } | null>((w, x) => (!w || CORS_SEV(x.cors) > CORS_SEV(w.cors) ? x : w), null);
+  const worstCors = worst?.cors ?? { ok: false, testedOrigin: '', reflected: false, wildcard: false };
+  const credsWildcardDanger = CORS_SEV(worstCors) >= 3;
+  // sayfaya-özgü: CORS en kötüsü home'dan FARKLI bir path'te mi (bazı sayfalar açık, diğerleri kapalı)
+  const corsVariance = worst && CORS_SEV(worstCors) >= 2 && corsOkList.some((x) => CORS_SEV(x.cors) < CORS_SEV(worstCors));
 
   let level: Level = 'low';
   if (credsWildcardDanger) level = 'high';
-  else if (cors.wildcard || cors.reflected || insecureCookies.length) level = 'medium';
+  else if (CORS_SEV(worstCors) >= 2 || insecureCookies.length) level = 'medium';
 
+  const covPages = (paths: Set<string>) => `${paths.size}/${pageCount} sayfada`;
   const corsSection =
-    `## CORS YAPILANDIRMASI\n\n` +
-    (!cors.ok
+    `## CORS YAPILANDIRMASI (${corsOkList.length}/${pageCount} sayfada test edildi)\n\n` +
+    (!worst
       ? '- CORS yanıtı elde edilemedi.\n\n'
-      : `- **Test Origin:** \`${cors.testedOrigin}\`\n` +
-        `- **Access-Control-Allow-Origin:** ${cors.acao ? `\`${cors.acao}\`` : 'gönderilmiyor (CORS kapalı — güvenli varsayılan)'}${cors.wildcard ? ' — ⚠️ wildcard (`*`)' : cors.reflected ? ' — ⚠️ Origin’i yansıtıyor' : ''}\n` +
-        `- **Access-Control-Allow-Credentials:** ${cors.acac ? `\`${cors.acac}\`` : 'gönderilmiyor'}\n` +
+      : `- **Test Origin:** \`${worstCors.testedOrigin}\` — her sayfaya zararsız bir Origin başlığı gönderilip yanıt değerlendirildi.\n` +
+        `- **En açık gözlemlenen politika** (\`${worst.path}\`): Access-Control-Allow-Origin: ${worstCors.acao ? `\`${worstCors.acao}\`` : 'gönderilmiyor (kapalı — güvenli varsayılan)'}${worstCors.wildcard ? ' — ⚠️ wildcard (`*`)' : worstCors.reflected ? ' — ⚠️ Origin yansıtma' : ''}; Allow-Credentials: ${worstCors.acac ? `\`${worstCors.acac}\`` : 'gönderilmiyor'}.\n` +
         (credsWildcardDanger ? `- ⚠️ **TEHLİKELİ KOMBİNASYON:** Kimlik bilgisi (credentials) + açık/yansıtılan origin — başka sitelerin kullanıcı oturumuyla veri okumasına yol açabilir.\n` : '') +
+        (corsVariance ? `- ℹ️ CORS politikası sayfaya göre DEĞİŞİYOR (bazı yollar açık, bazıları kapalı) — en açık yol yukarıda.\n` : '') +
         '\n');
 
   const cookieSection =
-    `## ÇEREZ BAYRAKLARI\n\n` +
-    (cookies.length === 0
-      ? '- Ana sayfa yanıtında Set-Cookie gözlemlenmedi.\n\n'
-      : `| Çerez | Secure | HttpOnly | SameSite | Not |\n|-------|--------|----------|----------|-----|\n` +
-        cookies.map((c) => `| \`${c.name}\` | ${c.secure ? '✅' : '❌'} | ${c.httpOnly ? '✅' : '❌'} | ${c.sameSite ?? '—'} | ${cookieNote(c)} |`).join('\n') + '\n\n');
+    `## ÇEREZ BAYRAKLARI (${pageCount} sayfada gözlemlenen tüm çerezler)\n\n` +
+    (cookieEntries.length === 0
+      ? `- Taranan ${pageCount} sayfanın hiçbirinde Set-Cookie gözlemlenmedi.\n\n`
+      : `| Çerez | Secure | HttpOnly | SameSite | Gözlemlendiği yer | Not |\n|-------|--------|----------|----------|------------------|-----|\n` +
+        cookieEntries.map((e) => `| \`${e.c.name}\` | ${e.c.secure ? '✅' : '❌'} | ${e.c.httpOnly ? '✅' : '❌'} | ${e.c.sameSite ?? '—'} | ${covPages(e.onPages)} | ${cookieNote(e.c)} |`).join('\n') + '\n\n');
 
   const risks: string[] = [];
-  if (credsWildcardDanger) risks.push('- **Yüksek — Tehlikeli CORS kombinasyonu:** `Allow-Credentials: true` ile açık/yansıtılan `Allow-Origin`. Kötü niyetli bir site, giriş yapmış kullanıcının oturumuyla API’nizden veri çekebilir.');
-  else if (cors.wildcard) risks.push('- **Orta — CORS wildcard (`*`):** Tüm kökenlere açık. Kimlik bilgisi olmayan uç noktalar için kabul edilebilir olsa da, hassas API’lerde origin allowlist önerilir.');
-  else if (cors.reflected) risks.push('- **Orta — CORS Origin yansıtması:** Gelen Origin doğrulanmadan yansıtılıyor; allowlist’e geçilmeli.');
-  for (const c of insecureCookies) risks.push(`- **Orta — Çerez bayrağı eksik (\`${c.name}\`):** ${!c.secure ? 'Secure yok (HTTP üzerinden sızabilir). ' : ''}${!c.httpOnly ? 'HttpOnly yok (JavaScript/XSS ile okunabilir).' : ''}`);
-  for (const c of sameSiteNone) risks.push(`- **Orta — \`${c.name}\` SameSite=None ama Secure yok:** Modern tarayıcılar reddeder; CSRF yüzeyi artar.`);
+  if (credsWildcardDanger) risks.push(`- **Yüksek — Tehlikeli CORS kombinasyonu (\`${worst!.path}\`):** \`Allow-Credentials: true\` ile açık/yansıtılan \`Allow-Origin\`. Kötü niyetli bir site, kurbanın oturum çerezleriyle bu uç noktadan veri çekip saldırgana gönderebilir (hesap verisi sızıntısı).`);
+  else if (worstCors.wildcard) risks.push(`- **Orta — CORS wildcard (\`*\`, \`${worst!.path}\`):** Tüm kökenlere açık. Kimlik bilgisi olmayan uç noktalarda kabul edilebilir; hassas API'lerde origin allowlist önerilir.`);
+  else if (worstCors.reflected) risks.push(`- **Orta — CORS Origin yansıtması (\`${worst!.path}\`):** Gelen Origin doğrulanmadan yansıtılıyor; bir allowlist ile sınırlanmalı.`);
+  for (const e of insecureCookies) risks.push(`- **Orta — Çerez bayrağı eksik (\`${e.c.name}\`, ${covPages(e.onPages)}):** ${!e.c.secure ? '**Secure yok** — çerez HTTP üzerinden düz metin gidebilir, ağ dinleyen bir saldırgan oturum çerezini çalabilir. ' : ''}${!e.c.httpOnly ? '**HttpOnly yok** — bir XSS açığı olması hâlinde JavaScript çerezi okuyup oturumu ele geçirebilir.' : ''}`);
+  for (const e of sameSiteNone) risks.push(`- **Orta — \`${e.c.name}\` SameSite=None ama Secure yok (${covPages(e.onPages)}):** Modern tarayıcılar reddeder; ayrıca CSRF yüzeyini artırır.`);
   if (!risks.length) risks.push('- CORS ve çerez yapılandırmasında belirgin bir risk öne çıkmadı.');
 
   const bullets: string[] = [];
   bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'kimlik bilgisiyle birlikte tehlikeli bir CORS yapılandırması tespit edildi.' : level === 'medium' ? 'CORS ve/veya çerez bayraklarında giderilmesi önerilen eksikler var.' : 'belirgin bir CORS/çerez sorunu öne çıkmadı.'}`);
-  bullets.push(`- CORS: ${cors.wildcard ? 'wildcard (*)' : cors.reflected ? 'origin yansıtma' : cors.acao ? 'sınırlı' : 'kapalı'}${credsWildcardDanger ? ' + credentials ⚠️' : ''}. Çerez: ${cookies.length} adet, ${insecureCookies.length} eksik bayraklı.`);
+  bullets.push(`- **Kapsam:** ${pageCount} benzersiz sayfada değerlendirildi. CORS: ${worstCors.wildcard ? 'wildcard (*)' : worstCors.reflected ? 'origin yansıtma' : worstCors.acao ? 'sınırlı' : 'kapalı'}${credsWildcardDanger ? ' + credentials ⚠️' : ''}. Çerez: ${cookieEntries.length} benzersiz, ${insecureCookies.length} eksik bayraklı.`);
   bullets.push('- **Önerilen ilk adım:** ' + (credsWildcardDanger ? 'CORS’u origin allowlist’e çekin; credentials ile wildcard/yansıtmayı kaldırın.' : 'Çerezlere Secure + HttpOnly + uygun SameSite ekleyin (hazır örnekler "AI Çözüm Önerileri" eklentisinde).'));
 
   const genel =
@@ -331,7 +366,7 @@ export async function generateCorsCookieReport(host: string): Promise<{ findings
         : 'CORS ve çerez yapılandırması güvenli varsayılanlara yakın; rapor yalnızca küçük iyileştirmeleri listeler.';
 
   const findings = assemble('CORS/Çerez', level, bullets, genel, `${corsSection}${cookieSection}## TESPİT EDİLEN RİSKLER\n\n${risksTable(risks)}\n`);
-  const fixText = buildCorsCookieFix(host, { credsWildcardDanger, wildcard: cors.wildcard, reflected: cors.reflected, insecure: insecureCookies.length > 0 });
+  const fixText = buildCorsCookieFix(host, { credsWildcardDanger, wildcard: worstCors.wildcard, reflected: worstCors.reflected, insecure: insecureCookies.length > 0 });
   return { findings, fixText };
 }
 
@@ -378,6 +413,14 @@ export async function generateCspReport(host: string): Promise<{ findings: strin
   else if (present && (directives?.unsafeInline || directives?.unsafeEval || directives?.wildcard)) level = 'medium';
   else if (!present && cspRO) level = 'medium';
 
+  // (BÖLÜM 1 — ÇOK SAYFA) CSP başlığı path-bazlı değişebilir (bir sayfada var, diğerinde yok).
+  // Keşfedilen sayfalarda CSP varlığını say. PASİF: yalnız GET (paylaşılan crawl'dan).
+  const cspPages = await collectPages(host);
+  const cspPageCount = Math.max(1, cspPages.length);
+  const cspAbsentPaths = cspPages.filter((pg) => !(pg.headers.get('content-security-policy') ?? '').trim()).map((pg) => { try { return new URL(pg.url).pathname; } catch { return pg.url; } });
+  const cspVariance = present && cspAbsentPaths.length > 0; // home'da var ama bazı sayfalarda YOK
+  const cspCov = cspPageCount > 1 ? ` Taranan ${cspPageCount} sayfanın ${cspAbsentPaths.length === cspPageCount ? 'TAMAMINDA' : `${cspAbsentPaths.length}/${cspPageCount}'sinde`} CSP başlığı yok.` : '';
+
   const statusSection =
     `## CSP DURUMU\n\n` +
     (present
@@ -393,9 +436,11 @@ export async function generateCspReport(host: string): Promise<{ findings: strin
       : '- Uygulanan bir CSP olmadığından direktif analizi yapılamadı.\n\n');
 
   const risks: string[] = [];
-  if (!present && !cspRO) risks.push(`- **${isSpa ? 'Orta-Yüksek' : 'Orta'} — CSP tamamen eksik:** XSS ve içerik enjeksiyonuna karşı tarayıcı seviyesinde savunma yok.${isSpa ? ' SPA olduğu için XSS etkisi belirgindir.' : ''}`);
+  if (!present && !cspRO) risks.push(`- **${isSpa ? 'Orta-Yüksek' : 'Orta'} — CSP tamamen eksik:** XSS ve içerik enjeksiyonuna karşı tarayıcı seviyesinde savunma yok.${isSpa ? ' SPA olduğu için XSS etkisi belirgindir.' : ''}${cspCov}`);
   if (!present && cspRO) risks.push('- **Orta — CSP yalnızca Report-Only:** İhlaller engellenmiyor; enforce moda geçilmeli.');
   if (present) for (const w of weakFindings.filter((x) => /unsafe|wildcard/.test(x))) risks.push(`- **Orta — Zayıf CSP direktifi:** ${w}`);
+  // (BÖLÜM 1) SAYFAYA-ÖZGÜ: CSP ana sayfada uygulanıyor ama bazı iç sayfalarda gönderilmiyor.
+  if (cspVariance) risks.push(`- **Orta — Sayfaya özgü CSP tutarsızlığı:** CSP ana sayfada mevcut ancak ${cspAbsentPaths.length}/${cspPageCount} iç sayfada gönderilmiyor (ör. ${cspAbsentPaths.slice(0, 3).join(', ')}). Politika tüm yollarda tutarlı uygulanmalı.`);
   if (!risks.length) risks.push('- CSP mevcut ve belirgin bir zayıflatıcı direktif içermiyor.');
 
   const bullets: string[] = [];
@@ -559,9 +604,13 @@ export async function generateBundleSurfaceReport(host: string): Promise<{ findi
   // (DÜRÜSTLÜK — c durumu) HEDEFE HİÇ ULAŞILAMADI -> "İncelenemedi" raporu (ASLA "temiz"/"düşük").
   if (!o.reachable) return unscannableSurfaceReport(host);
   // Her alan kendi kanitini toplar (bagimsiz, saf); paralel calistir, biri patlarsa null.
-  const results = await Promise.all(BUNDLE_AREAS.map((a) => a.gen(host).catch(() => null)));
+  // (BÖLÜM 1) Alanlar collectPages'i PAYLAŞIR (in-flight cache) -> hedefe tek crawl gider.
+  const [results, pages] = await Promise.all([
+    Promise.all(BUNDLE_AREAS.map((a) => a.gen(host).catch(() => null))),
+    collectPages(host).catch(() => [] as PageEvidence[]),
+  ]);
   // Hiçbir alan veri toplayamadıysa (reachable ama tüm sorgular başarısız) -> "İncelenemedi".
-  return combineSurfaceAreas(results, { httpOnly: o.reachable && !o.httpsWorks }) ?? unscannableSurfaceReport(host);
+  return combineSurfaceAreas(results, { httpOnly: o.reachable && !o.httpsWorks, pageCount: pages.length }) ?? unscannableSurfaceReport(host);
 }
 
 // Hedefe ulaşılamadığında dürüst "İncelenemedi" raporu (pdf.ts assessBasit nötr amber rozet basar).
@@ -580,10 +629,11 @@ function unscannableSurfaceReport(host: string): { findings: string; fixText: st
 // verilerle (null-alan / worst-case) test edilebilsin diye. Hepsi null ise -> null (fallback).
 export function combineSurfaceAreas(
   results: Array<{ findings: string; fixText: string } | null>,
-  opts?: { httpOnly?: boolean },
+  opts?: { httpOnly?: boolean; pageCount?: number },
 ): { findings: string; fixText: string } | null {
   if (results.every((r) => r === null)) return null; // hicbir alan veri toplayamadi -> fallback
   const httpOnly = opts?.httpOnly ?? false;
+  const pageCount = Math.max(1, opts?.pageCount ?? 1);
 
   const levels: Array<Level | null> = results.map((r) => (r ? extractLevel(r.findings) : null));
   // WORST-CASE ALAN: en yuksek seviyeli alanin indexini bul — genel rozet + kutu/genel cumle
@@ -658,10 +708,26 @@ export function combineSurfaceAreas(
     ? `## TESPİT EDİLEN RİSKLER\n\n| Bulgu | Şiddet | Açıklama |\n|-------|--------|----------|\n| HTTPS desteklenmiyor (şifresiz iletişim) | Yüksek | Site HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir, oturum/şifre çalınabilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS. |\n\n`
     : '';
 
+  // (BÖLÜM 2 — POZİTİF GÜVENCE) "Sorun bulunamadı"yı da ŞEFFAF kıl: hangi alanlar GERÇEKTEN kontrol
+  // edildi, kaç sayfada, üç-durum ayrımıyla (Temiz / Bulgu / İncelenemedi). SADECE gerçek veriden.
+  const assuranceRows = BUNDLE_AREAS.map((a, i) => {
+    const r = results[i]; const lv = levels[i];
+    const state = !r || !lv ? '⚠️ İncelenemedi (veri toplanamadı — “temiz” DEĞİL)' : lv === 'low' ? '✅ Sorun bulunmadı' : `⚠️ Bulgu var (${RISK_WORD[lv]} — yukarıda ayrıntılı)`;
+    return `| ${a.title} | ${state} |`;
+  }).join('\n');
+  const assuranceSection =
+    `## POZİTİF GÜVENCE — KONTROL EDİLEN ALANLAR\n\n` +
+    `Bulgu çıkmayan alanlar da dâhil, dış-yüzey kontrolleri ana sayfa dâhil **${pageCount} benzersiz sayfada** gerçekten çalıştırıldı. Aşağıdaki tablo, "sorun bulunamadı" sonuçlarını da şeffaf biçimde gösterir:\n\n` +
+    `| Kontrol Alanı | Sonuç |\n|---------------|-------|\n${assuranceRows}\n\n` +
+    `> **Üç-durum ayrımı (dürüstlük):** ✅ *Sorun bulunmadı* = kontrol çalıştı, temiz çıktı · ⚠️ *Bulgu var* = yukarıda detaylı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).\n\n` +
+    `### Bu paket NE kontrol EDER, NE ETMEZ\n\n` +
+    `**EDER (pasif — yalnız GET ile sayfa çekme + zararsız Origin/DNS sorgusu):** TLS/sertifika, HTTP güvenlik başlıkları, CORS politikası, çerez bayrakları (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS/e-posta kayıtları (SPF/DKIM/DMARC/DNSSEC), açıkta hassas dosya, eski/desteksiz yazılım sürümü — keşfedilen ${pageCount} sayfada.\n\n` +
+    `**ETMEZ:** Aktif zafiyet doğrulaması (SQLi/XSS/IDOR gibi payload/prob denemesi), kimlik-doğrulamalı akış testi, iş-mantığı istismarı. Bunlar **Aktif Doğrulama** ve **Tam Kapsamlı Pentest** paketlerinin kapsamındadır. Bu rapor pasif gözleme dayanır; bir alanda "bulgu yok" ifadesi, aktif istismar denenmediği için **güvenli olduğunu KANITLAMAZ** — yalnız dışarıdan gözlemlenen yapılandırmanın temiz olduğunu gösterir.\n\n`;
+
   const findings =
     `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
     `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${httpOnly ? 'Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz (düz metin) taşınıyor — öncelikli olarak geçerli bir TLS sertifikasıyla HTTPS’e geçilmelidir. Diğer alanlar http:// üzerinden incelenmiştir. ' : ''}${genelSentence}\n\n` +
-    `${httpsFindingSection}${areaSections}`;
+    `${httpsFindingSection}${areaSections}\n${assuranceSection}`;
 
   // --- AI ÇÖZÜM ÖNERİLERİ (5 alan TEK bolumde, alt-basliklarla) ---
   const fixParts = BUNDLE_AREAS.map((a, i) => {
