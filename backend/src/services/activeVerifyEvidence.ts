@@ -229,6 +229,15 @@ const AUTH_SPA_HASH_ROUTES = [
   '#/saved-address', '#/basket', '#/cart', '#/wishlist', '#/wallet', '#/payment', '#/saved-payment-methods',
   '#/security', '#/privacy-security', '#/2fa', '#/dashboard', '#/me', '#/user/profile',
 ];
+// (İş 1) KLASİK (server-render) authenticated landing/hesap yolları — SPA hash-route DEĞİL. Homepage
+// login-arkası sayfaya link vermediğinde (ör. AltoroMutual `/` -> /bank/main.jsp linki yok) authenticated
+// yüzeye ulaşmak için tohum. GENEL bankacılık/uygulama demo kalıpları; hedefe özel sabit-kod DEĞİL. Yalnız
+// oturum varken denenir; erişilemeyen/anonim-shell dönenler içerik-hash dedup ile elenir (yüzey şişmez).
+const AUTH_SEED_PATHS = [
+  '/bank/main.jsp', '/bank/', '/bank/main', '/main.jsp', '/dashboard', '/home', '/account', '/accounts',
+  '/myaccount', '/my-account', '/profile', '/user/profile', '/settings', '/overview', '/summary',
+  '/bank/showAccount', '/bank/transfer.aspx', '/bank/transaction', '/transactions', '/history', '/orders',
+];
 // Yakalanan XHR/fetch trafiginde gurultu (socket/analytics/i18n) + degersiz cache-buster param'lar.
 const API_NOISE_PATH_RE = /(\/socket\.io\/|\/sockjs|__webpack|hot-update|\/assets\/|\/i18n\/|analytics|gtag|\/collect\b|\/rum\b|\/beacon\b)/i;
 const API_NOISE_PARAM_RE = /^(_|t|ts|v|ver|cb|cache|rand|nonce|sid|eio|transport|timestamp|__.*|hash|token|jwt|key)$/i;
@@ -244,6 +253,10 @@ export type Surface = {
   homeHeaders: Map<string, string>;
   inputs: InputPoint[];
   idEndpoints: Array<{ url: string; idParam: string; idValue: number; kind: 'query' | 'path'; siblingIds?: number[] }>;
+  // (İş 2) Numaralandırılabilir GET-form select'leri (ör. hesap seçim formu showAccount?listAccounts=<hesap#>).
+  // Authenticated IDOR yüzeyinin bulunduğunu DÜRÜSTÇE göstermek için — otomatik neighbor-IDOR ÇALIŞTIRILMAZ
+  // (kendi kaynakları yetkilidir; sahip-olunmayan ID'ye erişim cross-account = kapsam dışı).
+  enumerableSelects?: Array<{ action: string; param: string; count: number; sample: number[] }>;
   uploadForms: Array<{ action: string; fileField: string; otherFields: string[]; source?: 'dom' | 'network' }>;
   massAssignForm: { action: string; fields: string[] } | null;
   apiWrites: string[];        // GOZLEMLENEN durum-degistiren API uclari ("POST /rest/user/login") — PROBE EDILMEZ
@@ -496,12 +509,18 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
     }
     const maxPages = session ? 20 : HEADLESS_MAX_PAGES;   // authenticated crawl daha geniş (hash-route'lar)
     const hardCap = session ? 26 : CRAWL_HARD_CAP;
-    const targets = [...linkSet].slice(0, maxPages - 1);
+    // (İş 1) Oturum varken KLASİK authenticated landing/hesap tohumları EN ÖNE alınır — aksi halde ana-sayfa
+    // linkleri sayfa tavanını (maxPages) doldurup login-arkası /bank/main.jsp gibi sayfalara sıra gelmiyordu.
+    const targets: string[] = [];
+    if (session) for (const p of AUTH_SEED_PATHS) { const a = absUrl(p, host); if (a && a !== homeUrl && !targets.includes(a)) targets.push(a); }
+    for (const l of [...linkSet].slice(0, maxPages - 1)) if (!targets.includes(l)) targets.push(l);
     for (const p of WELL_KNOWN_PATHS) { const a = absUrl(p, host); if (a && a !== homeUrl && !targets.includes(a)) targets.push(a); }
     for (const h of hashTargets) if (!targets.includes(h)) targets.push(h);
 
     // 3) Sayfalari render et (benzersiz icerik + sayfa ust siniri). Hash-route'lar farkli icerik dondururse
     // benzersiz sayilir; var-olmayan route SPA shell'i (ana sayfa) dondurup icerik-hash dedup ile elenir.
+    // (İş 1) Oturum varken 2. SEVİYE keşif: her authenticated sayfanın kendi linkleri de sıraya eklenir
+    // (BFS) — böylece login-arkası main.jsp -> showAccount/transfer gibi GERÇEK iç sayfalar bulunur.
     for (const t of targets) {
       if (stopped || pages.length >= maxPages || seenUrl.size >= hardCap) break;
       if (seenUrl.has(t)) continue; seenUrl.add(t);
@@ -511,6 +530,15 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
       if (seenHash.has(h)) continue; // ayni shell -> benzersiz sayma
       seenHash.add(h);
       pages.push({ url: t, html });
+      // (İş 1) authenticated 2. seviye link genişletme (bounded — hardCap/maxPages durdurur).
+      if (session && targets.length < hardCap) {
+        for (const m of html.matchAll(/href\s*=\s*["']([^"'#]+)["']/gi)) {
+          const abs = absUrl(m[1].replace(/&amp;/g, '&'), host);
+          if (!abs) continue;
+          try { const u = new URL(abs); if (CRAWL_ASSET_RE.test(u.pathname)) continue; const norm = `${u.origin}${u.pathname}${u.search}`; if (!seenUrl.has(norm) && !targets.includes(norm)) targets.push(norm); } catch { /* atla */ }
+          if (targets.length >= hardCap) break;
+        }
+      }
     }
 
     // 4) Render-edilmis sayfalardan input/ID/form kesfini birlestir (MEVCUT extractor'lar)
@@ -519,6 +547,7 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
     const uploadForms: Surface['uploadForms'] = []; const seenUp = new Set<string>();
     let massAssignForm: Surface['massAssignForm'] = null;
     const domForms: Surface['domForms'] = []; const seenDf = new Set<string>();
+    const enumerableSelects: NonNullable<Surface['enumerableSelects']> = []; const seenSel = new Set<string>();
     for (const pg of pages) {
       for (const ip of discoverInputs(host, pg.html)) { const k = `${ip.method} ${ip.action} ${ip.param}`; if (!seenIn.has(k)) { seenIn.add(k); inputs.push(ip); } }
       for (const e of discoverIdEndpoints(host, pg.html)) { const k = `${e.kind}:${e.idParam}:${(() => { try { const u = new URL(e.url); return u.origin + u.pathname; } catch { return e.url; } })()}`; if (!seenId.has(k)) { seenId.add(k); idEndpoints.push(e); } }
@@ -526,6 +555,8 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
       if (!massAssignForm) massAssignForm = discoverMassAssignForm(host, pg.html);
       // (İŞ 2) SALT-OKUNUR DOM form-alani kesfi (SPA formlari icin — submit YOK).
       const df = discoverDomFormFields(pg.html); if (df) { const k = df.fields.join(','); if (!seenDf.has(k)) { seenDf.add(k); domForms.push({ url: pg.url, fields: df.fields, interesting: df.interesting }); } }
+      // (İş 2) Numaralandırılabilir GET-form select'leri (hesap seçim formu vb.) — dürüst IDOR-yüzey raporu için.
+      for (const s of discoverEnumerableSelects(host, pg.html)) { const k = `${s.action}:${s.param}`; if (!seenSel.has(k)) { seenSel.add(k); enumerableSelects.push(s); } }
     }
 
     // 5) YAKALANAN API YUZEYI -> input havuzuna EKLE (gercek SPA API'leri: /rest/products/search?q= gibi).
@@ -575,7 +606,7 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
     }
 
     const minedApiPaths = [...new Set([homeHtml, ...pages.map((p) => p.html)].flatMap((h) => mineApiPaths(h)))].slice(0, 12);
-    return { ok: true, method: 'headless', pagesScanned: pages.length, urlsFetched: seenUrl.size, jsRendered: true, homeHtml, homeHeaders: new Map(), inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [...apiWrites].slice(0, 20), apiReads: [...apiReads].slice(0, 30), domForms: domForms.slice(0, 10), minedApiPaths };
+    return { ok: true, method: 'headless', pagesScanned: pages.length, urlsFetched: seenUrl.size, jsRendered: true, homeHtml, homeHeaders: new Map(), inputs, idEndpoints, uploadForms, massAssignForm, apiWrites: [...apiWrites].slice(0, 20), apiReads: [...apiReads].slice(0, 30), domForms: domForms.slice(0, 10), minedApiPaths, enumerableSelects: enumerableSelects.slice(0, 8) };
   } catch {
     return null;
   } finally {
@@ -1101,6 +1132,26 @@ function idorCandidatesFrom(surf: Surface): Surface['idEndpoints'] {
   return out;
 }
 
+// (İş 2) GET-form içindeki <select name=X> + SAYISAL <option value=N> = numaralandırılabilir kaynak
+// yüzeyi (ör. AltoroMutual showAccount?listAccounts=800002). Authenticated IDOR yüzeyinin VAR olduğunu
+// dürüstçe raporlamak için toplanır. POST formlar (ör. doTransfer — para transferi) HARİÇ (durum-değiştiren).
+function discoverEnumerableSelects(host: string, html: string): Array<{ action: string; param: string; count: number; sample: number[] }> {
+  const out: Array<{ action: string; param: string; count: number; sample: number[] }> = [];
+  for (const fm of html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)) {
+    const attrs = fm[1];
+    if (/method\s*=\s*["']?\s*post/i.test(attrs)) continue; // yalnız GET form (durum değiştirmez)
+    const actionRaw = attrs.match(/action\s*=\s*["']([^"']*)["']/i)?.[1] ?? '';
+    const action = absUrl(actionRaw || '/', host); if (!action) continue;
+    if (/transfer|dotransfer|pay|checkout|delete|remove/i.test(action)) continue; // durum-değiştiren eylem hariç
+    for (const sm of fm[2].matchAll(/<select\b[^>]*\bname\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/select>/gi)) {
+      const param = sm[1];
+      const nums = [...sm[2].matchAll(/<option\b[^>]*\bvalue\s*=\s*["'](\d{2,19})["']/gi)].map((m) => parseInt(m[1], 10)).filter((n) => Number.isFinite(n));
+      if (nums.length >= 2) out.push({ action, param, count: nums.length, sample: nums.slice(0, 4) });
+    }
+  }
+  return out;
+}
+
 // Ana sayfa HTML'inden sayisal/predictable ID iceren URL adaylarini bul.
 // (10/10 Bölüm 1.2) Ayrica AYNI koleksiyon ucu icin sayfada GORULEN tum gercek ID'leri (siblingIds)
 // toplar — IDOR testinde rastgele/komsu tahmin yerine sitenin KENDI verisinden gorulen ID'lerle denenir.
@@ -1282,8 +1333,18 @@ export async function collectIdorEvidence(host: string, session?: AuthSession): 
   const totalCandidates = eps.length + derivedBases.length;
   if (derivedBases.length) notes.push(`Ayrıca **${derivedBases.length}** koleksiyon-benzeri uçtan (ör. \`${(() => { try { return new URL(derivedBases[0]).pathname; } catch { return derivedBases[0]; } })()}\`) sıralı sayısal ID'ler (\`/{1..${DERIVE_IDS_PER_BASE}}\`) türetilip GET ile içerik-farkı yöntemiyle test edildi.`);
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!totalCandidates) notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada sayısal/tahmin-edilebilir ID içeren bir uç nokta (ör. \`?id=123\`, \`/user/45\`) veya sıralı ID türetilebilecek koleksiyon ucu bulunamadı.` + spaHint(surf));
-  return { ok: true, pagesScanned: surf.pagesScanned, candidates: totalCandidates, endpointsTested: tested, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+  // (İş 2 — DÜRÜSTLÜK) Authenticated numaralandırılabilir yüzey (hesap seçim formu vb.) BULUNDUYSA:
+  // "giriş noktası yok" DEME. Ama otomatik neighbor-IDOR ÇALIŞTIRMA — kullanıcının KENDİ hesapları
+  // yetkilidir (kıyas yanlış-pozitif olur) ve SAHİP OLUNMAYAN ID'ye erişim cross-account = KAPSAM DIŞI.
+  const enumSel = session ? (surf.enumerableSelects ?? []) : [];
+  if (enumSel.length) {
+    const s = enumSel[0]; let p = s.action; try { p = new URL(s.action).pathname; } catch { /* ham */ }
+    notes.push(`Authenticated numaralandırılabilir kaynak yüzeyi BULUNDU: \`${p}?${s.param}=<değer>\` (${s.count} değerli seçim formu; ör. ${s.sample.slice(0, 3).join(', ')}…). Bu, hesap/kayıt seçimi gibi ID-tabanlı bir yüzeydir. Kullanıcının KENDİ kaynaklarına erişimi YETKİLİDİR (IDOR değil); asıl risk olan **sahip olunmayan** bir ID'ye erişim (**cross-account IDOR**) iki ayrı hesap gerektirir ve bu paketin **kapsamı dışıdır** — kapsam-sözleşmeli Tam Kapsamlı Pentest ile test edilmelidir. Otomatik komşu-ID probu bu yüzeyde bilinçli olarak ÇALIŞTIRILMADI (yanlış-pozitif ve kapsam-dışı erişimi önlemek için).`);
+  } else if (!totalCandidates) {
+    notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada sayısal/tahmin-edilebilir ID içeren bir uç nokta (ör. \`?id=123\`, \`/user/45\`) veya sıralı ID türetilebilecek koleksiyon ucu bulunamadı.` + spaHint(surf));
+  }
+  const reportedCandidates = totalCandidates + enumSel.length; // yüzey bulunduysa "giriş noktası yok" DEME
+  return { ok: true, pagesScanned: surf.pagesScanned, candidates: reportedCandidates, endpointsTested: tested, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }
 
 // ======================================================================================

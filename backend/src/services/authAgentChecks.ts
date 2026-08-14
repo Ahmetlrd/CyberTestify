@@ -13,7 +13,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { cachedOriginUrl } from './surfaceEvidence.js';
-import { ProbeCtx, discoverSurface, domFormLabel, type ActiveCheckEvidence, type VFinding, type Surface } from './activeVerifyEvidence.js';
+import { ProbeCtx, discoverSurface, domFormLabel, formCategory, forbiddenFormReason, type ActiveCheckEvidence, type VFinding, type Surface } from './activeVerifyEvidence.js';
 import { type AuthSession, applyAuthHeaders } from './authSession.js';
 import { requestAuthAgentScenarios, type AuthAgentSuggestion } from './authAgentAdvisor.js';
 
@@ -75,6 +75,11 @@ function deriveAgentStatus(surf: Surface, scenarios: AuthAgentSuggestion[] | nul
 async function massAssignObservation(ctx: ProbeCtx, host: string, action: string, fields: string[]): Promise<VFinding | null> {
   // BACKEND-BİRİNCİL GUARD: hesap-değiştiren/checkout hedefine ASLA yazma.
   if (AUTH_WRITE_BLOCKLIST_RE.test(action)) return null;
+  // (İş 3) Aktif Doğrulama'daki formCategory sınıflandırıcısıyla AYNI kapı: YASAK tür (kayıt/iletişim/
+  // parola-sıfırlama/ödeme/abonelik) ve login/arama formlarına gerçek POST ATMA — kalıcı yan etki / anlamsız.
+  if (forbiddenFormReason(action, fields)) return null;
+  const cat0 = formCategory(action, fields);
+  if (cat0 === 'login' || cat0 === 'search') return null;
   const usp = new URLSearchParams();
   for (const f of fields) usp.set(f, /email/i.test(f) ? `cybertestify-probe+${rand()}@example.com` : 'cybertestify-test');
   usp.set('role', 'admin'); usp.set('isAdmin', 'true'); usp.set('is_admin', 'true');
@@ -98,44 +103,50 @@ export async function collectPrivilegeEscalationEvidence(host: string, session: 
   const findings: VFinding[] = [];
   const notes: string[] = [];
 
+  // (İş 3) DETERMİNİSTİK PROB — advisory'DEN BAĞIMSIZ, HER ZAMAN çalışır. Bulgu KANITI advisory'ye DEĞİL
+  // gerçek gözleme dayanır; advisory yalnızca ek aday önerir (yardımcı/ikincil bağlam).
+  let detProbed = false;               // güvenle test edilebilir GERÇEK bir yüzey bulundu mu
+  const probedActions = new Set<string>();
+  //  (a) keşfedilen mass-assignment (kayıt/profil-benzeri) formu — YASAK/login/arama değilse tek gözlemsel probe.
+  if (surf.massAssignForm) {
+    const { action, fields } = surf.massAssignForm;
+    let p = action; try { p = new URL(action).pathname; } catch { /* ham */ }
+    const forb = forbiddenFormReason(action, fields); const cat = formCategory(action, fields);
+    if (forb) notes.push(`Mass-assignment adayı form (${p}) YASAK türe girdiğinden gerçek POST'tan hariç tutuldu: ${forb}. Bu kontrol için güvenle test edilebilir bir yetki formu değildir.`);
+    else if (cat === 'login' || cat === 'search') notes.push(`Aday form (${p}, ${cat}) yetki-yükseltme/over-posting hedefi değildir — atlandı.`);
+    else { detProbed = true; probedActions.add(action); const f = await massAssignObservation(ctx, host, action, fields); if (f) findings.push(f); }
+  }
+  //  (b) DOM'da açığa çıkmış yetki alanları (salt-okunur gözlem; İSTEK YOK) — her zaman.
+  for (const dom of surf.domForms) { const f = domFormPrivObservation(dom); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) { findings.push(f); detProbed = true; } }
+
+  // (YARDIMCI/İKİNCİL) advisory — ek aday seçerse deterministik güvenli probe'dan geçirilir. Kanıt DEĞİL.
   const scenarios = await getScenarios(host, surf).catch(() => null);
   const agentStatus = deriveAgentStatus(surf, scenarios);
   console.log(`[advisory] priv-esc host=${host} candidates=${candidateCount(surf)} agentStatus=${agentStatus} scenarios=${scenarios === null ? 'null' : scenarios.length}`);
-
   if (scenarios !== null) {
-    // Ajanın seçtiği priv-esc hedeflerini uygula:
-    //  (a) domForm seçimi (İŞ 2) -> SALT-OKUNUR gözlem (submit YOK; yalnız DOM'da açığa çıkan yetki alanı).
-    //  (b) klasik form action (gerçek POST ucu) -> GÜVENLİ tek-deneme mass-assignment gözlemi.
     for (const s of scenarios.filter((x) => x.check === 'privilege_escalation').slice(0, 3)) {
       if (ctx.stopped) break;
       const dom = surf.domForms.find((d) => s.inputPoint.includes(d.url));
-      if (dom) { const f = domFormPrivObservation(dom); if (f) findings.push(f); continue; } // salt-okunur, istek YOK
+      if (dom) { const f = domFormPrivObservation(dom); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) { findings.push(f); detProbed = true; } continue; }
       const action = absUrl(host, s.inputPoint.replace(/^\w+\s+/, '').split('?')[0]);
-      if (!action || AUTH_WRITE_BLOCKLIST_RE.test(action)) continue; // guard
+      if (!action || probedActions.has(action)) continue;
       const fields = surf.massAssignForm && surf.massAssignForm.action === action ? surf.massAssignForm.fields : ['email', 'username'];
-      const f = await massAssignObservation(ctx, host, action, fields);
-      if (f) { f.technique = 'AI advisory seçti + backend güvenli uyguladı: ' + f.technique; findings.push(f); }
+      probedActions.add(action);
+      const f = await massAssignObservation(ctx, host, action, fields); // içi YASAK/login/arama guard'lı
+      if (f) { f.technique = 'AI advisory seçti + backend güvenli uyguladı: ' + f.technique; findings.push(f); detProbed = true; }
     }
-    // (İŞ 2) advisory bir şey seçmese bile DOM'da AÇIĞA ÇIKMIŞ yetki alanı varsa gözlemle (deterministik, istek yok).
-    for (const dom of surf.domForms) { if (findings.some((x) => x.technique?.includes('client-exposed'))) break; const f = domFormPrivObservation(dom); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) findings.push(f); }
-    if (agentStatus === 'analyzed') {
-      notes.push('Bu kontrol, keşfedilen authenticated yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnız yapılandırılmış JSON öneri üretir; tüm istekler backend’in güvenli, authenticated-light fonksiyonlarından geçer; advisory doğrudan HTTP atmaz).');
-      if (!findings.length) notes.push('Yapay zekâ destekli advisory bu yüzeyi analiz etti; uygulanabilir bir yetki-yükseltme vektörü tespit edilmedi (temiz sonuç — uydurma bulgu yok).');
-    } else { // no_candidate
-      notes.push('Bu hedefte pasif keşifle uygulanabilir bir yetki-yükseltme giriş noktası (kayıt/profil formu, yetki-alanı içeren API) bulunamadığından advisory çalıştırılmadı. Not: bazı açıklar (ör. kayıtta gizli `role` alanının API’de kabul edilmesi) UI/DOM’da görünmez ve pasif keşifle tespit edilemez; kesin sonuç manuel test gerektirir.');
-    }
-  } else {
-    // FALLBACK (advisory anahtarı yok / timeout / hata) -> deterministik: bilinen mass-assignment formu +
-    // (İŞ 2) DOM'da açığa çıkan yetki alanları (salt-okunur), advisory muhakemesi olmadan.
-    notes.push('AI advisory (LLM) analizi tamamlanamadı (anahtar yok/timeout/hata) — bu kontrol **deterministik göstergeyle sınırlıdır** (keşfedilen kayıt/profil formu + DOM yetki alanları, advisory muhakemesi olmadan).');
-    if (surf.massAssignForm) {
-      const f = await massAssignObservation(ctx, host, surf.massAssignForm.action, surf.massAssignForm.fields);
-      if (f) findings.push(f);
-    }
-    for (const dom of surf.domForms) { const f = domFormPrivObservation(dom); if (f) findings.push(f); }
   }
+
+  // (DÜRÜSTLÜK) "denedi, temiz" ≠ "uygun yüzey yok". Advisory tek başına kanıt sayılmaz.
+  if (!detProbed) {
+    notes.push('Yetki-yükseltme için GÜVENLE test edilebilir (YASAK olmayan; kayıt/profil/ayar tipi) bir form/uç bu hedefte bulunamadı — bu kontrol **İncelenemedi** (deterministik prob için uygun authenticated yüzey yok). Not: bazı açıklar (API’de gizli `role` kabulü vb.) UI/DOM’da görünmez; kesin sonuç manuel test gerektirir.');
+  } else if (!findings.length) {
+    notes.push('Keşfedilen authenticated form(lar)a gözlemsel mass-assignment probu (`role/isAdmin` ek alan) gönderildi; sunucu açık bir reddetme ile karşıladı — yetki-yükseltme göstergesi **bulunamadı** (deterministik sonuç — advisory değil, gerçek gözlem).');
+  }
+  if (scenarios !== null && agentStatus === 'analyzed') notes.push('AI advisory bu yüzeyi ayrıca analiz etti (yardımcı bağlam; nihai karar deterministik prob/gözleme dayanır — advisory tek başına kanıt sunulmaz).');
   if (ctx.stopped) notes.push(ctx.stopped);
-  const inputsFound = (surf.massAssignForm ? 1 : 0) + surf.domForms.length;
+  // (DÜRÜSTLÜK) inputsFound = GERÇEKTEN deterministik test edilen yüzey. detProbed yoksa 0 -> rapor "İncelenemedi".
+  const inputsFound = detProbed ? ((surf.massAssignForm ? 1 : 0) + surf.domForms.length) : 0;
   return { ok: true, pagesScanned: surf.pagesScanned, inputsFound, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed: scenarios !== null, agentStatus };
 }
 
