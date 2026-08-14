@@ -891,7 +891,7 @@ export function discoveryMethodNote(surf: Surface): string {
 // ======================================================================================
 const SQL_ERROR_RE = /(SQL syntax|mysql_fetch|mysqli|you have an error in your sql|ORA-\d{4,5}|PLS-\d|PostgreSQL.*ERROR|pg_query|SQLite3?::|SQLITE_ERROR|SQLITE_CONSTRAINT|no such column|near ".{0,40}": syntax error|unrecognized token|SQLSTATE\[|Microsoft OLE DB Provider|ODBC SQL Server|Unclosed quotation mark|quoted string not properly terminated|syntax error at or near|Warning: pg_|Warning: mysql|Sequelize\w*Error)/i;
 
-export type InjFinding = { inputPoint: string; type: 'SQLi' | 'XSS'; technique: 'error-based' | 'time-based' | 'reflection'; evidence: string; severity: 'high' | 'medium' | 'low'; confidence: 'high' | 'medium' | 'low' };
+export type InjFinding = { inputPoint: string; type: 'SQLi' | 'XSS'; technique: 'error-based' | 'time-based' | 'reflection' | 'boolean-based'; evidence: string; severity: 'high' | 'medium' | 'low'; confidence: 'high' | 'medium' | 'low' };
 export type InjEvidence = { ok: boolean; baseUrl: string; pagesScanned: number; inputsFound: number; inputsTested: number; probesSent: number; payloadsSent: number; findings: InjFinding[]; stopped: string | null; notes: string[]; verboseError?: { endpoint: string; sig: string }; formsTested: number; formsSkipped: Array<{ action: string; reason: string }> };
 
 // (İŞ B) ZATEN toplanan hata yanıtı GÖVDESİNDE ayrıntılı-hata-sayfası imzası — UYDURMA YOK, yalnız
@@ -1003,6 +1003,33 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
         findings.push({ inputPoint: label, type: 'SQLi', technique: 'time-based', evidence: `Zaman-tabanlı probe (SLEEP ${TIME_PROBE_DELAY_S}s) yanıt süresini ~${(tr.ms / 1000).toFixed(1)}s'ye çıkardı (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — blind SQLi göstergesi.`, severity: 'high', confidence: 'medium' });
       }
     }
+
+    // --- (İŞ 1) BOOLEAN-TABANLI SQLi: TRUE (1=1) vs FALSE (1=2) koşullu yanıtları KIYASLA ---
+    // Yalnız sayısal/ID-benzeri giriş noktalarında (boolean koşulun anlamlı olduğu yer) + hata-tabanlı
+    // SQLi zaten bulunmadıysa. Sayısal değer için "N AND 1=1/1=2", string için "v' AND '1'='1/'2".
+    // FALSE-POZİTİF önlemi: aday fark bulunursa TRUE tekrar gönderilir; TRUE stabil ve FALSE'tan
+    // KALICI farklı olmalı (dinamik sayfa gürültüsü elenir). Fark yoksa: gerçek "temiz", güven yükseltme YOK.
+    const boolBase = ip.params?.[ip.param] ?? '';
+    const boolTarget = /^\d{1,9}$/.test(boolBase) || ID_LIKE_PARAM_RE.test(ip.param);
+    if (!sqlErrorFound && !ctx.stopped && boolTarget) {
+      const isNum = /^\d{1,9}$/.test(boolBase);
+      const b = isNum ? boolBase : (boolBase || '1');
+      const truePay = isNum ? `${b} AND 1=1` : `${b}' AND '1'='1`;
+      const falsePay = isNum ? `${b} AND 1=2` : `${b}' AND '1'='2`;
+      payloads += 2;
+      const tRes = await send(ip, truePay);
+      const fRes = await send(ip, falsePay);
+      const bigDiff = (a: ProbeResult, c: ProbeResult) => a.status !== c.status || Math.abs(a.len - c.len) > Math.max(80, 0.15 * Math.max(a.len, c.len, 1));
+      if (tRes && fRes && tRes.status > 0 && fRes.status > 0 && !ctx.stopped && bigDiff(tRes, fRes)) {
+        // Stabilite: TRUE'yu tekrar gönder; ilk TRUE'ya yakın (stabil) VE FALSE'tan hâlâ farklı olmalı.
+        payloads++;
+        const tRes2 = await send(ip, truePay);
+        const stable = !!tRes2 && tRes2.status > 0 && Math.abs(tRes2.len - tRes.len) <= Math.max(80, 0.05 * Math.max(tRes.len, 1)) && bigDiff(tRes2, fRes);
+        if (stable) {
+          findings.push({ inputPoint: label, type: 'SQLi', technique: 'boolean-based', evidence: `Boolean-tabanlı karşılaştırma: TRUE koşulu (\`${truePay}\`) → HTTP ${tRes.status}/${tRes.len} bayt; FALSE koşulu (\`${falsePay}\`) → HTTP ${fRes.status}/${fRes.len} bayt. TRUE yanıtı tekrarda tutarlı (${tRes2!.len} bayt), FALSE'tan KALICI içerik farkı — boolean-based SQL enjeksiyonu göstergesi (girdinin sorgu mantığını değiştirdiğini gösterir).`, severity: 'high', confidence: 'high' });
+        }
+      }
+    }
   }
 
   // --- (BÖLÜM B) PATH-ID hata-tabanlı SQLi: REST/Swagger keşfiyle bulunan path uçlarında (ör.
@@ -1044,18 +1071,26 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
 // ======================================================================================
 export type IdorFinding = { endpoint: string; idParam: string; observation: string; differentResource: boolean; severity: 'high' | 'medium' | 'low' };
 export type IdorEvidence = { ok: boolean; pagesScanned: number; candidates: number; endpointsTested: number; probesSent: number; findings: IdorFinding[]; stopped: string | null; notes: string[] };
-const IDOR_MAX = 22; // (İş B.1) daha fazla ID'li uc nokta test edilsin (16->22)
+const IDOR_MAX = 30; // (İş 2) keşfedilen TÜM sayısal ID adayları sistematik test edilsin (22->30)
 // (İş B.2) IDOR yalnız strict discoverIdEndpoints'e değil, KEŞFEDİLEN TÜM id-parametreli GET giriş
 // noktalarına genişletilir. id-benzeri parametre adları (sayısal değer şart değil — yoksa 1 varsayılır).
 const ID_LIKE_PARAM_RE = /(^id$|_id$|^user|^account|^order|^invoice|^p$|^pid$|^uid$|^num$|^no$|^item|^product|^news|^cat$|^category|^page$|^record|^ref$|^doc)/i;
+// (İş 2) Sayfalama/navigasyon paramları IDOR adayı DEĞİLDİR — bunlar meşru olarak farklı içerik döndürür
+// (page=1 ≠ page=2) ve içerik-farkı kıyasında YANLIŞ-POZİTİF üretir. IDOR yalnız KAYNAK-kimliği içindir.
+const PAGINATION_PARAM_RE = /^(p|pg|page|pageno|pagenumber|offset|start|limit|per_?page|size|count|skip|from|to|index)$/i;
 function idorEndpointKey(url: string): string { try { const u = new URL(url); return `${u.origin}${u.pathname}`; } catch { return url; } }
 function idorCandidatesFrom(surf: Surface): Surface['idEndpoints'] {
   const out: Surface['idEndpoints'] = [...surf.idEndpoints];
   const seen = new Set(out.map((e) => `${e.kind}:${idorEndpointKey(e.url)}:${e.idParam}`));
   for (const ip of surf.inputs) {
-    if (ip.method !== 'GET' || !ID_LIKE_PARAM_RE.test(ip.param)) continue;
+    if (ip.method !== 'GET') continue;
+    if (PAGINATION_PARAM_RE.test(ip.param)) continue; // sayfalama -> yanlış-pozitif; IDOR adayı değil
     const rawVal = ip.params?.[ip.param];
-    const idValue = rawVal && /^\d{1,9}$/.test(rawVal) ? parseInt(rawVal, 10) : 1; // sayısal değilse 1'den başla
+    const numeric = !!rawVal && /^\d{1,9}$/.test(rawVal);
+    // (İş 2) IDOR adayı: id-benzeri param ADI VEYA sayısal DEĞER (kaynak-id niteliğinde). Böylece
+    // sitenin tüm sayfalarından toplanan TÜM sayısal ID adayları sistematik olarak test edilir.
+    if (!ID_LIKE_PARAM_RE.test(ip.param) && !numeric) continue;
+    const idValue = numeric ? parseInt(rawVal!, 10) : 1;
     let url: string;
     try { const u = new URL(ip.action); u.searchParams.set(ip.param, String(idValue)); url = u.toString(); } catch { continue; }
     const key = `query:${idorEndpointKey(url)}:${ip.param}`;
@@ -1199,7 +1234,7 @@ export async function collectIdorEvidence(host: string, session?: AuthSession): 
     }
     // (10/10 Bölüm 1.2) GERÇEK-ID denemesi: rastgele/komşu tahmin yerine, sitenin KENDİ sayfalarında
     // GÖRÜLEN gerçek ID'lerle test (ör. bir listeleme sayfasında geçen id=5, id=8...). Daha güçlü kanıt.
-    for (const realId of (ep.siblingIds ?? []).slice(0, 3)) {
+    for (const realId of (ep.siblingIds ?? []).slice(0, 5)) { // (İş 2) daha fazla gerçek sibling ID sistematik denenir
       if (ctx.stopped) break;
       const rr = await ctx.fetchOnce(withId(ep.url, ep.kind, ep.idParam, realId));
       if (!rr || ctx.stopped) continue;

@@ -92,6 +92,7 @@ export function buildInjectionReport(ev: InjEvidence): { findings: string; fixTe
     '',
     '- **SQLi (hata-tabanlı):** Tek tırnak (`\'`) enjekte edilip yanıtta veritabanı hata imzası (MySQL/PostgreSQL/Oracle/MSSQL/SQLite) arandı.',
     `- **SQLi (zaman-tabanlı):** Hata görülmeyen noktalarda tek bir zararsız gecikme probu (SLEEP) ile yanıt süresi baseline’a göre ölçüldü (blind SQLi göstergesi).`,
+    `- **SQLi (boolean-tabanlı):** Sayısal/ID-benzeri noktalarda TRUE (\`1=1\`) ve FALSE (\`1=2\`) koşullu iki istek gönderilip yanıtları (status + içerik uzunluğu) karşılaştırıldı; TRUE tekrarında tutarlı ve FALSE'tan KALICI farklıysa boolean-based SQLi göstergesidir (yanlış-pozitife karşı stabilite doğrulaması yapılır).`,
     '- **XSS (yansıyan):** Benzersiz, zararsız bir işaret dizesi enjekte edilip yanıt HTML’inde **kaçırılmadan (unencoded)** yansıyıp yansımadığı kontrol edildi (JS çalıştırılmadı; stored XSS denenmedi).',
     '',
   ].join('\n');
@@ -100,12 +101,15 @@ export function buildInjectionReport(ev: InjEvidence): { findings: string; fixTe
   // AYRI güven kategorileri olarak gösterilir — "dolaylı gösterge" ile "doğrudan kanıt" karıştırılmaz.
   const injConf = (f: InjEvidence['findings'][number]): string =>
     f.technique === 'error-based' ? 'Yüksek — yanıtta veritabanı hata imzası (doğrudan kanıt)'
+    : f.technique === 'boolean-based' ? 'Yüksek — TRUE/FALSE koşul yanıtları tutarlı ve KALICI biçimde farklı (girdi sorgu mantığını değiştiriyor — doğrudan kanıt)'
     : f.technique === 'time-based' ? 'Orta — zaman-tabanlı/dolaylı; OOB doğrulama altyapısı yok'
     : f.confidence === 'high' ? 'Orta-Yüksek — işaret dizesi HAM (kaçırılmamış) yansıdı; güçlü XSS göstergesi (JS yürütülmediğinden istismar kanıtlanmadı)'
     : 'Düşük — yansıdı ancak kodlanmış/kaçırılmış; bağlama bağlı zayıf gösterge';
+  const techLabel = (t: InjEvidence['findings'][number]['technique']): string =>
+    t === 'error-based' ? 'hata-tabanlı' : t === 'time-based' ? 'zaman-tabanlı' : t === 'boolean-based' ? 'boolean-tabanlı' : 'yansıma';
   const table = ev.findings.length
     ? '## BULGULAR\n\n| Giriş Noktası | Tür | Teknik | Kanıt | Güven (gerekçe) | Ciddiyet |\n|---------------|-----|--------|-------|-----------------|----------|\n' +
-      ev.findings.map((f) => `| ${f.inputPoint} | ${f.type} | ${f.technique === 'error-based' ? 'hata-tabanlı' : f.technique === 'time-based' ? 'zaman-tabanlı' : 'yansıma'} | ${f.evidence.replace(/\|/g, '\\|')} | ${injConf(f)} | ${RISK_WORD[f.severity]} |`).join('\n') + '\n\n'
+      ev.findings.map((f) => `| ${f.inputPoint} | ${f.type} | ${techLabel(f.technique)} | ${f.evidence.replace(/\|/g, '\\|')} | ${injConf(f)} | ${RISK_WORD[f.severity]} |`).join('\n') + '\n\n'
     : '## BULGULAR\n\nTest edilen giriş noktalarında enjeksiyon kanıtı bulunamadı.\n\n';
 
   // (İŞ B) GERÇEK yanıt gövdesinden saptanan ayrıntılı-hata-sayfası bilgi ifşası -> ŞİDDET-kolonlu tablo
