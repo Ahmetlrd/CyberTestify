@@ -97,7 +97,10 @@ export function validateAndRepairReport(
   // --- R5: Devre kesici / erken durma şeffaflığı (exec-özette görünmeli) ---
   const execSeg = md.split(/##\s*GENEL DE[ĞG]ERLEND[İI]RME/i)[0] ?? md.slice(0, 2500);
   const bodySeg = md.slice(execSeg.length);
-  const triggered = /(art arda\s*5xx|devre kesici.*(?:durdu|tetiklendi|nedeniyle)|erken (?:durduruldu|sonland[ıi]r)|WAF.*(?:durdu|engel)|hedef[- ]sa[ğg]l[ıi][ğg][ıi].*durdu|tarama.*erken.*sonland)/i;
+  // DİKKAT: SCOPE_NOTE "devre kesici (art arda 5xx / WAF) UYGULANIR" der (mekanizma AÇIKLAMASI) —
+  // bu bir TETİKLEME değildir. GERÇEK tetikleme ProbeCtx.stopped mesajlarıdır; hepsi "otomatik
+  // durduruldu" / "bu kontrol durduruldu" ile biter. Yalnız bunları say (yanlış-pozitif önle).
+  const triggered = /(otomatik durduruldu|kontrol durduruldu)/i;
   if (triggered.test(bodySeg) && !triggered.test(execSeg)) {
     const note = loc === 'tr'
       ? '\n- ⚠️ **Erken durdurma:** Bir/birkaç kontrol, hedef-sağlığı devre kesici (art arda 5xx / aşırı yavaşlama / WAF) nedeniyle erken sonlandırıldı; ilgili sonuçlar eksik olabilir (aşağıda ilgili kontrolde belirtilmiştir).'
