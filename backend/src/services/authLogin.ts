@@ -197,9 +197,11 @@ type FormLoginResult = { session?: AuthSession; twoFactor: boolean; formFound: b
 async function tryFormLogin(host: string, creds: TestCredentialInput): Promise<FormLoginResult | null> {
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
   try {
-    browser = await puppeteer.launch({ executablePath: CHROMIUM_PATH, headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+    // (Güvenlik-testi hedefleri sık sık BOZUK/expired TLS taşır — bu başlı başına bir bulgudur. Bu yüzden
+    // login için sertifika hatası YOKSAYILIR, aksi halde bad-cert siteler hiç test edilemezdi.)
+    browser = await puppeteer.launch({ executablePath: CHROMIUM_PATH, headless: true, acceptInsecureCerts: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--ignore-certificate-errors'] });
   } catch { return null; }
-  const loginPages = ['/#/login', '/login', '/giris', '/giris-yap', '/hesap/giris', '/signin', '/sign-in', '/account/login', '/users/sign_in', '/'];
+  const loginPages = ['/#/login', '/login', '/login.jsp', '/login.php', '/login.aspx', '/login.html', '/giris', '/giris-yap', '/hesap/giris', '/signin', '/signin.jsp', '/sign-in', '/account/login', '/users/sign_in', '/auth/login', '/'];
   const pwSel = 'input[type="password"]';
   let formFound = false;
   try {
@@ -216,27 +218,70 @@ async function tryFormLogin(host: string, creds: TestCredentialInput): Promise<F
         formFound = true;
         const bodyText = (await page.evaluate(() => document.body?.innerText ?? '')).slice(0, 20_000);
         const twoFactor = TWO_FACTOR_RE.test(bodyText);
-        const userSel = (await page.$('input[type="email"]')) ? 'input[type="email"]'
-          : (await page.$('input[name*="user" i], input[name*="email" i], input[id*="email" i], input[id*="user" i]')) ? 'input[name*="user" i], input[name*="email" i], input[id*="email" i], input[id*="user" i]'
-          : 'input[type="text"]';
+        // (Sağlamlaştırma) Kullanıcı-adı alanını PAROLA alanıyla AYNI <form> içinde bul: önce isim/id
+        // deseni (uid/user/email/login/account…), yoksa DOM'da paroladan ÖNCE gelen SON metin input'u.
+        // Böylece sayfadaki bağımsız ARAMA kutusu (ör. AltoroMutual `query`) yanlışlıkla doldurulmaz.
+        const userMarked = await page.evaluate(() => {
+          const pw = document.querySelector('input[type="password"]') as HTMLInputElement | null;
+          if (!pw) return false;
+          const scope: ParentNode = pw.closest('form') ?? document;
+          const texts = Array.from(scope.querySelectorAll('input')).filter((i) => {
+            const t = (i.getAttribute('type') || 'text').toLowerCase();
+            return ['text', 'email', 'tel', 'search', ''].includes(t);
+          }) as HTMLInputElement[];
+          const named = texts.find((i) => /uid|user|e-?mail|login|account|loginid|userid|kullanic|kullanıc|isim/i.test(`${i.getAttribute('name') || ''} ${i.getAttribute('id') || ''}`));
+          let cand: HTMLInputElement | undefined = named;
+          if (!cand) {
+            const before = texts.filter((i) => (pw.compareDocumentPosition(i) & Node.DOCUMENT_POSITION_PRECEDING) !== 0);
+            cand = before[before.length - 1] || texts[0];
+          }
+          if (!cand) return false;
+          cand.setAttribute('data-ct-user', '1');
+          return true;
+        });
+        const userSel = userMarked ? 'input[data-ct-user="1"]' : 'input[type="text"]';
         await page.type(userSel, creds.username, { delay: 5 }).catch(() => {});
         await page.type(pwSel, creds.password, { delay: 5 }).catch(() => {});
+        // (KRİTİK) Parolanın KENDİ formundaki submit butonuna TIKLA — sayfadaki başka bir formun (ör.
+        // AltoroMutual arama kutusu) butonunu DEĞİL. Tıklama, butonun adı/değerini (ör. btnSubmit=Login)
+        // POST gövdesine ekler; bazı klasik app'ler bunu ŞART KOŞAR (form.submit() bunu atlar -> login başarısız).
         const submitted = await page.evaluate(() => {
-          const b = document.querySelector('button[type="submit"], input[type="submit"], button#loginButton, button[aria-label*="login" i], button[aria-label*="giriş" i]') as HTMLElement | null;
-          if (b) { b.click(); return true; }
+          const pw = document.querySelector('input[type="password"]') as HTMLInputElement | null;
+          const form = pw?.closest('form') ?? null;
+          const btn = (form ?? document).querySelector('button[type="submit"], input[type="submit"], input[type="image"], button:not([type]), button#loginButton, button[aria-label*="login" i], button[aria-label*="giriş" i]') as HTMLElement | null;
+          if (btn) { btn.click(); return true; }
+          if (form && typeof (form as HTMLFormElement).requestSubmit === 'function') { (form as HTMLFormElement).requestSubmit(); return true; }
           return false;
         });
-        if (!submitted) await page.keyboard.press('Enter').catch(() => {});
+        if (!submitted) { await page.focus(pwSel).catch(() => {}); await page.keyboard.press('Enter').catch(() => {}); }
         await page.waitForNetworkIdle({ idleTime: 800, timeout: 8000 }).catch(() => {});
         const bearer = await extractBrowserToken(page);
         const cookies = await page.cookies();
         const authCookies = cookies.filter((c) => AUTH_COOKIE_RE.test(c.name)).map((c) => `${c.name}=${c.value}`);
         const cookieFlags: CookieFlag[] = cookies.map((c) => ({ name: c.name, secure: !!c.secure, httpOnly: !!c.httpOnly, sameSite: (c as any).sameSite ?? null }));
+        // (KRİTİK) Login GERÇEKTEN başarılı mı? Cookie varlığı YETMEZ — klasik app'ler (JSP/PHP) JSESSIONID'yi
+        // login'den ÖNCE de set eder; yanlış şifre de cookie'li "başarı" görünürdü. Sayfa durumundan doğrula:
+        //  - başarısızlık metni (login failed/invalid/hatalı) VARSA -> başarısız
+        //  - parola alanı hâlâ duruyorsa (login sayfasında kaldıysak) ve çıkış linki yoksa -> başarısız
+        const post = await page.evaluate(() => {
+          const txt = (document.body?.innerText || '').slice(0, 8000);
+          const html = (document.body?.innerHTML || '').slice(0, 40_000);
+          return {
+            stillHasPw: !!document.querySelector('input[type="password"]'),
+            failText: /(login failed|invalid (username|password|credentials|login|user)|incorrect (password|username|login)|authentication failed|hatalı (kullanıcı|parola|şifre|giriş)|geçersiz (kullanıcı|parola|şifre)|kullanıcı adı veya (parola|şifre)|wrong (password|username)|bad credentials|giriş başarısız)/i.test(txt),
+            logout: /sign\s?off|sign\s?out|log\s?out|logout|çıkış yap|oturumu kapat/i.test(html),
+          };
+        }).catch(() => ({ stillHasPw: false, failText: false, logout: false }));
+        let movedOffLogin = false;
+        try { movedOffLogin = !/login|signin|sign-in|sign_in|giris/i.test(new URL(page.url()).pathname.toLowerCase()); } catch { /* yoksay */ }
         await page.close().catch(() => {});
-        if (bearer || authCookies.length) {
+        // bearer (localStorage/JWT) yalnız BAŞARILI login'de yazılır -> tek başına yeterli kanıt.
+        // Cookie tabanlı: gerçekten authenticated olduğumuzu heuristikle doğrula (yanlış-pozitif önle).
+        const authed = !post.failText && (post.logout || (movedOffLogin && !post.stillHasPw));
+        if (bearer || (authCookies.length && authed)) {
           return { session: { method: 'form', loginUrl: url, cookie: authCookies.join('; ') || undefined, bearer: bearer || undefined, cookieFlags: cookieFlags.length ? cookieFlags : undefined, acquiredAt: Date.now() }, twoFactor, formFound };
         }
-        return { twoFactor, formFound }; // form vardı ama oturum alınamadı -> bad_credentials
+        return { twoFactor, formFound }; // form vardı ama gerçek oturum doğrulanamadı -> bad_credentials
       } catch { await page.close().catch(() => {}); }
     }
     return { twoFactor: false, formFound }; // formFound=false ise hiç login formu yok -> no_login_endpoint

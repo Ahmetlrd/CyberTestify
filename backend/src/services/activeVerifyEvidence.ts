@@ -404,7 +404,7 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
   await acquireHeadless();
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
   try {
-    browser = await puppeteer.launch({ executablePath: CHROMIUM_PATH, headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+    browser = await puppeteer.launch({ executablePath: CHROMIUM_PATH, headless: true, acceptInsecureCerts: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--ignore-certificate-errors'] });
   } catch {
     chromiumUnavailable = true; // Chromium yok/baslatilamadi -> statik'e dus
     releaseHeadless();
@@ -814,7 +814,7 @@ async function renderHomepageHeadless(host: string): Promise<string | null> {
   await acquireHeadless();
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
   try {
-    browser = await puppeteer.launch({ executablePath: CHROMIUM_PATH, headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+    browser = await puppeteer.launch({ executablePath: CHROMIUM_PATH, headless: true, acceptInsecureCerts: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--ignore-certificate-errors'] });
   } catch {
     chromiumUnavailable = true;
     releaseHeadless();
