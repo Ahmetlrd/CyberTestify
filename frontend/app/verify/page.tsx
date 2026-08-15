@@ -27,7 +27,7 @@ type Order = {
 const ORDER_STATUS_LABEL: Record<string, string> = {
   awaiting_payment: 'Ödeme bekleniyor',
   paid: 'Sıraya alınıyor',
-  scan_queued: 'Sırada',
+  scan_queued: 'Başlatılıyor',
   scan_running: 'Taranıyor',
   // (Savunma) İç kalite kapısı durumu backend'de zaten 'scan_running'e maskelenir; yine de
   // hiçbir koşulda ham enum sızmasın diye burada da "Taranıyor" gösterilir.

@@ -83,18 +83,36 @@ function phasesFor(key?: string | null): string[] {
 const SECONDS_PER_PHASE = 9; // her faz ~9 sn; son "çalışan" fazda durur (bitiş gerçek durumdan gelir)
 
 export function LiveScanPhases({
-  hostname, feed, startedAt, packageKey,
+  hostname, feed, startedAt, packageKey, queued,
 }: {
   hostname: string;
   feed: Array<{ seq: number; text: string }>;
   startedAt?: string | null;
   packageKey?: string | null;
+  queued?: boolean;
 }) {
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // (Sırada/başlamamış) Tarama HENÜZ başlamadıysa fazlar İLERLEMEZ — yalnız "başlatılıyor" gösterilir.
+  // startedAt yoksa flow başlamamıştır; queued bayrağı da açıkça sırada olduğunu belirtir.
+  const notStarted = queued || !startedAt;
+  if (notStarted) {
+    return (
+      <div className="min-h-[180px] p-5 font-mono text-[13px] leading-7">
+        <div className="text-white/45" dir="ltr">$ cybertestify scan {hostname}</div>
+        <div className="text-emerald-300" dir="ltr">✓ Alan adı sahipliği doğrulandı</div>
+        <div className="text-white/85" dir="ltr">→ Tarama başlatılıyor…<span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" /></div>
+        <div className="mt-3 text-white/45">Taramanız en kısa sürede başlayacaktır.</div>
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+          <div className="h-full w-1/4 animate-pulse rounded-full bg-gradient-to-r from-accent/60 to-emerald-400/70" />
+        </div>
+      </div>
+    );
+  }
 
   const PHASES = phasesFor(packageKey);
   const startMs = startedAt ? new Date(startedAt).getTime() : now;

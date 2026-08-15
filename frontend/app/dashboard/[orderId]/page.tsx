@@ -15,7 +15,7 @@ const TERMINAL = new Set(['scan_completed', 'scan_failed', 'scope_violation', 'r
 const HEADLINE: Record<string, string> = {
   awaiting_payment: 'Ödeme bekleniyor',
   paid: 'Ödeme alındı — tarama hazırlanıyor',
-  scan_queued: 'Sırada bekliyor',
+  scan_queued: 'Taramanız başlatılıyor',
   scan_running: 'Taramanız çalışıyor',
   scan_completed: 'Raporunuz hazır',
   scan_failed: 'Tarama tamamlanamadı',
@@ -188,43 +188,22 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
         </div>
       )}
 
-      {status === 'scan_queued' && order?.queue && (
+      {status === 'scan_queued' && (
         <div className="mt-4 rounded-card border border-accent/40 bg-accent-soft/40 px-4 py-3 text-sm text-ink-soft">
-          {(() => {
-            const ahead = order.queue.peopleAhead ?? 0;
-            const eta = order.queue.etaMinutes;
-            const hasEta = typeof eta === 'number' && eta > 0;
-            const etaLabel = hasEta
-              ? eta >= 60
-                ? `yaklaşık ${Math.round((eta / 60) * 10) / 10} saat`
-                : `yaklaşık ${eta} dakika`
-              : null;
-            if (ahead > 0) {
-              return (
-                <>
-                  <strong>Şu an önünüzde {ahead} tarama var.</strong>{' '}
-                  {etaLabel
-                    ? <>Tahminen <strong>{etaLabel}</strong> sonra taramanız başlayacak. </>
-                    : <>Taramanız kısa süre içinde başlayacak. </>}
-                  Taramalar tek tek yapıldığı için sıra size gelince otomatik başlar; bu sayfa güncel kalır,
-                  kapatsanız bile durumu buradan takip edebilirsiniz.
-                </>
-              );
-            }
-            return (
-              <>
-                <strong>Sıra sizde — taramanız birazdan başlıyor.</strong> Bu sayfa otomatik güncelleniyor.
-              </>
-            );
-          })()}
+          <strong>Taramanız en kısa sürede başlayacaktır.</strong> Bu sayfa otomatik güncellenir;
+          kapatsanız bile durumu buradan takip edebilirsiniz.
         </div>
       )}
 
-      {active && (
+      {active && (() => {
+        // (Sırada) Tarama HENÜZ başlamadıysa (kuyrukta veya flow başlamamış): ilerleme YOK, "başlatılıyor".
+        const notStarted = status === 'scan_queued' || status === 'paid' || !order?.flow?.startedAt;
+        return (
         <>
           <p className="mt-4 rounded-card bg-brand-50/70 px-4 py-3 text-sm text-ink-soft">
-            Tarama arka planda çalışıyor. Bu sayfa otomatik güncelleniyor — kapatabilirsiniz; sonuç
-            hazır olduğunda erişim kodu e-postanıza gönderilecek.
+            {notStarted
+              ? <>Taramanız <strong>en kısa sürede başlayacaktır</strong>. Bu sayfa otomatik güncelleniyor — kapatabilirsiniz; sonuç hazır olduğunda erişim kodu e-postanıza gönderilecek.</>
+              : <>Tarama arka planda çalışıyor. Bu sayfa otomatik güncelleniyor — kapatabilirsiniz; sonuç hazır olduğunda erişim kodu e-postanıza gönderilecek.</>}
           </p>
 
           {/* Canlı aktivite — landing'deki terminal görünümüyle aynı; içerik GERÇEK
@@ -236,13 +215,14 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               <span className="h-3 w-3 rounded-full bg-emerald-400/70" />
               <span className="ml-3 text-xs font-medium text-white/40">cybertestify — live scan</span>
             </div>
-            <LiveScanPhases hostname={hostname} feed={feed} startedAt={order?.flow?.startedAt} packageKey={order?.packageKey} />
+            <LiveScanPhases hostname={hostname} feed={notStarted ? [] : feed} startedAt={order?.flow?.startedAt} packageKey={order?.packageKey} queued={notStarted} />
             <div className="border-t border-white/10 px-5 py-3 text-xs text-white/40">
               Teknik loglar güvenlik ve gizlilik nedeniyle gizlenmiştir; yalnızca genel aktivite gösterilir.
             </div>
           </div>
         </>
-      )}
+        );
+      })()}
 
       {status === 'scan_completed' && (
         <div className="mt-8 space-y-6">

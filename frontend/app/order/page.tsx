@@ -517,17 +517,23 @@ export default function OrderPage() {
       {/* KAPSAM NETLIGI — Aktif Doğrulama Paketi seçiliyken HER müşteri, ÖDEME ÖNCESİ görür
           (düşük-sinyal ön-kontrol uyarısından bağımsız; o uyarı ek olarak gösterilir). */}
       {selectedBundle?.key === 'bundle_active_verify' && (
-        <div className="mt-3 rounded-card border border-line bg-brand-50/50 px-4 py-3 text-sm text-ink-soft">
-          <strong className="text-ink">Kapsam:</strong> Bu paket, kimlik doğrulaması{' '}
-          <strong>gerektirmeyen dış yüzeye</strong> odaklanır — herkese açık uç noktalar (açık
-          formlar/API’lar, arama, login/kayıt akışının kendisi) üzerindeki enjeksiyon, yetkilendirme ve
-          mantık risklerini hedefler. IDOR / İş Mantığı / Race-Mass-Assignment kontrolleri{' '}
-          <strong>yalnızca login-öncesi erişilebilir yüzeyde</strong> (ör. genel API’lar, herkese açık
-          id-tabanlı uç noktalar) çalıştırılır — bu nedenle bu kategorilerde bazı hedeflerde{' '}
-          <strong>sınırlı veya “İncelenemedi”</strong> sonuç normal ve beklenendir (siteye özgü yüzey
-          azlığından; motor eksikliğinden değil). Login-<strong>sonrası</strong>, oturum içi derin
-          yetkilendirme/iş mantığı zafiyetleri bu paketin kapsamı dışındadır ve{' '}
-          <strong>Tam Kapsamlı Pentest</strong> paketinde ele alınır.
+        <div className="mt-3 rounded-card border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900/90">
+          <p className="font-bold text-amber-900">💡 Şeffaflık &amp; Kapsam — ödemeden önce okuyun</p>
+          <p className="mt-1 leading-relaxed">
+            Bu paket, web sitenizin <strong>herkese açık (login gerektirmeyen) dış saldırı yüzeyini</strong>{' '}
+            zararsız problarla test eder — dışa açık arama, form, API ve login/kayıt akışı üzerindeki enjeksiyon,
+            yetkilendirme ve mantık riskleri.
+          </p>
+          <p className="mt-2 leading-relaxed">
+            Sitenizde dışa açık <strong>arama, form, API veya id-tabanlı uç nokta bulunmuyorsa</strong>, içerikte
+            listelenen <strong>IDOR / İş Mantığı / Dosya Yükleme / Race</strong> gibi kontroller raporda{' '}
+            <strong>“İncelenemedi”</strong> görünebilir. Bu bir <strong>hata değildir</strong> — sitenizin dış
+            yüzey yapısının doğal sonucudur (test edilecek açık bir giriş noktası olmaması).
+          </p>
+          <p className="mt-2 leading-relaxed">
+            Oturum içi (kullanıcı girişi <strong>sonrası</strong>) derin yetkilendirme/iş-mantığı testleri için{' '}
+            <strong>Tam Kapsamlı Pentest</strong> paketini seçin.
+          </p>
         </div>
       )}
 
@@ -734,14 +740,7 @@ export default function OrderPage() {
 
       {queue?.busy && !intlComingSoon && (
         <div className="mt-6 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-ink-soft">
-          <strong>Şu an yoğunuz.</strong> Taramalar sırayla yapılıyor ve kuyrukta {queue.queuedCount} sipariş
-          bekliyor; tahmini bekleme süresi{' '}
-          <strong>
-            {queue.etaMinutes >= 60
-              ? `~${Math.round((queue.etaMinutes / 60) * 10) / 10} saat`
-              : `~${queue.etaMinutes} dakika`}
-          </strong>
-          . Yine de sipariş verebilirsiniz — sıranız gelince taramanız otomatik başlar ve durumu bu panelden
+          Sipariş verebilirsiniz — <strong>taramanız en kısa sürede başlayacaktır</strong> ve durumu bu panelden
           takip edebilirsiniz.
         </div>
       )}
