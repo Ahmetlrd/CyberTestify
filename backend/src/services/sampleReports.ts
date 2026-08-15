@@ -229,12 +229,17 @@ export async function getSampleReportPdf(packageKey: string): Promise<Buffer> {
     metaPackageKey = undefined;
   }
 
+  // (Rapor No benzersizliği) Aynı örnek hostu (ornek.com) paylaşan paketler farklı Rapor No alsın diye
+  // createdAt'e paket-bazlı sabit bir dakika ofseti eklenir. Tarih PDF'te GİZLİ (hideDate) — ofset yalnız
+  // reportIdentifiers hash'ini değiştirir; görünmez ama her örneğe benzersiz CT-ÖRNEK-XXXX verir. STABİL.
+  const seedMin = [...packageKey].reduce((a, c) => a + c.charCodeAt(0), 0) % 720;
+  const sampleCreatedAt = new Date(Date.parse('2026-08-15T10:00:00.000Z') + seedMin * 60_000);
   const pdf = await renderReportPdf(
     md,
     {
       hostname,
       packageName,
-      createdAt: new Date('2026-08-15T10:00:00.000Z'), // sabit ornek zamani (stabil cikti; PDF'te tarih GOSTERILMEZ)
+      createdAt: sampleCreatedAt, // sabit ornek zamani (stabil cikti; PDF'te tarih GOSTERILMEZ)
       locale: 'tr',
       packageKey: metaPackageKey,
     },
