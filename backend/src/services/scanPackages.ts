@@ -418,9 +418,10 @@ export const SCAN_PACKAGES: ScanPackageDef[] = [
     key: 'basit_tarama',
     displayName: 'Basit Tarama',
     description:
-      'Hizli, pasif on-kontrol: ana sayfanin guvenlik basliklari, TLS gecerliligi ve ' +
-      'sunucu banner ozeti. Birkac dakikada biten en ucuz giris paketi.',
-    priceMinorUnit: 49900,
+      'Web sitenizin dis guvenlik durusunu hizlica olcmek ve temel riskleri kapatmak icin ideal ' +
+      'baslangic paketi: HTTP guvenlik basliklari, SSL/TLS yapilandirmasi, sunucu & teknoloji ifsasi, ' +
+      'temel yapilandirma dosyalari (robots.txt, assetlinks) ve platforma ozel hazir duzeltme kodlari (Nginx, IIS, Vercel vb.).',
+    priceMinorUnit: 69900,
     fixSuggestionPriceMinorUnit: 29900, fixSuggestionListMinorUnit: 49900, // AI Çözüm: 299 TL (~%40 indirimli göster)
     modelProvider: PROVIDER,
     maxToolCalls: 25,

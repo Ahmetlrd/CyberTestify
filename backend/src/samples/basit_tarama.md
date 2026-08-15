@@ -1,108 +1,64 @@
-# Guvenlik Tarama Raporu
+## YÖNETİCİ ÖZETİ
 
-**Hedef:** ornek-site.com
-**Paket:** Basit Tarama
-**Olusturma tarihi:** 2026-01-15T10:00:00.000Z
+- **Genel risk seviyesi: Yüksek** — site HTTPS desteklemiyor; iletişim şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir. Öncelikli olarak HTTPS’e geçilmelidir.
+- ⚠️ Bu hedef HTTPS (443) üzerinden yanıt vermedi; tarama **http:// üzerinden** yürütüldü. HTTPS eksikliği başlı başına bir bulgudur (aşağıda).
+- 6/6 önemli güvenlik başlığı eksik: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy, Permissions-Policy.
+- **Kapsam:** Güvenlik başlığı ve sürüm imzası kontrolleri, ana sayfa dâhil **8 benzersiz sayfada** yürütüldü (tek sayfa değil).
+- **Önerilen ilk adım:** Geçerli bir TLS sertifikası kurup tüm trafiği HTTPS’e taşıyın; adım adım hazır komutlar "AI Çözüm Önerileri" eklentisinde sunulur.
 
----
+> **Kapsam ve sınır:** Bu paket **pasif, GET-tabanlı** bir dış gözlemdir; hiçbir aktif istismar veya prob denenmemiştir. Bir alanda "bulgu yok" ifadesi, aktif test yapılmadığı için **güvenli olduğunu KANITLAMAZ** — yalnızca dışarıdan gözlemlenen yapılandırmanın temiz olduğunu gösterir.
 
-## Bulgular
+## GENEL DEĞERLENDİRME
 
-# ornek-site.com — Hızlı Güvenlik Ön-Kontrolü
+**Risk Seviyesi: Yüksek**
 
-## 1. YÖNETİCİ ÖZETİ
+Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz (düz metin) HTTP ile yürüyor. Bu, aynı ağdaki bir saldırganın trafiği dinlemesine/değiştirmesine ve oturum/şifre çalmasına olanak tanıyan ciddi bir eksiktir; modern tarayıcılar siteyi "Güvenli değil" olarak işaretler. Öncelik, geçerli bir TLS sertifikasıyla HTTPS’e geçmek ve HTTP→HTTPS yönlendirmesi + HSTS eklemektir. Diğer başlık kontrolleri http:// üzerinden yürütülmüştür.
 
-ornek-site.com ana sayfası üzerinde hızlı ve pasif bir güvenlik ön-kontrolü yapıldı. Şifreleme güncel (TLS 1.3) ve HTTPS zorunlu tutuluyor; sunucu banner'ında sürüm ifşası yok. Buna karşılık üç temel HTTP güvenlik başlığı (X-Frame-Options, X-Content-Type-Options, Content-Security-Policy) eksik. Bu eksiklikler doğrudan bir açık oluşturmaz ancak tarayıcı seviyesindeki savunma katmanlarını zayıflatır. **Genel risk seviyesi: Orta.** Kritik veya yüksek seviyeli bir bulgu tespit edilmedi.
+## HTTP GÜVENLİK BAŞLIKLARI
 
-## 2. GENEL DEĞERLENDİRME
+| Başlık | Durum | Açıklama |
+|--------|-------|----------|
+| Strict-Transport-Security | Yok | HTTPS zorunluluğu tarayıcıya bildirilmiyor; ilk isteklerde SSL-stripping/MITM riski var. |
+| Content-Security-Policy | Yok | Tarayıcı hangi kaynakların yükleneceğini kısıtlayamıyor; XSS ve içerik enjeksiyonuna karşı temel savunma yok. |
+| X-Frame-Options | Yok | Sayfa başka bir sitenin iframe’ine gömülebilir; clickjacking ile kullanıcı kandırılabilir. |
+| X-Content-Type-Options | Yok | Tarayıcı içerik türünü tahmin edebilir (MIME-sniffing); yüklenen dosyalar script gibi çalıştırılabilir. |
+| Referrer-Policy | Yok | Dış bağlantılara tam URL (Referer) gönderilir; oturum/gizlilik bilgisi sızabilir. |
+| Permissions-Policy | Yok | Kamera/mikrofon/konum gibi hassas API’ler kısıtlanmamış; üçüncü taraf içerik kötüye kullanabilir. |
+| X-XSS-Protection | Yok | Eski tarayıcı XSS filtresi ayarlı değil (modern tarayıcılarda kritik değildir; asıl koruma CSP’dir). |
+| Content-Type | Var | text/html |
 
-Hedefin temel taşıma güvenliği (TLS/HTTPS) sağlam durumda ve teknoloji imzası dikkatli şekilde gizlenmiş. Tespit edilen eksiklikler, eklenmesi kısa vadede önerilen ancak tek başına sömürülebilir olmayan başlıklarla sınırlı. Bu nedenle sitenin genel güvenlik duruşu **Orta Risk** olarak değerlendirilmiştir — hızlı ve düşük maliyetli düzeltmelerle Düşük seviyeye çekilebilir.
+## TLS SERTİFİKA DURUMU
 
-## 3. HTTP GÜVENLİK BAŞLIKLARI
+⚠️ Bu hedef **HTTPS (443) üzerinden yanıt vermedi**; geçerli bir TLS sertifikası bulunamadı. Site yalnızca **şifresiz HTTP** üzerinden yayında (bkz. Tespit Edilen Riskler → “HTTPS desteklenmiyor”). Aşağıdaki başlık kontrolleri http:// üzerinden yürütülmüştür.
 
-| Başlık | Durum | Not |
-|--------|-------|-----|
-| Strict-Transport-Security | ✅ Mevcut | max-age=31536000 (1 yıl) |
-| X-Frame-Options | ❌ Eksik | Clickjacking koruması yok |
-| X-Content-Type-Options | ❌ Eksik | MIME-sniffing koruması yok |
-| Content-Security-Policy | ❌ Eksik | XSS azaltma katmanı yok |
-| Referrer-Policy | ⚠️ Eksik | Referrer sızıntısı ihtimali (düşük etki) |
+## SUNUCU / TEKNOLOJİ İMZASI
 
-## 4. TLS SERTİFİKA DURUMU
+- Sunucu: Microsoft-IIS/8.5
+- X-Powered-By: ASP.NET
 
-- **Durum:** ✅ Geçerli
-- **Protokol:** TLS 1.3 (güncel)
-- **HTTPS Yönlendirmesi:** ✅ Mevcut (HTTP → HTTPS, 301 kalıcı yönlendirme)
-- Sertifika süresi geçerlilik aralığı içinde; zincir eksiği gözlemlenmedi.
+## TESPİT EDİLEN RİSKLER
 
-## 5. SUNUCU/TEKNOLOJİ İMZASI
+| Bulgu | Şiddet | Açıklama |
+|-------|--------|----------|
+| HTTPS desteklenmiyor (şifresiz iletişim) | Yüksek | Site HTTPS'e yanıt vermiyor; sayfaya gelen/giden tüm trafik şifresiz (düz metin) taşınıyor — aynı ağdaki bir saldırgan trafiği dinleyebilir, oturum/şifre çalabilir veya içeriği değiştirebilir. Tarama http:// üzerinden yürütüldü. |
+| Kritik güvenlik başlıkları eksik (Content-Security-Policy, X-Frame-Options) | Orta | XSS ve/veya clickjacking saldırılarına karşı tarayıcı seviyesinde savunma bulunmuyor. Taranan 8 benzersiz sayfanın TAMAMINDA eksik. |
+| Ek güvenlik başlıkları eksik (X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy, Permissions-Policy) | Orta | Savunma derinliği zayıf; tek tek düşük etkili olsa da birlikte saldırı yüzeyini genişletir. Taranan 8 benzersiz sayfanın TAMAMINDA eksik. |
 
-- **Server:** nginx (sürüm bilgisi gizlenmiş) — ✅ iyi uygulama
-- Uygulama çatısı / dil sürümü ifşası gözlemlenmedi.
-- Bilgi ifşası oluşturan hata sayfası veya debug çıktısı tespit edilmedi.
+## POZİTİF GÜVENCE — KONTROL EDİLEN ALANLAR
 
-## 6. TESPİT EDİLEN RİSKLER
+Bulgu çıkmayan alanlar da dâhil, Basit Tarama kontrolleri ana sayfa dâhil **8 benzersiz sayfada** gerçekten çalıştırıldı. Aşağıdaki tablo, "sorun bulunamadı" sonuçlarını da şeffaf biçimde gösterir:
 
-| # | Bulgu | Şiddet | Kısa Açıklama |
-|---|-------|--------|----------------|
-| 1 | X-Frame-Options başlığı eksik | Orta | Sayfa iframe içine alınıp clickjacking'e açık olabilir |
-| 2 | X-Content-Type-Options eksik | Orta | Tarayıcı MIME-sniffing ile içeriği yanlış yorumlayabilir |
-| 3 | Content-Security-Policy eksik | Orta | XSS ve içerik enjeksiyonuna karşı azaltma katmanı yok |
-| 4 | Referrer-Policy eksik | Düşük | Dış bağlantılara referrer bilgisi sızabilir |
+| Kontrol Alanı | Sonuç |
+|---------------|-------|
+| HTTP güvenlik başlıkları (8 sayfada) | ⚠️ Bulgu var (6/6 önerilen başlık eksik — yukarıda detaylı) |
+| TLS / sertifika | ⚠️ Bulgu var (HTTPS yanıt vermedi — şifresiz iletişim) |
+| Sunucu/yazılım sürüm imzası (8 sayfada) | ✅ Sorun bulunmadı (bilinen eski/EOL sürüm imzası saptanmadı) |
 
----
+> **Üç-durum ayrımı (dürüstlük):** ✅ *Sorun bulunmadı* = kontrol çalıştı, temiz çıktı · ⚠️ *Bulgu var* = yukarıda detaylı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).
 
-## Metodoloji ve Yaklaşım
+### Bu paket NE kontrol EDER, NE ETMEZ
 
-Bu ön-kontrol YALNIZCA **pasif ve düşük-etkili** tekniklerle yapılır: ana sayfa yanıtı GET ile alınır, TLS el sıkışması `node:tls` ile kurulur ve HTTP güvenlik başlıkları kod düzeyinde çözümlenir. Hiçbir girdi enjekte edilmez, oturum açılmaz, veri değiştirilmez. Gözlemlenen değerler OWASP Secure Headers Project ve endüstri en iyi uygulamalarıyla karşılaştırılır.
+**EDER (pasif — yalnız GET ile sayfa çekme, hiçbir prob/payload gönderilmez):** HTTP güvenlik başlıkları, TLS/sertifika durumu (geçerlilik · hostname · TLS sürümü), sunucu-yazılım sürüm imzası ve bilinen eski/EOL sürüm tespiti — keşfedilen 8 sayfada.
 
-## Test Ortamı ve Sınırlamalar
+**ETMEZ:** CORS politikası, çerez bayrağı detayı, Content-Security-Policy analizi, DNS/e-posta kayıtları (SPF/DKIM/DMARC) ve açıkta hassas dosya taraması **Dış Yüzey** paketindedir; KVKK/PCI/ISO çerçeve-eşlemesi **Uyum** paketinde; subdomain/API/CVE keşfi **Keşif** paketinde; aktif zafiyet doğrulaması (SQLi/XSS/IDOR prob’u) **Aktif Doğrulama** ve **Tam Kapsamlı Pentest** paketlerinde ele alınır. Bu rapor pasif gözleme dayanır; "bulgu yok", aktif istismar denenmediği için **güvenli olduğunu KANITLAMAZ**.
 
-- **Kapsam:** Yalnız `https://ornek-site.com/` ana sayfası (giriş gerektiren alanlar ve alt sayfalar kapsam dışı).
-- **Yöntem:** Salt-okunur GET/HEAD; oran sınırı ve 9 sn zaman aşımı korumalı; bant-dışı (OOB) kanal yok.
-- **Sınır:** Bulgular tarama anındaki yanıtları yansıtır; sunucu tarafı değişiklikler sonucu etkileyebilir. Bu bir ön-kontroldür, kapsamlı bir denetim değildir.
-
-## Kapsam ve Kontrol Listesi
-
-Çalıştırılan tüm kontroller — geçenler dahil (10 kontrol; 6 temiz, 4 iyileştirme).
-
-| Kontrol | Kapsam | Sonuç |
-|---------|--------|-------|
-| HTTPS zorunluluğu (HTTP→HTTPS 301) | Ana sayfa | ✅ Geçti |
-| TLS sertifika geçerliliği | Sertifika zinciri | ✅ Geçti (66 gün kaldı) |
-| TLS protokol sürümü | Handshake | ✅ Geçti (TLS 1.3) |
-| Strict-Transport-Security (HSTS) | Yanıt başlığı | ✅ Geçti (max-age=1 yıl) |
-| Sunucu sürüm ifşası | `Server` başlığı | ✅ Geçti (gizli) |
-| Teknoloji/çatı sürüm ifşası | Yanıt + HTML | ✅ Geçti |
-| X-Frame-Options | Yanıt başlığı | ⚠️ Eksik (Orta) |
-| X-Content-Type-Options | Yanıt başlığı | ⚠️ Eksik (Orta) |
-| Content-Security-Policy | Yanıt başlığı | ⚠️ Eksik (Orta) |
-| Referrer-Policy | Yanıt başlığı | ⚠️ Eksik (Düşük) |
-
-## Tarama İstatistikleri
-
-| Ölçüt | Değer |
-|-------|-------|
-| Taranan sayfa | 1 (ana sayfa) |
-| Gönderilen istek | 4 (GET + TLS handshake denemeleri) |
-| İncelenen giriş noktası | 0 (pasif; girdi denenmedi) |
-| Çalıştırılan kontrol | 10 |
-| Tespit edilen bulgu | 4 (0 kritik · 0 yüksek · 3 orta · 1 düşük) |
-| Yaklaşık süre | ~8 saniye |
-
-## Sonraki Adımlar
-
-1. **Öncelik 1 (Orta):** X-Frame-Options, X-Content-Type-Options ve Content-Security-Policy başlıklarını ekleyin.
-2. **Öncelik 2 (Düşük):** Referrer-Policy başlığını ekleyin.
-3. Panoya kopyalanabilir tüm düzeltmeler aşağıdaki **AI Çözüm Önerileri** bölümündedir; uyguladıktan sonra aynı paketle yeniden tarayarak doğrulayın.
-
----
-
-## Yasal Uyari ve Kapsam
-
-- **Yapay zeka uretimi:** Bu rapor yapay zeka tabanli otomatik bir ajan tarafindan uretilmistir; olgusal ifadeler bagimsiz dogrulanmadan kullanilmamalidir.
-- **Kapsam:** Tarama YALNIZCA sahipligi dogrulanmis hedefle ve **pasif** yontemlerle sinirlidir; ic ag, kimlik dogrulamali test ve sizma testi KAPSAM DISIDIR.
-- **Resmi degildir:** Bu rapor resmi uyumluluk denetimi/sertifikasyon (ASV/QSA vb.) yerine gecmez.
-- **Sorumluluk:** Bulgularin dogrulanmasi ve giderilmesi musterinin sorumlulugundadir.
-
-> **Not:** Bu bir ÖRNEK rapordur. İçerik, gerçek bir taramanın formatını göstermek için anonimleştirilmiş/temsilidir; gerçek bir hedefe ait değildir.

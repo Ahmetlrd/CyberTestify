@@ -146,12 +146,14 @@ export default async function PackagesPage({ params }: { params: { region: strin
                   <h3 className="text-lg font-bold text-brand">{basit.displayName}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-ink-soft">
                     {tr
-                      ? 'Hızlı, ucuz bir deneme taraması — CyberTestify’ı denemek için ideal.'
-                      : 'A fast, cheap trial scan — ideal to try CyberTestify.'}
+                      ? 'Web sitenizin dış güvenlik duruşunu hızlıca ölçmek ve temel riskleri kapatmak için ideal başlangıç paketi.'
+                      : 'The ideal starter package to quickly gauge your site’s external security posture and close basic risks.'}
                   </p>
                   <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
                     <span className="font-semibold">{tr ? 'Kapsam' : 'Scope'}:</span>{' '}
-                    {tr ? 'Güvenlik başlıkları · TLS geçerliliği · sunucu banner özeti' : 'Security headers · TLS validity · server banner'}
+                    {tr
+                      ? 'HTTP güvenlik başlıkları · SSL/TLS yapılandırması · Sunucu & teknoloji ifşası · Temel yapılandırma dosyaları (robots.txt, assetlinks) · Platforma özel hazır düzeltme kodları (Nginx, IIS, Vercel vb.).'
+                      : 'HTTP security headers · SSL/TLS configuration · Server & tech disclosure · Basic config files (robots.txt, assetlinks) · Platform-specific ready-to-use fix snippets (Nginx, IIS, Vercel, etc.).'}
                   </div>
                   <div className="mt-4 flex-1">
                     <div>
@@ -159,7 +161,9 @@ export default async function PackagesPage({ params }: { params: { region: strin
                       <span className="ml-1 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahil' : 'incl. tax'}</span>
                     </div>
                     <div className="mt-1.5 text-[11px] text-ink-soft">
-                      {tr ? 'Ön izleme niteliğindedir; kapsamlı bir denetim değildir.' : 'A preview, not a comprehensive audit.'}
+                      {tr
+                        ? 'Dış yüzey ön-değerlendirmesidir; aktif sızma testi veya derinlemesine kod denetimi içermez.'
+                        : 'An external-surface pre-assessment; no active penetration test or in-depth code audit.'}
                     </div>
                   </div>
                   <a

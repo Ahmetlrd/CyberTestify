@@ -387,7 +387,7 @@ export default function VerifyHub() {
           {/* SATIN-ALMA MODU: yalnız alan adı seçimi (rapor geçmişi YOK). Paket sonraki adımda hazır gelir. */}
           <div className="mt-6 rounded-card border border-accent/40 bg-accent-soft/40 px-4 py-3 text-sm text-ink-soft">
             Seçtiğiniz paket için bir <strong>alan adı</strong> seçin. Doğrulanmış bir alan adınız varsa tek tıkla
-            devam edin; yoksa yeni bir alan adı ekleyip doğrulayın. Sonraki adımda <strong>paketiniz hazır gelecek</strong>.
+            devam edin; yoksa yeni bir alan adı ekleyip doğrulayın.
           </div>
           {domainSection}
         </>

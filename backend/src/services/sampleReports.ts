@@ -186,18 +186,29 @@ export async function getSampleReportPdf(packageKey: string): Promise<Buffer> {
     ? bundle.displayName
     : getPackageDef(sampleKey as Parameters<typeof getPackageDef>[0]).displayName;
 
+  // (BASİT TARAMA — GERÇEK ÇIKTI) Örnek rapor, deterministik motorun GERÇEK bir taramadan ürettiği
+  // gövdedir (testasp.vulnweb.com); müşteri ana sayfada birebir gerçek rapor formatını görür. Bu yüzden
+  // assessOverride VERİLMEZ: reorganize + 2.3 Detaylı Bulgular + master tablo gerçek-rapor yolundan üretilsin.
+  const isBasitReal = sampleKey === 'basit_tarama';
+
   // (LANSMAN KAMPANYASI) örnek raporda AI Çözüm Önerileri bölümü AÇIK (temsili içerik). Kapanınca kilitli.
-  const fixMarkdown = config.aiFixFreeCampaign ? (SAMPLE_FIX_MD[sampleKey] ?? SAMPLE_FIX_MD[DEFAULT_SAMPLE]) : null;
+  const fixMarkdown = config.aiFixFreeCampaign
+    ? isBasitReal
+      ? readFileSync(join(SAMPLES_DIR, 'basit_tarama_fix.md'), 'utf-8')
+      : (SAMPLE_FIX_MD[sampleKey] ?? SAMPLE_FIX_MD[DEFAULT_SAMPLE])
+    : null;
   // (issue #4) Üst "Genel Değerlendirme" kutusu = GÖVDEDEKİ gerçek risk. Statik örnek gövdesinin
   // risk ifadesi severity-parse'a takılmayabildiğinden her örneğe AÇIK seviye veriyoruz (tutarlılık).
-  const assessOverride = SAMPLE_RISK[sampleKey] ?? SAMPLE_RISK[DEFAULT_SAMPLE];
+  // Basit Tarama gövdesi gerçek çıktı olduğundan risk zaten parse edilir -> override YOK.
+  const assessOverride = isBasitReal ? undefined : (SAMPLE_RISK[sampleKey] ?? SAMPLE_RISK[DEFAULT_SAMPLE]);
   const pdf = await renderReportPdf(
     md,
     {
-      hostname: 'ornek-site.com',
+      hostname: isBasitReal ? 'testasp.vulnweb.com' : 'ornek-site.com',
       packageName,
-      createdAt: new Date('2026-01-15T10:00:00.000Z'), // sabit ornek tarihi (stabil cikti)
+      createdAt: new Date(isBasitReal ? '2026-08-15T10:00:00.000Z' : '2026-01-15T10:00:00.000Z'), // sabit ornek tarihi (stabil cikti)
       locale: 'tr',
+      packageKey: isBasitReal ? 'basit_tarama' : undefined,
     },
     { fixMarkdown, assessOverride },
   );
