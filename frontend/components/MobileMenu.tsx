@@ -1,21 +1,30 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
 /**
  * Mobil (md altı) gezinme menüsü. Nav linkleri desktop'ta `md:flex` ile görünür;
- * mobilde bu hamburger içine taşınır — böylece küçük ekranda hem taşma olmaz hem
- * de "Nasıl çalışır / Neden biz / Paketler" erişilebilir kalır.
+ * mobilde bu hamburger içine taşınır. GİRİŞ DURUMUNA DUYARLI: token varsa "Giriş/Kayıt"
+ * DEĞİL, "Panelim/Profil" gösterir (aksi halde login olmuş kullanıcı mobilde "Giriş" görüp
+ * /login → /verify sekmesine düşüyordu). Token 401'de api.ts tarafından silindiği için
+ * ölü oturumda da doğru (çıkış yapılmış) görünür.
  */
 export function MobileMenu({
   links,
   authLabels,
 }: {
   links: Array<[string, string]>;
-  authLabels: { login: string; cta: string };
+  authLabels: { login: string; cta: string; panel: string; profile: string };
 }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setLoggedIn(typeof window !== 'undefined' && !!window.localStorage.getItem('token'));
+  }, [pathname]);
 
   return (
     <div className="md:hidden">
@@ -51,12 +60,25 @@ export function MobileMenu({
                 </Link>
               ))}
               <div className="mt-2 flex gap-3 border-t border-line/70 pt-3">
-                <Link href="/login" onClick={() => setOpen(false)} className="btn-ghost flex-1 justify-center">
-                  {authLabels.login}
-                </Link>
-                <Link href="/register" onClick={() => setOpen(false)} className="btn-primary flex-1 justify-center">
-                  {authLabels.cta}
-                </Link>
+                {loggedIn ? (
+                  <>
+                    <Link href="/verify" onClick={() => setOpen(false)} className="btn-ghost flex-1 justify-center">
+                      {authLabels.panel}
+                    </Link>
+                    <Link href="/profile" onClick={() => setOpen(false)} className="btn-primary flex-1 justify-center">
+                      {authLabels.profile}
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/login" onClick={() => setOpen(false)} className="btn-ghost flex-1 justify-center">
+                      {authLabels.login}
+                    </Link>
+                    <Link href="/register" onClick={() => setOpen(false)} className="btn-primary flex-1 justify-center">
+                      {authLabels.cta}
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </div>

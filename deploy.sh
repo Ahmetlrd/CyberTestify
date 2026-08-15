@@ -47,6 +47,18 @@ $COMPOSE exec -T api npx prisma migrate deploy
 echo "==> Juice Shop test hesabı seed (idempotent)"
 $COMPOSE exec -T api npx tsx prisma/seedJuiceShopTestAccount.ts || echo "   (seed atlandı/başarısız — test fixture; üretimi etkilemez)"
 
+# (CLARITY DEPLOY-PROOF REPLAY) Next.js her build'de /_next/static CSS/JS dosyalarına içerik-hash'li
+# YENİ isim verir ve eskisini SİLER. Microsoft Clarity replay bu dosyaları URL'den yeniden çektiğinden,
+# bir deploy'dan ÖNCE alınan kayıtlar deploy sonrası 404 → stilsiz görünür. Çözüm: her build'in
+# static'ini birikimli bir arşivde topla ve çalışan container'a geri koy (eski+yeni hash'ler birlikte
+# sunulur). 30 günden eski dosyalar temizlenir (Clarity saklama penceresiyle hizalı; arşiv şişmez).
+echo "==> Clarity: eski static varlıklarını koru (deploy-proof replay)"
+ARCHIVE=/opt/cybertestify/static-archive
+mkdir -p "$ARCHIVE"
+docker cp cybertestify-frontend:/app/.next/static/. "$ARCHIVE/" 2>/dev/null || true   # yeni build -> arşiv (additive)
+find "$ARCHIVE" -type f -mtime +30 -delete 2>/dev/null || true                        # 30 günden eskiyi buda
+docker cp "$ARCHIVE/." cybertestify-frontend:/app/.next/static/ 2>/dev/null || true   # arşiv (eski+yeni) -> container
+
 echo "==> Durum"
 $COMPOSE ps --format "table {{.Name}}\t{{.State}}\t{{.Status}}"
 echo "==> Bitti."

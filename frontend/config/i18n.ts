@@ -5,7 +5,7 @@ import type { Lang, RegionConfig } from './regions';
  * + `dir: 'rtl'` yeterli olacak şekilde yapılandırıldı (Faz-2 TODO, bkz HANDOFF).
  */
 export interface Dict {
-  nav: { how: string; why: string; packages: string; login: string; cta: string; panel: string; logout: string };
+  nav: { how: string; why: string; packages: string; login: string; cta: string; panel: string; logout: string; profile: string };
   hero: {
     badge: string;
     titleA: string;
@@ -57,7 +57,7 @@ export interface Dict {
 }
 
 const tr: Dict = {
-  nav: { how: 'Nasıl Çalışır', why: 'Neden Biz', packages: 'Paketler', login: 'Giriş', cta: 'Ücretsiz Doğrula', panel: 'Panelim', logout: 'Çıkış' },
+  nav: { how: 'Nasıl Çalışır', why: 'Neden Biz', packages: 'Paketler', login: 'Giriş', cta: 'Ücretsiz Doğrula', panel: 'Panelim', logout: 'Çıkış', profile: 'Profil' },
   hero: {
     badge: 'Yapay zekâ destekli otomasyon · İnsan pentester beklemeyin',
     titleA: 'Sitenizin güvenliğini,',
@@ -142,7 +142,7 @@ const tr: Dict = {
 };
 
 const en: Dict = {
-  nav: { how: 'How It Works', why: 'Why Us', packages: 'Pricing', login: 'Log in', cta: 'Verify Free', panel: 'My Panel', logout: 'Log out' },
+  nav: { how: 'How It Works', why: 'Why Us', packages: 'Pricing', login: 'Log in', cta: 'Verify Free', panel: 'My Panel', logout: 'Log out', profile: 'Profile' },
   hero: {
     badge: 'AI-assisted automation · No waiting for a human pentester',
     titleA: 'Test your website’s security with',

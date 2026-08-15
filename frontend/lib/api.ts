@@ -35,6 +35,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     },
   });
   if (!res.ok) {
+    // (OTURUM TEMİZLİĞİ) 401 = token geçersiz/süresi dolmuş → localStorage'daki ölü token'ı SİL ki
+    // Nav "giriş yapılmış" sanıp her istekte "geçersiz/süresi dolmuş oturum" döngüsüne girmesin.
+    // Login/register 401'i (yanlış şifre) hariç — orada zaten token yok.
+    if (res.status === 401 && typeof window !== 'undefined' && !path.startsWith('/auth/login') && !path.startsWith('/auth/register')) {
+      window.localStorage.removeItem('token');
+    }
     const body = await res.json().catch(() => ({}));
     const msg = friendlyError(body, res.status);
     const err = new Error(msg) as Error & { status?: number; emailUnverified?: boolean; needsCredentials?: boolean; tooManyAttempts?: boolean };
