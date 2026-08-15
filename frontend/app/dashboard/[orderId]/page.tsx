@@ -169,10 +169,48 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       </h1>
       {order && <p className="mt-1 text-sm text-ink-muted">Hedef: {hostname}</p>}
 
-      {/* İade/süre-doldu gibi terminal durumlarda adım göstergesi YANILTICI olur — gösterilmez. */}
-      {!['refunded', 'report_purged'].includes(status) && (
+      {/* İade/süre-doldu gibi terminal durumlarda adım göstergesi YANILTICI olur — gösterilmez.
+          ÖDEME BEKLENİYOR'da da gösterilmez: tarama HENÜZ BAŞLAMADI; "Tarama çalışıyor" adımı
+          müşteriyi yanıltır (ödeme yapmadan tarama sanıyor). Onun yerine ödeme kartı gösterilir. */}
+      {!['refunded', 'report_purged', 'awaiting_payment'].includes(status) && (
         <div className="mt-8">
           <StatusTracker status={status} />
+        </div>
+      )}
+
+      {/* ÖDEME BEKLENİYOR — müşteri ödeme ekranını göremiyordu (bug). Net ödeme kartı + "Ödemeyi
+          Tamamla" CTA -> mevcut /pay/<orderId> ödeme sayfası (canlıda iyzico'ya yönlendirir). */}
+      {status === 'awaiting_payment' && (
+        <div className="mt-8 rounded-card border-2 border-accent/50 bg-accent-soft/30 p-6">
+          <p className="text-lg font-bold text-brand">Ödemeniz henüz tamamlanmadı</p>
+          <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+            Siparişiniz oluşturuldu ancak ödeme alınmadığı için tarama <strong>henüz başlamadı</strong>.
+            Taramayı başlatmak için ödemeyi tamamlamanız yeterli.
+          </p>
+          {order?.amountMinorUnit != null && (
+            <div className="mt-4 flex items-baseline justify-between rounded-card bg-white/70 px-4 py-3">
+              <span className="text-sm text-ink-soft">
+                {hostname}{order?.packageName ? <> · {order.packageName}</> : null}
+              </span>
+              <span className="text-2xl font-extrabold text-brand">
+                {(order.amountMinorUnit / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}{' '}
+                {order.currency === 'TRY' || !order.currency ? 'TL' : order.currency}
+              </span>
+            </div>
+          )}
+          <a
+            href={`/pay/${params.orderId}`}
+            className="btn-primary mt-4 flex w-full items-center justify-center gap-1.5"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="M3 10h18" />
+            </svg>
+            Ödemeyi Tamamla
+          </a>
+          <p className="mt-2 text-center text-[11px] text-ink-muted">
+            Ödeme onaylanınca tarama otomatik başlar ve bu sayfa kendiliğinden güncellenir.
+          </p>
         </div>
       )}
 
