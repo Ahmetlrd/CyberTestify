@@ -175,7 +175,7 @@ const REAL_SAMPLES: Record<string, { fileKey: string; hostname: string }> = {
   bundle_surface: { fileKey: 'bundle_surface', hostname: 'rest.vulnweb.com' },
   bundle_recon: { fileKey: 'bundle_recon', hostname: 'ornek.com' }, // gerçek tarama (anonimleştirildi: *.ornek.com)
   bundle_compliance: { fileKey: 'bundle_compliance', hostname: 'ornek.com' }, // gerçek tarama (anonimleştirildi)
-  bundle_active_verify: { fileKey: 'bundle_active_verify', hostname: 'test.cybertestify.com' }, // kendi Juice Shop fixture'ımız (gerçek aktif tarama; gövde host-agnostik)
+  bundle_active_verify: { fileKey: 'bundle_active_verify', hostname: 'ornek.com' }, // gerçek aktif tarama (kendi fixture'ımız; gövde host-agnostik -> kapakta ornek.com)
 };
 
 const pdfCache = new Map<string, Buffer>();
