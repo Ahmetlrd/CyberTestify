@@ -173,6 +173,7 @@ const SAMPLE_RISK: Record<string, { level: 'high' | 'medium' | 'low' }> = {
 const REAL_SAMPLES: Record<string, { fileKey: string; hostname: string }> = {
   basit_tarama: { fileKey: 'basit_tarama', hostname: 'testasp.vulnweb.com' },
   bundle_surface: { fileKey: 'bundle_surface', hostname: 'rest.vulnweb.com' },
+  bundle_recon: { fileKey: 'bundle_recon', hostname: 'ornek.com' }, // gerçek tarama (anonimleştirildi: *.ornek.com)
 };
 
 const pdfCache = new Map<string, Buffer>();
