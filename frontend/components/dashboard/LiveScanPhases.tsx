@@ -106,7 +106,6 @@ export function LiveScanPhases({
         <div className="text-white/45" dir="ltr">$ cybertestify scan {hostname}</div>
         <div className="text-emerald-300" dir="ltr">✓ Alan adı sahipliği doğrulandı</div>
         <div className="text-white/85" dir="ltr">→ Tarama başlatılıyor…<span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" /></div>
-        <div className="mt-3 text-white/45">Taramanız en kısa sürede başlayacaktır.</div>
         <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
           <div className="h-full w-1/4 animate-pulse rounded-full bg-gradient-to-r from-accent/60 to-emerald-400/70" />
         </div>

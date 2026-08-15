@@ -34,17 +34,9 @@ function Spinner() {
 export function StatusTracker({ status }: { status: string }) {
   const failed = status === 'scan_failed' || status === 'scope_violation';
   const done = completedCount(status);
-  const queued = status === 'scan_queued';
 
   return (
     <div className="card p-6">
-      {queued && (
-        <div className="mb-4 rounded-card bg-accent-soft px-4 py-2.5 text-sm font-medium text-accent-600">
-          Siparişiniz alındı, taramanız sırada. Şu an başka bir tarama çalışıyor; sıranız gelince
-          otomatik başlayacak — bu sayfa kendiliğinden güncellenir ve <strong>başladığında size e-posta
-          göndeririz</strong>.
-        </div>
-      )}
       <ol className="space-y-1">
         {STEPS.map((s, i) => {
           const isDone = i < done && !failed;

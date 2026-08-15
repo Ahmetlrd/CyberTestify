@@ -188,22 +188,14 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
         </div>
       )}
 
-      {status === 'scan_queued' && (
-        <div className="mt-4 rounded-card border border-accent/40 bg-accent-soft/40 px-4 py-3 text-sm text-ink-soft">
-          <strong>Taramanız en kısa sürede başlayacaktır.</strong> Bu sayfa otomatik güncellenir;
-          kapatsanız bile durumu buradan takip edebilirsiniz.
-        </div>
-      )}
-
       {active && (() => {
         // (Sırada) Tarama HENÜZ başlamadıysa (kuyrukta veya flow başlamamış): ilerleme YOK, "başlatılıyor".
         const notStarted = status === 'scan_queued' || status === 'paid' || !order?.flow?.startedAt;
         return (
         <>
+          {/* Tek bilgilendirme satırı — kuyruk/başka tarama detayı verilmez; "başlatılıyor" başlık + terminal yeterli. */}
           <p className="mt-4 rounded-card bg-brand-50/70 px-4 py-3 text-sm text-ink-soft">
-            {notStarted
-              ? <>Taramanız <strong>en kısa sürede başlayacaktır</strong>. Bu sayfa otomatik güncelleniyor — kapatabilirsiniz; sonuç hazır olduğunda erişim kodu e-postanıza gönderilecek.</>
-              : <>Tarama arka planda çalışıyor. Bu sayfa otomatik güncelleniyor — kapatabilirsiniz; sonuç hazır olduğunda erişim kodu e-postanıza gönderilecek.</>}
+            Bu sayfa otomatik güncelleniyor — kapatabilirsiniz; sonuç hazır olduğunda erişim kodu e-postanıza gönderilecek.
           </p>
 
           {/* Canlı aktivite — landing'deki terminal görünümüyle aynı; içerik GERÇEK
