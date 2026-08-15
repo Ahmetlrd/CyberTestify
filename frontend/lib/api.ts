@@ -104,6 +104,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ domainId, packageKey, ...consents, region, activeTestConsent, authCredentials, promoCode }),
     }),
+  // 'awaiting_payment' bir siparis icin GERCEK odeme sayfasini yeniden baslat (dashboard "Odemeyi Tamamla").
+  resumePayment: (orderId: string) =>
+    request<{ orderId: string; paymentPageUrl?: string; conversationId?: string }>(`/orders/${orderId}/pay`, {
+      method: 'POST',
+    }),
   // Kombine paketler (bundle) — bolgesel fiyat + uye listesi.
   listBundles: (region = 'tr') =>
     request<

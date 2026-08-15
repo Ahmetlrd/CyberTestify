@@ -43,6 +43,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const [accessSecret, setAccessSecret] = useState('');
   const [unlocked, setUnlocked] = useState(false);
   const [busyFix, setBusyFix] = useState(false);
+  const [busyPay, setBusyPay] = useState(false); // "Odemeyi Tamamla" -> gercek iyzico'ya yonlendirme
   const [fixPromo, setFixPromo] = useState(''); // AI Cozum Onerileri promosyon kodu
   const [error, setError] = useState<string | null>(null);
   const [dlError, setDlError] = useState<string | null>(null); // rapor indirme hatası — kutunun altında gösterilir
@@ -117,6 +118,25 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
     } catch (err: any) {
       // (UX) İndirme hatasını sayfa DİBİNDE değil, erişim-kodu kutusunun HEMEN ALTINDA göster.
       setDlError(err.message);
+    }
+  }
+
+  // (Ödeme Bekleniyor) "Ödemeyi Tamamla" -> GERÇEK iyzico ödeme sayfasını yeniden başlat, oraya yönlen.
+  // (Env'de anahtar yoksa backend görsel /pay placeholder'ı döner — TEK route, dallanma sunucuda.)
+  async function handleResumePayment() {
+    setBusyPay(true);
+    setError(null);
+    try {
+      const res = await api.resumePayment(params.orderId);
+      if (res.paymentPageUrl) {
+        window.location.href = res.paymentPageUrl;
+        return;
+      }
+      setError('Ödeme sayfası alınamadı. Lütfen tekrar deneyin.');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusyPay(false);
     }
   }
 
@@ -198,18 +218,19 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               </span>
             </div>
           )}
-          <a
-            href={`/pay/${params.orderId}`}
-            className="btn-primary mt-4 flex w-full items-center justify-center gap-1.5"
+          <button
+            onClick={handleResumePayment}
+            disabled={busyPay}
+            className="btn-primary mt-4 flex w-full items-center justify-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
               <rect x="3" y="5" width="18" height="14" rx="2" />
               <path d="M3 10h18" />
             </svg>
-            Ödemeyi Tamamla
-          </a>
+            {busyPay ? 'Ödeme sayfasına yönlendiriliyor…' : 'Ödemeyi Tamamla'}
+          </button>
           <p className="mt-2 text-center text-[11px] text-ink-muted">
-            Ödeme onaylanınca tarama otomatik başlar ve bu sayfa kendiliğinden güncellenir.
+            Güvenli ödeme iyzico altyapısıyla alınır. Ödeme onaylanınca tarama otomatik başlar ve bu sayfa kendiliğinden güncellenir.
           </p>
         </div>
       )}

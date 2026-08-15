@@ -414,6 +414,31 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   res.json({ orderId: order.id, ...payment });
 });
 
+// ODEMEYI SURDUR — 'awaiting_payment' bir siparis icin GERCEK odeme sayfasini (iyzico CheckoutForm)
+// yeniden baslatir. Musteri odeme ekranini kapatip dashboard'a dondugunde "Odemeyi Tamamla" bunu
+// cagirir; anahtar varsa gercek iyzico URL'i, yoksa gorsel /pay placeholder'i doner (initiatePayment
+// env'e gore dallanir — TEK route). Odeme onaylanınca callback siparisi 'paid' yapip taramayi baslatir.
+ordersRouter.post('/:orderId/pay', requireAuth, async (req, res) => {
+  const order = await prisma.order.findFirst({
+    where: { id: req.params.orderId, customerId: req.customerId! },
+    select: { id: true, status: true, locale: true },
+  });
+  if (!order) return res.status(404).json({ error: 'Siparis bulunamadi.' });
+  if (order.status !== 'awaiting_payment') {
+    return res.status(409).json({ error: 'Bu siparis odeme beklemiyor (zaten odendi/iptal).' });
+  }
+  const region = order.locale === 'tr' ? 'tr' : 'us';
+  try {
+    const payment = await getPaymentProvider(region).initiatePayment(order.id);
+    return res.json({ orderId: order.id, ...payment });
+  } catch (err: any) {
+    console.error(`[order][resume-pay] odeme baslatilamadi (order ${order.id}):`, err?.message ?? err);
+    return res.status(503).json({
+      error: err?.message?.startsWith('Ödeme') ? err.message : 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin.',
+    });
+  }
+});
+
 // KOMBINE PAKET (bundle) SATIN ALMA — tekil paketleri SILMEDEN, uye paketlerin her biri
 // icin ayri bir siparis olusturur (her uye kendi MEVCUT promptu/guard'iyla calisir; prompt
 // TEKRARI YOK). Tek yetkilendirme beyani tum active-light uyeleri kapsar (ekstra onay YOK).
