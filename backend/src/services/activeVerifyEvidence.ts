@@ -1368,7 +1368,7 @@ export type VFinding = {
 // agentStatus (ajan kontrolleri icin): 'analyzed' = advisory GERCEKTEN cagrildi (aday vardi) ;
 // 'no_candidate' = pasif kesifle hic aday yuzey yoktu, advisory CAGRILMADI ; 'unavailable' = advisory
 // cagrildi ama tamamlanamadi (anahtar yok/timeout/hata). Rapor bu ucunu NET ayirir (dururstluk).
-export type ActiveCheckEvidence = { ok: boolean; pagesScanned: number; inputsFound: number; probesSent: number; findings: VFinding[]; stopped: string | null; notes: string[]; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' };
+export type ActiveCheckEvidence = { ok: boolean; pagesScanned: number; inputsFound: number; probesSent: number; findings: VFinding[]; stopped: string | null; notes: string[]; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled' };
 
 // (İş Mantığı + Race) SINIRLI PentAGI ajan onerileri — host basina TEK cagri, iki kontrol PAYLASIR.
 // (Bölüm 2 — İZOLE/DENEYSEL advisory) Advisory (PentAGI-tarzı LLM önceliklendirme sinyali) yalnızca

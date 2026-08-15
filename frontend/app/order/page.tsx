@@ -540,14 +540,16 @@ export default function OrderPage() {
           <p><strong className="text-ink">Test hesabı:</strong> Kimlik doğrulamalı test için bir <strong>TEST hesabı</strong>
           (ana/üretim hesabınız DEĞİL; 2FA’sız, sınırlı yetkili, tek-kullanımlık) vermelisiniz. Kimlik bilgileriniz
           <strong> şifreli/geçici</strong> saklanır ve tarama sonrası silinir.</p>
-          <p><strong className="text-ink">Yöntem:</strong> Deterministik kimlik-doğrulamalı kontroller + iki kontrolde
-          <strong> yapay zekâ destekli analiz</strong> (tek LLM danışma çağrısı) kullanır. Gerçek veri/hesap değişikliği ve
-          ödeme tamamlama <strong>kod seviyesinde engellidir</strong> — bu bir otonom/sınırsız pentest değildir.</p>
+          <p><strong className="text-ink">Yöntem:</strong> Login sonrası çerez/oturum/yetki, authenticated enjeksiyon ve IDOR,
+          yetki yükseltme ve çok-adımlı iş mantığı göstergeleri <strong>deterministik güvenlik kontrolleriyle</strong> incelenir.
+          Gerçek veri/hesap değişikliği ve ödeme tamamlama <strong>kod seviyesinde engellidir</strong> — bu bir otonom/sınırsız
+          pentest değildir.</p>
+          <p><strong className="text-ink">Opsiyonel AI katmanı:</strong> İki kontrolde (yetki yükseltme + çok-adımlı iş mantığı)
+          isteğe bağlı, hafif bir <strong>yapay zekâ danışma katmanı</strong> vardır; <strong>varsayılan olarak kapalıdır</strong> ve
+          yalnız açıkken ek, doğrulanabilir bir gösterge bulduğunda devreye girer. Kapalıyken sonuçlar <strong>tam deterministik
+          authenticated kontrollerle</strong> üretilir — normal ve beklenen davranıştır, rapor bunu şeffaf gösterir.</p>
           <p><strong className="text-ink">Kapsam:</strong> <strong>Cross-account</strong> (başka bir kullanıcının verisine
           erişim) IDOR bu sürümün kapsamı dışındadır.</p>
-          <p><strong className="text-ink">Beklenti:</strong> Yapay zekâ destekli analiz katmanı bazı hedeflerde uygulanabilir
-          bir gösterge bulamayabilir; bu durumda sonuçlar deterministik authenticated kontrollerle sınırlı kalır — bu
-          normal bir davranıştır ve rapor bunu şeffaf gösterir.</p>
         </div>
       )}
 

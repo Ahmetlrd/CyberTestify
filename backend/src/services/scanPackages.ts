@@ -1350,10 +1350,11 @@ Target: ${host}
   },
   {
     key: 'autonomous_pentest',
-    displayName: 'Yapay Zekâ Destekli Analiz (Yetki & İş Mantığı)',
+    displayName: 'Yetki Yükseltme & Çok-Adımlı İş Mantığı (deterministik)',
     description:
-      'Keşfedilen kimlik-doğrulamalı yüzey üzerinde yapay zekâ destekli analiz (tek LLM danışma çağrısı): ' +
-      'yetki yükseltme ve çok-adımlı iş mantığı göstergeleri. Yalnız gözlem; istismar/exfil/DoS/auth-bypass/ ' +
+      'Keşfedilen kimlik-doğrulamalı yüzeyde **deterministik** yetki yükseltme ve çok-adımlı iş mantığı göstergeleri: ' +
+      'yetki-alanı içeren form/API + istemci-değiştirilebilir fiyat/kupon/adım-atlama gözlemi. İsteğe bağlı, varsayılan ' +
+      'kapalı bir yapay zekâ danışma katmanı (yalnız açıkken devreye girer). Yalnız gözlem; istismar/exfil/DoS/auth-bypass/ ' +
       'veri-değiştirme YASAK (aktif-hafif sınırlar). Yetkilendirme beyanı gerektirir.',
     // (Fiyat karari) AI/otonom bilesen artik AGIR otonom PentAGI flow'u DEGIL, hafif bir advisory (tek
     // LLM cagrisi) — bu yuzden fiyat etiketi ₺15.999'dan ₺5.499'a dusuruldu. bundle-only (standalone

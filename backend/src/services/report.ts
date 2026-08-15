@@ -529,8 +529,8 @@ const KVKK_LEGAL = [
 // (Tam Kapsamlı Pentest) AYRI, DOĞRU disclaimer — bu paket TAM OLARAK kimlik doğrulamalı test yapar;
 // diğer 6 paketin "pasif / authenticated KAPSAM DIŞI" cümlesi burada YANLIŞ olurdu. Diğer paketler DEĞİŞMEZ.
 const FULL_PENTEST_LEGAL_TR = [
-  '**Yapay zeka destekli:** Bu rapor, backend deterministik kontroller + sınırlı/kontrollü otonom ajan analiziyle üretilmiştir; olgusal ifadeler bağımsız doğrulanmadan kullanılmamalıdır.',
-  '**Kapsam:** Bu tarama, sağladığınız TEST hesabıyla **kimlik doğrulamalı (login’li)** bağlamda ve **sınırlı/kontrollü otonom ajan** analiziyle yapılmıştır. Gerçek veri değişikliği, hesap durumu değişikliği, ödeme/sipariş tamamlama veya üçüncü taraf hesaplarına erişim **KAPSAM DIŞIDIR ve kod seviyesinde engellenmiştir**.',
+  '**Nasıl üretildi:** Bu rapor **backend deterministik güvenlik kontrolleriyle** üretilmiştir. İki kontrolde (yetki yükseltme + çok-adımlı iş mantığı) isteğe bağlı, **varsayılan olarak kapalı** bir yapay zekâ danışma katmanı vardır; yalnız açıkken ve ek bir doğrulanabilir gösterge bulduğunda devreye girer — kapalıyken sonuçlar tam deterministik kontrollerle üretilir. Olgusal ifadeler bağımsız doğrulanmadan kullanılmamalıdır.',
+  '**Kapsam:** Bu tarama, sağladığınız TEST hesabıyla **kimlik doğrulamalı (login’li)** bağlamda yapılmıştır. Gerçek veri değişikliği, hesap durumu değişikliği, ödeme/sipariş tamamlama veya üçüncü taraf hesaplarına erişim **KAPSAM DIŞIDIR ve kod seviyesinde engellenmiştir**.',
   '**Resmi değildir:** Bu rapor resmi bir sızma testi/uyum denetimi (ASV/QSA vb.) yerine geçmez.',
   '**Sorumluluk:** Bulguların doğrulanması ve giderilmesi müşterinin sorumluluğundadır.',
 ];

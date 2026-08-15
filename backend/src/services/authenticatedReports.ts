@@ -64,10 +64,16 @@ const FORCED_CFG = {
   cleanGenel: 'Düşük yetkili oturumla erişilebilen bir admin/yönetim uç noktası gözlemlenmedi.',
 };
 
+// (İş A) NE KONTROL EDİLDİ ilk satırı advisor durumuna göre koşullu: KAPALI (varsayılan) -> deterministik dil;
+// AÇIK (AUTH_ADVISOR_HOSTS) -> AI-danışma dili. Tek 'agentStatus' bayrağından türer (rapor kendiyle çelişmez).
+const PRIVESC_WC_DET = 'Keşfedilen authenticated yüzeyde **deterministik olarak** yetki-alanı içeren form/API (kayıt/profil/ayar tipi) arandı.';
+const PRIVESC_WC_AI = 'Keşfedilen authenticated yüzeyden **Otonom Analiz Motoru** (yalnız JSON öneri; doğrudan HTTP atmaz) yetki-alanı içeren form/API seçti.';
+const MULTISTEP_WC_DET = '**Deterministik olarak** çok-adımlı akış/fiyat-kupon alanı arandı; backend YALNIZ **GET-gözlem** yaptı.';
+const MULTISTEP_WC_AI = '**Otonom Analiz Motoru** (yalnız JSON öneri) çok-adımlı akış/fiyat-kupon alanı seçti; backend YALNIZ **GET-gözlem** yaptı.';
 const PRIVESC_CFG = {
   title: 'Yetki Yükseltme (Privilege Escalation)', whatChecked: [
-    'Keşfedilen authenticated yüzeyden **PentAGI ajanı** (yalnız JSON öneri; doğrudan HTTP atmaz) yetki-alanı içeren form/API seçti.',
-    'Backend, öneriyi **güvenli, authenticated-light** fonksiyonundan geçirip TEK gözlemsel mass-assignment probu (`role/isAdmin` ek alan) uyguladı.',
+    PRIVESC_WC_DET,
+    'Güvenli test edilebilir bir yüzey bulunduysa **güvenli, authenticated-light** fonksiyonla TEK gözlemsel mass-assignment probu (`role/isAdmin` ek alan) uygulandı.',
     '⚠️ Gerçek yükseltme TAMAMLANMADI; yükseltilmiş yetkiyle tekrar giriş yapılmadı; oturum dışına çıkılmadı; hesap-değiştiren/checkout hedeflerine **yazılmadı** (kod-seviyesi blocklist).',
   ],
   confidenceNote: 'Mass-assignment göstergesi yalnızca ilk yanıttan çıkarılmıştır (düşük güven); kesin doğrulama manuel test gerektirir.',
@@ -78,7 +84,7 @@ const PRIVESC_CFG = {
 };
 const MULTISTEP_CFG = {
   title: 'Çok-Adımlı İş Mantığı', whatChecked: [
-    '**PentAGI ajanı** (yalnız JSON öneri) çok-adımlı akış/fiyat-kupon alanı seçti; backend YALNIZ **GET-gözlem** yaptı.',
+    MULTISTEP_WC_DET,
     'İstemci-değiştirilebilir gizli fiyat/miktar/kupon alanı + ön koşulsuz erişilebilen "onay" adımı gözlemlendi.',
     '⚠️ Yalnız sepete/forma kadar; **ödeme/checkout TAMAMLANMADI** (kod-seviyesi blocklist); hiçbir kaynak tüketilmedi.',
   ],
@@ -150,9 +156,13 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   runs.push({ title: 'Authenticated IDOR (kendi kaynakları)', conf: 'Orta', rep: idorEv ? buildIdorReport(idorEv) : null, inputs: idorEv?.candidates ?? 0, probes: idorEv?.probesSent ?? 0, fc: idorEv?.findings.length ?? 0, enumerableSurface: idorEv?.enumerableSurface ?? null });
   // (FAZ D) SINIRLI/KONTROLLÜ AJAN KATMANI — priv-esc + çok-adımlı iş mantığı (ajan öneri, backend uygular).
   const privEv = await collectPrivilegeEscalationEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Yetki Yükseltme (Privilege Escalation)', conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, PRIVESC_CFG) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0, agentCheck: true, agentUsed: privEv?.agentUsed ?? false, agentStatus: privEv?.agentStatus });
+  // (İş A) advisor AÇIK (analyzed) ise AI-danışma dili; KAPALI (varsayılan) ise deterministik dil.
+  const privCfg = privEv?.agentStatus === 'analyzed' ? { ...PRIVESC_CFG, whatChecked: [PRIVESC_WC_AI, ...PRIVESC_CFG.whatChecked.slice(1)] } : PRIVESC_CFG;
+  runs.push({ title: 'Yetki Yükseltme (Privilege Escalation)', conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, privCfg) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0, agentCheck: true, agentUsed: privEv?.agentUsed ?? false, agentStatus: privEv?.agentStatus });
   const multiEv = await collectMultiStepBusinessLogicEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Çok-Adımlı İş Mantığı', conf: 'Düşük', rep: multiEv ? buildActiveCheckReport(multiEv, MULTISTEP_CFG) : null, inputs: multiEv?.inputsFound ?? 0, probes: multiEv?.probesSent ?? 0, fc: multiEv?.findings.length ?? 0, agentCheck: true, agentUsed: multiEv?.agentUsed ?? false, agentStatus: multiEv?.agentStatus });
+  const multiCfg = multiEv?.agentStatus === 'analyzed' ? { ...MULTISTEP_CFG, whatChecked: [MULTISTEP_WC_AI, ...MULTISTEP_CFG.whatChecked.slice(1)] } : MULTISTEP_CFG;
+  runs.push({ title: 'Çok-Adımlı İş Mantığı', conf: 'Düşük', rep: multiEv ? buildActiveCheckReport(multiEv, multiCfg) : null, inputs: multiEv?.inputsFound ?? 0, probes: multiEv?.probesSent ?? 0, fc: multiEv?.findings.length ?? 0, agentCheck: true, agentUsed: multiEv?.agentUsed ?? false, agentStatus: multiEv?.agentStatus });
+  const advisorActive = privEv?.agentStatus === 'analyzed' || multiEv?.agentStatus === 'analyzed'; // (İş A) tek bayrak
   // (İŞ 3) JWT/token güvenliği + giriş baypası (SQLi göstergesi) — deterministik, gözlemsel.
   const jwtEv = await collectJwtAnalysis(host, session).catch(() => null);
   runs.push({ title: 'JWT / Token Güvenliği', conf: 'Yüksek', rep: jwtEv ? buildActiveCheckReport(jwtEv, JWT_CFG) : null, inputs: jwtEv?.inputsFound ?? 0, probes: jwtEv?.probesSent ?? 0, fc: jwtEv?.findings.length ?? 0 });
@@ -175,7 +185,7 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
     `> **Bu tarama, verilen TEST hesabının oturumuyla KİMLİK-DOĞRULAMALI (login’li) bağlamda yapılmıştır.** ` +
     `${runs.length} authenticated kontrol değerlendirildi; toplam **${totalProbes}** istek. ` +
     (anyFinding ? `En yüksek risk **${worstTitle}** alanında (aşağıda detaylı).` : `Doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`) +
-    `\n>\n> _Şifre hiçbir aşamada ajana/PentAGI’ye gönderilmedi; backend deterministik login yapıp yalnız oturumu (cookie/token) kullandı._`;
+    `\n>\n> _Şifre hiçbir aşamada dışarı/üçüncü bir servise gönderilmedi; backend deterministik login yapıp yalnız oturumu (cookie/token) kullandı._`;
 
   // AJAN kontrolleri için 3 durum NET ayrılır (dürüstlük): 'unavailable' = advisory tamamlanamadı;
   // 'analyzed' = advisory GERÇEKTEN çalıştı (bulgu varsa gösterge, yoksa "AI analiz etti, vektör yok");
@@ -235,7 +245,7 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
       : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — en yüksek risk **${worstTitle}** alanında.`,
   );
   summary.push(
-    `- **Kapsam:** Bu bölüm **kimlik-doğrulamalı (login’li)** bağlamda çalışır; çerez/oturum/yetki, authenticated enjeksiyon/IDOR ve **sınırlı-otonom ajan katmanıyla** yetki yükseltme + çok-adımlı iş mantığı göstergelerini kapsar (ajan yalnız öneri verir; backend güvenli uygular; ödeme/hesap-değişikliği tamamlama YOK). Cross-account (başka kullanıcının verisi) IDOR bu sürümün kapsamı dışındadır.`,
+    `- **Kapsam:** Bu bölüm **kimlik-doğrulamalı (login’li)** bağlamda çalışır; çerez/oturum/yetki, authenticated enjeksiyon/IDOR ve ${advisorActive ? 'isteğe bağlı bir **yapay zekâ danışma katmanı** destekli' : '**deterministik güvenlik kontrolleriyle**'} yetki yükseltme + çok-adımlı iş mantığı göstergelerini kapsar (backend güvenli uygular; ödeme/hesap-değişikliği tamamlama YOK). Cross-account (başka kullanıcının verisi) IDOR bu sürümün kapsamı dışındadır.`,
   );
   runs.forEach((r, i) => {
     summary.push(`- **${r.title}:** ${statusSummary(r, levels[i])}`);
@@ -246,7 +256,7 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
     (worst === 'low'
       ? `${runs.length} authenticated doğrulama kontrolü değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`
       : `Çalıştırılan authenticated kontrollerde en yüksek risk **${worstTitle}** alanında tespit edildi; öncelikli olarak giderilmesi/doğrulanması önerilir.`) +
-    ` Tüm kontroller GET-only/gözlemseldir; state-değiştiren istek gönderilmemiştir. Şifre ajana/PentAGI’ye gönderilmemiş, backend login yapıp yalnız oturumu kullanmıştır.`;
+    ` Tüm kontroller GET-only/gözlemseldir; state-değiştiren istek gönderilmemiştir. Şifre dışarı/üçüncü bir servise gönderilmemiş, backend login yapıp yalnız oturumu kullanmıştır.`;
 
   const sections = runs.map((r) => {
     if (!r.rep) return `## ${r.title}\n\n> Bu kontrol için veri toplanamadı.\n`;
