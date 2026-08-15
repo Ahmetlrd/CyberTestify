@@ -435,12 +435,15 @@ async function sniffVersion(host: string, cms: string): Promise<string | undefin
 // (Grok B3) CMS parmak izi zayifsa (generator/HTML gizlenmis) — BILINEN CMS yollarinin VARLIGINI
 // dene. KIRMIZI CIZGI: yalniz GET + govde imzasi (existence) — LOGIN/POST/parola DENEMESI YOK.
 // Yanit govdesindeki CMS'e ozgu imza ile dogrular (tek basina 200 yetmez -> catch-all yanlis-poziti onler).
+// bodyRe: CMS'e ÖZGÜ, benzersiz imzalar — genel HTML kalıplarından KAÇIN (yanlış-pozitif kırmızı çizgi).
+// (Örn. Magento için "mage/" YASAK: "image/" alt dizesini yakalayıp her siteyi Magento sanır.)
 const CMS_PATH_SIGS: Array<{ cms: string; paths: string[]; bodyRe: RegExp }> = [
-  { cms: 'WordPress', paths: ['/wp-login.php', '/wp-json/'], bodyRe: /wordpress|wp-submit|user_login|"namespace":\s*"wp\/v2"|\/wp-includes\//i },
+  { cms: 'WordPress', paths: ['/wp-login.php', '/wp-json/'], bodyRe: /wordpress|wp-submit|"namespace":\s*"wp\/v2"|\/wp-includes\/|\/wp-content\//i },
   { cms: 'Joomla', paths: ['/administrator/'], bodyRe: /joomla|com_login|mod-login|option=com_/i },
   { cms: 'Drupal', paths: ['/user/login', '/core/CHANGELOG.txt'], bodyRe: /drupal|user-login-form|form_id"\s+value="user_login|Drupal\.settings/i },
-  { cms: 'Magento', paths: ['/admin/', '/downloader/'], bodyRe: /magento|mage\/|Magento_|Magento Downloader/i },
-  { cms: 'TYPO3', paths: ['/typo3/'], bodyRe: /typo3/i },
+  // Magento — YALNIZ benzersiz tokenler (Mage.Cookies / skin/frontend / static/version / Magento_).
+  { cms: 'Magento', paths: ['/downloader/', '/admin/'], bodyRe: /Magento(?:_|Downloader| Commerce|<)|Mage\.Cookies|\/skin\/frontend\/|\/static\/version\d|mage\/requirejs/i },
+  { cms: 'TYPO3', paths: ['/typo3/'], bodyRe: /TYPO3|typo3conf|typo3temp/i },
 ];
 
 async function sniffCmsByPaths(host: string): Promise<{ cms?: string; evidence?: string }> {
