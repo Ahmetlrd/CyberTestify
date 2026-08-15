@@ -36,6 +36,10 @@ export interface ReportPdfOptions {
   // ORNEK raporlar kullanir (statik govdedeki risk severity-parse'a takilmayabilir); GERCEK
   // raporlar bunu ASLA gecmez -> onlarin assessRisk/assessBasit mantigi AYNEN korunur.
   assessOverride?: { level: 'high' | 'medium' | 'low'; sentence?: string } | null;
+  // (ORNEK PDF) Ornek raporlarda HIC tarih gosterme: kapak rozeti, muhur "Tarih:" satiri ve ust
+  // banner "Tarih" alani gizlenir; Rapor No da tarih icermeyen "CT-ÖRNEK-XXXX" formatina doner.
+  // GERCEK raporlar bunu ASLA gecmez -> tarih/rapor-no mantigi aynen korunur.
+  hideDate?: boolean;
 }
 
 const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
@@ -259,12 +263,14 @@ function escapeHtml(s: string): string {
 // ============================================================================
 
 // Deterministik Rapor No + Doğrulama Kodu (aynı rapor -> aynı numara; rastgelelik YOK).
-function reportIdentifiers(hostname: string, createdAt: Date): { reportNo: string; verifyCode: string } {
+function reportIdentifiers(hostname: string, createdAt: Date, hideDate = false): { reportNo: string; verifyCode: string } {
   const y = createdAt.getUTCFullYear();
   const mo = String(createdAt.getUTCMonth() + 1).padStart(2, '0');
   const d = String(createdAt.getUTCDate()).padStart(2, '0');
   const h = createHash('sha256').update(`${hostname}|${createdAt.toISOString()}`).digest('hex').toUpperCase();
-  return { reportNo: `CT-${y}${mo}${d}-${h.slice(0, 4)}`, verifyCode: `${h.slice(4, 8)}-${h.slice(8, 12)}` };
+  // (ORNEK PDF) tarih gizliyse Rapor No da tarih icermez -> "CT-ÖRNEK-XXXX".
+  const reportNo = hideDate ? `CT-ÖRNEK-${h.slice(0, 4)}` : `CT-${y}${mo}${d}-${h.slice(0, 4)}`;
+  return { reportNo, verifyCode: `${h.slice(4, 8)}-${h.slice(8, 12)}` };
 }
 
 export type Sev = 'critical' | 'high' | 'medium' | 'low';
@@ -725,7 +731,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   }
 
   // (PROFESYONEL İSKELET) TÜRETİLEN bölümler — gövde/ton/disclaimer DEĞİŞMEZ.
-  const { reportNo, verifyCode } = reportIdentifiers(meta.hostname, meta.createdAt);
+  const { reportNo, verifyCode } = reportIdentifiers(meta.hostname, meta.createdAt, opts.hideDate);
   // (parsed/isCompliance yukarıda hesaplandı — rozet tutarlılığı için.)
   // (DÜRÜSTLÜK) Hedefe ulaşılamadı/tarama yürütülemedi -> master "Temiz" DEĞİL "İncelenemedi",
   // dağılımdaki 0'lar "temiz" değil "incelenemedi" olarak işaretlenir. (assessBasit rozeti zaten nötr yapıyor.)
@@ -971,14 +977,14 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   <div class="cover">
     <div class="cover-top">${LOGO_SVG}<div class="brand">Cyber<span>Testify</span></div></div>
     <div class="cover-mid">
-      <div class="cover-datebadge">${escapeHtml(dateStr)}</div>
+      ${opts.hideDate ? '' : `<div class="cover-datebadge">${escapeHtml(dateStr)}</div>`}
       <div class="cover-title">${escapeHtml(t.brandTagline)}</div>
       <div class="cover-sub">${escapeHtml(meta.hostname)} &nbsp;·&nbsp; ${escapeHtml(meta.packageName)}</div>
       <div class="cover-seal">
         <div class="seal-title">${escapeHtml(sealTitle)}</div>
         <div class="seal-row">${meta.locale === 'tr' ? 'Rapor No' : 'Report No'}: <strong>${reportNo}</strong></div>
         <div class="seal-row">${meta.locale === 'tr' ? 'Doğrulama Kodu' : 'Verification Code'}: <strong>${verifyCode}</strong></div>
-        <div class="seal-row">${escapeHtml(t.date)}: ${escapeHtml(dateStr)}</div>
+        ${opts.hideDate ? '' : `<div class="seal-row">${escapeHtml(t.date)}: ${escapeHtml(dateStr)}</div>`}
       </div>
     </div>
     <div class="cover-foot">${escapeHtml(notCert)}</div>
@@ -994,7 +1000,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   <div class="meta">
     <div><div class="k">${escapeHtml(t.target)}</div><div class="v">${escapeHtml(meta.hostname)}</div></div>
     <div><div class="k">${escapeHtml(t.pkg)}</div><div class="v">${escapeHtml(meta.packageName)}</div></div>
-    <div><div class="k">${escapeHtml(t.date)}</div><div class="v">${escapeHtml(dateStr)}</div></div>
+    ${opts.hideDate ? '' : `<div><div class="k">${escapeHtml(t.date)}</div><div class="v">${escapeHtml(dateStr)}</div></div>`}
     <div><div class="k">${meta.locale === 'tr' ? 'Rapor No' : 'Report No'}</div><div class="v">${reportNo}</div></div>
   </div>
   <div class="content">${contentInner}</div>
@@ -1041,7 +1047,7 @@ export async function renderReportPdf(
 ): Promise<Buffer> {
   const html = buildHtml(bodyMarkdown, meta, opts);
   const t = L[meta.locale];
-  const { reportNo } = reportIdentifiers(meta.hostname, meta.createdAt);
+  const { reportNo } = reportIdentifiers(meta.hostname, meta.createdAt, opts.hideDate);
   const confidential = meta.locale === 'tr' ? 'Gizli' : 'Confidential';
 
   const browser = await puppeteer.launch({

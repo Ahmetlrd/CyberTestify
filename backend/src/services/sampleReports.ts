@@ -167,6 +167,14 @@ const SAMPLE_RISK: Record<string, { level: 'high' | 'medium' | 'low' }> = {
   full_pentest: { level: 'high' },
 };
 
+// (GERÇEK ÇIKTI ÖRNEKLERİ) İstek paketKey → deterministik motorun GERÇEK taramasından üretilmiş
+// örnek gövde. Dosyalar SAMPLES_DIR/<fileKey>.md + <fileKey>_fix.md. hostname örnek hedeftir.
+// Buraya eklenen her paket, temsili markdown yerine gerçek-rapor formatını gösterir.
+const REAL_SAMPLES: Record<string, { fileKey: string; hostname: string }> = {
+  basit_tarama: { fileKey: 'basit_tarama', hostname: 'testasp.vulnweb.com' },
+  bundle_surface: { fileKey: 'bundle_surface', hostname: 'rest.vulnweb.com' },
+};
+
 const pdfCache = new Map<string, Buffer>();
 
 function sampleKeyFor(packageKey: string): string {
@@ -179,38 +187,56 @@ export async function getSampleReportPdf(packageKey: string): Promise<Buffer> {
   const cached = pdfCache.get(packageKey);
   if (cached) return cached;
 
+  // (GERÇEK ÇIKTI ÖRNEKLERİ) Bu paketlerin örneği, deterministik motorun GERÇEK bir taramadan
+  // ürettiği gövdedir (uydurma değil); müşteri ana sayfada BİREBİR gerçek rapor formatını görür.
+  // Bu yüzden assessOverride VERİLMEZ (reorganize + master tablo + 2.3 Detaylı Bulgular + pozitif
+  // güvence gerçek-rapor yolundan üretilir) ve fix dosyadan okunur. Dosyalar: <key>.md + <key>_fix.md.
+  const real = REAL_SAMPLES[packageKey];
   const bundle = getBundle(packageKey);
-  const sampleKey = bundle ? BUNDLE_SAMPLE[packageKey] ?? DEFAULT_SAMPLE : sampleKeyFor(packageKey);
-  const md = readFileSync(join(SAMPLES_DIR, `${sampleKey}.md`), 'utf-8');
-  const packageName = bundle
-    ? bundle.displayName
-    : getPackageDef(sampleKey as Parameters<typeof getPackageDef>[0]).displayName;
 
-  // (BASİT TARAMA — GERÇEK ÇIKTI) Örnek rapor, deterministik motorun GERÇEK bir taramadan ürettiği
-  // gövdedir (testasp.vulnweb.com); müşteri ana sayfada birebir gerçek rapor formatını görür. Bu yüzden
-  // assessOverride VERİLMEZ: reorganize + 2.3 Detaylı Bulgular + master tablo gerçek-rapor yolundan üretilsin.
-  const isBasitReal = sampleKey === 'basit_tarama';
+  let md: string;
+  let packageName: string;
+  let fixMarkdown: string | null;
+  let assessOverride: { level: 'high' | 'medium' | 'low' } | undefined;
+  let hostname: string;
+  let metaPackageKey: string | undefined;
 
-  // (LANSMAN KAMPANYASI) örnek raporda AI Çözüm Önerileri bölümü AÇIK (temsili içerik). Kapanınca kilitli.
-  const fixMarkdown = config.aiFixFreeCampaign
-    ? isBasitReal
-      ? readFileSync(join(SAMPLES_DIR, 'basit_tarama_fix.md'), 'utf-8')
-      : (SAMPLE_FIX_MD[sampleKey] ?? SAMPLE_FIX_MD[DEFAULT_SAMPLE])
-    : null;
-  // (issue #4) Üst "Genel Değerlendirme" kutusu = GÖVDEDEKİ gerçek risk. Statik örnek gövdesinin
-  // risk ifadesi severity-parse'a takılmayabildiğinden her örneğe AÇIK seviye veriyoruz (tutarlılık).
-  // Basit Tarama gövdesi gerçek çıktı olduğundan risk zaten parse edilir -> override YOK.
-  const assessOverride = isBasitReal ? undefined : (SAMPLE_RISK[sampleKey] ?? SAMPLE_RISK[DEFAULT_SAMPLE]);
+  if (real) {
+    md = readFileSync(join(SAMPLES_DIR, `${real.fileKey}.md`), 'utf-8');
+    packageName = bundle
+      ? bundle.displayName
+      : getPackageDef(real.fileKey as Parameters<typeof getPackageDef>[0]).displayName;
+    fixMarkdown = config.aiFixFreeCampaign
+      ? readFileSync(join(SAMPLES_DIR, `${real.fileKey}_fix.md`), 'utf-8')
+      : null;
+    assessOverride = undefined; // gerçek gövde -> risk zaten parse edilir
+    hostname = real.hostname;
+    metaPackageKey = packageKey;
+  } else {
+    const sampleKey = bundle ? BUNDLE_SAMPLE[packageKey] ?? DEFAULT_SAMPLE : sampleKeyFor(packageKey);
+    md = readFileSync(join(SAMPLES_DIR, `${sampleKey}.md`), 'utf-8');
+    packageName = bundle
+      ? bundle.displayName
+      : getPackageDef(sampleKey as Parameters<typeof getPackageDef>[0]).displayName;
+    // (LANSMAN KAMPANYASI) örnek raporda AI Çözüm Önerileri bölümü AÇIK (temsili içerik). Kapanınca kilitli.
+    fixMarkdown = config.aiFixFreeCampaign ? (SAMPLE_FIX_MD[sampleKey] ?? SAMPLE_FIX_MD[DEFAULT_SAMPLE]) : null;
+    // (issue #4) Üst "Genel Değerlendirme" kutusu = GÖVDEDEKİ gerçek risk. Statik örnek gövdesinin
+    // risk ifadesi severity-parse'a takılmayabildiğinden her örneğe AÇIK seviye veriyoruz (tutarlılık).
+    assessOverride = SAMPLE_RISK[sampleKey] ?? SAMPLE_RISK[DEFAULT_SAMPLE];
+    hostname = 'ornek-site.com';
+    metaPackageKey = undefined;
+  }
+
   const pdf = await renderReportPdf(
     md,
     {
-      hostname: isBasitReal ? 'testasp.vulnweb.com' : 'ornek-site.com',
+      hostname,
       packageName,
-      createdAt: new Date(isBasitReal ? '2026-08-15T10:00:00.000Z' : '2026-01-15T10:00:00.000Z'), // sabit ornek tarihi (stabil cikti)
+      createdAt: new Date('2026-08-15T10:00:00.000Z'), // sabit ornek zamani (stabil cikti; PDF'te tarih GOSTERILMEZ)
       locale: 'tr',
-      packageKey: isBasitReal ? 'basit_tarama' : undefined,
+      packageKey: metaPackageKey,
     },
-    { fixMarkdown, assessOverride },
+    { fixMarkdown, assessOverride, hideDate: true }, // (ORNEK PDF) tarih HIC gosterilmez
   );
   pdfCache.set(packageKey, pdf);
   return pdf;
