@@ -131,7 +131,7 @@ function toAuthenticatedContext(md: string): string {
     .replace(/kimlik doğrulaması olmadan/g, 'kimlik-doğrulamalı oturumla');
 }
 
-type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable'; enumerableSurface?: { param: string; count: number } | null };
+type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
 export async function generateAuthenticatedReport(host: string, session: AuthSession): Promise<{ findings: string; fixText: string } | null> {
@@ -186,6 +186,8 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
     if (r.fc > 0 && lv === 'high') return '⚠ Zafiyet göstergesi';
     if (r.fc > 0) return '⚠ Sınırlı gösterge';
     if (r.agentCheck) {
+      // (Deney) advisory VARSAYILAN KAPALI -> bu kontrol deterministik çalışır; sonucu deterministik durumdan türet.
+      if (r.agentStatus === 'disabled') return r.inputs === 0 ? 'İncelenemedi — güvenli test edilebilir yüzey yok' : '✓ Zafiyet kanıtı yok';
       if (r.agentStatus === 'unavailable' || r.agentUsed === false) return 'Ajan analizi tamamlanamadı (deterministik göstergeyle sınırlı)';
       if (r.agentStatus === 'analyzed') return '✓ AI advisory analiz etti — vektör yok';
       return 'Uygulanabilir giriş noktası yok (advisory çalıştırılmadı)'; // no_candidate
@@ -199,6 +201,7 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   const confCell = (r: Run): string => {
     if (!r.rep) return 'Kapsam dışı';
     if (r.agentCheck) {
+      if (r.agentStatus === 'disabled') return r.inputs > 0 || r.fc > 0 ? r.conf : 'Kapsam dışı';
       if (r.agentStatus === 'unavailable' || r.agentUsed === false) return 'Sınırlı';
       if (r.agentStatus === 'analyzed') return r.conf; // AI gerçekten çalıştı -> güven göster
       return 'Kapsam dışı'; // no_candidate
@@ -213,6 +216,7 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
     const hl = headlineOf(r.rep.findings);
     if (r.fc > 0) return `${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`;                       // bulgu var -> seviye + başlık
     if (r.agentCheck) {
+      if (r.agentStatus === 'disabled') return r.inputs === 0 ? 'İncelenemedi — güvenle test edilebilir yüzey bulunamadı (deterministik kontrol)' : `${RISK_WORD[lv]} — deterministik kontrol, göstergesi yok`;
       if (r.agentStatus === 'unavailable' || r.agentUsed === false) return 'Ajan analizi tamamlanamadı — deterministik göstergeyle sınırlı';
       if (r.agentStatus === 'analyzed') return 'Yapay zekâ destekli advisory analiz etti — uygulanabilir vektör tespit edilmedi';
       return 'Kapsam dışı — pasif keşifle uygulanabilir giriş noktası yok (advisory çalıştırılmadı)'; // no_candidate

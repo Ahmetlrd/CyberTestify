@@ -44,6 +44,15 @@ function absUrl(host: string, raw: string): string | null {
   try { const u = raw.startsWith('http') ? new URL(raw) : new URL(raw, `${cachedOriginUrl(host)}/`); return u.hostname.toLowerCase() === host.toLowerCase() ? u.toString() : null; } catch { return null; }
 }
 
+export type AgentStatus = 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled';
+// (PentAGI/advisory DENEY) Authenticated advisory VARSAYILAN KAPALI. AUTH_ADVISOR_HOSTS env'i virgülle
+// ayrılmış host allowlist'i; boş/tanımsız -> HER hedefte KAPALI (yalnız deterministik). Ölçüm: authenticated
+// senaryoda advisory 0 yeni doğrulanmış kanıt üretti (bkz deney) -> kapalı bırakıldı (compliance: uzak LLM'e
+// authenticated yüzey verisi göndermeme + maliyet/gürültü yok). Belirli bir hedefte açmak için env'e ekle.
+function authAdvisorAllowed(host: string): boolean {
+  const allow = (process.env.AUTH_ADVISOR_HOSTS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return allow.includes(host.toLowerCase());
+}
 // Ajan önerileri host başına TEK createFlow ile alınır (iki kontrol PAYLAŞIR). Cache.
 const AUTH_AGENT_CACHE = new Map<string, { at: number; p: Promise<AuthAgentSuggestion[] | null> }>();
 function getScenarios(host: string, surf: Surface): Promise<AuthAgentSuggestion[] | null> {
@@ -63,7 +72,7 @@ function candidateCount(surf: Surface): number {
   return surf.inputs.length + (surf.massAssignForm ? 1 : 0) + surf.uploadForms.length + surf.domForms.length + surf.apiWrites.length + surf.apiReads.length;
 }
 // advisory'nin gerçekten çalışıp çalışmadığını 3 duruma ayır (rapor bunu net gösterir).
-function deriveAgentStatus(surf: Surface, scenarios: AuthAgentSuggestion[] | null): 'analyzed' | 'no_candidate' | 'unavailable' {
+function deriveAgentStatus(surf: Surface, scenarios: AuthAgentSuggestion[] | null): AgentStatus {
   if (scenarios === null) return 'unavailable';          // LLM çağrıldı ama tamamlanamadı (anahtar/timeout/hata)
   if (candidateCount(surf) === 0) return 'no_candidate'; // aday yoktu -> LLM hiç çağrılmadı (kısa devre [])
   return 'analyzed';                                      // aday vardı -> LLM gerçekten çağrıldı
@@ -120,8 +129,9 @@ export async function collectPrivilegeEscalationEvidence(host: string, session: 
   for (const dom of surf.domForms) { const f = domFormPrivObservation(dom); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) { findings.push(f); detProbed = true; } }
 
   // (YARDIMCI/İKİNCİL) advisory — ek aday seçerse deterministik güvenli probe'dan geçirilir. Kanıt DEĞİL.
-  const scenarios = await getScenarios(host, surf).catch(() => null);
-  const agentStatus = deriveAgentStatus(surf, scenarios);
+  const advisorOn = authAdvisorAllowed(host); // (deney) advisory VARSAYILAN KAPALI — yalnız izin verilen hedeflerde
+  const scenarios = advisorOn ? await getScenarios(host, surf).catch(() => null) : null;
+  const agentStatus: AgentStatus = advisorOn ? deriveAgentStatus(surf, scenarios) : 'disabled';
   console.log(`[advisory] priv-esc host=${host} candidates=${candidateCount(surf)} agentStatus=${agentStatus} scenarios=${scenarios === null ? 'null' : scenarios.length}`);
   if (scenarios !== null) {
     for (const s of scenarios.filter((x) => x.check === 'privilege_escalation').slice(0, 3)) {
@@ -182,8 +192,9 @@ export async function collectMultiStepBusinessLogicEvidence(host: string, sessio
   for (const m of html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)) { const a = absUrl(host, m[1].replace(/&amp;/g, '&')); if (a && STEP_SKIP_RE.test(a)) stepLinks.add(a); }
   for (const e of surf.idEndpoints) { if (STEP_SKIP_RE.test(e.url)) stepLinks.add(e.url); }
 
-  const scenarios = await getScenarios(host, surf).catch(() => null);
-  const agentStatus = deriveAgentStatus(surf, scenarios);
+  const advisorOn = authAdvisorAllowed(host); // (deney) advisory VARSAYILAN KAPALI — yalnız izin verilen hedeflerde
+  const scenarios = advisorOn ? await getScenarios(host, surf).catch(() => null) : null;
+  const agentStatus: AgentStatus = advisorOn ? deriveAgentStatus(surf, scenarios) : 'disabled';
   console.log(`[advisory] multistep host=${host} candidates=${candidateCount(surf)} agentStatus=${agentStatus} scenarios=${scenarios === null ? 'null' : scenarios.length}`);
   const agentPicks: string[] = [];
   if (scenarios !== null) {
@@ -196,6 +207,8 @@ export async function collectMultiStepBusinessLogicEvidence(host: string, sessio
     } else { // no_candidate
       notes.push('Bu hedefte pasif keşifle gözlemlenebilir bir çok-adımlı iş-mantığı giriş noktası (istemci-tarafı fiyat/miktar/kupon alanı, ön-koşulsuz "onay" adımı) bulunamadığından advisory çalıştırılmadı. İş mantığı zafiyetleri bağlama özeldir; kesin sonuç manuel test gerektirir.');
     }
+  } else if (agentStatus === 'disabled') {
+    notes.push('Bu kontrol **deterministik olarak** çalıştırıldı (gözlemsel adım-atlama + istemci-değiştirilebilir fiyat/miktar/kupon alanı). AI advisory katmanı **varsayılan olarak devre dışıdır** (deneyde ek doğrulanmış kanıt üretmediği için).');
   } else {
     notes.push('AI advisory (LLM) analizi tamamlanamadı (anahtar yok/timeout/hata) — bu kontrol **deterministik göstergeyle sınırlıdır** (gözlemsel adım-atlama/fiyat alanı, advisory muhakemesi olmadan).');
   }
