@@ -64,7 +64,8 @@ export default function OrderPage() {
   const [credShare, setCredShare] = useState(false);
   const [testAcct, setTestAcct] = useState(false);
   const [elevRisk, setElevRisk] = useState(false);
-  const authConsentsOk = credShare && testAcct && elevRisk;
+  // authConsentsOk aşağıda (selUsesForeignAi tanımlandıktan SONRA) hesaplanır — credShare (kimlik
+  // bilgisi yurt dışı AI aktarımı rızası) YALNIZ yurt dışı AI kullanılıyorsa zorunludur.
 
   // Sahiplik beyani (TCK 243 — guvenlik) ayri; iyzico'nun bekledigi 2 ODEME-onay
   // checkbox'i: (1) On Bilgilendirme+Mesafeli+Iptal/Iade, (2) KVKK/Gizlilik.
@@ -145,7 +146,6 @@ export default function OrderPage() {
   // (#4) Uluslararasi odeme (Paddle) henuz canli degil — TR disi bolgede nazik "yakinda".
   const intlComingSoon = region !== 'tr';
   const needsAuthCreds = selected === 'authenticated_scan';
-  const activeConsentOk = (!isActiveLight || atRisk) && (!needsAuthCreds || (authUser.trim() && authPass && authConsentsOk));
 
   // (İŞ 3) Onay GRUPLAMA — UI'da ≤3 checkbox. Sunucu-tarafı zorunluluk DEĞİŞMEZ: her grup, altındaki
   // TÜM bireysel onay state'lerini birlikte set eder (ownership/contract/kvkk/atRisk/testAcct/elevRisk/
@@ -155,6 +155,11 @@ export default function OrderPage() {
   const needsAuthSel = needsAuthCreds || !!selectedBundle?.members?.some((m: any) => m.key === 'authenticated_scan');
   // (KVKK m.9) Seçili paket/bundle yurt dışı AI'ya veri gönderiyor mu? Sadece o zaman m.9 açık rıza gerekir.
   const selUsesForeignAi = !!(selectedBundle ? selectedBundle.crossBorderAi : selectedPkg?.crossBorderAi);
+  // (BUG FIX) Kimlik-doğrulamalı testte 2 zorunlu beyan: TEST hesabı + yüksek-risk. credShare (kimlik
+  // bilgisi YURT DIŞI AI aktarımı rızası) yalnız yurt dışı AI KULLANILIYORSA gerekir — advisory kapalıyken
+  // o kutu hiç gösterilmez, dolayısıyla credShare hiç set edilemez; onu zorunlu tutmak butonu kilitliyordu.
+  const authConsentsOk = testAcct && elevRisk && (!selUsesForeignAi || credShare);
+  const activeConsentOk = (!isActiveLight || atRisk) && (!needsAuthCreds || (authUser.trim() && authPass && authConsentsOk));
   const allConsents =
     authConsent && contractConsent && withdrawalConsent && kvkkConsent && (!selUsesForeignAi || crossBorderConsent);
   // Grup 1 — Genel kabul (ownership + mesafeli/ön-bilgi + KVKK aydınlatma + [aktif-test riski] + [test hesabı beyanı]).
@@ -259,7 +264,7 @@ export default function OrderPage() {
     if (isAL && !atRisk) return setError('Aktif test için risk kabul kutusunu işaretlemelisiniz.');
     const needsAuth = selectedBundle.members?.some((m: any) => m.key === 'authenticated_scan');
     if (needsAuth && (!authUser.trim() || !authPass)) return setError('Bu paket için test hesabı bilgileri gerekli.');
-    if (needsAuth && !authConsentsOk) return setError('Kimlik-doğrulamalı test için 3 ek onayı da işaretlemelisiniz.');
+    if (needsAuth && !authConsentsOk) return setError('Kimlik-doğrulamalı test için gerekli ek onayları (test hesabı beyanı ve yüksek-risk kabulü) işaretlemelisiniz.');
     if (selectedBundle.selectable && bundleModules.length === 0) return setError('En az bir modül seçin.');
     if (showLowScopeWarning && !lowScopeAck) return setError('Devam etmek için ön kontrol uyarısını onaylamalısınız.');
     if (showUnreachableWarning && !unreachableAck) return setError('Hedefe erişilemiyor — devam etmek için uyarıyı onaylamalısınız.');
