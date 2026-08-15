@@ -131,7 +131,7 @@ function toAuthenticatedContext(md: string): string {
     .replace(/kimlik doğrulaması olmadan/g, 'kimlik-doğrulamalı oturumla');
 }
 
-type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' };
+type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
 export async function generateAuthenticatedReport(host: string, session: AuthSession): Promise<{ findings: string; fixText: string } | null> {
@@ -147,7 +147,7 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   const injEv = await collectInjectionEvidence(host, session).catch(() => null);
   runs.push({ title: 'Authenticated Enjeksiyon (SQLi/XSS)', conf: 'Yüksek', rep: injEv ? buildInjectionReport(injEv) : null, inputs: injEv?.inputsFound ?? 0, probes: injEv?.probesSent ?? 0, fc: injEv?.findings.length ?? 0 });
   const idorEv = await collectIdorEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Authenticated IDOR (kendi kaynakları)', conf: 'Orta', rep: idorEv ? buildIdorReport(idorEv) : null, inputs: idorEv?.candidates ?? 0, probes: idorEv?.probesSent ?? 0, fc: idorEv?.findings.length ?? 0 });
+  runs.push({ title: 'Authenticated IDOR (kendi kaynakları)', conf: 'Orta', rep: idorEv ? buildIdorReport(idorEv) : null, inputs: idorEv?.candidates ?? 0, probes: idorEv?.probesSent ?? 0, fc: idorEv?.findings.length ?? 0, enumerableSurface: idorEv?.enumerableSurface ?? null });
   // (FAZ D) SINIRLI/KONTROLLÜ AJAN KATMANI — priv-esc + çok-adımlı iş mantığı (ajan öneri, backend uygular).
   const privEv = await collectPrivilegeEscalationEvidence(host, session).catch(() => null);
   runs.push({ title: 'Yetki Yükseltme (Privilege Escalation)', conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, PRIVESC_CFG) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0, agentCheck: true, agentUsed: privEv?.agentUsed ?? false, agentStatus: privEv?.agentStatus });
@@ -190,6 +190,9 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
       if (r.agentStatus === 'analyzed') return '✓ AI advisory analiz etti — vektör yok';
       return 'Uygulanabilir giriş noktası yok (advisory çalıştırılmadı)'; // no_candidate
     }
+    // (İş 2 tutarlılık) Numaralandırılabilir yüzey BULUNDU ama cross-account testi kapsam dışı olduğundan
+    // komşu-ID probu BİLİNÇLİ çalıştırılmadı -> "temiz" DEĞİL; detay bölümüyle tutarlı ayrı durum.
+    if (r.enumerableSurface && r.fc === 0) return '⚠ Yüzey bulundu — cross-account testi kapsam dışı';
     if (r.inputs === 0) return 'Uygulanabilir giriş noktası yok (Kapsam dışı)';
     return '✓ Zafiyet kanıtı yok';
   };
@@ -200,6 +203,7 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
       if (r.agentStatus === 'analyzed') return r.conf; // AI gerçekten çalıştı -> güven göster
       return 'Kapsam dışı'; // no_candidate
     }
+    if (r.enumerableSurface && r.fc === 0) return 'Kapsam dışı'; // yüzey var ama test çalıştırılmadı -> güven yok
     return r.inputs > 0 ? r.conf : 'Kapsam dışı';
   };
   // (blocker fix) YÖNETİCİ ÖZETİ satırı, KONTROL ÖZETİ tablosuyla AYNI kaynaktan/mantıktan türer —
@@ -213,6 +217,7 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
       if (r.agentStatus === 'analyzed') return 'Yapay zekâ destekli advisory analiz etti — uygulanabilir vektör tespit edilmedi';
       return 'Kapsam dışı — pasif keşifle uygulanabilir giriş noktası yok (advisory çalıştırılmadı)'; // no_candidate
     }
+    if (r.enumerableSurface && r.fc === 0) return `Numaralandırılabilir yüzey bulundu (${r.enumerableSurface.count} değer) — kendi kaynağına erişim yetkili; cross-account IDOR kapsam dışı (komşu-ID bilinçli çalıştırılmadı)`;
     if (r.inputs === 0) return 'Kapsam dışı — uygulanabilir giriş noktası yok';
     return `${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`;                                      // temiz çalıştı -> seviye + başlık
   };

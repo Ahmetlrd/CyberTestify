@@ -1101,7 +1101,7 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
 // idor_verify — kimlik-dogrulamasiz numaralandirilabilir kaynak (sinirli kapsam)
 // ======================================================================================
 export type IdorFinding = { endpoint: string; idParam: string; observation: string; differentResource: boolean; severity: 'high' | 'medium' | 'low' };
-export type IdorEvidence = { ok: boolean; pagesScanned: number; candidates: number; endpointsTested: number; probesSent: number; findings: IdorFinding[]; stopped: string | null; notes: string[] };
+export type IdorEvidence = { ok: boolean; pagesScanned: number; candidates: number; endpointsTested: number; probesSent: number; findings: IdorFinding[]; stopped: string | null; notes: string[]; enumerableSurface?: { param: string; count: number } | null };
 const IDOR_MAX = 30; // (İş 2) keşfedilen TÜM sayısal ID adayları sistematik test edilsin (22->30)
 // (İş B.2) IDOR yalnız strict discoverIdEndpoints'e değil, KEŞFEDİLEN TÜM id-parametreli GET giriş
 // noktalarına genişletilir. id-benzeri parametre adları (sayısal değer şart değil — yoksa 1 varsayılır).
@@ -1344,7 +1344,9 @@ export async function collectIdorEvidence(host: string, session?: AuthSession): 
     notes.push(`Taranan ${surf.pagesScanned} benzersiz sayfada sayısal/tahmin-edilebilir ID içeren bir uç nokta (ör. \`?id=123\`, \`/user/45\`) veya sıralı ID türetilebilecek koleksiyon ucu bulunamadı.` + spaHint(surf));
   }
   const reportedCandidates = totalCandidates + enumSel.length; // yüzey bulunduysa "giriş noktası yok" DEME
-  return { ok: true, pagesScanned: surf.pagesScanned, candidates: reportedCandidates, endpointsTested: tested, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
+  // (İş 2 tutarlılık) Rapor, "yüzey bulundu ama cross-account kapsam dışı" durumunu "temiz" ile KARIŞTIRMASIN.
+  const enumerableSurface = enumSel.length ? { param: enumSel[0].param, count: enumSel[0].count } : null;
+  return { ok: true, pagesScanned: surf.pagesScanned, candidates: reportedCandidates, endpointsTested: tested, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, enumerableSurface };
 }
 
 // ======================================================================================
