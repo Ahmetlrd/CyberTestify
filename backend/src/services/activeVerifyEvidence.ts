@@ -238,6 +238,10 @@ const AUTH_SEED_PATHS = [
   '/myaccount', '/my-account', '/profile', '/user/profile', '/settings', '/overview', '/summary',
   '/bank/showAccount', '/bank/transfer.aspx', '/bank/transaction', '/transactions', '/history', '/orders',
 ];
+// (KRİTİK — authenticated crawl güvenilirliği) LOGOUT/SIGN-OFF linklerine ASLA gidilmez: ziyaret edilirse
+// sunucu-taraflı oturum (JSESSIONID) GEÇERSİZLEŞİR ve crawl'ın geri kalanı + sonraki tüm authenticated
+// kontroller unauth'a düşerdi (FLAKY sığ rapor kök nedeni). "login" ile KARIŞMAZ (out/off şartı var).
+const LOGOUT_LINK_RE = /(log-?out|sign-?out|sign-?off|log-?off|logoff|signout|signoff|deauth|revoke.?session|oturumu?[-_]?kapat|çıkış[-_]?yap|cikis[-_]?yap|\/logout\b|\/signout\b)/i;
 // Yakalanan XHR/fetch trafiginde gurultu (socket/analytics/i18n) + degersiz cache-buster param'lar.
 const API_NOISE_PATH_RE = /(\/socket\.io\/|\/sockjs|__webpack|hot-update|\/assets\/|\/i18n\/|analytics|gtag|\/collect\b|\/rum\b|\/beacon\b)/i;
 const API_NOISE_PARAM_RE = /^(_|t|ts|v|ver|cb|cache|rand|nonce|sid|eio|transport|timestamp|__.*|hash|token|jwt|key)$/i;
@@ -435,8 +439,10 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
     const apiReqs: Array<{ method: string; url: string; ctype: string }> = [];
 
     // Tek sayfayi render edip render-edilmis HTML'i dondur. HARD-GUARD: yalniz ayni host, ic-ag ASLA.
+    // (KRİTİK) Oturum varken LOGOUT linkine ASLA gidilmez -> aksi halde JSESSIONID ölür, crawl+sonraki
+    // authenticated kontroller unauth'a düşer (flaky sığ rapor kök nedeni).
     const renderOne = async (url: string): Promise<string | null> => {
-      try { const u = new URL(url); if (u.hostname.toLowerCase() !== host.toLowerCase() || isInternalHost(u.hostname)) return null; } catch { return null; }
+      try { const u = new URL(url); if (u.hostname.toLowerCase() !== host.toLowerCase() || isInternalHost(u.hostname)) return null; if (session && LOGOUT_LINK_RE.test(u.pathname + u.search)) return null; } catch { return null; }
       const page = await browser!.newPage();
       try {
         await page.setUserAgent('CyberTestify-ActiveVerify/1.0');
@@ -535,7 +541,7 @@ async function crawlHeadless(host: string, session?: AuthSession): Promise<Surfa
         for (const m of html.matchAll(/href\s*=\s*["']([^"'#]+)["']/gi)) {
           const abs = absUrl(m[1].replace(/&amp;/g, '&'), host);
           if (!abs) continue;
-          try { const u = new URL(abs); if (CRAWL_ASSET_RE.test(u.pathname)) continue; const norm = `${u.origin}${u.pathname}${u.search}`; if (!seenUrl.has(norm) && !targets.includes(norm)) targets.push(norm); } catch { /* atla */ }
+          try { const u = new URL(abs); if (CRAWL_ASSET_RE.test(u.pathname)) continue; if (LOGOUT_LINK_RE.test(u.pathname + u.search)) continue; /* oturumu öldürme */ const norm = `${u.origin}${u.pathname}${u.search}`; if (!seenUrl.has(norm) && !targets.includes(norm)) targets.push(norm); } catch { /* atla */ }
           if (targets.length >= hardCap) break;
         }
       }
