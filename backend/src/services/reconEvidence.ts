@@ -93,6 +93,17 @@ const DANGLING_SIGS: Array<{ service: string; suffixes: string[]; fp: string[] }
   { service: 'Unbounce', suffixes: ['unbouncepages.com'], fp: ['The requested URL was not found on this server'] },
   { service: 'Cargo', suffixes: ['cargocollective.com'], fp: ['404 Not Found'] },
   { service: 'Help Scout', suffixes: ['helpscoutdocs.com'], fp: ['No settings were found for this company'] },
+  // --- ek servisler (Grok geliştirmesi) — can-i-take-over-xyz'den derlenmiş, gerçek "yok" imzalarıyla ---
+  { service: 'Read the Docs', suffixes: ['readthedocs.io', 'readthedocs.org'], fp: ['unknown to Read the Docs', "The page you're looking for could not be found"] },
+  { service: 'WP Engine', suffixes: ['wpengine.com'], fp: ["The site you were looking for couldn't be found"] },
+  { service: 'Strikingly', suffixes: ['s.strikinglydns.com', 'strikingly.com'], fp: ["But if you're looking to build your own website", 'page not found'] },
+  { service: 'Acquia', suffixes: ['acquia-sites.com', 'acsitefactory.com'], fp: ['The site you are looking for could not be found', 'Web Site Not Found'] },
+  { service: 'UserVoice', suffixes: ['uservoice.com'], fp: ['This UserVoice subdomain is currently available'] },
+  { service: 'Campaign Monitor', suffixes: ['createsend.com'], fp: ['Double check the URL', 'Trying to access your account?'] },
+  { service: 'Intercom', suffixes: ['custom.intercom.help'], fp: ['This page is reserved for artistic dogs', "Uh oh. That page doesn't exist"] },
+  { service: 'Tilda', suffixes: ['tilda.ws'], fp: ['Please renew your subscription'] },
+  { service: 'Webflow', suffixes: ['proxy-ssl.webflow.com', 'proxy.webflow.com'], fp: ["The page you are looking for doesn't exist or has been moved"] },
+  { service: 'Wix', suffixes: ['wixdns.net'], fp: ['Error ConnectYourDomain occurred'] },
 ];
 
 export type DanglingHit = { sub: string; cname: string; service: string; confidence: 'confirmed' | 'suspected'; note: string };
@@ -182,9 +193,10 @@ export async function collectSubdomains(host: string): Promise<SubEvidence> {
     const targetNx = aRec?.status === 3; // NXDOMAIN
     const page = await safeGet(`https://${sub}/`);
     const body = page.text;
-    const fpHit = svc.fp.some((f) => body.includes(f));
-    if (fpHit) {
-      dangling.push({ sub, cname, service: svc.service, confidence: 'confirmed', note: `Servis "kayıt yok" imzası yanıt gövdesinde bulundu (${svc.service}).` });
+    const matchedFp = svc.fp.find((f) => body.includes(f));
+    if (matchedFp) {
+      // (Grok B1) CNAME hedefi + HTTP yanıt imzası KOMBİNASYONU — hangi imzayla eşleştiği kayda geçer.
+      dangling.push({ sub, cname, service: svc.service, confidence: 'confirmed', note: `CNAME "${cname}" (${svc.service}) + yanıt gövdesinde devralma imzası eşleşti: "${matchedFp}".` });
     } else if (targetNx) {
       dangling.push({ sub, cname, service: svc.service, confidence: 'suspected', note: `CNAME hedefi (${cname}) çözümlenemiyor (NXDOMAIN); servis kaydı boşta olabilir — manuel doğrulama önerilir.` });
     } else {
@@ -218,8 +230,10 @@ export async function collectSubdomains(host: string): Promise<SubEvidence> {
 // ======================================================================================
 const API_PATHS = ['/openapi.json', '/swagger.json', '/v2/api-docs', '/v3/api-docs', '/api-docs', '/api/docs', '/api/v1/docs', '/swagger-ui.html', '/swagger/index.html', '/redoc', '/.well-known/openapi.json', '/graphql'];
 const SENSITIVE_RE = /(admin|internal|debug|token|secret|password|passwd|credential|export|dump|backup|user|account|payment|invoice|upload|delete|drop|config|env|key)/i;
+// (Grok B2) admin/debug/internal isimli uc noktalar AYRI isaretlenir (genel "hassas"tan daha yuksek dikkat).
+const ADMIN_RE = /(admin|debug|internal|sysadmin|superuser|root|manage|console|actuator)/i;
 
-export type ApiSpec = { path: string; title?: string; version?: string; endpointCount: number; sensitive: Array<{ method: string; path: string; noAuth: boolean }>; hasGlobalAuth: boolean };
+export type ApiSpec = { path: string; title?: string; version?: string; endpointCount: number; sensitive: Array<{ method: string; path: string; noAuth: boolean; adminLike: boolean }>; hasGlobalAuth: boolean };
 export type ApiEvidence = {
   ok: boolean;
   tried: Array<{ path: string; status: number }>; // denenen TUM yollar + HTTP durumu (rapor tam-liste tablosu)
@@ -273,8 +287,9 @@ function parseOpenApi(path: string, json: unknown): ApiSpec | null {
       endpointCount++;
       const opSec = op && typeof op === 'object' ? (op as any).security : undefined;
       const opHasAuth = Array.isArray(opSec) ? opSec.length > 0 : hasGlobalAuth;
-      if (SENSITIVE_RE.test(p) || SENSITIVE_RE.test(String((op as any)?.operationId ?? ''))) {
-        sensitive.push({ method: m.toUpperCase(), path: p, noAuth: !opHasAuth });
+      const opId = String((op as any)?.operationId ?? '');
+      if (SENSITIVE_RE.test(p) || SENSITIVE_RE.test(opId)) {
+        sensitive.push({ method: m.toUpperCase(), path: p, noAuth: !opHasAuth, adminLike: ADMIN_RE.test(p) || ADMIN_RE.test(opId) });
       }
     }
   }
@@ -417,6 +432,30 @@ async function sniffVersion(host: string, cms: string): Promise<string | undefin
   return undefined;
 }
 
+// (Grok B3) CMS parmak izi zayifsa (generator/HTML gizlenmis) — BILINEN CMS yollarinin VARLIGINI
+// dene. KIRMIZI CIZGI: yalniz GET + govde imzasi (existence) — LOGIN/POST/parola DENEMESI YOK.
+// Yanit govdesindeki CMS'e ozgu imza ile dogrular (tek basina 200 yetmez -> catch-all yanlis-poziti onler).
+const CMS_PATH_SIGS: Array<{ cms: string; paths: string[]; bodyRe: RegExp }> = [
+  { cms: 'WordPress', paths: ['/wp-login.php', '/wp-json/'], bodyRe: /wordpress|wp-submit|user_login|"namespace":\s*"wp\/v2"|\/wp-includes\//i },
+  { cms: 'Joomla', paths: ['/administrator/'], bodyRe: /joomla|com_login|mod-login|option=com_/i },
+  { cms: 'Drupal', paths: ['/user/login', '/core/CHANGELOG.txt'], bodyRe: /drupal|user-login-form|form_id"\s+value="user_login|Drupal\.settings/i },
+  { cms: 'Magento', paths: ['/admin/', '/downloader/'], bodyRe: /magento|mage\/|Magento_|Magento Downloader/i },
+  { cms: 'TYPO3', paths: ['/typo3/'], bodyRe: /typo3/i },
+];
+
+async function sniffCmsByPaths(host: string): Promise<{ cms?: string; evidence?: string }> {
+  for (const sig of CMS_PATH_SIGS) {
+    for (const p of sig.paths) {
+      const r = await safeGet(`${cachedOriginUrl(host)}${p}`);
+      // 200/401/403 (mevcut ama korumali da olabilir) + govde CMS imzasi -> VARLIK dogrulandi.
+      if ((r.status === 200 || r.status === 401 || r.status === 403) && sig.bodyRe.test(r.text)) {
+        return { cms: sig.cms, evidence: `${sig.cms}'e özgü yol mevcut ve içerik imzası eşleşti: \`${p}\` (yalnız varlık kontrolü — giriş/parola denemesi yapılmadı)` };
+      }
+    }
+  }
+  return {};
+}
+
 // Kaba surum karsilastirma (RC/beta ekleri sayisal parcaya indirgenir).
 function vParts(v: string): number[] { return v.split(/[^0-9]+/).filter(Boolean).map(Number); }
 function vCmp(a: string, b: string): number {
@@ -490,8 +529,17 @@ async function nvdLookup(cpeProdEnc: string, version: string): Promise<{ ok: boo
 export async function collectCms(host: string, http?: HttpEvidence): Promise<CmsEvidence> {
   const page = http ?? (await collectHttp(host));
   if (!page.ok) return { ok: false, evidence: [], extras: [], cveOk: false, cveTotal: 0, cves: [] };
-  const { cms, extras, evidence } = detectCms(page);
-  let version = detectCms(page).version;
+  const det = detectCms(page);
+  let cms = det.cms;
+  let version = det.version;
+  const extras = det.extras;
+  const evidence = [...det.evidence];
+  // (Grok B3) Ana sayfa/HTML parmak izi CMS vermediyse: bilinen CMS yollarının VARLIĞIYLA doğrula
+  // (yalnız GET/existence — login denemesi YOK). Generator gizlenmiş kurulumları yakalar.
+  if (!cms) {
+    const byPath = await sniffCmsByPaths(host).catch(() => ({} as { cms?: string; evidence?: string }));
+    if (byPath.cms) { cms = byPath.cms; if (byPath.evidence) evidence.push(byPath.evidence); }
+  }
   if (cms && !version) version = await sniffVersion(host, cms).catch(() => undefined);
 
   let cveOk = false; let cveTotal = 0; let cves: CveItem[] = []; let cpeQueried: string | undefined;

@@ -300,14 +300,20 @@ function buildApiArea(ev: ApiEvidence): Area {
     lines.push(`- Genel kimlik doğrulama tanımı: ${spec.hasGlobalAuth ? 'var (global `security`)' : '⚠️ şemada global `security` tanımı yok'}`);
     lines.push('');
     if (sensitive.length) {
+      const adminLike = sensitive.filter((s) => s.adminLike);
       lines.push('#### Hassas uç noktalar\n');
-      lines.push('Yol/işlem adı hassas anahtar kelime içeren uç noktalar (yalnızca şemadan; **çağrılmamıştır**):');
+      lines.push('Yol/işlem adı hassas anahtar kelime içeren uç noktalar (yalnızca şemadan **PASİF okundu**; hiçbiri **çağrılmadı/test edilmedi**):');
       lines.push('');
-      lines.push('| Metot | Yol | Kimlik doğrulama |');
-      lines.push('|-------|-----|------------------|');
-      for (const s of sensitive.slice(0, 25)) lines.push(`| ${s.method} | ${s.path} | ${s.noAuth ? '⚠️ tanımsız/yok' : 'tanımlı'} |`);
+      lines.push('| Metot | Yol | Kategori | Kimlik doğrulama (şema) |');
+      lines.push('|-------|-----|----------|--------------------------|');
+      for (const s of sensitive.slice(0, 25)) {
+        lines.push(`| ${s.method} | ${s.path} | ${s.adminLike ? '🔑 admin/debug/internal' : 'hassas' } | ${s.noAuth ? '⚠️ tanımsız görünüyor' : 'tanımlı'} |`);
+      }
       lines.push('');
-      if (noAuthSensitive.length) lines.push(`> **${noAuthSensitive.length} hassas uç nokta** şemada kimlik doğrulama tanımı olmadan listeleniyor. Bu, yetkisiz erişime açık olabileceklerine dair güçlü bir göstergedir (doğrulama için manuel test gerekir).`);
+      if (adminLike.length) lines.push(`> **${adminLike.length}** uç nokta *admin/debug/internal* isimli — şemada özellikle dikkat gerektirir.`);
+      if (noAuthSensitive.length) lines.push(`> **${noAuthSensitive.length} hassas uç nokta** şemada kimlik doğrulama tanımı olmadan listeleniyor (spec gözlemi = "auth tanımsız görünüyor" — "auth yok, eriştik" DEĞİL). Bu bir **göstergedir**; gerçek yetki kontrolü **çağrı yapılarak doğrulanmamıştır**.`);
+      lines.push('');
+      lines.push('> **Sınır (Keşif):** Bu uç noktalar yalnız şemadan pasif okundu; hiçbiri çağrılmadı, auth aktif test edilmedi. Yetki/erişim doğrulaması **Aktif Doğrulama** ve **Tam Kapsamlı Pentest** paketlerinin kapsamındadır — daha derin doğrulama için bu paketler önerilir.');
       lines.push('');
     }
   } else {
@@ -338,6 +344,7 @@ const FINGERPRINT_SOURCES = [
   '`<meta name="generator">` etiketi',
   'HTML yol/kalıp izleri (`/wp-content/`, `/wp-includes/`, `Drupal.settings`, `/sites/all/`, `option=com_`, `/media/jui/`, `typo3conf`, `Magento_`)',
   'Yaygın sürüm dosyaları (WordPress `/readme.html`, Drupal `/CHANGELOG.txt`)',
+  'Bilinen CMS yollarının VARLIĞI (`/wp-login.php`, `/wp-json/`, `/administrator/`, `/user/login`, `/typo3/` — yalnız var/yok kontrolü; giriş/parola denemesi YOK)',
   'Kütüphane/eklenti ipuçları (WooCommerce, jQuery sürümü)',
 ];
 
@@ -433,7 +440,7 @@ const METHODOLOGY_SECTION =
   'Bu rapor, üç keşif alanında **pasif** (istismar içermeyen) tekniklerle, dışarıdan gözlemlenebilir verilerden otomatik olarak üretilmiştir:\n\n' +
   '- **Subdomain Takeover:** Alt domainler Certificate Transparency loglarından (crt.sh, yedek olarak certSpotter) toplanır; her biri Cloudflare DoH ile DNS/CNAME çözümlemesinden geçirilir ve bilinen “dangling” (terk edilmiş bulut servisi) imza veritabanıyla karşılaştırılır.\n' +
   '- **API & Swagger Keşfi:** Yaygın API dokümantasyon yollarından oluşan sabit bir liste GET ile denenir; bulunan OpenAPI/Swagger şemaları ayrıştırılır ve hassas/kimlik-doğrulamasız uç noktalar işaretlenir (uç noktalar çağrılmaz).\n' +
-  '- **CMS & Bilinen CVE:** HTTP başlıkları, `<meta generator>` ve HTML kalıpları üzerinden CMS ve sürüm parmak izi çıkarılır; tespit edilen sürüm, NVD (NIST Ulusal Zafiyet Veritabanı) sorgulanarak — sürümü açıkça kapsayan — bilinen CVE’lerle eşlenir.\n\n' +
+  '- **CMS & Bilinen CVE:** HTTP başlıkları, `<meta generator>` ve HTML kalıpları üzerinden CMS ve sürüm parmak izi çıkarılır; generator gizlenmişse bilinen CMS yollarının VARLIĞI (yalnız GET/existence — giriş denemesi yok) ile doğrulanır. Tespit edilen sürüm, NVD (NIST Ulusal Zafiyet Veritabanı) sorgulanarak — sürümü açıkça kapsayan — bilinen CVE’lerle eşlenir; sürüm okunamazsa CVE eşlemesi yapılmaz (uydurma CVE yok).\n\n' +
   '> Tüm veriler dışarıdan, hedefe zarar vermeden toplanmıştır. Kimlik doğrulama gerektiren alanlar, iç ağ ve aktif sömürü bu paketin kapsamı dışındadır.\n';
 
 const BEST_PRACTICES_SECTION =
@@ -486,6 +493,12 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
   );
   if (httpOnly) summary.push('- ⚠️ **HTTPS desteklenmiyor:** Hedef HTTPS (443) üzerinden yanıt vermedi; keşif http:// üzerinden yürütüldü. Şifresiz iletişim başlı başına ciddi bir bulgudur (aşağıda).');
   for (const a of areas) summary.push(a.dataUnavailable ? `- **${a.title}:** ⚠️ incelenemedi (veri kaynağına ulaşılamadı) — "temiz" anlamına gelmez` : `- **${a.title}:** ${RISK_WORD[a.level]} — ${a.headline}`);
+  // (Grok B4) TEMİZ raporlar dahil GERÇEK kapsam sayıları — "ne kadar bakıldığını" şeffaf göster (padding DEĞİL).
+  {
+    const subPart = ev.sub.dataSource === 'unavailable' ? 'alt domain envanteri: veri kaynağına ulaşılamadı' : `${ev.sub.total} alt domain envanterlendi`;
+    const apiPathsTried = (ev.api.tried?.length ?? 0) + (ev.api.minedTried?.length ?? 0);
+    summary.push(`- **Kapsam (gerçek sayılar):** ${subPart} · ${apiPathsTried} API/Swagger yolu denendi (${ev.api.pagesScanned ?? 1} sayfa tarandı) · ${FINGERPRINT_SOURCES.length}+ pasif CMS/teknoloji sinyali incelendi.`);
+  }
   summary.push('- **Önerilen ilk adım:** En yüksek riskli alandan başlayın; her bulgu için adım adım hazır çözümler "AI Çözüm Önerileri" bölümünde sunulur.');
 
   const genelSentence =

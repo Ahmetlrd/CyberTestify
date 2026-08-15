@@ -423,9 +423,22 @@ export default function OrderPage() {
         ) : null}
         <span className="font-bold text-brand">{b.displayName}</span>
         <p className="mt-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
-        <p className="mt-1.5 flex-1 text-[11px] text-ink-muted">
-          İçindekiler: {b.members.map((m: any) => m.displayName).join(' · ')}
-        </p>
+        {b.key === 'bundle_recon' ? (
+          <div className="mt-1.5 flex-1 text-[11px] text-ink-muted">
+            İçindekiler:
+            <ul className="mt-1 space-y-0.5">
+              <li>· Terk edilmiş alt domain (Subdomain Takeover) taraması — CT loglarından alt domain envanteri</li>
+              <li>· Açık API / Swagger dokümantasyon keşfi</li>
+              <li>· CMS &amp; teknoloji parmak izi analizi</li>
+              <li>· Site haritasından idari/hassas yol tespiti</li>
+            </ul>
+            <p className="mt-1.5 italic">Pasif dış yüzey keşfidir; aktif uç nokta enjeksiyonu veya kimlik doğrulamalı test içermez.</p>
+          </div>
+        ) : (
+          <p className="mt-1.5 flex-1 text-[11px] text-ink-muted">
+            İçindekiler: {b.members.map((m: any) => m.displayName).join(' · ')}
+          </p>
+        )}
         <p className="mt-2 text-ink">
           {b.discountPct > 0 && (
             <span className="text-xs text-ink-muted line-through">{formatMoney(b.originalMinorUnit, getRegion(region))}</span>

@@ -217,6 +217,38 @@ export default async function PackagesPage({ params }: { params: { region: strin
                           ? `${(b.selectableModules ?? []).map((m) => m.displayName).join(' / ')}'den istediğinizi seçin`
                           : `pick any of ${(b.selectableModules ?? []).map((m) => m.displayName).join(' / ')}`}
                       </div>
+                    ) : b.key === 'bundle_recon' ? (
+                      // (Keşif) İçindekiler = gerçek kapsam maddeleri (üye adları değil). CT ayrı teslimat
+                      // DEĞİL — subdomain envanterinin yöntemi olarak 1. maddenin içinde (ikinci kez sayma).
+                      <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
+                        <span className="font-semibold">{tr ? 'İçindekiler' : 'Includes'}:</span>
+                        <ul className="mt-1.5 space-y-1">
+                          {(tr
+                            ? [
+                                'Terk edilmiş alt domain (Subdomain Takeover) taraması — Certificate Transparency loglarından alt domain envanteri',
+                                'Açık API / Swagger dokümantasyon keşfi',
+                                'CMS & teknoloji parmak izi analizi',
+                                'Site haritasından idari/hassas yol tespiti',
+                              ]
+                            : [
+                                'Abandoned subdomain (takeover) scan — subdomain inventory from Certificate Transparency logs',
+                                'Public API / Swagger documentation discovery',
+                                'CMS & technology fingerprint analysis',
+                                'Admin/sensitive path detection from the site map',
+                              ]
+                          ).map((it) => (
+                            <li key={it} className="flex gap-1.5">
+                              <span className="mt-0.5 text-accent-600">·</span>
+                              <span>{it}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 border-t border-line/60 pt-2 text-[11px] italic text-ink-muted">
+                          {tr
+                            ? 'Pasif dış yüzey keşfidir; aktif uç nokta enjeksiyonu veya kimlik doğrulamalı test içermez.'
+                            : 'Passive external-surface discovery; no active endpoint injection or authenticated testing.'}
+                        </p>
+                      </div>
                     ) : b.members.length > 0 ? (
                       <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
                         <span className="font-semibold">{region.code === 'tr' ? 'İçindekiler' : 'Includes'}:</span>{' '}

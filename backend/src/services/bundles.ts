@@ -71,9 +71,9 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     displayName: 'Keşif Paketi',
     displayNameEn: 'Discovery Bundle',
     description:
-      'Saldırı yüzeyinizi keşfeden paket: subdomain takeover taraması, API/Swagger keşfi ve CMS/bilinen-CVE tespiti. Tekil toplamdan indirimli.',
+      'Dış saldırı yüzeyinizi haritalayan ve sahipsiz/ifşa olmuş varlıkları tespit eden derin keşif paketi.',
     descriptionEn:
-      'Maps your attack surface: subdomain takeover scan, API/Swagger discovery and CMS/known-CVE detection. Discounted vs buying separately.',
+      'A deep discovery bundle that maps your external attack surface and detects abandoned/exposed assets.',
     category: 'passive',
     discountPct: 20,
     finalPriceMinorUnitTr: 449900, // 4.499 TL (Vedat — nihai, yuvarlak)
