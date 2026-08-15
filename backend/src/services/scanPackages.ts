@@ -111,21 +111,37 @@ export function requiresTestCredentials(packageKey: string): boolean {
   try { return getPackageDef(packageKey).requiresTestCredentials === true; } catch { return false; }
 }
 
-// YURT DIŞI AI AKTARIMI (KVKK m.9): YALNIZ bu paketler tarama/analiz verisini yurt dışında
-// yerleşik bir AI (advisory LLM) hizmet sağlayıcısına gönderir → m.9 AÇIK RIZA sadece bunlarda
-// gerekir. Diğer paketler tamamen backend-deterministiktir; yurt dışına hiçbir veri gitmez.
-// Kaynak: advisoryLlm.callAdvisoryLlm çağıran akışlar — authAgentChecks (full pentest) +
-// agentAdvisor (activeVerifyEvidence İş Mantığı/Race → active_verify).
-const FOREIGN_AI_PACKAGES = new Set<string>([
-  'bundle_full_pentest',
-  'bundle_active_verify',
-  'bundle_elite_autonomous', // vitrin/contact-only ama tümüyle AI — ileride açılırsa consent hazır
-  'autonomous_pentest',
-  'business_logic_verify',
-  'race_massassign_verify',
-]);
+// YURT DIŞI AI AKTARIMI (KVKK m.9): Advisory LLM (yurt dışı AI) YALNIZCA fiilen ETKİNSE veri yurt
+// dışına gider → m.9 AÇIK RIZA sadece o zaman gerekir. Advisory katmanı iki koşulla açılır:
+//   (1) ADVISORY_LLM_API_KEY tanımlı VE
+//   (2) ilgili host-allowlist (ACTIVE_VERIFY_ADVISOR_HOSTS / AUTH_ADVISOR_HOSTS) boş DEĞİL.
+// İkisi de sağlanmıyorsa advisory HİÇBİR hedefte çalışmaz → veri yurt dışına gitmez → rıza gerekmez
+// (paket 2 onayla, diğer deterministik paketler gibi). VARSAYILAN: KAPALI (allowlist'ler boş).
+// Vedat advisory'yi açtığında (allowlist doldurunca) rıza otomatik geri gelir — hukuken kendini ayarlar.
+// (Aktif Doğrulama'nın İş Mantığı/Race + Tam Pentest'in authAgentChecks danışma katmanı buna dayanır.)
+function advisorLiveFor(envList: string | undefined): boolean {
+  const hasHosts = (envList ?? '').split(',').map((s) => s.trim()).filter(Boolean).length > 0;
+  return !!process.env.ADVISORY_LLM_API_KEY && hasHosts;
+}
 export function usesForeignAi(key: string | undefined | null): boolean {
-  return !!key && FOREIGN_AI_PACKAGES.has(key);
+  if (!key) return false;
+  switch (key) {
+    // Aktif Doğrulama ailesi — danışma yalnız ACTIVE_VERIFY_ADVISOR_HOSTS ile açık
+    case 'bundle_active_verify':
+    case 'business_logic_verify':
+    case 'race_massassign_verify':
+      return advisorLiveFor(process.env.ACTIVE_VERIFY_ADVISOR_HOSTS);
+    // Tam Kapsamlı Pentest ailesi — danışma yalnız AUTH_ADVISOR_HOSTS ile açık
+    case 'bundle_full_pentest':
+    case 'authenticated_scan':
+    case 'autonomous_pentest':
+      return advisorLiveFor(process.env.AUTH_ADVISOR_HOSTS);
+    // Elit Otonom (contact-only/yakında) — tümüyle otonom AI; anahtar varsa consent hazır tut.
+    case 'bundle_elite_autonomous':
+      return !!process.env.ADVISORY_LLM_API_KEY;
+    default:
+      return false;
+  }
 }
 
 export type SecurityProfile = 'passive' | 'active-light' | 'active-verify-only' | 'authenticated-light';
