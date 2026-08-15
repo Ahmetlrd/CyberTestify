@@ -176,6 +176,7 @@ const REAL_SAMPLES: Record<string, { fileKey: string; hostname: string }> = {
   bundle_recon: { fileKey: 'bundle_recon', hostname: 'ornek.com' }, // gerçek tarama (anonimleştirildi: *.ornek.com)
   bundle_compliance: { fileKey: 'bundle_compliance', hostname: 'ornek.com' }, // gerçek tarama (anonimleştirildi)
   bundle_active_verify: { fileKey: 'bundle_active_verify', hostname: 'ornek.com' }, // gerçek aktif tarama (kendi fixture'ımız; gövde host-agnostik -> kapakta ornek.com)
+  bundle_full_pentest: { fileKey: 'bundle_full_pentest', hostname: 'demo.testfire.net' }, // gerçek pentest çıktısı (IBM public demo; alan adı görünür, tarih gizli)
 };
 
 const pdfCache = new Map<string, Buffer>();
