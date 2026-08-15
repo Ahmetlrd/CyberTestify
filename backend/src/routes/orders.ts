@@ -265,7 +265,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
   // (Tam Kapsamlı Pentest — FAZ A) kimlik-doğrulamalı/otonom paketlerde 3 EK onay da ZORUNLU.
   const needsAuthConsents = requiresTestCredentials(packageKey);
   if (isActiveLight) {
-    const v = validateConsentInput(parsed.data.activeTestConsent, { requireAuthConsents: needsAuthConsents });
+    const v = validateConsentInput(parsed.data.activeTestConsent, { requireAuthConsents: needsAuthConsents, requireCredentialSharing: usesForeignAi(packageKey) });
     if (!v.ok) return res.status(400).json({ error: v.error });
   }
 
@@ -341,7 +341,8 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
         legalName: cust.fullName?.trim() || cust.email, companyName: null,
         riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
         // (FAZ A) kimlik-doğrulamalı/otonom paket onayları (yalnız o paketlerde işaretlenir).
-        credentialSharingAcceptedAt: needsAuthConsents ? now : null,
+        // credentialSharing YALNIZ yurt dışı AI kullanılıyorsa toplanır (KVKK m.9) — aksi halde null (dürüst kayıt).
+        credentialSharingAcceptedAt: needsAuthConsents && usesForeignAi(packageKey) ? now : null,
         testAccountDeclaredAt: needsAuthConsents ? now : null,
         elevatedRiskAcceptedAt: needsAuthConsents ? now : null,
       },
@@ -503,7 +504,7 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
   // Tek yetkilendirme beyani TUM active-light uyeleri kapsar (ekstra adim YOK). (FAZ A) kimlik-
   // doğrulamalı üye (authenticated_scan) varsa 3 EK onay da ZORUNLU.
   if (anyActiveLight) {
-    const v = validateConsentInput(parsed.data.activeTestConsent, { requireAuthConsents: hasAuthScan });
+    const v = validateConsentInput(parsed.data.activeTestConsent, { requireAuthConsents: hasAuthScan, requireCredentialSharing: bundleForeignAi });
     if (!v.ok) return res.status(400).json({ error: v.error });
   }
   if (hasAuthScan && !parsed.data.authCredentials) {
@@ -572,7 +573,7 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
           customerId: req.customerId!, orderId: order.id, packageKey: bundleKey as any,
           legalName: cust.fullName?.trim() || cust.email, companyName: null,
           riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
-          credentialSharingAcceptedAt: hasAuthScan ? now : null,
+          credentialSharingAcceptedAt: hasAuthScan && bundleForeignAi ? now : null, // KVKK m.9 yalnız yurt dışı AI'da
           testAccountDeclaredAt: hasAuthScan ? now : null,
           elevatedRiskAcceptedAt: hasAuthScan ? now : null,
         },
@@ -618,7 +619,7 @@ ordersRouter.post('/bundle', requireAuth, async (req, res) => {
             customerId: req.customerId!, orderId: order.id, packageKey: key as any,
             legalName: cust.fullName?.trim() || cust.email, companyName: null,
             riskAccepted: true, textVersion: ACTIVE_TEST_CONSENT_VERSION, consentIp: req.ip ?? null,
-            credentialSharingAcceptedAt: memberNeedsCreds ? now : null,
+            credentialSharingAcceptedAt: memberNeedsCreds && bundleForeignAi ? now : null, // KVKK m.9 yalnız yurt dışı AI'da
             testAccountDeclaredAt: memberNeedsCreds ? now : null,
             elevatedRiskAcceptedAt: memberNeedsCreds ? now : null,
           },

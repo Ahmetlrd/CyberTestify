@@ -87,13 +87,16 @@ export interface ActiveTestConsentInput {
 // requireAuthConsents=true ise (kimlik-doğrulamalı/otonom paket) 3 ek onay da ZORUNLU.
 export function validateConsentInput(
   input: ActiveTestConsentInput | undefined,
-  opts?: { requireAuthConsents?: boolean },
+  opts?: { requireAuthConsents?: boolean; requireCredentialSharing?: boolean },
 ): { ok: true } | { ok: false; error: string } {
   if (!input || input.riskAccepted !== true) {
     return { ok: false, error: 'Aktif test için risk kabul kutusunu işaretlemelisiniz.' };
   }
   if (opts?.requireAuthConsents) {
-    if (input.credentialSharingAccepted !== true) {
+    // credentialSharing = kimlik bilgisi + YURT DIŞI AI aktarımı (KVKK m.9) rızası. YALNIZ yurt dışı AI
+    // KULLANILIYORSA gerekir; advisory kapalıyken veri yurt dışına gitmez → istenmez (frontend'de o kutu
+    // da hiç gösterilmez; zorunlu tutmak siparişi sunucuda reddedip butonu işlevsiz bırakıyordu).
+    if (opts?.requireCredentialSharing && input.credentialSharingAccepted !== true) {
       return { ok: false, error: 'Kimlik bilgisi paylaşımı ve yurt dışı aktarım (KVKK m.9) onayını işaretlemelisiniz.' };
     }
     if (input.testAccountDeclared !== true) {
