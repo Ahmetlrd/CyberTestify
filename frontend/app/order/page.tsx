@@ -53,6 +53,10 @@ export default function OrderPage() {
   const [scopeLow, setScopeLow] = useState<boolean | null>(null); // null=henüz kontrol edilmedi
   const [scopeChecking, setScopeChecking] = useState(false); // ön-kontrol devam ediyor (SPA'da headless render ~birkaç sn)
   const [lowScopeAck, setLowScopeAck] = useState(false);
+  // (TÜM paketler) ödeme-öncesi ERİŞİLEBİLİRLİK ön-kontrolü: hedef 443/80 yanıt vermiyorsa tarama
+  // "İncelenemedi" (boş) sonuç verir; müşteri ödemeden önce uyarılmalı (yine de devam edebilir).
+  const [reachable, setReachable] = useState<boolean | null>(null); // null=bilinmiyor/kontrol edilmedi
+  const [unreachableAck, setUnreachableAck] = useState(false);
   // (#5) authenticated_scan — test hesabi kimlik bilgileri.
   const [authUser, setAuthUser] = useState('');
   const [authPass, setAuthPass] = useState('');
@@ -111,21 +115,28 @@ export default function OrderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
-  // (Aktif Doğrulama Paketi) Ödeme öncesi hızlı kapsam ön-kontrolü. SADECE bu paket seçiliyken
-  // çalışır (en riskli — "test edilecek giriş noktası" bulmaya dayalı). Düşük sinyalde uyarı gösterilir.
+  // Ödeme öncesi hızlı ön-kontrol. ERİŞİLEBİLİRLİK (reachable) TÜM paketler için kontrol edilir —
+  // hedef 443/80 yanıt vermiyorsa tarama "İncelenemedi" (boş) sonuç verir, müşteri önceden uyarılır.
+  // DÜŞÜK KAPSAM (lowSignal) yalnız Aktif Doğrulama için anlamlıdır (giriş noktası bulmaya dayalı).
   useEffect(() => {
     setLowScopeAck(false);
     setScopeLow(null);
+    setReachable(null);
+    setUnreachableAck(false);
     setScopeChecking(false);
-    if (!domainId || selectedBundle?.key !== 'bundle_active_verify') return;
+    if (!domainId || !(selected || selectedBundle)) return; // domain + herhangi bir paket seçili
     let cancelled = false;
     setScopeChecking(true);
     api.scopeEstimate(domainId)
-      .then((r) => { if (!cancelled) setScopeLow(r.lowSignal); })
-      .catch(() => { if (!cancelled) setScopeLow(false); }) // hata -> engelleme, uyarı gösterme
+      .then((r) => {
+        if (cancelled) return;
+        setReachable(r.reachable);
+        setScopeLow(selectedBundle?.key === 'bundle_active_verify' ? r.lowSignal : false);
+      })
+      .catch(() => { if (!cancelled) { setReachable(null); setScopeLow(false); } }) // hata -> engelleme yok
       .finally(() => { if (!cancelled) setScopeChecking(false); });
     return () => { cancelled = true; };
-  }, [domainId, selectedBundle?.key]);
+  }, [domainId, selected, selectedBundle?.key]);
 
   const selectedPkg = packages.find((p) => p.key === selected);
   // SATIS MODELI: tekil kontrol satisi YOK — secilebilir TEK "tekil" paket basit_tarama (giris).
@@ -161,6 +172,8 @@ export default function OrderPage() {
   // Grup 3 — AYRI: mesafeli satış cayma hakkı feragati (withdrawalConsent) — doğrudan.
   // (Aktif Doğrulama Paketi) düşük-kapsam uyarısı gösterilecek mi (ön-kontrol düşük sinyal döndüyse).
   const showLowScopeWarning = selectedBundle?.key === 'bundle_active_verify' && scopeLow === true;
+  // (TÜM paketler) hedef ödeme öncesi ön-kontrolde erişilemiyorsa uyar (tarama boş/"İncelenemedi" verir).
+  const showUnreachableWarning = reachable === false;
 
   async function applyPromo() {
     if (!promoInput.trim() || (!selected && !selectedBundle)) return;
@@ -249,6 +262,7 @@ export default function OrderPage() {
     if (needsAuth && !authConsentsOk) return setError('Kimlik-doğrulamalı test için 3 ek onayı da işaretlemelisiniz.');
     if (selectedBundle.selectable && bundleModules.length === 0) return setError('En az bir modül seçin.');
     if (showLowScopeWarning && !lowScopeAck) return setError('Devam etmek için ön kontrol uyarısını onaylamalısınız.');
+    if (showUnreachableWarning && !unreachableAck) return setError('Hedefe erişilemiyor — devam etmek için uyarıyı onaylamalısınız.');
     setBusy(true);
     setError(null);
     try {
@@ -353,15 +367,17 @@ export default function OrderPage() {
       ? promo.finalAmountMinorUnit
       : baseAmountMinor;
   const totalMinor = !selectedBundle && recurring ? unitAmountMinor * runs : unitAmountMinor;
+  // (TÜM paketler) ön-kontrol bitene kadar bekle; erişilemez uyarısı onaylanmadan ödeme yok.
+  const preCheckGate = scopeChecking || (showUnreachableWarning && !unreachableAck);
   const ctaDisabled = selectedBundle
     ? !domainId || busy || !allConsents || intlComingSoon ||
       (selectedBundle.category === 'active-light' && !atRisk) ||
       // (FAZ A) kimlik-doğrulamalı üye varsa: 3 ek onay + kimlik bilgisi girişleri zorunlu.
       (selectedBundle.members?.some((m: any) => m.key === 'authenticated_scan') && (!authConsentsOk || !authUser.trim() || !authPass)) ||
       (selectedBundle.selectable && bundleModules.length === 0) ||
-      (selectedBundle.key === 'bundle_active_verify' && scopeChecking) || // ön-kontrol bitene kadar bekle
-      (showLowScopeWarning && !lowScopeAck) // düşük-kapsam uyarısı onaylanmadan ödeme yok
-    : !domainId || busy || !selected || !allConsents || !activeConsentOk || intlComingSoon;
+      (showLowScopeWarning && !lowScopeAck) || // düşük-kapsam uyarısı onaylanmadan ödeme yok
+      preCheckGate
+    : !domainId || busy || !selected || !allConsents || !activeConsentOk || intlComingSoon || preCheckGate;
   const ctaLabel = busy
     ? 'Başlatılıyor…'
     : selectedBundle
@@ -383,6 +399,8 @@ export default function OrderPage() {
     if (needsAuthSel && (!authUser.trim() || !authPass)) return { text: 'Test hesabı kullanıcı adı ve şifresini girin.', scroll: false };
     if (!allGroupsChecked) return { text: 'Devam etmek için aşağıdaki onayları işaretleyin →', scroll: true };
     if (showLowScopeWarning && !lowScopeAck) return { text: 'Düşük-kapsam uyarısını onaylayın.', scroll: false };
+    if (showUnreachableWarning && !unreachableAck) return { text: 'Hedefe erişilemiyor — uyarıyı okuyup onaylayın.', scroll: false };
+    if (scopeChecking) return { text: 'Ön kontrol yapılıyor…', scroll: false };
     return null;
   })();
 
@@ -795,8 +813,27 @@ export default function OrderPage() {
               ) : (
                 <p className="mt-2 text-sm text-ink-soft">Devam etmek için bir paket seçin.</p>
               )}
-              {selectedBundle?.key === 'bundle_active_verify' && scopeChecking && (
-                <p className="mt-3 text-center text-xs text-ink-muted">Hedefiniz için kapsam ön kontrolü yapılıyor…</p>
+              {scopeChecking && (
+                <p className="mt-3 text-center text-xs text-ink-muted">Hedefinize ulaşılıyor mu, ön kontrol yapılıyor…</p>
+              )}
+              {showUnreachableWarning && (
+                <div className="mt-4 rounded-card border-2 border-rose-400 bg-rose-50 p-4 text-sm">
+                  <p className="font-bold text-rose-900">🚫 Hedefinize şu an dışarıdan ulaşılamıyor</p>
+                  <p className="mt-1 leading-relaxed text-rose-900/90">
+                    Sitenizin ana adresi (<strong>443/HTTPS ve 80/HTTP</strong>) şu an yanıt vermiyor. Bu bir hata
+                    değildir — sitenizin <strong>yayında olmadığı, kapalı olduğu ya da bizim erişimimizi
+                    engellediği</strong> anlamına gelir. Tarama şu an başlatılırsa dışarıdan test edilecek bir yüzey
+                    bulunamayacağı için rapor büyük olasılıkla <strong>boş / "İncelenemedi"</strong> gelir.
+                  </p>
+                  <p className="mt-2 leading-relaxed text-rose-900/90">
+                    <strong>Önerimiz:</strong> sitenizin yayında ve erişilebilir olduğundan emin olun, sonra bu sayfayı
+                    yenileyip tekrar deneyin. Erişim sorununun geçici olduğunu düşünüyorsanız yine de devam edebilirsiniz.
+                  </p>
+                  <label className="mt-3 flex cursor-pointer items-start gap-2 font-medium text-rose-900">
+                    <input type="checkbox" checked={unreachableAck} onChange={(e) => setUnreachableAck(e.target.checked)} className="mt-0.5" />
+                    <span>Erişim sorununu anladım; yine de şimdi başlatmak istiyorum.</span>
+                  </label>
+                </div>
               )}
               {showLowScopeWarning && (
                 <div className="mt-4 rounded-card border-2 border-amber-400 bg-amber-50 p-4 text-sm">
