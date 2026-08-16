@@ -276,15 +276,27 @@ export default function VerifyHub() {
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <div className="truncate font-semibold text-ink">{d.hostname}</div>
-                      <span className={`mt-0.5 text-xs font-medium ${expired ? 'text-red-600' : 'text-amber-600'}`}>
+                      <span className={`mt-0.5 block text-xs font-medium ${expired ? 'text-red-600' : 'text-amber-600'}`}>
                         {expired ? 'Süresi doldu — yeniden doğrula' : 'Henüz doğrulanmadı'}
                       </span>
+                      {!purchaseMode && (
+                        <span className="mt-0.5 block text-[11px] text-ink-muted">
+                          Pasif paketler (Basit Tarama, Dış Yüzey, Keşif, Uyum) için doğrulama gerekmez. Aktif paketler DNS doğrulaması ister.
+                        </span>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                       {/* PASİF satın-alma: doğrulama gerekmez → tek tıkla devam. Aktifte bu buton YOK. */}
                       {purchaseMode && !activePurchase && (
                         <button onClick={() => goToOrder(d.id)} className="btn-primary text-sm">
                           Devam et
+                        </button>
+                      )}
+                      {/* NORMAL panel: doğrulanmamış alan adı için de "Taramayı Başlat" — pasif 4 paket
+                          doğrulama gerektirmez. Aktif paket seçilirse /order doğrulamaya yönlendirir. */}
+                      {!purchaseMode && (
+                        <button onClick={() => goToOrder(d.id)} className="btn-primary text-sm">
+                          Taramayı Başlat
                         </button>
                       )}
                       <button onClick={() => setOpenId(open ? null : d.id)} className="btn-outline text-sm">
