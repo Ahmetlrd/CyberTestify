@@ -8,6 +8,7 @@ import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { sendPasswordReset, sendEmailVerification } from '../services/mailer.js';
 import { requireAuth } from '../middleware/auth.js';
+import { verifyTurnstile } from '../services/turnstile.js';
 
 export const authRouter = Router();
 
@@ -32,11 +33,17 @@ const registerSchema = credsSchema.extend({
   termsAccepted: z.literal(true, {
     errorMap: () => ({ message: 'Kullanim Kosullari ve KVKK Aydinlatma Metni onaylanmalidir.' }),
   }),
+  turnstileToken: z.string().max(4000).optional(), // (BOT) fake-hesap botlarina karsi Turnstile.
 });
 
 authRouter.post('/register', async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
+
+  // (BOT KORUMASI) fake/otomatik hesap acilmasina karsi insan dogrulamasi (authLimiter'a EK).
+  if (!(await verifyTurnstile(parsed.data.turnstileToken, (req.ip || '').toString()))) {
+    return res.status(403).json({ error: 'İnsan doğrulaması gerekli. Lütfen doğrulama kutusunu tamamlayın.' });
+  }
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
   let customer;

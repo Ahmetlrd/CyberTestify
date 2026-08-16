@@ -70,10 +70,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  register: (email: string, password: string, termsAccepted: boolean) =>
+  register: (email: string, password: string, termsAccepted: boolean, turnstileToken?: string) =>
     request<{ token: string; emailVerified?: boolean; autoLogin?: boolean }>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password, termsAccepted }),
+      body: JSON.stringify({ email, password, termsAccepted, turnstileToken }),
     }),
   login: (email: string, password: string) =>
     request<{ token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),

@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { api } from '../../lib/api';
 import { PasswordInput } from '../../components/PasswordInput';
 import { GoogleButton } from '../../components/GoogleButton';
+import { Turnstile, type TurnstileHandle } from '../../components/Turnstile';
+import { useRef } from 'react';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -20,6 +22,8 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [terms, setTerms] = useState(false);
+  const [token, setToken] = useState<string | null>(null); // Turnstile (bot koruması)
+  const turnstile = useRef<TurnstileHandle>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -35,9 +39,13 @@ export default function RegisterPage() {
       setError('Devam etmek için Kullanım Koşulları ve KVKK Aydınlatma Metni onayı gereklidir.');
       return;
     }
+    if (!token) {
+      setError('Lütfen doğrulama kutusunu tamamlayın.');
+      return;
+    }
     setBusy(true);
     try {
-      const res = await api.register(email, password, terms);
+      const res = await api.register(email, password, terms, token);
       window.localStorage.setItem('token', res.token);
       // YENI hesap (emailVerified=false) -> once dogrulama ekrani. Mevcut/verified -> next.
       if (res.emailVerified === false) router.push(`/verify-email?next=${encodeURIComponent(next)}`);
@@ -45,6 +53,7 @@ export default function RegisterPage() {
     } catch (err: any) {
       setError(err.message);
       setBusy(false);
+      setToken(null); turnstile.current?.reset(); // token tek-kullanımlık → yenile
     }
   }
 
@@ -96,9 +105,12 @@ export default function RegisterPage() {
             </span>
           </label>
 
+          {/* Bot koruması (Turnstile) — token gelene kadar buton kilitli. */}
+          <Turnstile ref={turnstile} onToken={setToken} action="register" />
+
           {error && <p className="form-error">{error}</p>}
-          <button type="submit" disabled={!terms || busy} className="btn-primary w-full disabled:opacity-60">
-            {busy ? 'Kaydolunuyor…' : 'Kayıt ol'}
+          <button type="submit" disabled={!terms || !token || busy} className="btn-primary w-full disabled:opacity-60">
+            {busy ? 'Kaydolunuyor…' : !token ? 'Doğrulama bekleniyor…' : 'Kayıt ol'}
           </button>
         </form>
       </div>

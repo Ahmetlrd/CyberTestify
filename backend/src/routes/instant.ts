@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { runInstantScan } from '../services/instantScan.js';
-import { config } from '../config.js';
+import { verifyTurnstile } from '../services/turnstile.js';
 
 /**
  * (ÜCRETSİZ ANLIK ÖN-TARAMA) PUBLIC endpoint — herkes bir URL girebilir. Bu yüzden:
@@ -43,24 +43,6 @@ function normalizeHost(raw: string): string | null {
     return null;
   }
   return host;
-}
-
-async function verifyTurnstile(token: string | undefined, ip: string): Promise<boolean> {
-  // Secret yoksa doğrulama atlanır (honeypot + rate-limit hâlâ aktif). VARSAYILANDA test-secret set
-  // olduğundan bu dal normalde çalışmaz; gerçek dağıtımda secret hep vardır.
-  if (!config.turnstile.secretKey) return true;
-  if (!token) return false;
-  try {
-    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ secret: config.turnstile.secretKey, response: token, remoteip: ip }),
-    });
-    const j = (await r.json()) as { success?: boolean };
-    return !!j.success;
-  } catch {
-    return false; // doğrulanamadıysa reddet (fail-closed).
-  }
 }
 
 instantRouter.post('/', async (req, res) => {
