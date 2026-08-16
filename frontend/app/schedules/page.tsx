@@ -21,7 +21,8 @@ export default function SchedulesPage() {
   const router = useRouter();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null); // sayfa-yükleme hatası (başlık altında)
+  const [msg, setMsg] = useState<{ id: string; text: string } | null>(null); // iptal hatası — kartın altında
 
   const refresh = useCallback(async () => {
     const list = await api.listSchedules();
@@ -39,12 +40,12 @@ export default function SchedulesPage() {
   }, [router, refresh]);
 
   async function cancel(id: string) {
-    setError(null);
+    setMsg(null);
     try {
       await api.cancelSchedule(id);
       await refresh();
     } catch (e: any) {
-      setError(e.message);
+      setMsg({ id, text: e.message });
     }
   }
 
@@ -60,6 +61,8 @@ export default function SchedulesPage() {
         </Link>
       </div>
 
+      {error && <p className="form-error mt-4">{error}</p>}
+
       {loading ? (
         <div className="mt-8 h-24 animate-pulse rounded-card bg-brand-50" />
       ) : schedules.length === 0 ? (
@@ -70,29 +73,32 @@ export default function SchedulesPage() {
       ) : (
         <div className="mt-8 space-y-2.5">
           {schedules.map((s) => (
-            <div key={s.id} className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <div className="truncate font-semibold text-ink">{s.hostname}</div>
-                <div className="mt-0.5 text-xs text-ink-muted">
-                  {FREQ[s.intervalDays] ?? `${s.intervalDays} günde bir`} · kalan {s.remainingRuns} tarama
-                  {s.active && (
-                    <> · sonraki: {new Date(s.nextRunAt).toLocaleDateString('tr-TR')}</>
-                  )}
+            <div key={s.id} className="card p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="truncate font-semibold text-ink">{s.hostname}</div>
+                  <div className="mt-0.5 text-xs text-ink-muted">
+                    {FREQ[s.intervalDays] ?? `${s.intervalDays} günde bir`} · kalan {s.remainingRuns} tarama
+                    {s.active && (
+                      <> · sonraki: {new Date(s.nextRunAt).toLocaleDateString('tr-TR')}</>
+                    )}
+                  </div>
                 </div>
+                {s.active ? (
+                  <button onClick={() => cancel(s.id)} className="btn-outline shrink-0 text-sm">
+                    İptal et
+                  </button>
+                ) : (
+                  <span className="badge shrink-0">Pasif</span>
+                )}
               </div>
-              {s.active ? (
-                <button onClick={() => cancel(s.id)} className="btn-outline shrink-0 text-sm">
-                  İptal et
-                </button>
-              ) : (
-                <span className="badge shrink-0">Pasif</span>
+              {msg?.id === s.id && (
+                <p className="mt-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{msg.text}</p>
               )}
             </div>
           ))}
         </div>
       )}
-
-      {error && <p className="form-error mt-6">{error}</p>}
     </main>
   );
 }

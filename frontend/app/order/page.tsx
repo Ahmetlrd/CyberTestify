@@ -625,7 +625,7 @@ export default function OrderPage() {
           ödeme öncesi NET bilsin: inceleme süreci + test hesabı + sınırlı-otonom ajan. */}
       {selectedBundle?.key === 'bundle_full_pentest' && (
         <div className="mt-3 space-y-2 rounded-card border border-brand-200 bg-brand-50/50 px-4 py-3 text-sm text-ink-soft">
-          <p><strong className="text-ink">ℹ️ İnceleme süreci:</strong> Bu paket, güvenlik nedeniyle sipariş sonrası
+          <p><strong className="text-ink">İnceleme süreci:</strong> Bu paket, güvenlik nedeniyle sipariş sonrası
           <strong>ödeme onaylanınca hemen</strong> başlar.</p>
           <p><strong className="text-ink">Test hesabı:</strong> Kimlik doğrulamalı test için bir <strong>TEST hesabı</strong>
           (ana/üretim hesabınız DEĞİL; 2FA’sız, sınırlı yetkili, tek-kullanımlık) vermelisiniz. Kimlik bilgileriniz
@@ -885,7 +885,8 @@ export default function OrderPage() {
               )}
 
 
-      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+      {/* MOBİL: sol kolon sonunda (özet kolonu masaüstünde görünür; mobilde sabit alt çubuk var). */}
+      {error && <p className="mt-4 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 lg:hidden">{error}</p>}
 
         </div>{/* ===== SOL kolon sonu ===== */}
 
@@ -959,6 +960,8 @@ export default function OrderPage() {
                     : 'Ödeme onaylanınca tarama otomatik başlar.'}
                 </p>
               )}
+              {/* Ödeme/başlatma hatası — CTA'nın HEMEN ALTINDA (masaüstü özet kolonunda). */}
+              {error && <p className="mt-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
             </div>
 
             {/* Güven şeridi — DÜRÜST sinyaller (uydurma istatistik/puan YOK) */}

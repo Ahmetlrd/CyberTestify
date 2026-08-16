@@ -84,6 +84,11 @@ export default function VerifyHub() {
   const [newHostname, setNewHostname] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [checkMsg, setCheckMsg] = useState<string | null>(null); // DNS kontrol sonucu — panel içinde, butonun altında
+  // (UYARILARI GÖRÜNÜR KIL) Aksiyon hataları sayfanın en altında kalıp gözden kaçıyordu; her mesajı
+  // ilgili butonun/kartın HEMEN ALTINDA göster.
+  const [domainMsg, setDomainMsg] = useState<{ id: string; text: string } | null>(null); // alan adı kartı (sil vb.)
+  const [orderMsg, setOrderMsg] = useState<{ id: string; text: string } | null>(null); // tarama kartı (sil/arşiv)
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null); // ekle-formu / toplu-sil bölgesi
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,7 +141,7 @@ export default function VerifyHub() {
     e.preventDefault();
     if (!newHostname.trim() || busy) return;
     setBusy(true);
-    setError(null);
+    setBulkMsg(null);
     setNotice(null);
     try {
       const res = await api.createDomain(newHostname.trim());
@@ -153,7 +158,7 @@ export default function VerifyHub() {
       // Zaten ekli + doğrulanmışsa: onaylı kayıt KORUNUR (yeniden DNS doğrulama yok) + net bilgi.
       if (res.alreadyVerified) setNotice(res.message || `“${res.hostname}” zaten ekli ve doğrulanmış.`);
     } catch (e: any) {
-      setError(e.message);
+      setBulkMsg(e.message);
     } finally {
       setBusy(false);
     }
@@ -177,45 +182,45 @@ export default function VerifyHub() {
 
   async function del(id: string) {
     if (!window.confirm('Bu alan adını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return;
-    setError(null);
+    setDomainMsg(null);
     try {
       await api.deleteDomain(id);
       await refresh();
     } catch (e: any) {
-      setError(e.message);
+      setDomainMsg({ id, text: e.message }); // uyarı ilgili alan adı kartının altında görünür
     }
   }
 
   async function delAll() {
     if (!window.confirm('Taraması olmayan tüm alan adları silinsin mi?')) return;
-    setError(null);
+    setBulkMsg(null);
     try {
       const r = await api.deleteAllDomains();
       await refresh();
-      if (r.kept > 0) setError(`${r.deleted} alan adı silindi; taraması olan ${r.kept} tanesi korundu.`);
+      if (r.kept > 0) setBulkMsg(`${r.deleted} alan adı silindi; taraması olan ${r.kept} tanesi korundu.`);
     } catch (e: any) {
-      setError(e.message);
+      setBulkMsg(e.message);
     }
   }
 
   async function archiveOrder(id: string, archived: boolean) {
-    setError(null);
+    setOrderMsg(null);
     try {
       await api.archiveOrder(id, archived);
       await refresh();
     } catch (e: any) {
-      setError(e.message);
+      setOrderMsg({ id, text: e.message });
     }
   }
 
   async function deleteOrder(id: string) {
     if (!window.confirm('Bu raporu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return;
-    setError(null);
+    setOrderMsg(null);
     try {
       await api.deleteOrder(id);
       await refresh();
     } catch (e: any) {
-      setError(e.message);
+      setOrderMsg({ id, text: e.message });
     }
   }
 
@@ -243,23 +248,28 @@ export default function VerifyHub() {
           <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">Doğrulanmış alan adların</h2>
           <div className="mt-3 space-y-2.5">
             {validDomains.map((d) => (
-              <div key={d.id} className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <div className="truncate font-semibold text-ink">{d.hostname}</div>
-                  <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Doğrulandı · geçerli
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-                  <button onClick={() => goToOrder(d.id)} className="btn-primary">
-                    {purchaseMode ? 'Bu alan adı ile devam et' : 'Taramayı Başlat'}
-                  </button>
-                  {!purchaseMode && (
-                    <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
-                      Sil
+              <div key={d.id} className="card p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold text-ink">{d.hostname}</div>
+                    <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Doğrulandı · geçerli
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+                    <button onClick={() => goToOrder(d.id)} className="btn-primary">
+                      {purchaseMode ? 'Bu alan adı ile devam et' : 'Taramayı Başlat'}
                     </button>
-                  )}
+                    {!purchaseMode && (
+                      <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
+                        Sil
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {domainMsg?.id === d.id && (
+                  <p className="mt-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{domainMsg.text}</p>
+                )}
               </div>
             ))}
           </div>
@@ -332,6 +342,9 @@ export default function VerifyHub() {
                       )}
                     </div>
                   )}
+                  {domainMsg?.id === d.id && (
+                    <p className="mt-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{domainMsg.text}</p>
+                  )}
                 </div>
               );
             })}
@@ -386,6 +399,13 @@ export default function VerifyHub() {
             })()}
           </form>
         )}
+        {/* Ekle / toplu-sil sonucu — bölümün HEMEN ALTINDA (sayfa sonunda değil). */}
+        {bulkMsg && (
+          <p className="mt-3 rounded-card border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">{bulkMsg}</p>
+        )}
+        {notice && (
+          <p className="mt-3 rounded-card border border-emerald-300/50 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-800">✓ {notice}</p>
+        )}
       </section>
 
       {domains.length === 0 && !showAdd && (
@@ -399,36 +419,41 @@ export default function VerifyHub() {
   const orderCard = (o: Order, isArchived: boolean) => (
     // MOBİL: dikey yığ (bilgi üstte, eylemler altta sarar) — aksi halde host + 4 buton yan yana sıkışıp
     // üst üste biniyordu. sm+ : yatay (bilgi solda, eylemler sağda).
-    <div key={o.id} className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-      <button onClick={() => router.push(`/dashboard/${o.id}`)} className="min-w-0 text-left sm:flex-1">
-        <div className="truncate font-semibold text-ink">{o.hostname}</div>
-        <div className="mt-0.5 text-xs text-ink-muted">
-          {o.packageName} · {new Date(o.createdAt).toLocaleDateString('tr-TR')}
+    <div key={o.id} className="card p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <button onClick={() => router.push(`/dashboard/${o.id}`)} className="min-w-0 text-left sm:flex-1">
+          <div className="truncate font-semibold text-ink">{o.hostname}</div>
+          <div className="mt-0.5 text-xs text-ink-muted">
+            {o.packageName} · {new Date(o.createdAt).toLocaleDateString('tr-TR')}
+          </div>
+        </button>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:shrink-0">
+          <span className="badge">{ORDER_STATUS_LABEL[o.status] ?? o.status}</span>
+          {/* (Fatura talebi) ödemesi tamamlanmış siparişte talep/durum — form dashboard'ta (#fatura). */}
+          {o.paid && (
+            <button onClick={() => router.push(`/dashboard/${o.id}#fatura`)} className="btn-ghost text-xs text-accent-700">
+              {o.invoiceStatus === 'sent' ? 'Fatura gönderildi' : o.invoiceStatus ? 'Fatura talebi ✓' : 'Fatura talep et'}
+            </button>
+          )}
+          {isArchived ? (
+            <button onClick={() => archiveOrder(o.id, false)} className="btn-ghost text-xs">
+              Arşivden çıkar
+            </button>
+          ) : (
+            <>
+              <button onClick={() => archiveOrder(o.id, true)} className="btn-ghost text-xs">
+                Arşivle
+              </button>
+              <button onClick={() => deleteOrder(o.id)} className="btn-ghost text-xs text-red-600">
+                Sil
+              </button>
+            </>
+          )}
         </div>
-      </button>
-      <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:shrink-0">
-        <span className="badge">{ORDER_STATUS_LABEL[o.status] ?? o.status}</span>
-        {/* (Fatura talebi) ödemesi tamamlanmış siparişte talep/durum — form dashboard'ta (#fatura). */}
-        {o.paid && (
-          <button onClick={() => router.push(`/dashboard/${o.id}#fatura`)} className="btn-ghost text-xs text-accent-700">
-            {o.invoiceStatus === 'sent' ? 'Fatura gönderildi' : o.invoiceStatus ? 'Fatura talebi ✓' : 'Fatura talep et'}
-          </button>
-        )}
-        {isArchived ? (
-          <button onClick={() => archiveOrder(o.id, false)} className="btn-ghost text-xs">
-            Arşivden çıkar
-          </button>
-        ) : (
-          <>
-            <button onClick={() => archiveOrder(o.id, true)} className="btn-ghost text-xs">
-              Arşivle
-            </button>
-            <button onClick={() => deleteOrder(o.id)} className="btn-ghost text-xs text-red-600">
-              Sil
-            </button>
-          </>
-        )}
       </div>
+      {orderMsg?.id === o.id && (
+        <p className="mt-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{orderMsg.text}</p>
+      )}
     </div>
   );
 
@@ -440,6 +465,9 @@ export default function VerifyHub() {
           {purchaseMode ? 'Alan adı seçin' : 'Taramaya Başla'}
         </h1>
       </div>
+
+      {/* Sayfa-yükleme / genel hata — başlığın hemen altında (görünür), en altta değil. */}
+      {error && <p className="form-error mt-4">{error}</p>}
 
       {loading ? (
         <div className="mt-8 h-32 animate-pulse rounded-card bg-brand-50" />
@@ -531,13 +559,6 @@ export default function VerifyHub() {
             )
           )}
         </>
-      )}
-
-      {error && <p className="form-error mt-6">{error}</p>}
-      {notice && (
-        <p className="mt-6 rounded-card border border-emerald-300/50 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-800">
-          ✓ {notice}
-        </p>
       )}
     </main>
   );
