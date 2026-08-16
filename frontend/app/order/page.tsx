@@ -41,6 +41,8 @@ export default function OrderPage() {
   const [region, setRegion] = useState<RegionCode>('tr');
   // Sipariş özetinde hangi alan adının taranacağını AÇIKÇA göster (domainId'den çözülür).
   const [hostname, setHostname] = useState<string | null>(null);
+  // Seçili alan adı DNS ile doğrulanmış mı (AKTİF paket çelik kapısı için UI göstergesi).
+  const [domainVerified, setDomainVerified] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -118,7 +120,7 @@ export default function OrderPage() {
     // Doğrulanmış domain listesinden domainId'nin hostname'ini çöz (özet + mobil çubukta göster).
     if (domainId) {
       api.listDomains()
-        .then((ds) => { const d = ds.find((x) => x.id === domainId); if (d) setHostname(d.hostname); })
+        .then((ds) => { const d = ds.find((x) => x.id === domainId); if (d) { setHostname(d.hostname); setDomainVerified(d.valid); } })
         .catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -498,11 +500,40 @@ export default function OrderPage() {
 
       {!domainId && (
         <p className="mt-4 rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Önce site sahipliğinizi doğrulamalısınız.{' '}
+          Önce taranacak bir alan adı seçin.{' '}
           <Link href="/verify" className="font-semibold underline">
-            Doğrulamaya git →
+            Alan adı seç →
           </Link>
         </p>
+      )}
+
+      {/* (PASİF/AKTİF AYRIMI) Doğrulama gereksinimi — paket tipine göre net mesaj. */}
+      {domainId && (selected || selectedBundle) && (
+        isActiveLightSel ? (
+          domainVerified ? (
+            <p className="mt-4 flex items-center gap-2 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="shrink-0" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
+              Alan adı DNS ile doğrulandı — aktif tarama ödeme onayından sonra başlar.
+            </p>
+          ) : (
+            <div className="mt-4 rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900/90">
+              <p className="font-bold text-amber-900">Bu paket aktif problar gönderir — DNS doğrulaması gerekir</p>
+              <p className="mt-1 leading-relaxed">
+                Alan adı sahipliğinizi DNS ile doğrulamadan aktif tarama (enjeksiyon/oturum denemeleri)
+                <strong> başlamaz</strong> — ödeme alınsa bile sipariş <strong>“alan adı doğrulaması bekleniyor”</strong>
+                durumunda tutulur, doğrulanınca <strong>otomatik başlar</strong>.
+              </p>
+              <Link href={`/verify?${selectedBundle ? `bundle=${selectedBundle.key}` : `package=${selected}`}`} className="mt-2 inline-flex items-center gap-1 font-semibold text-amber-900 underline">
+                Şimdi DNS ile doğrula →
+              </Link>
+            </div>
+          )
+        ) : (
+          <p className="mt-4 flex items-center gap-2 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="shrink-0" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
+            Bu paket için doğrulama gerekmez — ödeme onaylanınca tarama hemen başlar.
+          </p>
+        )
       )}
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10">

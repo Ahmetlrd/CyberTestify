@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { adminApi } from '../../../lib/adminApi';
 import { H1, Table, Pager, StatusBadge, fmtDate } from '../../../components/admin/ui';
 
-const STATUSES = ['', 'awaiting_payment', 'paid', 'scan_queued', 'scan_running', 'awaiting_admin_review', 'scan_completed', 'scan_failed', 'scope_violation', 'report_delivered', 'report_purged', 'refunded'];
+const STATUSES = ['', 'awaiting_payment', 'awaiting_domain_verification', 'paid', 'scan_queued', 'scan_running', 'awaiting_admin_review', 'scan_completed', 'scan_failed', 'scope_violation', 'report_delivered', 'report_purged', 'refunded'];
 
 export default function AdminOrders() {
   const [page, setPage] = useState(1);

@@ -17,7 +17,6 @@ import { sendOrderConfirmation, sendInvoiceRequestNotification, sendRefundReques
 import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
 import { COMBO_BUNDLES, getBundle, bundlePrice, bundleMemberAmounts, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
-import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
 export const ordersRouter = Router();
@@ -230,11 +229,12 @@ ordersRouter.post('/', createLimiter, requireAuth, async (req, res) => {
     where: { id: domainId, customerId: req.customerId! },
   });
 
-  // Sira ONEMLI: once dogrulama, sonra odeme. Dogrulanmamis/suresi gecmis
-  // domain icin siparis olusturulamaz — bkz konusmadaki sira gerekcesi.
-  if (!isVerificationStillValid(domain)) {
-    return res.status(403).json({ error: 'Domain dogrulanmamis veya dogrulama suresi dolmus.' });
-  }
+  // (PASİF/AKTİF AYRIMI) DNS doğrulaması artık sipariş oluşturmayı BLOKLAMAZ:
+  //  · PASİF paketler (dışarıdan GET/TLS gözlemi) doğrulama GEREKTİRMEZ → sürtünmesiz.
+  //  · AKTİF paketler için doğrulama ÇELİK KAPI olarak DİSPATCH'te uygulanır (orchestrator
+  //    startScanForOrder): ödeme alınsa bile domain doğrulanmadan aktif tarama BAŞLAMAZ,
+  //    sipariş 'awaiting_domain_verification'da tutulur. Böylece "önce öde, sonra doğrula"
+  //    akışı mümkün olur ve çelik kapı yine de garanti kalır (tek choke-point).
 
   const packageDb = await prisma.scanPackage.findUniqueOrThrow({ where: { key: packageKey } });
   const packageDef = getPackageDef(packageKey);
@@ -483,9 +483,8 @@ ordersRouter.post('/bundle', createLimiter, requireAuth, async (req, res) => {
   const { domainId, bundleKey, region } = parsed.data;
 
   const domain = await prisma.domain.findFirstOrThrow({ where: { id: domainId, customerId: req.customerId! } });
-  if (!isVerificationStillValid(domain)) {
-    return res.status(403).json({ error: 'Domain dogrulanmamis veya dogrulama suresi dolmus.' });
-  }
+  // (PASİF/AKTİF AYRIMI) Doğrulama sipariş oluşturmayı bloklamaz — aktif paketler için
+  // çelik kapı dispatch'te (orchestrator.startScanForOrder) uygulanır. Bkz tekil sipariş yolu.
 
   const bundle = getBundle(bundleKey);
   if (!bundle) return res.status(404).json({ error: 'Paket bulunamadi.' });

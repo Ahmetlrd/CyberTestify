@@ -102,6 +102,13 @@ export function InstantScan() {
   const ok = result && result.status === 'ok' ? result : null;
   const highScore = !!ok && ok.score >= 85;
 
+  // (İş 2 — autopopulate) Teaser'da taranan alan adını satın-alma akışına TAŞI: kullanıcı tekrar
+  // yazmasın. Pasif Basit Tarama doğrulama gerektirmediği için /verify'da tek tık ile devam eder.
+  // Giriş yoksa /register?next=… ile önce kayıt, sonra otomatik /verify (hostname dolu) → /order.
+  const buyHostname = ok?.host ? encodeURIComponent(ok.host) : '';
+  const passiveNext = ok?.host ? `/verify?package=basit_tarama&hostname=${buyHostname}` : '/verify';
+  const passiveBuyHref = `/register?next=${encodeURIComponent(passiveNext)}`;
+
   return (
     <div className="rounded-[20px] border border-line bg-white/95 p-5 shadow-xl backdrop-blur sm:p-7">
       <div className="flex items-center gap-2">
@@ -232,7 +239,7 @@ export function InstantScan() {
                       {highScore ? (
                         <Link href="/tr/packages" className="btn-primary justify-center">Aktif Doğrulama Paketi ile Derinleştir → ₺14.999</Link>
                       ) : (
-                        <Link href="/register" className="btn-primary justify-center">Detaylı Raporu Aç (₺699)</Link>
+                        <Link href={passiveBuyHref} className="btn-primary justify-center">Detaylı Raporu Aç (₺699)</Link>
                       )}
                       <Link href="/tr/packages" className="text-center text-xs font-semibold text-accent-600 hover:underline">Tüm paketleri incele →</Link>
                     </div>

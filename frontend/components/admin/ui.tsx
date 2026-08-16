@@ -39,12 +39,13 @@ export function Pager({ page, pageSize, total, onPage }: { page: number; pageSiz
 const STATUS_COLOR: Record<string, string> = {
   scan_completed: '#22c55e', report_delivered: '#22c55e', scan_running: '#38bdf8',
   scan_queued: '#eab308', paid: '#a3e635', awaiting_payment: '#94a3b8',
-  awaiting_admin_review: '#f59e0b', awaiting_review: '#fbbf24',
+  awaiting_admin_review: '#f59e0b', awaiting_review: '#fbbf24', awaiting_domain_verification: '#fb923c',
   scan_failed: '#ef4444', scope_violation: '#f97316', report_purged: '#64748b', refunded: '#a78bfa',
 };
 // Kısa Türkçe etiketler (uzun enum yerine panelde okunur).
 const STATUS_LABEL: Record<string, string> = {
   awaiting_admin_review: 'rapor onayı bekliyor',
+  awaiting_domain_verification: 'alan adı doğrulaması bekliyor',
 };
 export function StatusBadge({ status }: { status: string | null }) {
   if (!status) return <span style={{ color: '#64748b' }}>—</span>;

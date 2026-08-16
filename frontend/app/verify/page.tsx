@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '../../lib/api';
+import { isActivePackageKey } from '../../lib/packages';
 
 type Domain = {
   id: string;
@@ -26,6 +27,7 @@ type Order = {
 
 const ORDER_STATUS_LABEL: Record<string, string> = {
   awaiting_payment: 'Ödeme bekleniyor',
+  awaiting_domain_verification: 'Alan adı doğrulaması bekleniyor',
   paid: 'Sıraya alınıyor',
   scan_queued: 'Başlatılıyor',
   scan_running: 'Taranıyor',
@@ -63,7 +65,11 @@ export default function VerifyHub() {
   const params = useSearchParams();
   const packageParam = params.get('package');
   const bundleParam = params.get('bundle');
+  // (İş 2 — autopopulate) Teaser'dan taşınan alan adı: form otomatik dolu gelsin.
+  const hostnameParam = params.get('hostname');
   const purchaseMode = !!(packageParam || bundleParam);
+  // (PASİF/AKTİF AYRIMI) Aktif paketlerde DNS doğrulaması ZORUNLU; pasiflerde doğrulama gerekmez.
+  const activePurchase = isActivePackageKey(packageParam) || isActivePackageKey(bundleParam);
   const purchaseQuery = packageParam ? `&package=${packageParam}` : bundleParam ? `&bundle=${bundleParam}` : '';
 
   const [domains, setDomains] = useState<Domain[]>([]);
@@ -103,6 +109,14 @@ export default function VerifyHub() {
 
   const goToOrder = (domainId: string) => router.push(`/order?domainId=${domainId}${purchaseQuery}`);
 
+  // (İş 2) Teaser'dan gelen alan adını ekleme formuna otomatik doldur + formu aç (kullanıcı yazmasın).
+  useEffect(() => {
+    if (hostnameParam) {
+      setNewHostname(hostnameParam);
+      setShowAdd(true);
+    }
+  }, [hostnameParam]);
+
   async function addDomain(e: React.FormEvent) {
     e.preventDefault();
     if (!newHostname.trim() || busy) return;
@@ -113,6 +127,12 @@ export default function VerifyHub() {
       const res = await api.createDomain(newHostname.trim());
       setNewHostname('');
       setShowAdd(false);
+      // (PASİF paket satın-alma) DNS doğrulaması GEREKMEZ → alan adı eklenince doğrudan sipariş
+      // adımına geç (sürtünmesiz). Aktif paketlerde bu atlama YOK; DNS TXT akışı zorunlu.
+      if (purchaseMode && !activePurchase) {
+        goToOrder(res.domainId);
+        return;
+      }
       await refresh();
       setOpenId(res.domainId);
       // Zaten ekli + doğrulanmışsa: onaylı kayıt KORUNUR (yeniden DNS doğrulama yok) + net bilgi.
@@ -247,6 +267,12 @@ export default function VerifyHub() {
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+                      {/* PASİF satın-alma: doğrulama gerekmez → tek tıkla devam. Aktifte bu buton YOK. */}
+                      {purchaseMode && !activePurchase && (
+                        <button onClick={() => goToOrder(d.id)} className="btn-primary text-sm">
+                          Devam et
+                        </button>
+                      )}
                       <button onClick={() => setOpenId(open ? null : d.id)} className="btn-outline text-sm">
                         {open ? 'Gizle' : 'Doğrula'}
                       </button>
@@ -304,7 +330,7 @@ export default function VerifyHub() {
                 onChange={(e) => setNewHostname(e.target.value)}
               />
               <button type="submit" disabled={busy} className="btn-primary disabled:opacity-60">
-                {busy ? 'Ekleniyor…' : 'Ekle ve doğrula'}
+                {busy ? 'Ekleniyor…' : purchaseMode && !activePurchase ? 'Ekle ve devam et' : 'Ekle ve doğrula'}
               </button>
             </div>
             {(() => {
@@ -387,10 +413,26 @@ export default function VerifyHub() {
       ) : purchaseMode ? (
         <>
           {/* SATIN-ALMA MODU: yalnız alan adı seçimi (rapor geçmişi YOK). Paket sonraki adımda hazır gelir. */}
-          <div className="mt-6 rounded-card border border-accent/40 bg-accent-soft/40 px-4 py-3 text-sm text-ink-soft">
-            Seçtiğiniz paket için bir <strong>alan adı</strong> seçin. Doğrulanmış bir alan adınız varsa tek tıkla
-            devam edin; yoksa yeni bir alan adı ekleyip doğrulayın.
-          </div>
+          {activePurchase ? (
+            /* AKTİF paket — DNS doğrulaması ZORUNLU (çelik kapı / yasal). */
+            <div className="mt-6 rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900/90">
+              <p className="font-bold text-amber-900">Bu paket aktif güvenlik probları gönderir</p>
+              <p className="mt-1 leading-relaxed">
+                Kimlik-doğrulamalı testler ve enjeksiyon/oturum denemeleri yalnızca <strong>alan adının
+                sahibi/yetkilisi</strong> olduğunuzu <strong>DNS TXT kaydıyla doğruladıktan sonra</strong> başlatılabilir
+                (yasal zorunluluk). Aşağıdan alan adınızı ekleyip doğrulayın.
+              </p>
+            </div>
+          ) : (
+            /* PASİF paket — doğrulama gerekmez, sürtünmesiz. */
+            <div className="mt-6 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900/90">
+              <p className="font-bold text-emerald-900">Bu paket için doğrulama gerekmez</p>
+              <p className="mt-1 leading-relaxed">
+                Pasif tarama yalnızca dışarıdan gözlem yapar (güvenlik başlıkları, TLS, yapılandırma).
+                Alan adınızı ekleyip <strong>hemen devam edebilirsiniz</strong> — DNS kaydı eklemenize gerek yok.
+              </p>
+            </div>
+          )}
           {domainSection}
         </>
       ) : (

@@ -151,6 +151,24 @@ export function securityProfileFor(def: ScanPackageDef): SecurityProfile {
   return def.securityProfile ?? 'passive';
 }
 
+// AKTİF paket sınıflandırması (DNS sahiplik doğrulaması ZORUNLU — çelik kapı).
+// AKTİF = sisteme fiilen prob/payload gönderir (SQLi/XSS enjeksiyon, IDOR, login prob…).
+// PASİF = yalnız dışarıdan gözlem (GET/TLS) → doğrulama GEREKMEZ (SecurityHeaders/SSL Labs sınıfı).
+//
+// KRİTİK: 'bundle_active_verify' package-def'inde securityProfile ALANI YOK → securityProfileFor
+// onu 'passive' döndürür, OYSA gerçekte aktif enjeksiyon probları çalıştırır. Bu yüzden aktif
+// sınıflandırma securityProfileFor'a TEK BAŞINA GÜVENMEZ; iki aktif bundle AÇIKÇA kümede tutulur,
+// ayrıca aktif profilli tekil üye paketler (injection_verify, rce_verify, authenticated_scan…)
+// profilden yakalanır. Güvenli taraf: emin değilsek 'aktif' say (yanlış-pasif ASLA olmasın).
+const ACTIVE_BUNDLE_KEYS = new Set(['bundle_active_verify', 'bundle_full_pentest', 'bundle_elite_autonomous']);
+export function isActivePackage(key: string | undefined | null): boolean {
+  if (!key) return false;
+  if (ACTIVE_BUNDLE_KEYS.has(key)) return true;
+  const def = SCAN_PACKAGES.find((p) => p.key === key);
+  if (!def) return false;
+  return securityProfileFor(def) !== 'passive';
+}
+
 const PACKAGE_I18N: Partial<Record<ScanPackageDef['key'], { displayName: string; description: string }>> = {
   basit_tarama: { displayName: 'Basic Scan', description: 'Fast passive pre-check: homepage security headers, TLS validity and server banner summary. The cheapest entry package, done in minutes.' },
   ssl_tls: { displayName: 'SSL/TLS Configuration Audit', description: 'Certificate validity/expiry, weak protocol and cipher suite usage, missing HSTS. A fully passive, non-intrusive encryption audit.' },

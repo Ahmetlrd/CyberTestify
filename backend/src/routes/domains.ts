@@ -9,6 +9,7 @@ import {
   normalizeHostname,
 } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
+import { resumeVerifiedDomainOrders } from '../services/orchestrator.js';
 import { quickScopeSignal } from '../services/activeVerifyEvidence.js';
 
 export const domainsRouter = Router();
@@ -78,7 +79,16 @@ domainsRouter.post('/', requireAuth, async (req, res) => {
 });
 
 domainsRouter.post('/:domainId/verify', requireAuth, async (req, res) => {
+  // Sahiplik kontrolü: domain bu müşteriye ait olmalı (aksi halde başkasının domain'ini
+  // doğrulayıp resume tetiklenemesin).
+  const owned = await prisma.domain.findFirst({ where: { id: req.params.domainId, customerId: req.customerId! }, select: { id: true } });
+  if (!owned) return res.status(404).json({ error: 'Alan adı bulunamadı.' });
   const verified = await checkDomainVerification(req.params.domainId);
+  // ÇELİK KAPI (resume): doğrulama tamamlandıysa bu alan adında 'doğrulama bekliyor'da TUTULAN
+  // aktif siparişleri otomatik başlat. Best-effort — doğrulama yanıtını bloklamaz.
+  if (verified) {
+    resumeVerifiedDomainOrders(req.params.domainId).catch((e) => console.error('[steel-gate] resume error', e));
+  }
   res.json({ verified });
 });
 

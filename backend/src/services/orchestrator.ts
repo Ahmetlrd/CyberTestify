@@ -1,6 +1,6 @@
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { getPackageDef, securityProfileFor, requiresManualReview, METHOD_GUARD_EN, METHOD_GUARD_TR, NO_SCRIPT_HARD_EN, NO_SCRIPT_HARD_TR } from './scanPackages.js';
+import { getPackageDef, securityProfileFor, isActivePackage, requiresManualReview, METHOD_GUARD_EN, METHOD_GUARD_TR, NO_SCRIPT_HARD_EN, NO_SCRIPT_HARD_TR } from './scanPackages.js';
 import { hasValidActiveTestConsent } from './activeTestConsent.js';
 import { isVerificationStillValid } from './verification.js';
 import { checkEgressProxyHealth } from './egressHealth.js';
@@ -45,6 +45,20 @@ async function hasActiveScan(): Promise<boolean> {
  * (scan_queued), yoksa hemen baslatir. Boylece concurrency=1 garanti edilir.
  */
 export async function enqueueOrStartScan(orderId: string) {
+  // ÇELİK KAPI (erken kontrol — İş 3): AKTİF paket + doğrulanmamış domain ise kuyruğa BİLE
+  // alma; doğrudan 'awaiting_domain_verification'a al ki müşteri durumu net görsün
+  // ("kuyrukta" değil "doğrulama bekliyor"). startScanForOrder'daki kapı yine de nihai
+  // garantidir (promote/retry gibi doğrudan yollar için).
+  const gate = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { domain: true, package: { select: { key: true } } },
+  });
+  if (gate && isActivePackage(gate.package.key) && !isVerificationStillValid(gate.domain)) {
+    await prisma.order.update({ where: { id: orderId }, data: { status: 'awaiting_domain_verification' } });
+    console.log(`[steel-gate] AKTİF paket ${gate.package.key} sipariş ${orderId}: domain doğrulanmadı → awaiting_domain_verification (kuyruğa alınmadı).`);
+    return { queued: false as const, held: true as const };
+  }
+
   // Aktif tarama varsa nasilsa kuyruga alacagiz; yoksa hemen baslatmadan ONCE
   // egress proxy saglikli mi kontrol et (kuyruga alinan siparisler promote
   // sirasinda ayrica kontrol edilir).
@@ -74,6 +88,30 @@ export async function enqueueUnlessReview(orderId: string): Promise<void> {
 }
 
 /**
+ * (ÇELİK KAPI — resume) Alan adı DNS ile DOĞRULANDIĞINDA çağrılır (domains verify route).
+ * O alan adında 'awaiting_domain_verification'da TUTULAN (ödenmiş) aktif siparişleri bulur ve
+ * yeniden kuyruğa alır → tarama otomatik başlar (full_pentest ise önce yarı-manuel admin kapısı).
+ * Idempotent: eşleşen sipariş yoksa sessizce döner. Doğrulama akışını asla bloklamaz (best-effort).
+ */
+export async function resumeVerifiedDomainOrders(domainId: string): Promise<void> {
+  const held = await prisma.order.findMany({
+    where: { domainId, status: 'awaiting_domain_verification' },
+    select: { id: true, package: { select: { key: true } } },
+  });
+  for (const o of held) {
+    // Tutulan sipariş ÖDENMİŞTİ (finalizePaidOrder 'paid' yaptıktan sonra kapı tuttu); enqueue
+    // yolunun beklediği 'paid' ara durumuna geri al, sonra normal akışa sok.
+    await prisma.order.update({ where: { id: o.id }, data: { status: 'paid' } });
+    try {
+      await enqueueUnlessReview(o.id);
+      console.log(`[steel-gate] Domain doğrulandı → aktif sipariş ${o.id} (${o.package.key}) resume edildi.`);
+    } catch (e) {
+      console.error(`[steel-gate] resume sipariş ${o.id} başarısız:`, e);
+    }
+  }
+}
+
+/**
  * Musteri hicbir asamada PentAGI'ye dogrudan dokunmuyor — sadece bu fonksiyon
  * bizim servis hesabimizla PentAGI'ye baglaniyor. 'paid' veya 'scan_queued'
  * (kuyruktan promote edilen) siparisler icin cagrilabilir.
@@ -94,12 +132,19 @@ export async function startScanForOrder(orderId: string) {
     throw new Error('Zaten aktif bir tarama var; siparis kuyruga alindi.');
   }
 
-  // Odeme ile tarama arasinda gecen surede domain sahipligi degismis olabilir
-  // (bkz konusmadaki "once dogrula, sonra ode" sirasi) — burada tekrar kontrol.
-  if (!isVerificationStillValid(order.domain)) {
-    await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed' } });
-    throw new Error('Domain dogrulamasi gecersiz veya suresi dolmus, tarama baslatilamiyor.');
+  // ============================ ÇELİK KAPI (İş 3) ============================
+  // AKTİF paketler (SQLi/XSS payload + login prob) alan adı DNS ile DOĞRULANMADAN
+  // ASLA çalışmaz — ödeme alınmış olsa BİLE. Bu TEK choke-point tüm yolları kapsar:
+  // ödeme, %100-promo, kuyruk-promote, admin-approve, admin-retry (hepsi buradan geçer).
+  // Doğrulanmamışsa sipariş 'awaiting_domain_verification'da TUTULUR (scan_failed DEĞİL —
+  // müşteri parasını kaybetmez); /verify'da DNS TXT tamamlanınca domains route otomatik
+  // resume eder (resumeVerifiedDomainOrders). PASİF paketler doğrulama gerektirmez → atlanır.
+  if (isActivePackage(order.package.key) && !isVerificationStillValid(order.domain)) {
+    await prisma.order.update({ where: { id: orderId }, data: { status: 'awaiting_domain_verification' } });
+    console.log(`[steel-gate] AKTİF paket ${order.package.key} sipariş ${orderId}: domain DOĞRULANMADI → awaiting_domain_verification. Tarama BAŞLATILMADI.`);
+    return null;
   }
+  // ==========================================================================
 
   const pkg = getPackageDef(order.package.key);
   const pkgProfile = securityProfileFor(pkg);

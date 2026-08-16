@@ -14,6 +14,7 @@ const TERMINAL = new Set(['scan_completed', 'scan_failed', 'scope_violation', 'r
 
 const HEADLINE: Record<string, string> = {
   awaiting_payment: 'Ödeme bekleniyor',
+  awaiting_domain_verification: 'Alan adı doğrulaması gerekli',
   paid: 'Ödeme alındı — tarama hazırlanıyor',
   scan_queued: 'Taramanız başlatılıyor',
   scan_running: 'Taramanız çalışıyor',
@@ -192,9 +193,27 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       {/* İade/süre-doldu gibi terminal durumlarda adım göstergesi YANILTICI olur — gösterilmez.
           ÖDEME BEKLENİYOR'da da gösterilmez: tarama HENÜZ BAŞLAMADI; "Tarama çalışıyor" adımı
           müşteriyi yanıltır (ödeme yapmadan tarama sanıyor). Onun yerine ödeme kartı gösterilir. */}
-      {!['refunded', 'report_purged', 'awaiting_payment'].includes(status) && (
+      {!['refunded', 'report_purged', 'awaiting_payment', 'awaiting_domain_verification'].includes(status) && (
         <div className="mt-8">
           <StatusTracker status={status} />
+        </div>
+      )}
+
+      {/* (ÇELİK KAPI) AKTİF paket ödendi ama alan adı DNS ile doğrulanmadı → tarama TUTULUYOR.
+          Aktif problar (SQLi/XSS/login prob) yasal olarak yalnız sahiplik doğrulanınca çalışır. */}
+      {status === 'awaiting_domain_verification' && (
+        <div className="mt-8 rounded-card border-2 border-amber-300 bg-amber-50 p-6">
+          <p className="text-lg font-bold text-amber-900">Alan adı sahipliğinizi doğrulayın</p>
+          <p className="mt-1 text-sm leading-relaxed text-amber-900/80">
+            Ödemeniz alındı. Ancak bu paket <strong>aktif güvenlik probları</strong> (kimlik-doğrulamalı testler,
+            enjeksiyon/oturum denemeleri) gönderir; bu testler yasal olarak yalnızca <strong>alan adının sahibi/yetkilisi
+            olduğunuzu DNS ile doğruladıktan sonra</strong> başlatılabilir. Doğrulama tamamlanınca taramanız
+            <strong> otomatik başlar</strong> — bu sayfa kendiliğinden güncellenir.
+          </p>
+          <a href="/verify" className="btn-primary mt-4 inline-flex w-full items-center justify-center gap-1.5 sm:w-auto">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
+            DNS ile doğrula
+          </a>
         </div>
       )}
 

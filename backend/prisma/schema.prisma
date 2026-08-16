@@ -25,6 +25,7 @@ enum DomainVerificationStatus {
 enum OrderStatus {
   awaiting_payment
   awaiting_review  // (Tam Kapsamlı Pentest) ödendi ama YARI-MANUEL onay bekliyor: biz hedef/test hesabı/kapsamı gözden geçirip onaylayınca tarama başlar
+  awaiting_domain_verification  // (AKTİF paketler — ÇELİK KAPI) ödeme alınmış olsa BİLE alan adı DNS ile doğrulanmadan aktif tarama BAŞLAMAZ; müşteri /verify'da DNS TXT'i tamamlayınca tarama otomatik başlar
   paid
   scan_queued
   scan_running
