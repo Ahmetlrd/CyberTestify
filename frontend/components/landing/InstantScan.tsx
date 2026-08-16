@@ -156,10 +156,11 @@ export function InstantScan() {
       {/* ANİMASYON */}
       {state === 'scanning' && (
         <div className="mt-5">
-          <div className="overflow-hidden rounded-card border border-white/10 bg-[#0A1F1C] p-4 font-mono text-[13px] leading-7">
+          {/* TÜM fazlar DOM'da; ulaşılmayanlar invisible → kutu yüksekliği sabit (mobilde zıplama yok). */}
+          <div className="rounded-card border border-white/10 bg-[#0A1F1C] p-4 font-mono text-[13px] leading-7">
             <div className="text-white/45" dir="ltr">$ cybertestify instant-scan {url.trim()}</div>
-            {PHASES.slice(0, phase + 1).map((p, i) => (
-              <div key={p} className={i === phase ? 'text-white/85' : 'text-emerald-300/90'} dir="ltr">
+            {PHASES.map((p, i) => (
+              <div key={p} className={`${i === phase ? 'text-white/85' : 'text-emerald-300/90'} ${i <= phase ? '' : 'invisible'}`} dir="ltr">
                 {i === phase ? '→' : '✓'} {p}
                 {i === phase && <span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" />}
               </div>

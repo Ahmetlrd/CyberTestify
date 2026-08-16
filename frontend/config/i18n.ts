@@ -62,7 +62,7 @@ const tr: Dict = {
     badge: 'Yapay zekâ destekli otomasyon · İnsan pentester beklemeyin',
     titleA: 'Sitenizin güvenliğini,',
     titleHi: 'dakikalar içinde',
-    titleB: 'yapay zekâ destekli taramayla başlatın',
+    titleB: 'yapay zekâ destekli taramayla test edin',
     subtitle:
       'Web siteniz için yapay zeka destekli, hızlı ve uygun fiyatlı güvenlik ön değerlendirmesi. Resmi pentest/denetim yerine geçmez; dakikalar içinde aksiyon alınabilir bir rapor üretir. Alan adınızı doğrulayın, paketinizi seçin, şifreli raporunuzu alın.',
     ctaPrimary: 'Ücretsiz Doğrula ve Başla',

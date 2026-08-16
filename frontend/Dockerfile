@@ -14,6 +14,9 @@ ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID}
 # Microsoft Clarity project ID — BOSSA hic yuklenmez; YALNIZ cerez onayi sonrasi yuklenir (KVKK).
 ARG NEXT_PUBLIC_CLARITY_PROJECT_ID
 ENV NEXT_PUBLIC_CLARITY_PROJECT_ID=${NEXT_PUBLIC_CLARITY_PROJECT_ID}
+# Cloudflare Turnstile SITE key (bot dogrulamasi widget'i). BOSSA component default TEST key kullanir.
+ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
+ENV NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
 RUN npm run build
 
 FROM node:20-alpine AS run

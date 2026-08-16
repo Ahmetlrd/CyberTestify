@@ -338,14 +338,16 @@ export default function VerifyHub() {
   );
 
   const orderCard = (o: Order, isArchived: boolean) => (
-    <div key={o.id} className="card flex items-center justify-between gap-3 p-4">
-      <button onClick={() => router.push(`/dashboard/${o.id}`)} className="min-w-0 flex-1 text-left">
+    // MOBİL: dikey yığ (bilgi üstte, eylemler altta sarar) — aksi halde host + 4 buton yan yana sıkışıp
+    // üst üste biniyordu. sm+ : yatay (bilgi solda, eylemler sağda).
+    <div key={o.id} className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <button onClick={() => router.push(`/dashboard/${o.id}`)} className="min-w-0 text-left sm:flex-1">
         <div className="truncate font-semibold text-ink">{o.hostname}</div>
         <div className="mt-0.5 text-xs text-ink-muted">
           {o.packageName} · {new Date(o.createdAt).toLocaleDateString('tr-TR')}
         </div>
       </button>
-      <div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
+      <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:shrink-0">
         <span className="badge">{ORDER_STATUS_LABEL[o.status] ?? o.status}</span>
         {/* (Fatura talebi) ödemesi tamamlanmış siparişte talep/durum — form dashboard'ta (#fatura). */}
         {o.paid && (

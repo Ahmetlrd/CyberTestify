@@ -57,12 +57,13 @@ export function LiveDemo({ lang = 'tr' }: { lang?: Lang }) {
         <span className="h-3 w-3 rounded-full bg-emerald-400/70" />
         <span className="ml-3 text-xs font-medium text-white/40">cybertestify — live scan</span>
       </div>
-      {/* SABİT yükseklik: satırlar 1→9→1 döngüsünde kutu yüksekliği DEĞİŞMEZ. Aksi halde büyüyüp
-          küçülen içerik mobilde tarayıcı scroll-anchoring'ini tetikleyip sayfayı kendiliğinden
-          aşağı kaydırıyordu (9 satır ≈ 252px + p-5 40px ≈ 292px; 296px hepsini taşımadan tutar). */}
-      <div className="h-[296px] overflow-hidden p-5 font-mono text-[13px] leading-7">
-        {lines.slice(0, shown).map((l, i) => (
-          <div key={i} className={TONE[l.tone]} dir="ltr">
+      {/* TÜM satırlar HER ZAMAN DOM'da; henüz "yazılmamış" olanlar `invisible` (yer tutar, görünmez).
+          Böylece kutu yüksekliği HİÇ değişmez (döngüde büyüyüp küçülmez → mobilde sayfayı kendiliğinden
+          kaydırmaz) VE hiçbir satır kırpılmaz (eski sabit-yükseklik + overflow-hidden son satırları
+          kesiyordu). Yükseklik içeriğe göre otomatik; sabit px yok → farklı font/ekranda güvenli. */}
+      <div className="p-5 font-mono text-[13px] leading-7">
+        {lines.map((l, i) => (
+          <div key={i} className={`${TONE[l.tone]} ${i < shown ? '' : 'invisible'}`} dir="ltr">
             {l.t}
             {i === shown - 1 && shown < lines.length && (
               <span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" />

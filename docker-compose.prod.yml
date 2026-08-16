@@ -99,6 +99,8 @@ services:
         NEXT_PUBLIC_GA_MEASUREMENT_ID: "${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}"
         # Microsoft Clarity project ID — .env'den (bossa yuklenmez; yalniz onay sonrasi). REBUILD gerekir.
         NEXT_PUBLIC_CLARITY_PROJECT_ID: "${NEXT_PUBLIC_CLARITY_PROJECT_ID:-}"
+        # Cloudflare Turnstile SITE key — .env'den (bossa component TEST key kullanir). Degisince REBUILD.
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: "${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}"
     container_name: cybertestify-frontend
     restart: always
     # SSR meta icin YALNIZ bu degisken .env'den gecirilir (secret sizmasin diye env_file DEGIL).

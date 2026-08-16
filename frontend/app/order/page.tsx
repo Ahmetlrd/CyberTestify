@@ -395,16 +395,18 @@ export default function OrderPage() {
   const onCta = () => (selectedBundle ? handleBundleStart() : handleStart());
 
   // (İŞ 3 · Sorun A) "Satın Al" neden pasif? Müşteri tahmin etmesin — net sebep + onaylara kaydırma.
-  const scrollToConsents = () => document.getElementById('onaylar')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const scrollToTarget = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   const allGroupsChecked = groupGeneralChecked && groupCrossBorderChecked && withdrawalConsent;
-  const disabledHint: { text: string; scroll: boolean } | null = (() => {
+  // (MOBİL) Buton neden pasif? Uyarı/onay AŞAĞIDA olabilir; hint'e `target` verip mobil alt-çubukta da
+  // "→ oraya kaydır" yapıyoruz. Aksi halde ön-kontrol uyarısının onay kutusuna ulaşılamayıp kilitleniyordu.
+  const disabledHint: { text: string; scroll: boolean; target?: string } | null = (() => {
     if (!(selected || selectedBundle) || busy) return null;
     if (!domainId) return { text: 'Önce site sahipliğinizi doğrulayın.', scroll: false };
     if (selectedBundle?.selectable && bundleModules.length === 0) return { text: 'Paket içeriğini seçin.', scroll: false };
     if (needsAuthSel && (!authUser.trim() || !authPass)) return { text: 'Test hesabı kullanıcı adı ve şifresini girin.', scroll: false };
-    if (!allGroupsChecked) return { text: 'Devam etmek için aşağıdaki onayları işaretleyin →', scroll: true };
-    if (showLowScopeWarning && !lowScopeAck) return { text: 'Düşük-kapsam uyarısını onaylayın.', scroll: false };
-    if (showUnreachableWarning && !unreachableAck) return { text: 'Hedefe erişilemiyor — uyarıyı okuyup onaylayın.', scroll: false };
+    if (!allGroupsChecked) return { text: 'Devam etmek için aşağıdaki onayları işaretleyin →', scroll: true, target: 'onaylar' };
+    if (showLowScopeWarning && !lowScopeAck) return { text: 'Ön kontrol uyarısını okuyup onaylayın →', scroll: true, target: 'oncontrol-uyari' };
+    if (showUnreachableWarning && !unreachableAck) return { text: 'Erişim uyarısını okuyup onaylayın →', scroll: true, target: 'oncontrol-uyari' };
     if (scopeChecking) return { text: 'Ön kontrol yapılıyor…', scroll: false };
     return null;
   })();
@@ -792,6 +794,51 @@ export default function OrderPage() {
         </div>
       )}
 
+      {/* ÖN KONTROL UYARILARI — ana kolonda (mobil DÂHİL görünür). aside masaüstü-only olduğundan
+          buraya taşındı; aksi halde mobilde onay kutusuna ulaşılamayıp sistem kilitleniyordu. */}
+              {scopeChecking && (
+                <p className="mt-3 text-center text-xs text-ink-muted">Hedefinize ulaşılıyor mu, ön kontrol yapılıyor…</p>
+              )}
+              {showUnreachableWarning && (
+                <div id="oncontrol-uyari" className="mt-4 scroll-mt-24 rounded-card border-2 border-rose-400 bg-rose-50 p-4 text-sm">
+                  <p className="font-bold text-rose-900">🚫 Hedefinize şu an dışarıdan ulaşılamıyor</p>
+                  <p className="mt-1 leading-relaxed text-rose-900/90">
+                    Sitenizin ana adresi (<strong>443/HTTPS ve 80/HTTP</strong>) şu an yanıt vermiyor. Bu bir hata
+                    değildir — sitenizin <strong>yayında olmadığı, kapalı olduğu ya da bizim erişimimizi
+                    engellediği</strong> anlamına gelir. Tarama şu an başlatılırsa dışarıdan test edilecek bir yüzey
+                    bulunamayacağı için rapor büyük olasılıkla <strong>boş / "İncelenemedi"</strong> gelir.
+                  </p>
+                  <p className="mt-2 leading-relaxed text-rose-900/90">
+                    <strong>Önerimiz:</strong> sitenizin yayında ve erişilebilir olduğundan emin olun, sonra bu sayfayı
+                    yenileyip tekrar deneyin. Erişim sorununun geçici olduğunu düşünüyorsanız yine de devam edebilirsiniz.
+                  </p>
+                  <label className="mt-3 flex cursor-pointer items-start gap-2 font-medium text-rose-900">
+                    <input type="checkbox" checked={unreachableAck} onChange={(e) => setUnreachableAck(e.target.checked)} className="mt-0.5" />
+                    <span>Erişim sorununu anladım; yine de şimdi başlatmak istiyorum.</span>
+                  </label>
+                </div>
+              )}
+              {showLowScopeWarning && (
+                <div id="oncontrol-uyari" className="mt-4 scroll-mt-24 rounded-card border-2 border-amber-400 bg-amber-50 p-4 text-sm">
+                  <p className="font-bold text-amber-900">⚠️ Önemli Ön Kontrol</p>
+                  <p className="mt-1 leading-relaxed text-amber-900/90">
+                    Sitenizde otomatik hızlı taramada <strong>test edilebilir giriş noktası</strong> (form, query
+                    parametresi, sayısal ID içeren uç nokta) <strong>neredeyse hiç bulunamadı</strong>. Bu genellikle
+                    sitenin <strong>JavaScript ile render edilen (SPA)</strong> bir yapıya sahip olmasından kaynaklanır.
+                  </p>
+                  <p className="mt-2 leading-relaxed text-amber-900/90">
+                    Tarama yine de çalıştırılacaktır, ancak çoğu kontrol <strong>"kapsam dışı / incelenemedi"</strong>{' '}
+                    olarak sonuçlanabilir. Ödenen tutar <strong>bulgu garantisi değildir</strong>; kapsamlı bir
+                    değerlendirme sürecinin tamamı içindir.
+                  </p>
+                  <label className="mt-3 flex cursor-pointer items-start gap-2 font-medium text-amber-900">
+                    <input type="checkbox" checked={lowScopeAck} onChange={(e) => setLowScopeAck(e.target.checked)} className="mt-0.5" />
+                    <span>Devam etmek istiyorum.</span>
+                  </label>
+                </div>
+              )}
+
+
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
         </div>{/* ===== SOL kolon sonu ===== */}
@@ -831,53 +878,12 @@ export default function OrderPage() {
               ) : (
                 <p className="mt-2 text-sm text-ink-soft">Devam etmek için bir paket seçin.</p>
               )}
-              {scopeChecking && (
-                <p className="mt-3 text-center text-xs text-ink-muted">Hedefinize ulaşılıyor mu, ön kontrol yapılıyor…</p>
-              )}
-              {showUnreachableWarning && (
-                <div className="mt-4 rounded-card border-2 border-rose-400 bg-rose-50 p-4 text-sm">
-                  <p className="font-bold text-rose-900">🚫 Hedefinize şu an dışarıdan ulaşılamıyor</p>
-                  <p className="mt-1 leading-relaxed text-rose-900/90">
-                    Sitenizin ana adresi (<strong>443/HTTPS ve 80/HTTP</strong>) şu an yanıt vermiyor. Bu bir hata
-                    değildir — sitenizin <strong>yayında olmadığı, kapalı olduğu ya da bizim erişimimizi
-                    engellediği</strong> anlamına gelir. Tarama şu an başlatılırsa dışarıdan test edilecek bir yüzey
-                    bulunamayacağı için rapor büyük olasılıkla <strong>boş / "İncelenemedi"</strong> gelir.
-                  </p>
-                  <p className="mt-2 leading-relaxed text-rose-900/90">
-                    <strong>Önerimiz:</strong> sitenizin yayında ve erişilebilir olduğundan emin olun, sonra bu sayfayı
-                    yenileyip tekrar deneyin. Erişim sorununun geçici olduğunu düşünüyorsanız yine de devam edebilirsiniz.
-                  </p>
-                  <label className="mt-3 flex cursor-pointer items-start gap-2 font-medium text-rose-900">
-                    <input type="checkbox" checked={unreachableAck} onChange={(e) => setUnreachableAck(e.target.checked)} className="mt-0.5" />
-                    <span>Erişim sorununu anladım; yine de şimdi başlatmak istiyorum.</span>
-                  </label>
-                </div>
-              )}
-              {showLowScopeWarning && (
-                <div className="mt-4 rounded-card border-2 border-amber-400 bg-amber-50 p-4 text-sm">
-                  <p className="font-bold text-amber-900">⚠️ Önemli Ön Kontrol</p>
-                  <p className="mt-1 leading-relaxed text-amber-900/90">
-                    Sitenizde otomatik hızlı taramada <strong>test edilebilir giriş noktası</strong> (form, query
-                    parametresi, sayısal ID içeren uç nokta) <strong>neredeyse hiç bulunamadı</strong>. Bu genellikle
-                    sitenin <strong>JavaScript ile render edilen (SPA)</strong> bir yapıya sahip olmasından kaynaklanır.
-                  </p>
-                  <p className="mt-2 leading-relaxed text-amber-900/90">
-                    Tarama yine de çalıştırılacaktır, ancak çoğu kontrol <strong>"kapsam dışı / incelenemedi"</strong>{' '}
-                    olarak sonuçlanabilir. Ödenen tutar <strong>bulgu garantisi değildir</strong>; kapsamlı bir
-                    değerlendirme sürecinin tamamı içindir.
-                  </p>
-                  <label className="mt-3 flex cursor-pointer items-start gap-2 font-medium text-amber-900">
-                    <input type="checkbox" checked={lowScopeAck} onChange={(e) => setLowScopeAck(e.target.checked)} className="mt-0.5" />
-                    <span>Devam etmek istiyorum.</span>
-                  </label>
-                </div>
-              )}
               <button onClick={onCta} disabled={ctaDisabled} className="btn-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-50">
                 {ctaLabel}
               </button>
               {disabledHint ? (
                 disabledHint.scroll ? (
-                  <button type="button" onClick={scrollToConsents} className="mt-2 w-full rounded-card border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs font-semibold text-amber-800 hover:bg-amber-100">
+                  <button type="button" onClick={() => scrollToTarget(disabledHint.target ?? 'onaylar')} className="mt-2 w-full rounded-card border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs font-semibold text-amber-800 hover:bg-amber-100">
                     {disabledHint.text}
                   </button>
                 ) : (
@@ -928,8 +934,8 @@ export default function OrderPage() {
             </p>
           </div>
           {disabledHint?.scroll ? (
-            <button type="button" onClick={scrollToConsents} className="shrink-0 rounded-pill border border-amber-400 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800">
-              Onayları işaretle →
+            <button type="button" onClick={() => scrollToTarget(disabledHint.target ?? 'onaylar')} className="shrink-0 rounded-pill border border-amber-400 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800">
+              {disabledHint.text}
             </button>
           ) : (
             <button onClick={onCta} disabled={ctaDisabled} className="btn-primary shrink-0 px-5 disabled:cursor-not-allowed disabled:opacity-50">
