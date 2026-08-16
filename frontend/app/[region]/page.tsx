@@ -209,6 +209,85 @@ function WhyUs({ d }: { d: Dict }) {
   );
 }
 
+// (FARK / REKLAM) Bizi ayıran şey: rapor + ÇÖZÜM. Çoğu tarayıcı bulguyu listeler; biz her bulgu
+// için platforma özel, uygulamaya hazır düzeltme kodu (AI destekli) veririz. Rakip İSMİ/mutlak iddia
+// YOK — "tipik tarayıcılar" gibi genel, savunulabilir bir çerçeve (dürüstlük disiplini).
+function SolutionSection({ region }: { region: RegionConfig }) {
+  const tr = region.lang === 'tr';
+  const others = tr
+    ? ['Uzun bir PDF ve bulgu listesi verir', 'Teknik jargon — önceliklendirme ve araştırma sizde', 'Nasıl düzelteceğinizi bulmak size kalır']
+    : ['Hands you a long PDF and a list of findings', 'Technical jargon — prioritizing & research is on you', 'Figuring out how to fix it is left to you'];
+  const us = tr
+    ? ['Her bulgu için platformunuza özel, hazır düzeltme kodu', 'Nginx · Apache · IIS · Vercel · Cloudflare…', 'Kopyala–yapıştır uygula, dakikalar içinde kapat']
+    : ['Ready-to-apply fix code for every finding', 'Nginx · Apache · IIS · Vercel · Cloudflare…', 'Copy–paste and close the gap in minutes'];
+  return (
+    <section id="cozum" className="scroll-mt-20 bg-gradient-to-b from-brand-50/50 to-white py-20">
+      <div className="container-page">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="eyebrow">{tr ? 'Bizi ayıran şey' : 'What sets us apart'}</p>
+          <h2 className="mt-3 text-3xl font-extrabold text-brand sm:text-4xl">
+            {tr ? 'Sadece “sorun var” demeyiz — çözümü de veririz' : 'We don’t just flag problems — we hand you the fix'}
+          </h2>
+          <p className="mt-4 text-ink-soft">
+            {tr
+              ? 'Çoğu tarayıcı bulguları listeler ve gerisini size bırakır. Biz her bulgu için yapay zekâ destekli, platformunuza özel ve uygulamaya hazır düzeltme kodu üretiriz.'
+              : 'Most scanners list findings and leave the rest to you. For every finding we generate AI-assisted, platform-specific, ready-to-apply fix code.'}
+          </p>
+        </div>
+
+        <div className="mx-auto mt-12 grid max-w-4xl items-stretch gap-6 lg:grid-cols-2">
+          {/* Tipik tarayıcılar */}
+          <div className="card border-dashed p-6">
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">{tr ? 'Tipik tarayıcılar' : 'Typical scanners'}</p>
+            <ul className="mt-4 space-y-3 text-sm text-ink-soft">
+              {others.map((t) => (
+                <li key={t} className="flex items-start gap-2.5">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="mt-0.5 shrink-0 text-ink-muted" aria-hidden><path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" /></svg>
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {/* CyberTestify */}
+          <div className="card border-brand-300 p-6 shadow-glow">
+            <p className="flex items-center gap-2">
+              <span className="rounded-pill bg-brand px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-accent">CyberTestify</span>
+            </p>
+            <ul className="mt-4 space-y-3 text-sm font-medium text-ink">
+              {us.map((t) => (
+                <li key={t} className="flex items-start gap-2.5">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="mt-0.5 shrink-0 text-accent-600" aria-hidden><path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {/* Somut örnek: kopyala-yapıştır düzeltme kodu (gerçek Nginx başlık düzeltmesi). */}
+        <div className="mx-auto mt-8 max-w-3xl overflow-hidden rounded-card border border-line shadow-sm">
+          <div className="flex items-center gap-2 bg-brand-deep px-4 py-2.5 text-xs font-medium text-white/75">
+            <span className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
+            <span className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+            <span className="ml-2">{tr ? 'Örnek düzeltme · Nginx — eksik güvenlik başlıkları' : 'Example fix · Nginx — missing security headers'}</span>
+          </div>
+          <pre className="overflow-x-auto bg-[#0e2a27] px-4 py-4 font-mono text-[12.5px] leading-relaxed text-emerald-200/90">
+{`add_header X-Frame-Options "SAMEORIGIN" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Content-Security-Policy "default-src 'self'" always;`}
+          </pre>
+        </div>
+        <p className="mx-auto mt-3 max-w-3xl text-center text-xs text-ink-muted">
+          {tr
+            ? 'Raporunuzdaki her bulgu, tam olarak böyle uygulamaya hazır bir düzeltmeyle gelir.'
+            : 'Every finding in your report comes with a ready-to-apply fix exactly like this.'}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function FinalCTA({ d, region }: { d: Dict; region: RegionConfig }) {
   return (
     <section className="container-page py-8 pb-20">
@@ -276,6 +355,7 @@ export default function RegionHome({ params }: { params: { region: string } }) {
       <Hero d={d} />
       <AutonomousSection region={region} />
       <HowItWorks d={d} />
+      <SolutionSection region={region} />
       <WhyUs d={d} />
       <Faq region={region} />
       <FinalCTA d={d} region={region} />
