@@ -13,6 +13,11 @@
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "SAMEORIGIN"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		# Permissions-Policy: yalnizca tarayici CIHAZ ozelliklerini (kamera/mikrofon/konum/sensor)
+		# kisitlar; script/analytics/odeme akisini etkilemez (risksiz). `payment` BILEREK kisitlanmadi
+		# (iyzico odeme akisina dokunmasin). CSP EKLENMEDI (3. taraflari — Turnstile/GA/Ads/Clarity —
+		# kirma riski; kullanici karariyla eklenmedi).
+		Permissions-Policy "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), usb=(), interest-cohort=()"
 	}
 }
 
