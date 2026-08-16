@@ -8,6 +8,7 @@ import { config, validateScopeLockConfig } from './config.js';
 import { checkEgressProxyHealth } from './services/egressHealth.js';
 import { authRouter } from './routes/auth.js';
 import { domainsRouter } from './routes/domains.js';
+import { instantRouter } from './routes/instant.js';
 import { ordersRouter } from './routes/orders.js';
 import { paymentsRouter } from './routes/payments.js';
 import { webhooksRouter } from './routes/webhooks.js';
@@ -85,8 +86,19 @@ const apiLimiter = rateLimit({
   message: { error: 'Cok fazla istek. Lutfen bir sure sonra tekrar deneyin.' },
 });
 
+// (ÜCRETSİZ ANLIK ÖN-TARAMA) Public + ücretsiz → bot/DDoS-by-proxy için birinci hedef. SIKI limit
+// (dk başına 6/IP). Router içinde ayrıca Turnstile + honeypot + tek-eşzamanlı-tarama/IP var.
+const instantLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 6,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çok fazla tarama isteği. Lütfen biraz bekleyip tekrar deneyin.' },
+});
+
 app.use('/auth', authLimiter, authRouter);
 app.use('/domains', apiLimiter, domainsRouter);
+app.use('/instant-scan', instantLimiter, instantRouter);
 app.use('/orders', apiLimiter, ordersRouter);
 app.use('/payments', paymentsRouter);
 app.use('/reports', apiLimiter, reportsRouter);

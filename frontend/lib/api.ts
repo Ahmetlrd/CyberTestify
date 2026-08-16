@@ -1,5 +1,21 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
+// (ÜCRETSİZ ANLIK ÖN-TARAMA) sonuç tipi — üç-durum + skor + ≤3 bulgu başlığı.
+export type InstantFinding = { title: string; severity: 'high' | 'medium' | 'low' };
+export type InstantScanResult =
+  | { host: string; status: 'unreachable' }
+  | {
+      host: string;
+      status: 'ok';
+      score: number;
+      grade: 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+      total: number;
+      shown: InstantFinding[];
+      locked: number;
+      clean: boolean;
+      httpsOk: boolean;
+    };
+
 function authHeaders(): Record<string, string> {
   if (typeof window === 'undefined') return {};
   const token = window.localStorage.getItem('token');
@@ -61,6 +77,9 @@ export const api = {
     }),
   login: (email: string, password: string) =>
     request<{ token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  // (ÜCRETSİZ ANLIK ÖN-TARAMA) public, pasif teaser. turnstileToken = bot doğrulaması; website = honeypot.
+  instantScan: (url: string, turnstileToken?: string, website?: string) =>
+    request<InstantScanResult>('/instant-scan', { method: 'POST', body: JSON.stringify({ url, turnstileToken, website }) }),
   // (0) E-posta dogrulama
   me: () => request<{ email: string; emailVerified: boolean }>('/auth/me'),
   verifyEmail: (code: string) =>

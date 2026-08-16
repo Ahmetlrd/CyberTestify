@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { zodError } from '../httpErrors.js';
 import { prisma } from '../db.js';
@@ -20,6 +21,10 @@ import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
 export const ordersRouter = Router();
+
+// (BOT KORUMASI) Sipariş/ödeme OLUŞTURMA uçları — sahte sipariş / kart-deneme botlarına karşı IP
+// başına sıkı limit (create'ler zaten requireAuth + e-posta + domain-doğrulama arkasında; bu EK kat).
+const createLimiter = rateLimit({ windowMs: 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false, message: { error: 'Cok fazla islem denemesi. Lutfen biraz bekleyip tekrar deneyin.' } });
 
 // ?region=tr|us|ae — bolgesel fiyat + para birimi ile paket listesi.
 ordersRouter.get('/packages', async (req, res) => {
@@ -208,7 +213,7 @@ const createOrderSchema = z.object({
   authCredentials: z.object({ username: z.string().min(1).max(200), password: z.string().min(1).max(400) }).optional(),
 });
 
-ordersRouter.post('/', requireAuth, async (req, res) => {
+ordersRouter.post('/', createLimiter, requireAuth, async (req, res) => {
   // ODEME ONCESI E-POSTA DOGRULAMA ZORUNLU (fail-fast; sema parse'indan ONCE): erisilemez bir
   // mail adresiyle odeme yapip rapor-hazir/sifre mailini alamama riskini ONLE. Login/dashboard
   // KISITLANMAZ, yalniz satin alma adimi.
@@ -419,7 +424,7 @@ ordersRouter.post('/', requireAuth, async (req, res) => {
 // yeniden baslatir. Musteri odeme ekranini kapatip dashboard'a dondugunde "Odemeyi Tamamla" bunu
 // cagirir; anahtar varsa gercek iyzico URL'i, yoksa gorsel /pay placeholder'i doner (initiatePayment
 // env'e gore dallanir — TEK route). Odeme onaylanınca callback siparisi 'paid' yapip taramayi baslatir.
-ordersRouter.post('/:orderId/pay', requireAuth, async (req, res) => {
+ordersRouter.post('/:orderId/pay', createLimiter, requireAuth, async (req, res) => {
   const order = await prisma.order.findFirst({
     where: { id: req.params.orderId, customerId: req.customerId! },
     select: { id: true, status: true, locale: true },
@@ -466,7 +471,7 @@ const bundleOrderSchema = z.object({
   // (Aktif Doğrulama Paketi) Ödeme öncesi "düşük kapsam" uyarısı gösterildiyse müşteri onayı.
   lowScopeAcknowledged: z.boolean().optional(),
 });
-ordersRouter.post('/bundle', requireAuth, async (req, res) => {
+ordersRouter.post('/bundle', createLimiter, requireAuth, async (req, res) => {
   // ODEME ONCESI E-POSTA DOGRULAMA ZORUNLU (bundle; fail-fast, sema parse'indan ONCE).
   const custB = await prisma.customer.findUnique({ where: { id: req.customerId! }, select: { emailVerified: true } });
   if (!custB?.emailVerified) {

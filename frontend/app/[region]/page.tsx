@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { AutonomousSection } from '../../components/landing/AutonomousSection';
+import { InstantScan } from '../../components/landing/InstantScan';
 import { JsonLd } from '../../components/JsonLd';
 import { VISIBLE_REGION_CODES, isRegionCode, getRegion, type RegionConfig } from '../../config/regions';
 import { getDict, type Dict } from '../../config/i18n';
@@ -122,7 +123,12 @@ function Hero({ d }: { d: Dict }) {
           </div>
         </div>
 
-        <div className="mx-auto mt-14 flex max-w-2xl flex-wrap items-center justify-center gap-3">
+        {/* ÜCRETSİZ ANLIK ÖN-TARAMA — landing'in birincil dönüşüm kancası (pasif, gerçek, üç-durum). */}
+        <div className="animate-fade-up mx-auto mt-12 max-w-2xl">
+          <InstantScan />
+        </div>
+
+        <div className="mx-auto mt-12 flex max-w-2xl flex-wrap items-center justify-center gap-3">
           {d.hero.trust.map((label, i) => (
             // Yesil zemin: her rozet BEYAZ oval pill icinde -> ikon+yazi net gorunur.
             <span key={label} className="inline-flex items-center gap-2 rounded-pill bg-white px-4 py-2 text-sm font-medium text-brand shadow-sm">

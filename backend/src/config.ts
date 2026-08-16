@@ -151,6 +151,17 @@ export const config = {
     redirectUri:
       process.env.GOOGLE_REDIRECT_URI ?? `${process.env.PUBLIC_API_URL ?? 'http://localhost:4000'}/auth/google/callback`,
   },
+
+  // (BOT KORUMASI) Cloudflare Turnstile — ücretsiz anlık ön-tarama + hassas formlar için insan
+  // doğrulaması. VARSAYILAN = Cloudflare'in PUBLIC TEST anahtarları (her zaman geçer) → akış uçtan
+  // uca çalışır ama GERÇEK koruma YOK. Vedat: .env'e gerçek TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY
+  // ekleyince gerçek bot koruması devreye girer (frontend NEXT_PUBLIC_TURNSTILE_SITE_KEY de aynısı olmalı).
+  turnstile: {
+    siteKey: process.env.TURNSTILE_SITE_KEY ?? '1x00000000000000000000AA',
+    secretKey: process.env.TURNSTILE_SECRET_KEY ?? '1x0000000000000000000000000000000AA',
+    // Test anahtarı mı kullanılıyor (gerçek koruma yok) — uyarı/log için.
+    get usingTestKey() { return (process.env.TURNSTILE_SECRET_KEY ?? '').length === 0; },
+  },
 };
 
 /**

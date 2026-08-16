@@ -18,7 +18,7 @@ const FETCH_TIMEOUT_MS = 9000;
 const TLS_TIMEOUT_MS = 8000;
 const MAX_HTML = 1_500_000;
 
-type Evidence = {
+export type Evidence = {
   ok: boolean;
   status?: number;
   headers: Map<string, string>; // lowercased
@@ -119,7 +119,7 @@ async function fetchHome(origin: string): Promise<{ ok: boolean; status?: number
   }
 }
 
-async function collectEvidence(host: string): Promise<Evidence> {
+export async function collectEvidence(host: string): Promise<Evidence> {
   const o = await resolveOrigin(host); // https tercihli; 443 kapalıysa http; ikisi de yoksa reachable=false
   const [home, tlsInfo] = await Promise.all([
     o.reachable ? fetchHome(o.origin) : Promise.resolve({ ok: false, status: undefined as number | undefined, headers: new Map<string, string>(), html: '' }),
@@ -129,7 +129,7 @@ async function collectEvidence(host: string): Promise<Evidence> {
 }
 
 // --- Teknoloji / bilgi ifsasi -------------------------------------------------------
-function detectTech(headers: Map<string, string>, html: string): { tech: string[]; disclosure: string[] } {
+export function detectTech(headers: Map<string, string>, html: string): { tech: string[]; disclosure: string[] } {
   const tech: string[] = [];
   const disclosure: string[] = [];
   const add = (arr: string[], v: string) => { if (v && !arr.includes(v)) arr.push(v); };
