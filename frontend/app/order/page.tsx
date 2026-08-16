@@ -39,6 +39,8 @@ export default function OrderPage() {
   const [bundleModules, setBundleModules] = useState<string[]>([]);
   // Tekil paket kategori akordeonlari (paketler sayfasiyla ayni duzen) — varsayilan KAPALI.
   const [region, setRegion] = useState<RegionCode>('tr');
+  // Sipariş özetinde hangi alan adının taranacağını AÇIKÇA göster (domainId'den çözülür).
+  const [hostname, setHostname] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -113,6 +115,12 @@ export default function OrderPage() {
       }
     }).catch(() => {});
     api.getQueueStatus().then(setQueue).catch(() => {}); // sessiz — uyari opsiyonel
+    // Doğrulanmış domain listesinden domainId'nin hostname'ini çöz (özet + mobil çubukta göster).
+    if (domainId) {
+      api.listDomains()
+        .then((ds) => { const d = ds.find((x) => x.id === domainId); if (d) setHostname(d.hostname); })
+        .catch(() => {});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
@@ -852,6 +860,12 @@ export default function OrderPage() {
                 <>
                   <p className="mt-2 text-base font-bold text-brand">{selName}</p>
                   <dl className="mt-3 space-y-1.5 text-sm">
+                    {hostname && (
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-ink-muted">Alan adı</dt>
+                        <dd className="text-right font-semibold text-ink break-all">{hostname}</dd>
+                      </div>
+                    )}
                     <div className="flex justify-between gap-2">
                       <dt className="text-ink-muted">Sıklık</dt>
                       <dd className="text-right font-medium text-ink">{freqLabel}</dd>
@@ -928,6 +942,7 @@ export default function OrderPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-xs font-semibold text-brand">{selName ?? 'Paket seçilmedi'}</p>
+            {hostname && <p className="truncate text-[11px] text-ink-muted">{hostname}</p>}
             <p className="text-sm font-extrabold text-ink">
               {formatMoney(totalMinor, getRegion(region))}
               <span className="ml-1 text-[10px] font-normal text-ink-muted">KDV dahil</span>
