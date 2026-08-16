@@ -57,7 +57,10 @@ export function LiveDemo({ lang = 'tr' }: { lang?: Lang }) {
         <span className="h-3 w-3 rounded-full bg-emerald-400/70" />
         <span className="ml-3 text-xs font-medium text-white/40">cybertestify — live scan</span>
       </div>
-      <div className="min-h-[268px] p-5 font-mono text-[13px] leading-7">
+      {/* SABİT yükseklik: satırlar 1→9→1 döngüsünde kutu yüksekliği DEĞİŞMEZ. Aksi halde büyüyüp
+          küçülen içerik mobilde tarayıcı scroll-anchoring'ini tetikleyip sayfayı kendiliğinden
+          aşağı kaydırıyordu (9 satır ≈ 252px + p-5 40px ≈ 292px; 296px hepsini taşımadan tutar). */}
+      <div className="h-[296px] overflow-hidden p-5 font-mono text-[13px] leading-7">
         {lines.slice(0, shown).map((l, i) => (
           <div key={i} className={TONE[l.tone]} dir="ltr">
             {l.t}
