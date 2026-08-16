@@ -67,6 +67,9 @@ export default function VerifyHub() {
   const bundleParam = params.get('bundle');
   // (İş 2 — autopopulate) Teaser'dan taşınan alan adı: form otomatik dolu gelsin.
   const hostnameParam = params.get('hostname');
+  // (Kullanıcı isteği) /order'daki "Doğrula" CTA'sı belirli bir alan adının DNS paneline odaklanmak
+  // için domainId taşır: o alan adının doğrulama panelini AÇ + üstüne kaydır.
+  const focusDomainId = params.get('domainId');
   const purchaseMode = !!(packageParam || bundleParam);
   // (PASİF/AKTİF AYRIMI) Aktif paketlerde DNS doğrulaması ZORUNLU; pasiflerde doğrulama gerekmez.
   const activePurchase = isActivePackageKey(packageParam) || isActivePackageKey(bundleParam);
@@ -116,6 +119,17 @@ export default function VerifyHub() {
       setShowAdd(true);
     }
   }, [hostnameParam]);
+
+  // (Odak) /order'dan domainId ile gelindiyse: o alan adının doğrulama panelini AÇ + üstüne kaydır.
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focusDomainId || focused) return;
+    if (domains.some((d) => d.id === focusDomainId)) {
+      setOpenId(focusDomainId);
+      setFocused(true);
+      setTimeout(() => document.getElementById(`domain-${focusDomainId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120);
+    }
+  }, [domains, focusDomainId, focused]);
 
   async function addDomain(e: React.FormEvent) {
     e.preventDefault();
@@ -258,7 +272,7 @@ export default function VerifyHub() {
               const expired = d.status === 'verified' && !d.valid;
               const open = openId === d.id;
               return (
-                <div key={d.id} className="card p-4">
+                <div key={d.id} id={`domain-${d.id}`} className="card p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <div className="truncate font-semibold text-ink">{d.hostname}</div>

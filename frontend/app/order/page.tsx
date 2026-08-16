@@ -383,17 +383,24 @@ export default function OrderPage() {
       ? promo.finalAmountMinorUnit
       : baseAmountMinor;
   const totalMinor = !selectedBundle && recurring ? unitAmountMinor * runs : unitAmountMinor;
+  // (Kullanıcı isteği) AKTİF paket + DOĞRULANMAMIŞ alan adı: "Satın Al" HİÇ tıklanmasın. Ödeme-sonra-tut
+  // yerine, kullanıcı önce doğrulamaya yönlendirilir. Bu durumda buy CTA'sı yerine "Doğrula" butonu çıkar
+  // ve /verify'da o alan adının DNS paneline odaklanır (domainId param).
+  const needsDomainVerify = isActiveLightSel && !!domainId && domainVerified === false;
+  const verifyHref = domainId
+    ? `/verify?domainId=${domainId}&${selectedBundle ? `bundle=${selectedBundle.key}` : `package=${selected}`}`
+    : '/verify';
   // (TÜM paketler) ön-kontrol bitene kadar bekle; erişilemez uyarısı onaylanmadan ödeme yok.
   const preCheckGate = scopeChecking || (showUnreachableWarning && !unreachableAck);
   const ctaDisabled = selectedBundle
-    ? !domainId || busy || !allConsents || intlComingSoon ||
+    ? !domainId || busy || !allConsents || intlComingSoon || needsDomainVerify ||
       (selectedBundle.category === 'active-light' && !atRisk) ||
       // (FAZ A) kimlik-doğrulamalı üye varsa: 3 ek onay + kimlik bilgisi girişleri zorunlu.
       (selectedBundle.members?.some((m: any) => m.key === 'authenticated_scan') && (!authConsentsOk || !authUser.trim() || !authPass)) ||
       (selectedBundle.selectable && bundleModules.length === 0) ||
       (showLowScopeWarning && !lowScopeAck) || // düşük-kapsam uyarısı onaylanmadan ödeme yok
       preCheckGate
-    : !domainId || busy || !selected || !allConsents || !activeConsentOk || intlComingSoon || preCheckGate;
+    : !domainId || busy || !selected || !allConsents || !activeConsentOk || intlComingSoon || needsDomainVerify || preCheckGate;
   const ctaLabel = busy
     ? 'Başlatılıyor…'
     : selectedBundle
@@ -524,7 +531,7 @@ export default function OrderPage() {
                 <strong> başlamaz</strong> — ödeme alınsa bile sipariş <strong>“alan adı doğrulaması bekleniyor”</strong>
                 durumunda tutulur, doğrulanınca <strong>otomatik başlar</strong>.
               </p>
-              <Link href={`/verify?${selectedBundle ? `bundle=${selectedBundle.key}` : `package=${selected}`}`} className="mt-2 inline-flex items-center gap-1 font-semibold text-amber-900 underline">
+              <Link href={verifyHref} className="mt-2 inline-flex items-center gap-1 font-semibold text-amber-900 underline">
                 Şimdi DNS ile doğrula →
               </Link>
             </div>
@@ -924,10 +931,21 @@ export default function OrderPage() {
               ) : (
                 <p className="mt-2 text-sm text-ink-soft">Devam etmek için bir paket seçin.</p>
               )}
-              <button onClick={onCta} disabled={ctaDisabled} className="btn-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-50">
-                {ctaLabel}
-              </button>
-              {disabledHint ? (
+              {needsDomainVerify ? (
+                <button onClick={() => router.push(verifyHref)} className="btn-primary mt-4 flex w-full items-center justify-center gap-1.5">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M12 2l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V5l7-3z" /><path d="M9 12l2 2 4-4" /></svg>
+                  Alan adını doğrula
+                </button>
+              ) : (
+                <button onClick={onCta} disabled={ctaDisabled} className="btn-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-50">
+                  {ctaLabel}
+                </button>
+              )}
+              {needsDomainVerify ? (
+                <p className="mt-2 text-center text-[11px] text-amber-700">
+                  Aktif tarama için önce alan adı sahipliğinizi DNS ile doğrulayın — doğrulandıktan sonra satın alabilirsiniz.
+                </p>
+              ) : disabledHint ? (
                 disabledHint.scroll ? (
                   <button type="button" onClick={() => scrollToTarget(disabledHint.target ?? 'onaylar')} className="mt-2 w-full rounded-card border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs font-semibold text-amber-800 hover:bg-amber-100">
                     {disabledHint.text}
@@ -980,7 +998,11 @@ export default function OrderPage() {
               <span className="ml-1 text-[10px] font-normal text-ink-muted">KDV dahil</span>
             </p>
           </div>
-          {disabledHint?.scroll ? (
+          {needsDomainVerify ? (
+            <button type="button" onClick={() => router.push(verifyHref)} className="btn-primary shrink-0 px-5">
+              Doğrula
+            </button>
+          ) : disabledHint?.scroll ? (
             <button type="button" onClick={() => scrollToTarget(disabledHint.target ?? 'onaylar')} className="shrink-0 rounded-pill border border-amber-400 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800">
               {disabledHint.text}
             </button>
