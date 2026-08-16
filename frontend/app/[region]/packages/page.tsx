@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { VISIBLE_REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 import { getDict, formatMoney } from '../../../config/i18n';
 import { JsonLd } from '../../../components/JsonLd';
+import { renderEmphasis, stripEmphasis } from '../../../lib/richText';
 
 type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean; bundleOnly?: boolean; bundleName?: string | null };
 type Bundle = {
@@ -89,8 +90,8 @@ export default async function PackagesPage({ params }: { params: { region: strin
     },
   });
   const serviceItems = [
-    ...(basit && !basit.comingSoon ? [svc(basit.displayName, basit.description, basit.priceMinorUnit)] : []),
-    ...bundles.filter((b: any) => !b.comingSoon).map((b: any) => svc(b.displayName, b.description, b.amountMinorUnit)),
+    ...(basit && !basit.comingSoon ? [svc(basit.displayName, stripEmphasis(basit.description), basit.priceMinorUnit)] : []),
+    ...bundles.filter((b: any) => !b.comingSoon).map((b: any) => svc(b.displayName, stripEmphasis(b.description), b.amountMinorUnit)),
   ];
   const servicesLd = {
     '@context': 'https://schema.org',
@@ -209,7 +210,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                       </span>
                     ) : null}
                     <h3 className="text-lg font-bold text-brand">{b.displayName}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-ink-soft">{b.description}</p>
+                    <p className="mt-2 text-sm leading-relaxed text-ink-soft">{renderEmphasis(b.description)}</p>
                     {b.selectable ? (
                       <div className="mt-3 rounded-card border border-accent/40 bg-accent-soft/30 px-3 py-2 text-xs text-ink-soft">
                         <span className="font-semibold">{region.code === 'tr' ? 'İçerik seçilebilir' : 'Content is selectable'}</span>{' '}

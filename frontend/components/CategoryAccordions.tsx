@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { getRegion } from '../config/regions';
 import { formatMoney } from '../config/i18n';
+import { renderEmphasis } from '../lib/richText';
 
 type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean; bundleOnly?: boolean; bundleName?: string | null };
 
@@ -129,7 +130,7 @@ export function CategoryAccordions({
                       )}
                     </div>
                     {cat.auth && <div className="mt-1.5">{authBadge}</div>}
-                    <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-soft">{p.description}</p>
+                    <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-soft">{renderEmphasis(p.description)}</p>
                     {p.comingSoon ? (
                       // "Yakında": fiyat gosterilmez, CTA pasif (BYOK ile ayni desen).
                       <span className="btn-ghost mt-4 w-full cursor-default">{tr ? 'Yakında' : 'Coming soon'}</span>

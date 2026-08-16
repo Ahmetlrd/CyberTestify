@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../lib/api';
+import { renderEmphasis } from '../../lib/richText';
 import { readRegionCookie } from '../../lib/region';
 import { getRegion, type RegionCode } from '../../config/regions';
 import { formatMoney } from '../../config/i18n';
@@ -439,7 +440,7 @@ export default function OrderPage() {
           <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-0.5 text-[10px] font-bold text-white">%{b.discountPct}</span>
         ) : null}
         <span className="font-bold text-brand">{b.displayName}</span>
-        <p className="mt-1 text-xs leading-relaxed text-ink-soft">{b.description}</p>
+        <p className="mt-1 text-xs leading-relaxed text-ink-soft">{renderEmphasis(b.description)}</p>
         {b.key === 'bundle_recon' ? (
           <div className="mt-1.5 flex-1 text-[11px] text-ink-muted">
             İçindekiler:
@@ -575,7 +576,7 @@ export default function OrderPage() {
               >
                 <span className="absolute -top-3 left-6 rounded-pill bg-ink-muted px-3 py-0.5 text-[10px] font-bold text-white">Yakında</span>
                 <span className="font-bold text-ink-soft">{b.displayName}</span>
-                <p className="mt-1 flex-1 text-xs leading-relaxed text-ink-muted">{b.description}</p>
+                <p className="mt-1 flex-1 text-xs leading-relaxed text-ink-muted">{renderEmphasis(b.description)}</p>
                 <p className="mt-2 text-xs font-semibold text-ink-muted">Şu an satışa kapalı</p>
               </div>
             ))}
