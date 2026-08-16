@@ -115,6 +115,16 @@ services:
       retries: 5
       start_period: 25s
 
+  # (İZOLE TEST HEDEFİ) OWASP Juice Shop — test.cybertestify.com'un arkasındaki KASITLI zafiyetli
+  # hedef. SADECE `juicebox` ağında: prod ağı `cybertestify`de DEĞİL → cybertestify-db/api'ye ağ
+  # yolu YOK. Böylece Juice Shop'ta SSRF/RCE bulunsa bile prod DB'ye pivot edemez. Yalnız caddy bu
+  # ağa da bağlı (reverse_proxy juice-shop:3000). Halka açılmıyor; port publish edilmez.
+  juice-shop:
+    image: bkimminich/juice-shop:latest
+    container_name: juice-shop
+    restart: unless-stopped
+    networks: [juicebox]
+
   caddy:
     image: caddy:2-alpine
     container_name: cybertestify-caddy
@@ -127,7 +137,7 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on: [api, frontend]
-    networks: [cybertestify]
+    networks: [cybertestify, juicebox]
 
 volumes:
   cybertestify-db-data:
@@ -137,6 +147,10 @@ volumes:
 networks:
   cybertestify:
     name: cybertestify
+  # (İZOLASYON) Juice Shop'a özel ağ — prod `cybertestify` ağından AYRI. Juice Shop yalnız burada,
+  # caddy hem burada hem cybertestify'da. Juice Shop → cybertestify-db/api ağ yolu YOK (pivot kapalı).
+  juicebox:
+    name: juicebox
   # PentAGI terminal container'larinin izole egress agi (once olusturulur:
   # docker network create pentagi-egress). egress-proxy buraya da baglidir.
   pentagi-egress:
