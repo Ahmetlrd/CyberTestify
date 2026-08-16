@@ -108,6 +108,11 @@ export function InstantScan() {
   const buyHostname = ok?.host ? encodeURIComponent(ok.host) : '';
   const passiveNext = ok?.host ? `/verify?package=basit_tarama&hostname=${buyHostname}` : '/verify';
   const passiveBuyHref = `/register?next=${encodeURIComponent(passiveNext)}`;
+  // AKTİF (Aktif Doğrulama) CTA'sı da AYNI mantıkta: taranan alan adını taşı → login sonrası
+  // /verify'a düşür (bundle=bundle_active_verify, hostname dolu). Aktif paket olduğu için orada
+  // DNS doğrulama akışı gösterilir; doğrulandıktan sonra /order'a geçer. /tr/packages'a ATMAZ.
+  const activeNext = ok?.host ? `/verify?bundle=bundle_active_verify&hostname=${buyHostname}` : '/verify';
+  const activeBuyHref = `/register?next=${encodeURIComponent(activeNext)}`;
 
   return (
     <div className="rounded-[20px] border border-line bg-white/95 p-5 shadow-xl backdrop-blur sm:p-7">
@@ -211,7 +216,7 @@ export function InstantScan() {
                     bunları ancak <strong>aktif/kimlik-doğrulamalı</strong> testler ortaya çıkarır.
                   </p>
                   <div className="mt-3 flex flex-col items-stretch gap-2">
-                    <Link href="/tr/packages" className="btn-primary justify-center">Aktif Doğrulama Paketi ile Derinleştir → ₺14.999</Link>
+                    <Link href={activeBuyHref} className="btn-primary justify-center">Aktif Doğrulama Paketi ile Derinleştir → ₺14.999</Link>
                     <Link href="/tr/packages" className="text-center text-xs font-semibold text-accent-600 hover:underline">Tüm paketleri incele →</Link>
                   </div>
                 </div>
@@ -237,7 +242,7 @@ export function InstantScan() {
                     </p>
                     <div className="mt-3 flex flex-col items-stretch gap-2">
                       {highScore ? (
-                        <Link href="/tr/packages" className="btn-primary justify-center">Aktif Doğrulama Paketi ile Derinleştir → ₺14.999</Link>
+                        <Link href={activeBuyHref} className="btn-primary justify-center">Aktif Doğrulama Paketi ile Derinleştir → ₺14.999</Link>
                       ) : (
                         <Link href={passiveBuyHref} className="btn-primary justify-center">Detaylı Raporu Aç (₺699)</Link>
                       )}
