@@ -178,15 +178,6 @@ export function InstantScan() {
                 </div>
               </div>
 
-              {/* Yüksek skor (90+/85+) reframe — DÜRÜST: pasif güçlü ama derini görünmüyor (upsell derin pakete) */}
-              {highScore && (
-                <p className="mt-3 rounded-card border border-brand-200 bg-brand-50/60 px-3 py-2 text-xs leading-relaxed text-ink-soft">
-                  Dış yüzey <strong>güçlü</strong> görünüyor. Ancak bu tarama yalnızca <strong>pasif dış katmanı</strong> görür;
-                  gerçek risk çoğu zaman <strong>login-sonrası, aktif zafiyetler ve iş mantığında</strong> saklıdır — bunları
-                  ancak <strong>aktif/kimlik-doğrulamalı</strong> testler ortaya çıkarır.
-                </p>
-              )}
-
               {/* Bulgu başlıkları — severity etiketli, hizalı */}
               {ok.shown.length > 0 && (
                 <ul className="mt-4 space-y-2">
@@ -199,35 +190,55 @@ export function InstantScan() {
                 </ul>
               )}
 
-              {/* KİLİTLİ — kilitli-liste efekti (blur satırlar + asma kilit) + değer odaklı + dinamik CTA */}
-              <div className="relative mt-4 overflow-hidden rounded-card border-2 border-dashed border-accent/60 bg-accent-soft/25 p-4">
-                <div aria-hidden className="pointer-events-none absolute inset-x-4 bottom-3 space-y-2 opacity-50 blur-[3px]">
-                  {['bg-red-200', 'bg-orange-200', 'bg-amber-200'].map((c, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className={`h-4 w-10 rounded-pill ${c}`} />
-                      <span className="h-3 flex-1 rounded-full bg-ink/15" />
-                    </div>
-                  ))}
-                </div>
-                <div className="relative">
+              {ok.clean ? (
+                /* TEMİZ (bulgu yok) — kilitlenecek bulgu olmadığı için "kilitli" kutusu YOK. Dürüst reframe:
+                   pasif katman temiz; gerçek risk aktif/kimlik-doğrulamalı testlerde → somut Aktif Doğrulama CTA'sı. */
+                <div className="mt-4 rounded-card border border-brand-200 bg-brand-50/60 p-4">
                   <p className="flex items-center gap-1.5 text-sm font-extrabold text-brand">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-pulse" aria-hidden><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
-                    {ok.locked > 0 ? `+${ok.locked} bulgu daha · detaylar & düzeltmeler kilitli` : 'Detaylar & hazır düzeltmeler kilitli'}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
+                    Pasif katman temiz
                   </p>
                   <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">
-                    Her bulgunun <strong>tam detayı</strong>, <strong>platformunuza özel hazır düzeltme kodları</strong> ve
-                    <strong> indirilebilir PDF raporu</strong> kilitli.
+                    Dış yüzeyde öne çıkan bir eksik bulunmadı. Ancak bu tarama yalnızca <strong>pasif dış katmanı</strong> görür;
+                    gerçek risk çoğu zaman <strong>login-sonrası, aktif zafiyetler ve iş mantığında</strong> saklıdır —
+                    bunları ancak <strong>aktif/kimlik-doğrulamalı</strong> testler ortaya çıkarır.
                   </p>
                   <div className="mt-3 flex flex-col items-stretch gap-2">
-                    {highScore ? (
-                      <Link href="/tr/packages" className="btn-primary justify-center">Aktif Sızma Testi ile Derinleştir</Link>
-                    ) : (
-                      <Link href="/register" className="btn-primary justify-center">Detaylı Raporu Aç (₺699)</Link>
-                    )}
+                    <Link href="/tr/packages" className="btn-primary justify-center">Aktif Doğrulama Paketi ile Derinleştir → ₺14.999</Link>
                     <Link href="/tr/packages" className="text-center text-xs font-semibold text-accent-600 hover:underline">Tüm paketleri incele →</Link>
                   </div>
                 </div>
-              </div>
+              ) : (
+                /* BULGU VAR — kilitli-liste efekti (blur satırlar + asma kilit) + değer odaklı + dinamik CTA */
+                <div className="relative mt-4 overflow-hidden rounded-card border-2 border-dashed border-accent/60 bg-accent-soft/25 p-4">
+                  <div aria-hidden className="pointer-events-none absolute inset-x-4 bottom-3 space-y-2 opacity-50 blur-[3px]">
+                    {['bg-red-200', 'bg-orange-200', 'bg-amber-200'].map((c, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className={`h-4 w-10 rounded-pill ${c}`} />
+                        <span className="h-3 flex-1 rounded-full bg-ink/15" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="relative">
+                    <p className="flex items-center gap-1.5 text-sm font-extrabold text-brand">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-pulse" aria-hidden><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                      {ok.locked > 0 ? `+${ok.locked} bulgu daha · detaylar & düzeltmeler kilitli` : 'Detaylar & hazır düzeltmeler kilitli'}
+                    </p>
+                    <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">
+                      Her bulgunun <strong>tam detayı</strong>, <strong>platformunuza özel hazır düzeltme kodları</strong> ve
+                      <strong> indirilebilir PDF raporu</strong> kilitli.
+                    </p>
+                    <div className="mt-3 flex flex-col items-stretch gap-2">
+                      {highScore ? (
+                        <Link href="/tr/packages" className="btn-primary justify-center">Aktif Doğrulama Paketi ile Derinleştir → ₺14.999</Link>
+                      ) : (
+                        <Link href="/register" className="btn-primary justify-center">Detaylı Raporu Aç (₺699)</Link>
+                      )}
+                      <Link href="/tr/packages" className="text-center text-xs font-semibold text-accent-600 hover:underline">Tüm paketleri incele →</Link>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <button onClick={again} className="mt-3 inline-flex w-full items-center justify-center rounded-pill border border-line px-3 py-2 text-xs font-semibold text-ink-soft hover:bg-brand-50">↺ Başka bir site tara</button>
             </div>
