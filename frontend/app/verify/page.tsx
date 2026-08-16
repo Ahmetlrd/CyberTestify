@@ -83,6 +83,7 @@ export default function VerifyHub() {
   const [loading, setLoading] = useState(true);
   const [newHostname, setNewHostname] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [checkMsg, setCheckMsg] = useState<string | null>(null); // DNS kontrol sonucu — panel içinde, butonun altında
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -161,13 +162,14 @@ export default function VerifyHub() {
   async function check(id: string) {
     setBusy(true);
     setError(null);
+    setCheckMsg(null); // önceki sonucu temizle (mesaj butonun ALTINDA, panel içinde gösterilir)
     try {
       const { verified } = await api.verifyDomain(id);
       await refresh();
       if (verified) goToOrder(id);
-      else setError('Kayıt henüz görünmüyor. DNS yayılımı biraz sürebilir; birazdan tekrar deneyin.');
+      else setCheckMsg('Kayıt henüz görünmüyor. DNS yayılımı biraz sürebilir; birazdan tekrar deneyin.');
     } catch (e: any) {
-      setError(e.message);
+      setCheckMsg(e.message);
     } finally {
       setBusy(false);
     }
@@ -281,7 +283,7 @@ export default function VerifyHub() {
                       </span>
                       {!purchaseMode && (
                         <span className="mt-0.5 block text-[11px] text-ink-muted">
-                          Pasif paketler (Basit Tarama, Dış Yüzey, Keşif, Uyum) için doğrulama gerekmez. Aktif paketler DNS doğrulaması ister.
+                          Pasif paketler için doğrulama gerekmez. Aktif paketler DNS doğrulaması ister.
                         </span>
                       )}
                     </div>
@@ -299,7 +301,7 @@ export default function VerifyHub() {
                           Taramayı Başlat
                         </button>
                       )}
-                      <button onClick={() => setOpenId(open ? null : d.id)} className="btn-outline text-sm">
+                      <button onClick={() => { setCheckMsg(null); setOpenId(open ? null : d.id); }} className="btn-outline text-sm">
                         {open ? 'Gizle' : 'Doğrula'}
                       </button>
                       <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
@@ -323,6 +325,11 @@ export default function VerifyHub() {
                       <button onClick={() => check(d.id)} disabled={busy} className="btn-primary mt-3 disabled:opacity-60">
                         {busy ? 'Kontrol ediliyor…' : 'Doğrulamayı kontrol et'}
                       </button>
+                      {checkMsg && (
+                        <p className="mt-2 rounded-card border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                          {checkMsg}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -442,11 +449,9 @@ export default function VerifyHub() {
           {activePurchase ? (
             /* AKTİF paket — DNS doğrulaması ZORUNLU (çelik kapı / yasal). */
             <div className="mt-6 rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900/90">
-              <p className="font-bold text-amber-900">Bu paket aktif güvenlik probları gönderir</p>
-              <p className="mt-1 leading-relaxed">
-                Kimlik-doğrulamalı testler ve enjeksiyon/oturum denemeleri yalnızca <strong>alan adının
-                sahibi/yetkilisi</strong> olduğunuzu <strong>DNS TXT kaydıyla doğruladıktan sonra</strong> başlatılabilir
-                (yasal zorunluluk). Aşağıdan alan adınızı ekleyip doğrulayın.
+              <p className="leading-relaxed">
+                Aktif güvenlik testlerini başlatabilmemiz için alan adının size ait olduğunu <strong>DNS TXT
+                kaydıyla</strong> doğrulamanız gerekiyor.
               </p>
             </div>
           ) : (

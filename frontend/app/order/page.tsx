@@ -494,7 +494,6 @@ export default function OrderPage() {
       {/* (İŞ 3) Test-hesabı beyanı + kimlik-bilgisi yurt dışı açık rıza + yüksek-risk kabulü artık aşağıdaki
           "2 · Onaylar" bölümündeki gruplu checkbox'lara taşındı (sunucu-tarafı alanlar AYNEN korunur). */}
       <p className="text-xs text-ink-muted">
-        Bu bilgilerle ilgili beyan/rıza (test hesabı, yurt dışı aktarım, yüksek risk) aşağıdaki <strong>“2 · Onaylar”</strong> bölümünde tek bir grupta toplanmıştır.
       </p>
     </div>
   );
@@ -594,7 +593,7 @@ export default function OrderPage() {
           giriş alanları gösterilir (kimlik-doğrulamalı bundle üyesi için). */}
       {selectedBundle?.members?.some((m: any) => m.key === 'authenticated_scan') && (
         <div className="mt-3 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm">
-          <p className="text-sm font-semibold text-brand">Test hesabı bilgileri (login’li tarama için)</p>
+          <p className="text-sm font-semibold text-brand">Test hesabı bilgileri</p>
           {authCredBlock}
         </div>
       )}
@@ -785,7 +784,7 @@ export default function OrderPage() {
           </p>
           {needsAuthCreds && (
             <div className="mt-4 border-t border-accent/30 pt-4">
-              <p className="text-sm font-semibold text-brand">Test hesabı bilgileri (login’li tarama için)</p>
+              <p className="text-sm font-semibold text-brand">Test hesabı bilgileri</p>
               {authCredBlock}
             </div>
           )}
