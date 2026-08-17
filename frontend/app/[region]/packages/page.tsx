@@ -205,8 +205,15 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         {tr ? 'Yakında' : 'Soon'}
                       </span>
                     ) : flagship ? (
-                      <span className="absolute -top-3 left-6 whitespace-nowrap rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
-                        ★ {tr ? 'En Kapsamlı Paket' : 'Most Complete'}
+                      <span className="absolute -top-3 left-6 flex items-center gap-1.5">
+                        <span className="whitespace-nowrap rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
+                          ★ {tr ? 'En Kapsamlı Paket' : 'Most Complete'}
+                        </span>
+                        {hasSaving && (
+                          <span className="whitespace-nowrap rounded-pill bg-accent px-2.5 py-1 text-xs font-bold text-white">
+                            %{savedPct} {tr ? 'avantaj' : 'off'}
+                          </span>
+                        )}
                       </span>
                     ) : popular ? (
                       <span className="absolute -top-3 left-6 rounded-pill bg-accent px-3 py-1 text-xs font-bold text-white">
