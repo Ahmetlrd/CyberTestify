@@ -68,7 +68,11 @@ export function parseDmarc(record: string): { p?: string; sp?: string; pct?: num
 export function parseSpf(record: string): { all?: '-' | '~' | '?' | '+'; lookups: number } {
   let all: '-' | '~' | '?' | '+' | undefined;
   const m = record.match(/([-~?+])all\b/i); if (m) all = m[1] as any;
-  const lookups = (record.match(/\b(include:|redirect=|a[:\s]|mx[:\s]|ptr\b|exists:)/gi) || []).length;
+  // Token-bazlı say: her DNS-arama mekanizması (include/redirect/a/mx/ptr/exists) bir kez.
+  let lookups = 0;
+  for (const tok of record.split(/\s+/)) {
+    if (/^[+\-~?]?(include:|redirect=|exists:|ptr\b|a$|a:|mx$|mx:)/i.test(tok)) lookups++;
+  }
   return { all, lookups };
 }
 
