@@ -36,7 +36,8 @@ const SOURCES: Array<{ id: string; re: RegExp }> = [
   { id: 'window.name', re: /window\.name/ },
 ];
 const SENSITIVE_KEY_RE = /(token|jwt|auth|session|passw(or)?d|secret|api[_-]?key|credential|bearer|access[_-]?token|refresh[_-]?token|ssn|tckn|kimlik)/i;
-const REDIRECT_PARAM_RE = /^(url|redirect|redirect_uri|redir|next|return|returnurl|returnto|dest|destination|continue|goto|target|forward)$/i;
+// Not: geniş liste güvenli — aday sadece PROB için; bulgu YALNIZ gerçek harici yönlendirme gözlenirse.
+const REDIRECT_PARAM_RE = /^(url|redirect|redirect_uri|redirect_url|redir|next|return|return_url|returnurl|returnto|dest|destination|continue|continue_url|goto|target|forward|to|link|callback|out|u|r)$/i;
 
 async function probeRedirectLocation(url: string): Promise<{ status: number; location: string | null; body: string } | null> {
   const ctrl = new AbortController();
