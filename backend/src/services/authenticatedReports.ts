@@ -19,6 +19,7 @@ import { collectAuthDepthEvidence } from './authDepthChecks.js';
 import { collectSessionDepthEvidence } from './sessionDepthChecks.js';
 import { collectInputHeaderEvidence, collectConfigExposureEvidence } from './configExposureChecks.js';
 import { collectApiSecurityEvidence } from './apiSecurityChecks.js';
+import { collectEmailDnsEvidence } from './emailDnsChecks.js';
 import {
   buildActiveCheckReport, buildInjectionReport, buildIdorReport,
   RISK_WORD, levelRank, extractLevel, headlineOf, detailOnly, type Level,
@@ -310,6 +311,29 @@ const API_SECURITY_CFG = {
   cleanGenel: 'Keşfedilen API uçlarında belirgin bir aşırı-veri ifşası, rate-limit eksikliği, gölge-sürüm veya açık GraphQL introspection göstergesi bulunamadı.',
 };
 
+// (Faz 3-C) E-posta & DNS Derinliği — anti-spoofing + DNS bütünlüğü. Pasif DNS/TXT + tek MTA-STS GET.
+const EMAIL_DNS_CFG = {
+  title: 'E-posta & DNS Derinliği (Anti-Spoofing)',
+  whatChecked: [
+    'Yalnız GERÇEK org-alandan okunan DNS kayıtları; hepsi PASİF DNS/TXT + tek güvenli MTA-STS GET (saldırı/state-değişimi yok). Alt-alan için DMARC **organizasyonel alan** seviyesinde değerlendirilir.',
+    '**G1 DMARC** politika gücü (p=none/quarantine/reject, pct, sp alt-alan, adkim/aspf, rua).',
+    '**G2 SPF** derinliği (-all/~all/?all/+all + üst-seviye DNS-arama sayısı, RFC 7208).',
+    '**G3 DKIM** yaygın seçici keşfi (default/google/selector1…) + anahtar uzunluğu (~1024/2048) + iptal (p= boş).',
+    '**G4 MTA-STS** (_mta-sts TXT + politika: enforce/testing/none) · **G5 TLS-RPT** raporlama.',
+    '**G6 DNSSEC** (imza/doğrulama — AD bayrağı, yalnız gözlem) · **G7 CAA** (sertifika-verme kısıtı) + **BIMI** (bilgilendirici).',
+  ],
+  confidenceNote: 'Kanıt = DNS\'in gerçekten döndürdüğü public kayıt (redaksiyon gereksiz). "gösterge" dili; e-posta göndermeyen alanda (MX yok) eksik DMARC/SPF şiddeti düşürülür. Uydurma/tahmin kayıt yok.',
+  fixTitle: 'E-posta & DNS Sertleştirme',
+  fixFound: [
+    'DMARC: \`p=none\`→\`quarantine\`→\`reject\` (pct=100) kademeli sıkılaştırın; \`rua=\` ile raporlamayı açın; alt-alanlar için \`sp=reject\`.',
+    'SPF: \`-all\` (hardfail) kullanın; \`+all\`/\`?all\`\'dan kaçının; DNS-arama sayısını ≤10 tutun (PermError).',
+    'DKIM: 2048-bit anahtar, iptal edilen seçicileri kaldırın. MTA-STS: \`mode=enforce\`. TLS-RPT ekleyin.',
+    'DNSSEC\'i etkinleştirin (DS+RRSIG). CAA ile yetkili CA\'ları kısıtlayın.',
+  ],
+  fixClean: ['DMARC p=reject, SPF -all, DKIM 2048-bit, MTA-STS enforce, TLS-RPT, DNSSEC, CAA — anti-spoofing/DNS bütünlüğü güçlü (proaktif).'],
+  cleanGenel: 'Sorgulanan org-alanın e-posta/DNS kayıtlarında belirgin bir anti-spoofing zayıflığı (eksik/gevşek DMARC-SPF, açık +all, imzasız DNSSEC vb.) göstergesi bulunamadı.',
+};
+
 type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
@@ -365,6 +389,8 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   runs.push({ title: 'Yapılandırma & İfşa Derinliği', conf: 'Yüksek', rep: ceEv ? buildActiveCheckReport(ceEv, CONFIG_EXPOSURE_CFG) : null, inputs: ceEv?.inputsFound ?? 0, probes: ceEv?.probesSent ?? 0, fc: ceEv?.findings.length ?? 0 });
   const apiEv = await collectApiSecurityEvidence(host, session).catch(() => null);
   runs.push({ title: 'API Güvenliği Derinliği (OWASP API Top 10)', conf: 'Orta', rep: apiEv ? buildActiveCheckReport(apiEv, API_SECURITY_CFG) : null, inputs: apiEv?.inputsFound ?? 0, probes: apiEv?.probesSent ?? 0, fc: apiEv?.findings.length ?? 0 });
+  const edEv = await collectEmailDnsEvidence(host).catch(() => null);
+  runs.push({ title: 'E-posta & DNS Derinliği (Anti-Spoofing)', conf: 'Orta', rep: edEv ? buildActiveCheckReport(edEv, EMAIL_DNS_CFG) : null, inputs: edEv?.inputsFound ?? 0, probes: edEv?.probesSent ?? 0, fc: edEv?.findings.length ?? 0 });
 
   // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
   if (runs.every((r) => !r.rep)) return unscannableReport(host, 'kimlik-doğrulamalı kontroller');
