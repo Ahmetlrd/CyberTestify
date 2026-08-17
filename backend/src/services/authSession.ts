@@ -8,6 +8,8 @@ export type CookieFlag = { name: string; secure: boolean; httpOnly: boolean; sam
 export type AuthSession = {
   method: 'api' | 'form';
   loginUrl: string;
+  username?: string;               // login KİMLİĞİ (e-posta/kullanıcı adı) — ŞİFRE DEĞİL. Enumerasyon
+                                   // kontrolü için "geçerli kullanıcı" örneği olarak kullanılır (Faz 2-A).
   cookie?: string;                 // "name=value; name2=value2" (Cookie header — flag'siz)
   bearer?: string;                 // Authorization: Bearer <...>
   cookieFlags?: CookieFlag[];      // login yanıtındaki Set-Cookie bayrak analizi (FAZ C — çerez güvenliği)

@@ -117,7 +117,7 @@ async function tryApiLogin(url: string, creds: TestCredentialInput): Promise<{ s
       scan(j);
     } catch { /* JSON değil */ }
     if (bearer || authCookies.length) {
-      return { session: { method: 'api', loginUrl: url, cookie: authCookies.join('; ') || undefined, bearer, cookieFlags: cookieFlags.length ? cookieFlags : undefined, acquiredAt: Date.now() }, twoFactor };
+      return { session: { method: 'api', loginUrl: url, username: creds.username, cookie: authCookies.join('; ') || undefined, bearer, cookieFlags: cookieFlags.length ? cookieFlags : undefined, acquiredAt: Date.now() }, twoFactor };
     }
     return { twoFactor };
   } catch { return null; }
@@ -286,7 +286,7 @@ async function tryFormLogin(host: string, creds: TestCredentialInput): Promise<F
         // Cookie tabanlı: gerçekten authenticated olduğumuzu heuristikle doğrula (yanlış-pozitif önle).
         const authed = !post.failText && (post.logout || (movedOffLogin && !post.stillHasPw));
         if (bearer || (authCookies.length && authed)) {
-          return { session: { method: 'form', loginUrl: url, cookie: authCookies.join('; ') || undefined, bearer: bearer || undefined, cookieFlags: cookieFlags.length ? cookieFlags : undefined, acquiredAt: Date.now() }, twoFactor, formFound };
+          return { session: { method: 'form', loginUrl: url, username: creds.username, cookie: authCookies.join('; ') || undefined, bearer: bearer || undefined, cookieFlags: cookieFlags.length ? cookieFlags : undefined, acquiredAt: Date.now() }, twoFactor, formFound };
         }
         return { twoFactor, formFound }; // form vardı ama gerçek oturum doğrulanamadı -> bad_credentials
       } catch { await page.close().catch(() => {}); }

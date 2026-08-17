@@ -15,6 +15,7 @@ import { collectPrivilegeEscalationEvidence, collectMultiStepBusinessLogicEviden
 import { collectJwtAnalysis, collectLoginBypassEvidence } from './authExtraChecks.js';
 import { collectJsAnalysisEvidence } from './jsAnalysis.js';
 import { collectClientSideEvidence } from './clientSideChecks.js';
+import { collectAuthDepthEvidence } from './authDepthChecks.js';
 import {
   buildActiveCheckReport, buildInjectionReport, buildIdorReport,
   RISK_WORD, levelRank, extractLevel, headlineOf, detailOnly, type Level,
@@ -187,6 +188,32 @@ const CLIENT_SIDE_CFG = {
   cleanGenel: 'Statik ayrıştırmada belirgin bir DOM-XSS göstergesi, güvensiz message handler, hassas storage yazımı, eksik SRI, tabnabbing veya açık yönlendirme gözlemlenmedi.',
 };
 
+// (Faz 2-A) Kimlik-Doğrulama Derinliği — 9 kontrol. Güvenlik kuralları kod-seviyesinde (gerçek hesap
+// kilitlenmez / reset e-postası gitmez / kayıt yapılmaz). Enumerasyon/lockout/reset = "gösterge" dili.
+const AUTH_DEPTH_CFG = {
+  title: 'Kimlik-Doğrulama Derinliği',
+  whatChecked: [
+    '9 kimlik-doğrulama derinlik kontrolü (WSTG-ATHN/IDNT) — **güvenli, düşük hacim**; brute-force/DoS YOK.',
+    '**1) Hesap enumerasyonu:** geçerli (test hesabı) vs geçersiz (rastgele) kullanıcıda yanıt farkı — birer BAŞARISIZ deneme; hesap oluşturmaz.',
+    '**2) Varsayılan kimlik:** küçük sabit liste (admin/admin vb.) — yalnız başarısız login; kabul edilirse oturum KULLANILMAZ.',
+    '**3) Zayıf lockout/rate-limit:** THROWAWAY (rastgele) kullanıcıyla birkaç hatalı deneme — **gerçek hesap ASLA kilitlenmez**.',
+    '**4) Parola sıfırlama:** mekanizma gözlemi (güvenlik sorusu/token) — **GERÇEK sıfırlama e-postası TETİKLENMEZ** (var-olmayan e-posta).',
+    '**5) Parola/kayıt politikası:** yalnız client-side gözlem — **GERÇEK kayıt YAPILMAZ**.',
+    '**6) "Beni hatırla" çerezi · 7) Authenticated sayfa cache (Cache-Control) · 8) MFA varlığı (bilgilendirici) · 9) Kimlik şifresiz kanalda (HTTP).**',
+  ],
+  confidenceNote: 'Enumerasyon/lockout/reset bulguları "gösterge"dir (doğrulama gerekir). Güvenlik: gerçek hesap kilitlenmedi, reset e-postası gitmedi, kayıt yapılmadı, başarılı giriş bulunsa bile oturum kullanılmadı.',
+  fixTitle: 'Kimlik-Doğrulama Sertleştirme',
+  fixFound: [
+    'Enumerasyon: login/reset/register’da **tek-tip** yanıt/mesaj/süre döndürün (kullanıcı var/yok sızdırmayın).',
+    'Varsayılan kimlik: tüm varsayılan hesapları kaldırın/parolalarını zorunlu değiştirin.',
+    'Lockout: art arda hatalı denemede **hesap+IP bazlı hız-sınırı / geçici kilit** uygulayın; CAPTCHA ekleyin.',
+    'Parola sıfırlama: **token-tabanlı** (tek-kullanımlık, kısa ömür), güvenlik-sorusundan kaçının; Host header’ı reset linkinde kullanmayın.',
+    'Parola politikası: sunucuda **min 8+ / karmaşıklık**; şifresiz kanal: login’i **yalnız HTTPS**’te yapın; hassas sayfalara `Cache-Control: no-store`; **MFA** sunun.',
+  ],
+  fixClean: ['Tek-tip auth yanıtları, varsayılan-hesap yok, lockout/rate-limit + CAPTCHA, token-tabanlı reset, güçlü parola politikası, HTTPS-only login, no-store cache, MFA (proaktif).'],
+  cleanGenel: 'Kimlik-doğrulama derinlik kontrollerinde belirgin bir enumerasyon, varsayılan-kimlik, zayıf-lockout, zayıf-reset veya şifresiz-kanal göstergesi gözlemlenmedi.',
+};
+
 type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
@@ -226,6 +253,10 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   // (YENİ — Faz 1-B) Client-Side Statik Analiz: DOM-XSS gösterge / postMessage / storage / SRI / tabnabbing / open-redirect.
   const csEv = await collectClientSideEvidence(host).catch(() => null);
   runs.push({ title: 'Client-Side Statik Analiz', conf: 'Orta', rep: csEv ? buildActiveCheckReport(csEv, CLIENT_SIDE_CFG) : null, inputs: csEv?.inputsFound ?? 0, probes: csEv?.probesSent ?? 0, fc: csEv?.findings.length ?? 0 });
+
+  // (YENİ — Faz 2-A) Kimlik-Doğrulama Derinliği: enum/varsayılan-kimlik/lockout/reset/politika/cache/MFA/HTTP.
+  const adEv = await collectAuthDepthEvidence(host, session).catch(() => null);
+  runs.push({ title: 'Kimlik-Doğrulama Derinliği', conf: 'Yüksek', rep: adEv ? buildActiveCheckReport(adEv, AUTH_DEPTH_CFG) : null, inputs: adEv?.inputsFound ?? 0, probes: adEv?.probesSent ?? 0, fc: adEv?.findings.length ?? 0 });
 
   // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
   if (runs.every((r) => !r.rep)) return unscannableReport(host, 'kimlik-doğrulamalı kontroller');
