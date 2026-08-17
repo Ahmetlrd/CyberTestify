@@ -16,6 +16,7 @@ import { collectJwtAnalysis, collectLoginBypassEvidence } from './authExtraCheck
 import { collectJsAnalysisEvidence } from './jsAnalysis.js';
 import { collectClientSideEvidence } from './clientSideChecks.js';
 import { collectAuthDepthEvidence } from './authDepthChecks.js';
+import { collectSessionDepthEvidence } from './sessionDepthChecks.js';
 import {
   buildActiveCheckReport, buildInjectionReport, buildIdorReport,
   RISK_WORD, levelRank, extractLevel, headlineOf, detailOnly, type Level,
@@ -214,6 +215,30 @@ const AUTH_DEPTH_CFG = {
   cleanGenel: 'Kimlik-doğrulama derinlik kontrollerinde belirgin bir enumerasyon, varsayılan-kimlik, zayıf-lockout, zayıf-reset veya şifresiz-kanal göstergesi gözlemlenmedi.',
 };
 
+// (Faz 2-B) Oturum Güvenliği Derinliği — 5 kontrol (CSRF/SameSite, session-id entropi, oturum-URL,
+// zaman-aşımı gözlemi, __Host-/__Secure- prefix). Sunucu oturum çerezi yoksa (Bearer/SPA) KAPSAM DIŞI.
+const SESSION_DEPTH_CFG = {
+  title: 'Oturum Güvenliği Derinliği',
+  whatChecked: [
+    'GERÇEK sunucu-taraflı oturum çerezi (Set-Cookie session) VARSA 5 oturum-yönetimi kontrolü — hepsi **read-only/gözlemsel** (durum-değiştiren gönderim / gerçek CSRF saldırısı YOK). Bearer/JWT/token-tabanlı hedefte bu bölüm **kapsam dışıdır**.',
+    '**1) CSRF (SESS-05):** oturum çerezinde SameSite + durum-değiştiren POST formunda anti-CSRF token gözlemi (statik; form GÖNDERİLMEDİ).',
+    '**2) Session-id entropi (SESS-01):** oturum kimliğinin yapısal analizi (uzunluk/charset/entropi) — brute YOK; JWT ise ayrı bölüme bırakılır.',
+    '**3) Oturum URL\'de (SESS-04):** session id URL/query\'de (jsessionid/sid vb.) ifşa mı.',
+    '**4) Zaman aşımı / eş-zamanlı oturum (SESS-07/11):** gözlemsel gösterge (kesin test manuel).',
+    '**5) Çerez prefix (SESS-02):** oturum çerezinde __Host-/__Secure- prefix eksik mi.',
+  ],
+  confidenceNote: 'Bulgular "gösterge"dir (gerçek CSRF saldırısı/brute yapılmadı; token/oturum REDAKTE). Sunucu oturum çerezi yoksa kontroller kapsam dışıdır (token/JWT güvenliği ayrı bölümde).',
+  fixTitle: 'Oturum Güvenliği Sertleştirme',
+  fixFound: [
+    'CSRF: oturum çerezine **SameSite=Lax/Strict** ekleyin; durum-değiştiren isteklerde **anti-CSRF token** (double-submit / synchronizer) zorunlu kılın.',
+    'Session-id: en az **128-bit rastgele** (CSPRNG) oturum kimliği kullanın; tahmin-edilebilir/sıralı değer kullanmayın.',
+    'Oturum URL\'de: session id\'yi **asla URL/query\'de taşımayın** — yalnız HttpOnly + Secure çerezde.',
+    'Prefix: oturum çerezini **`__Host-`** prefix\'iyle (Secure + Path=/ + Domain yok) ayarlayın. Zaman aşımı: makul idle/absolute timeout + sunucu-taraflı geçersizleştirme.',
+  ],
+  fixClean: ['Oturum çerezine SameSite + __Host- prefix, 128-bit rastgele session-id, URL\'de oturum taşımama, anti-CSRF token, makul timeout (proaktif).'],
+  cleanGenel: 'Sunucu oturum çerezi gözlemlendi ancak belirgin bir CSRF/SameSite eksiği, zayıf session-id, URL-ifşa veya prefix eksikliği göstergesi bulunamadı.',
+};
+
 type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
@@ -257,6 +282,10 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   // (YENİ — Faz 2-A) Kimlik-Doğrulama Derinliği: enum/varsayılan-kimlik/lockout/reset/politika/cache/MFA/HTTP.
   const adEv = await collectAuthDepthEvidence(host, session).catch(() => null);
   runs.push({ title: 'Kimlik-Doğrulama Derinliği', conf: 'Yüksek', rep: adEv ? buildActiveCheckReport(adEv, AUTH_DEPTH_CFG) : null, inputs: adEv?.inputsFound ?? 0, probes: adEv?.probesSent ?? 0, fc: adEv?.findings.length ?? 0 });
+
+  // (YENİ — Faz 2-B) Oturum Güvenliği Derinliği: CSRF/SameSite, session-id entropi, oturum-URL, prefix, timeout.
+  const sdEv = await collectSessionDepthEvidence(host, session).catch(() => null);
+  runs.push({ title: 'Oturum Güvenliği Derinliği', conf: 'Orta', rep: sdEv ? buildActiveCheckReport(sdEv, SESSION_DEPTH_CFG) : null, inputs: sdEv?.inputsFound ?? 0, probes: sdEv?.probesSent ?? 0, fc: sdEv?.findings.length ?? 0 });
 
   // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
   if (runs.every((r) => !r.rep)) return unscannableReport(host, 'kimlik-doğrulamalı kontroller');
