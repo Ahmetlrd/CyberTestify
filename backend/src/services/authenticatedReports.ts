@@ -18,6 +18,7 @@ import { collectClientSideEvidence } from './clientSideChecks.js';
 import { collectAuthDepthEvidence } from './authDepthChecks.js';
 import { collectSessionDepthEvidence } from './sessionDepthChecks.js';
 import { collectInputHeaderEvidence, collectConfigExposureEvidence } from './configExposureChecks.js';
+import { collectApiSecurityEvidence } from './apiSecurityChecks.js';
 import {
   buildActiveCheckReport, buildInjectionReport, buildIdorReport,
   RISK_WORD, levelRank, extractLevel, headlineOf, detailOnly, type Level,
@@ -285,6 +286,30 @@ const CONFIG_EXPOSURE_CFG = {
   cleanGenel: 'Erişilebilir yedek/eski dosya, açık admin arayüzü, listelenebilir bucket, cache-poisoning göstergesi veya belirgin yorum/metadata sızıntısı gözlemlenmedi.',
 };
 
+// (Faz 3-B) API Güvenliği Derinliği — OWASP API Top 10. Yalnız GERÇEK keşfedilmiş (JSON, SPA-shell
+// olmayan) REST/GraphQL API'de çalışır; yoksa Kapsam dışı. Read-only; mutasyon/DoS yok.
+const API_SECURITY_CFG = {
+  title: 'API Güvenliği Derinliği (OWASP API Top 10)',
+  whatChecked: [
+    'Aynı-origin JS/HTML\'den keşfedilen, JSON dönen (SPA catch-all shell OLMAYAN) GERÇEK API uçlarında 5 kontrol — hepsi read-only. Gerçek API yoksa (Firebase/istemci-SDK/SPA) bu bölüm **kapsam dışıdır**.',
+    '**F1 BOLA/BFLA (API1/API5):** nesne/fonksiyon-seviyesi yetki — **Authenticated IDOR** + **Forced Browsing** bölümlerinde değerlendirildi (çift bulgu önlemek için burada tekrar probe edilmedi).',
+    '**F2 Aşırı veri ifşası / BOPLA (API3):** API yanıtında hassas/aşırı alan (parola-hash/rol/iç-ID) — değer REDAKTE.',
+    '**F3 Rate-limit (API4):** MODEST burst (DoS DEĞİL) sonrası 429/rate-limit başlığı çıkıyor mu — hedef yorulmadı.',
+    '**F4 Shadow/deprecated sürüm (API9):** /v1,/v2,/api/v1 gibi sürüm uçları erişilebilir mi (SPA-shell elendi).',
+    '**F5 GraphQL introspection (APIT-99):** GraphQL ucu varsa introspection açık mı — **read-only sorgu; mutasyon YOK**.',
+  ],
+  confidenceNote: 'Bulgular "gösterge"dir; yalnız GERÇEKTEN gözlemlenen (JSON, SPA-shell olmayan) uçlarda. Hassas veri REDAKTE; mutasyon/veri-değiştirme/DoS yapılmadı.',
+  fixTitle: 'API Güvenliği Sertleştirme',
+  fixFound: [
+    'BOLA/BFLA: her API isteğinde nesne-sahipliği + fonksiyon-rol kontrolünü sunucuda zorunlu kılın (ID geçerliliği yetmez).',
+    'Aşırı veri: yanıtları **alan-allowlist (DTO)** ile sınırlayın; parola-hash/sır/iç-ID/rol\'ü istemciye göndermeyin.',
+    'Rate-limit: hesap+IP+endpoint bazlı **rate-limit + kota**; ağır uçlara maliyet-tabanlı sınır.',
+    'Sürüm: kullanılmayan/eski API sürümlerini kapatın. GraphQL: üretimde **introspection\'ı kapatın**; sorgu derinliği/karmaşıklık limiti ekleyin.',
+  ],
+  fixClean: ['Nesne/fonksiyon yetkisi sunucuda, yanıt DTO-allowlist, rate-limit+kota, eski sürümler kapalı, GraphQL introspection kapalı (proaktif).'],
+  cleanGenel: 'Keşfedilen API uçlarında belirgin bir aşırı-veri ifşası, rate-limit eksikliği, gölge-sürüm veya açık GraphQL introspection göstergesi bulunamadı.',
+};
+
 type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
@@ -338,6 +363,8 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   runs.push({ title: 'Girdi & Header Derinliği', conf: 'Orta', rep: ihEv ? buildActiveCheckReport(ihEv, INPUT_HEADER_CFG) : null, inputs: ihEv?.inputsFound ?? 0, probes: ihEv?.probesSent ?? 0, fc: ihEv?.findings.length ?? 0 });
   const ceEv = await collectConfigExposureEvidence(host, session).catch(() => null);
   runs.push({ title: 'Yapılandırma & İfşa Derinliği', conf: 'Yüksek', rep: ceEv ? buildActiveCheckReport(ceEv, CONFIG_EXPOSURE_CFG) : null, inputs: ceEv?.inputsFound ?? 0, probes: ceEv?.probesSent ?? 0, fc: ceEv?.findings.length ?? 0 });
+  const apiEv = await collectApiSecurityEvidence(host, session).catch(() => null);
+  runs.push({ title: 'API Güvenliği Derinliği (OWASP API Top 10)', conf: 'Orta', rep: apiEv ? buildActiveCheckReport(apiEv, API_SECURITY_CFG) : null, inputs: apiEv?.inputsFound ?? 0, probes: apiEv?.probesSent ?? 0, fc: apiEv?.findings.length ?? 0 });
 
   // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
   if (runs.every((r) => !r.rep)) return unscannableReport(host, 'kimlik-doğrulamalı kontroller');
