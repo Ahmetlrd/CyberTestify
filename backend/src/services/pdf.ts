@@ -620,6 +620,35 @@ function dedupeBlockquotes(html: string): string {
 }
 
 
+// (TUTARLILIK) KONTROL ÖZETİ tablosunu ayrıştırıp Sonuç sütunu GERÇEKTEN "kapsam dışı" olan kontrol
+// adlarını (küçük harf) döndürür. İnceleme Notu + detay-collapse bu TEK kaynaktan üretilir → özet/tablo/
+// not asla çelişmez. (buildPositiveAssurance ile AYNI tablo-okuma disiplini.)
+function scopeOutControlsFromTable(md: string): Set<string> {
+  const out = new Set<string>();
+  const lines = md.split('\n');
+  for (let i = 0; i < lines.length; ) {
+    if (!/^\s*\|.*\|\s*$/.test(lines[i])) { i++; continue; }
+    const block: string[] = [];
+    while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { block.push(lines[i]); i++; }
+    if (block.length < 2) continue;
+    const cells = (r: string) => r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+    const header = cells(block[0]).map((h) => h.toLocaleLowerCase('tr'));
+    const kCol = header.findIndex((h) => /kontrol/.test(h));
+    const sCol = header.findIndex((h) => /sonu[çc]/.test(h));
+    if (kCol === -1 || sCol === -1) continue; // yalnız KONTROL ÖZETİ tablosu
+    for (let r = 1; r < block.length; r++) {
+      if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue;
+      const c = cells(block[r]);
+      const sonuc = (c[sCol] ?? '').toLocaleLowerCase('tr');
+      if (/kapsam d|giri[şs] noktas[ıi] yok/.test(sonuc)) {
+        const name = stripMd(c[kCol] ?? '').trim();
+        if (name) out.add(name.toLocaleLowerCase('tr'));
+      }
+    }
+  }
+  return out;
+}
+
 export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions): string {
   const t = L[meta.locale];
   const dateStr = meta.createdAt.toLocaleDateString(meta.locale === 'tr' ? 'tr-TR' : 'en-GB', {
@@ -772,16 +801,17 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     // (KAPSAM-DIŞI SADELEŞTİRME) Hedefin mimarisine UYMAYAN / giriş noktası olmayan kontroller
     // (bulgu YOK) yarım-sayfa "NE KONTROL EDİLDİ/BULGULAR" bloğu olarak açılmasın; TEK "İnceleme
     // Notu" kutusunda toplanır. GERÇEKTEN çalışan (⚠ gösterge/bulgu olan) kontroller TAM blok kalır.
+    // (TUTARLILIK — TABLO İLE ÜRET; Sütun 0 / QA) Bir kontrolü "kapsam dışı" saymanın TEK kaynağı
+    // KONTROL ÖZETİ tablosunun Sonuç sütunudur. ESKİ HATA: gövde-regex + şiddet-satırı sezgisi, "⚠ Sınırlı
+    // gösterge" veren ÇALIŞAN bir bölümü (severity kelimesi satırda yoksa) yanlışlıkla "kapsam dışı" sayıp
+    // detayını siliyor ve İnceleme Notu'na yazıyordu (tablo ile ÇELİŞKİ). Artık İnceleme Notu == tablo.
+    const tableScopeOut = scopeOutControlsFromTable(effectiveMd);
     const scopeOut: string[] = [];
     const keptDetail = detailParts.filter((chunk) => {
       const hm = chunk.match(/^###\s+(.+?)\s*(?:\n|$)/);
       const name = hm ? stripMd(hm[1]).trim() : '';
       const isControlBlock = /NE KONTROL ED[İi]LD[İi]|####?\s*BULGULAR/i.test(chunk);
-      const isScopeOut = /kapsam d[ıi][şs][ıi]|uygulanabilir giri[şs] noktas[ıi] yok|giri[şs] noktas[ıi] yok/i.test(chunk);
-      // GERÇEK bulgu = tabloda ŞİDDET satırı ("… | Yüksek |"). "zafiyet göstergesi bulunamadı" prozunu
-      // yanlışlıkla bulgu sayma (yanlış-negatif collapse'ı önle).
-      const hasSevRow = /^\s*\|.*\b(y[üu]ksek|orta|d[üu][şs][üu]k|krit[iı]k)\b.*\|\s*$/im.test(chunk);
-      if (name && isControlBlock && isScopeOut && !hasSevRow) { scopeOut.push(name); return false; }
+      if (name && isControlBlock && tableScopeOut.has(name.toLocaleLowerCase('tr'))) { scopeOut.push(name); return false; }
       return true;
     });
     const scopeNote = scopeOut.length

@@ -14,11 +14,42 @@
  * SÜTUN 0: her bulgu gerçek gözleme dayanır; enumerasyon/lockout/reset "gösterge, doğrulama gerekir"
  * dilinde; gerekçesiz "kanıtlanmış" DENMEZ.
  */
+import { createHash } from 'node:crypto';
 import { fetchClientCorpus } from './jsAnalysis.js';
 import { cachedOriginUrl, resolveOrigin } from './surfaceEvidence.js';
 import { logScanStep } from './scanLogger.js';
 import type { AuthSession } from './authSession.js';
 import type { ActiveCheckEvidence, VFinding } from './activeVerifyEvidence.js';
+
+const md5 = (s: string) => createHash('md5').update(s).digest('hex');
+
+// (SÜTUN 0 — SPA/NO-LOGIN SCOPING) Login "endpoint"i GERÇEK bir sunucu login ucu mu? Firebase/istemci-
+// taraflı SPA'da guessed uç SPA catch-all shell (== ana sayfa) veya 404 döner → GERÇEK DEĞİL. whoami/
+// logout ile AYNI endpoint-provenance + SPA-catch-all disiplini. Yanlış-kimlikle 1 deneme yapılır.
+async function isRealLoginEndpoint(loginUrl: string | null, homeShell: string): Promise<boolean> {
+  if (!loginUrl) return false;
+  const r = await attemptLogin(loginUrl, `ct-probe-${Math.floor(Math.random() * 1e9).toString(36)}@example.invalid`, `wrong-${Math.floor(Math.random() * 1e9).toString(36)}`, 'login-endpoint gerçeklik kontrolü');
+  if (!r || r.status === 404) return false;
+  if (homeShell && md5(r.body) === homeShell) return false;                 // SPA catch-all shell -> gerçek uç değil
+  if (/<!doctype|<html[\s>]/i.test(r.body.slice(0, 200)) && !/^\s*[[{]/.test(r.body.trim())) return false; // HTML sayfa döndü
+  // GERÇEK login işleme sinyali: token döndü / reddetti (4xx) / login-failure mesajı / JSON login yanıtı.
+  return r.success || (r.status >= 400 && r.status < 500) || FAIL_RE.test(r.body.slice(0, 400)) || /^\s*[[{]/.test(r.body.trim());
+}
+
+// Güvenlik-sorusu tabanlı reset GERÇEK bir sunucu ucu mu? (var-olmayan e-posta ile GET; e-posta gitmez.)
+async function observeSecurityQuestionReset(host: string, r: string): Promise<{ real: boolean; finding: VFinding | null }> {
+  const secQ = new URL('/rest/user/security-question', `${cachedOriginUrl(host)}/`).toString();
+  const sq = await probe(`${secQ}?email=${encodeURIComponent(`ct-reset-${r}@example.invalid`)}`, { label: 'reset: security-question gözlemi (var-olmayan e-posta)' });
+  const real = !!sq && sq.status >= 200 && sq.status < 400 && /question|soru|"id"\s*:/i.test(sq.text) && !/<!doctype|<html[\s>]/i.test(sq.text.slice(0, 200));
+  return real
+    ? { real: true, finding: {
+        check: 'weak_password_reset', inputPoint: '/rest/user/security-question', vulnerable: true,
+        technique: 'parola sıfırlama mekanizması gözlemi (güvenlik sorusu) — gösterge',
+        evidence: 'Parola sıfırlama **güvenlik sorusu** tabanlı görünüyor (security-question ucu yanıt verdi) — güvenlik soruları tahmin/OSINT ile aşılabilir; token-tabanlı e-posta sıfırlaması daha güvenli. Gösterge; GERÇEK sıfırlama e-postası tetiklenmedi.',
+        confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
+      } }
+    : { real: false, finding: null };
+}
 
 const REQ_TIMEOUT = 12_000;
 const MIN_DELAY = 350;
@@ -88,10 +119,22 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
   const loginUrl = session.loginUrl || findEndpoint(homeHtml, host, /log[\s-]?in|sign[\s-]?in|giriş|oturum/i, ['/rest/user/login', '/api/login', '/login', '/api/auth/login']);
   let probes = 0;
   const rand = () => Math.floor(Math.random() * 1e9).toString(36);
-
-  // ---- 9) KİMLİK ŞİFRESİZ KANALDA (ATHN-01) ----
   const httpsOk = origin.startsWith('https://');
-  if (!httpsOk || (loginUrl && loginUrl.startsWith('http://'))) {
+
+  // ============ SÜTUN 0 — SPA / NO-LOGIN SCOPING (hayalet-bulgu önleme) ============
+  // GERÇEK bir sunucu login VEYA reset ucu YOKSA (Firebase/istemci-taraflı SPA; guessed uçlar SPA
+  // catch-all shell/404 döndü) → TÜM bölüm "Kapsam dışı — uygulanabilir giriş noktası yok". Böylece
+  // sahte uca 5 başarısız login atıp "lockout yok" gibi HAYALET bulgu ÜRETİLMEZ (nomorelink bug'ı).
+  const homeShell = homeHtml ? md5(homeHtml) : '';
+  const loginRealistic = await isRealLoginEndpoint(loginUrl, homeShell); probes++;
+  const resetReal = await observeSecurityQuestionReset(host, rand()); probes++;
+  if (!loginRealistic && !resetReal.real) {
+    return { ok: true, pagesScanned: 1, inputsFound: 0, probesSent: probes, findings: [], stopped: null,
+      notes: ['Uygulanabilir bir SUNUCU kimlik-doğrulama uç noktası (login/reset/register) bu hedefte gözlemlenmedi — guessed uçlar SPA catch-all shell / 404 döndü (istemci-taraflı/SPA veya Firebase auth). Kimlik-doğrulama derinliği kontrolleri bu hedef için **kapsam dışıdır**.'] };
+  }
+
+  // ---- 9) KİMLİK ŞİFRESİZ KANALDA (ATHN-01) — yalnız gerçek login ucu varsa ----
+  if (loginRealistic && (!httpsOk || (loginUrl && loginUrl.startsWith('http://')))) {
     findings.push({
       check: 'auth_cleartext', inputPoint: loginUrl ?? origin, vulnerable: true,
       technique: 'kimlik bilgisi taşıma kanalı (HTTP/HTTPS) gözlemi',
@@ -101,7 +144,7 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
   }
 
   // ---- 1) ENUMERASYON (IDNT-04) — geçerli (test hesabı) vs geçersiz (rastgele), 1'er başarısız deneme ----
-  if (loginUrl && session.username) {
+  if (loginRealistic && loginUrl && session.username) {
     const invalidUser = `ct-nouser-${rand()}@example.invalid`;
     const valid = await attemptLogin(loginUrl, session.username, `wrongpass-${rand()}`, 'enum: geçerli-kullanıcı yanlış-parola'); probes++;
     const invalid = await attemptLogin(loginUrl, invalidUser, `wrongpass-${rand()}`, 'enum: geçersiz-kullanıcı'); probes++;
@@ -124,7 +167,7 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
   }
 
   // ---- 2) VARSAYILAN KİMLİK BİLGİLERİ (ATHN-02) — küçük sabit liste, SADECE başarısız beklenir ----
-  if (loginUrl) {
+  if (loginRealistic && loginUrl) {
     const DEFAULTS: Array<[string, string]> = [['admin', 'admin'], ['admin', 'password'], ['admin', '123456'], ['administrator', 'administrator'], ['test', 'test'], ['root', 'root']];
     for (const [u, p] of DEFAULTS) {
       const r = await attemptLogin(loginUrl, u, p, `default-cred: ${u}`); probes++;
@@ -141,7 +184,7 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
   }
 
   // ---- 3) ZAYIF LOCKOUT / RATE-LIMIT (ATHN-03) — THROWAWAY kullanıcı (gerçek hesap ASLA) ----
-  if (loginUrl) {
+  if (loginRealistic && loginUrl) {
     const throwaway = `ct-lockout-${rand()}@example.invalid`;
     if (throwaway === session.username) { /* imkânsız (rastgele) — güvenlik asserti */ } else {
       let blocked = false; let slow = false; const times: number[] = [];
@@ -165,19 +208,11 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
     }
   }
 
-  // ---- 4) PAROLA SIFIRLAMA (ATHN-09) — GÖZLEM: reset ucu + güvenlik-sorusu, GERÇEK e-posta YOK ----
+  // ---- 4) PAROLA SIFIRLAMA (ATHN-09) — GÖZLEM: security-question reset (yukarıda 1 kez probe edildi) ----
   {
     const resetUrl = findEndpoint(homeHtml, host, /forgot|reset|password|şifre|parola|kurtar/i, ['/rest/user/reset-password', '/api/auth/forgot', '/forgot-password', '/reset']);
-    const secQ = new URL('/rest/user/security-question', `${cachedOriginUrl(host)}/`).toString();
-    const noneEmail = `ct-reset-${rand()}@example.invalid`;
-    const sq = await probe(`${secQ}?email=${encodeURIComponent(noneEmail)}`, { label: 'reset: security-question gözlemi (var-olmayan e-posta)' }); probes++;
-    if (sq && sq.status >= 200 && sq.status < 400 && /question|soru|"id"/i.test(sq.text)) {
-      findings.push({
-        check: 'weak_password_reset', inputPoint: '/rest/user/security-question', vulnerable: true,
-        technique: 'parola sıfırlama mekanizması gözlemi (güvenlik sorusu) — gösterge',
-        evidence: `Parola sıfırlama **güvenlik sorusu** tabanlı görünüyor (security-question ucu yanıt verdi) — güvenlik soruları tahmin/OSINT ile aşılabilir; token-tabanlı e-posta sıfırlaması daha güvenli. Gösterge; GERÇEK sıfırlama e-postası tetiklenmedi.`,
-        confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
-      });
+    if (resetReal.finding) {
+      findings.push(resetReal.finding);
     } else if (resetUrl) {
       notes.push('Parola sıfırlama ucu gözlemlendi; token/mekanizma statik olarak doğrulanamadı (gerçek e-posta tetiklenmedi) — bu bölüm için sınırlı.');
     } else {
@@ -252,5 +287,6 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
   }
 
   notes.push(`Denenen: **${probes}** güvenli auth-probu (varsayılan-kimlik yalnız başarısız login; lockout THROWAWAY kullanıcıyla; reset var-olmayan e-posta ile; kayıt YAPILMADI; gerçek hesap kilitlenmedi).`);
-  return { ok: true, pagesScanned: 1, inputsFound: loginUrl ? 1 : 0, probesSent: probes, findings, stopped: null, notes };
+  // Buraya YALNIZ gerçek bir sunucu login/reset ucu VARSA gelinir (yukarıdaki kapsam kapısı) → inputsFound=1.
+  return { ok: true, pagesScanned: 1, inputsFound: 1, probesSent: probes, findings, stopped: null, notes };
 }
