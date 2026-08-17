@@ -61,7 +61,9 @@ function CampaignBanner({ region }: { region: RegionConfig }) {
   return (
     <Link
       href={`/${region.code}/packages`}
-      className="group block bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 text-white"
+      /* Sticky: global Nav (sticky top-0, h-16, z-40) HEMEN ALTINA sabitlenir (top-16, z-30) →
+         aşağı kaydırınca kampanya şeridi kaybolmaz. */
+      className="group sticky top-16 z-30 block bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 text-white shadow-sm"
     >
       <div className="container-page flex flex-wrap items-center justify-center gap-x-3 gap-y-1 py-2.5 text-center text-sm font-semibold">
         <span className="rounded-pill bg-white/20 px-2.5 py-0.5 text-xs font-extrabold tracking-wide">
