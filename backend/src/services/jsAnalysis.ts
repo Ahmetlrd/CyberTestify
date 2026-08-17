@@ -8,6 +8,9 @@
  * SÜTUN 0: Her bulgu GERÇEKTEN çekilen dosyaya/pattern'e dayanır (uydurma yok). Tasarım-gereği-PUBLIC
  * anahtarlar (Firebase apiKey, GTM/GA ID, Google Maps browser key, Stripe pk_, reCAPTCHA site key)
  * "ifşa/zafiyet" SAYILMAZ → "bilgilendirici: public-by-design" olarak ETİKETLENİR (nomorelink dersi).
+ *
+ * (Faz 1-B) fetchClientCorpus: home HTML + same-origin JS'i TEK sefer çeker (60s cache) ve hem bu
+ * modül hem clientSideChecks.ts paylaşır (çift fetch yok).
  */
 import { resolveOrigin, cachedOriginUrl } from './surfaceEvidence.js';
 import { logScanStep } from './scanLogger.js';
@@ -22,7 +25,7 @@ let lastAt = 0;
 
 type Fetched = { status: number; text: string; len: number; url: string };
 
-async function getCapped(url: string, cap = MAX_BYTES): Promise<Fetched | null> {
+export async function getCapped(url: string, cap = MAX_BYTES): Promise<Fetched | null> {
   const wait = MIN_DELAY - (Date.now() - lastAt);
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   lastAt = Date.now();
@@ -54,8 +57,77 @@ const redact = (s: string): string => {
   return t.slice(0, 4) + '…' + '•'.repeat(6) + '…' + t.slice(-4);
 };
 
+// ================= PAYLAŞILAN CORPUS (Faz 1-A + 1-B tek fetch) =================
+export type ClientJsFile = { url: string; body: string };
+export type ClientCorpus = {
+  origin: string; reachable: boolean; homeHtml: string;
+  inlineScripts: string[];
+  sameOriginJs: ClientJsFile[];
+  externalScripts: string[];
+  scriptTags: Array<{ url: string; external: boolean; hasIntegrity: boolean }>;
+  styleTags: Array<{ url: string; external: boolean; hasIntegrity: boolean }>;
+  blankLinks: Array<{ href: string; hasRelSafe: boolean; external: boolean }>;
+  fetches: number;
+};
+const corpusCache = new Map<string, { at: number; corpus: ClientCorpus }>();
+
+export async function fetchClientCorpus(host: string): Promise<ClientCorpus> {
+  const cached = corpusCache.get(host);
+  if (cached && Date.now() - cached.at < 60_000) return cached.corpus;
+  await resolveOrigin(host).catch(() => null);
+  const origin = cachedOriginUrl(host);
+  const empty: ClientCorpus = { origin, reachable: false, homeHtml: '', inlineScripts: [], sameOriginJs: [], externalScripts: [], scriptTags: [], styleTags: [], blankLinks: [], fetches: 1 };
+  const home = await getCapped(`${origin}/`);
+  if (!home || home.status >= 400 || !home.text) { corpusCache.set(host, { at: Date.now(), corpus: empty }); return empty; }
+  const html = home.text;
+
+  const scriptTags: ClientCorpus['scriptTags'] = [];
+  const scriptSrcs: string[] = [];
+  const inlineScripts: string[] = [];
+  for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    const attrs = m[1]; const body = m[2];
+    const src = attrs.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (src) {
+      const u = absUrl(src, host); if (!u) continue;
+      scriptTags.push({ url: u, external: !sameHost(u, host), hasIntegrity: /\bintegrity\s*=/i.test(attrs) });
+      scriptSrcs.push(u);
+    } else if (body.trim()) inlineScripts.push(body);
+  }
+  const styleTags: ClientCorpus['styleTags'] = [];
+  for (const m of html.matchAll(/<link\b([^>]*)>/gi)) {
+    const attrs = m[1];
+    if (!/\brel\s*=\s*["']?[^"'>]*stylesheet/i.test(attrs)) continue;
+    const href = attrs.match(/\bhref\s*=\s*["']([^"']+)["']/i)?.[1]; if (!href) continue;
+    const u = absUrl(href, host); if (!u) continue;
+    styleTags.push({ url: u, external: !sameHost(u, host), hasIntegrity: /\bintegrity\s*=/i.test(attrs) });
+  }
+  const blankLinks: ClientCorpus['blankLinks'] = [];
+  for (const m of html.matchAll(/<a\b([^>]*)>/gi)) {
+    const attrs = m[1];
+    if (!/\btarget\s*=\s*["']?_blank/i.test(attrs)) continue;
+    const href = attrs.match(/\bhref\s*=\s*["']([^"']+)["']/i)?.[1] ?? '';
+    const rel = attrs.match(/\brel\s*=\s*["']([^"']*)["']/i)?.[1] ?? '';
+    const abs = absUrl(href, host);
+    blankLinks.push({ href: href.slice(0, 200), hasRelSafe: /noopener|noreferrer/i.test(rel), external: abs ? !sameHost(abs, host) : /^https?:\/\//i.test(href) });
+  }
+
+  const sameOriginJs: ClientJsFile[] = [];
+  const externalScripts: string[] = [];
+  let fetches = 1;
+  for (const u of scriptSrcs) {
+    if (sameHost(u, host)) {
+      if (sameOriginJs.length >= MAX_JS_FILES) continue;
+      const r = await getCapped(u); fetches++;
+      if (r && r.status < 400 && r.text) sameOriginJs.push({ url: u, body: r.text });
+    } else externalScripts.push(u);
+  }
+
+  const corpus: ClientCorpus = { origin, reachable: true, homeHtml: html, inlineScripts, sameOriginJs, externalScripts, scriptTags, styleTags, blankLinks, fetches };
+  corpusCache.set(host, { at: Date.now(), corpus });
+  return corpus;
+}
+
 // ============================ A) GERÇEK SIRLAR ============================
-// Her biri: yakala + neden hassas. PUBLIC-BY-DESIGN olanlar (aşağıda) BURADA DEĞİL.
 const REAL_SECRET_RULES: Array<{ id: string; re: RegExp; why: string }> = [
   { id: 'private_key', re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/g, why: 'Özel anahtar (private key) — imzalama/şifre çözme yetkisi verir.' },
   { id: 'aws_akia', re: /\bAKIA[0-9A-Z]{16}\b/g, why: 'AWS erişim anahtarı kimliği (AKIA…) — AWS hesabına programatik erişim.' },
@@ -79,7 +151,6 @@ const PUBLIC_BY_DESIGN_RULES: Array<{ id: string; label: string; re: RegExp }> =
 ];
 
 // ============================ C) BİLİNEN-ZAFİYETLİ KÜTÜPHANELER ============================
-// MUHAFAZAKÂR: yalnız GÜVENLE okunan sürüm eşlenir; aralık AÇIK; "istismar edilebilir" DEMEZ.
 type VulnRange = { ltOr?: string; geLt?: [string, string]; cves: string; note: string };
 const KNOWN_VULN_LIBS: Record<string, { display: string; ranges: VulnRange[]; eol?: string }> = {
   jquery: { display: 'jQuery', ranges: [
@@ -126,64 +197,49 @@ function matchVuln(lib: string, version: string): { cves: string; note: string }
   return null;
 }
 
-// Kütüphane + sürüm tespiti: (1) URL/dosya adı, (2) dosya banner'ı. Sürüm okunamazsa CVE eşleme YOK.
 const LIB_NAME_RE = /(jquery|angular|react|vue|lodash|underscore|moment|bootstrap|handlebars|dompurify|axios|d3|three|backbone|knockout|ember)/i;
 function detectLib(url: string, body: string): { lib: string; display: string; version: string | null } | null {
   const nameM = url.match(LIB_NAME_RE) || body.slice(0, 500).match(LIB_NAME_RE);
   if (!nameM) return null;
   const lib = nameM[1].toLowerCase();
   const display = KNOWN_VULN_LIBS[lib]?.display ?? (lib.charAt(0).toUpperCase() + lib.slice(1));
-  // Sürüm: URL'de (jquery-3.4.1 / jquery.min.js?ver=3.4.1) veya banner'da (v3.4.1 / VERSION="3.4.1").
   const fromUrl = url.match(new RegExp(lib + '[.\\-/@]?v?(\\d+\\.\\d+\\.\\d+)', 'i')) || url.match(/[?&]ver(?:sion)?=(\d+\.\d+\.\d+)/i);
   const fromBanner = body.slice(0, 3000).match(new RegExp(lib + '[^0-9]{0,20}v?(\\d+\\.\\d+\\.\\d+)', 'i')) || body.slice(0, 3000).match(/VERSION\s*[:=]\s*["'](\d+\.\d+\.\d+)["']/i);
   const version = fromUrl?.[1] ?? fromBanner?.[1] ?? null;
   return { lib, display, version };
 }
+export { detectLib, matchVuln };
+
+// (Doğrulama için) tek metni tarayıp GERÇEK-sır bulgularını + public-by-design etiketlerini döndürür.
+export function scanTextForSecrets(text: string, where = 'test'): { findings: VFinding[]; publicByDesign: string[] } {
+  const findings: VFinding[] = []; const publicSeen = new Set<string>();
+  scanSecrets(text, where, findings, publicSeen);
+  return { findings, publicByDesign: [...publicSeen] };
+}
 
 export async function collectJsAnalysisEvidence(host: string): Promise<ActiveCheckEvidence> {
   const findings: VFinding[] = [];
   const notes: string[] = [];
-  await resolveOrigin(host).catch(() => null);
-  const origin = cachedOriginUrl(host);
-
-  // 1) Ana sayfa HTML → script src'leri + inline script'ler.
-  const home = await getCapped(`${origin}/`);
-  if (!home || home.status >= 400 || !home.text) {
+  const c = await fetchClientCorpus(host);
+  if (!c.reachable) {
     return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null,
       notes: ['Ana sayfa HTML çekilemedi — istemci-tarafı/JS analizi bu hedef için **kapsam dışıdır**.'] };
   }
-  const html = home.text;
-  const scriptSrcs = [...html.matchAll(/<script[^>]+src\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1]);
-  const inlineScripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]).filter((s) => s.trim().length > 0);
 
-  const sameOriginJs: string[] = [];
-  const externalJs: string[] = [];
-  for (const src of scriptSrcs) {
-    const u = absUrl(src, host); if (!u) continue;
-    (sameHost(u, host) ? sameOriginJs : externalJs).push(u);
-  }
-
-  let jsScanned = 0, probes = 1, mapsTried = 0;
-  const publicSeen = new Set<string>();       // public-by-design (bilgilendirici)
+  const publicSeen = new Set<string>();
   const libsDetected: string[] = [];
   const libSeen = new Set<string>();
+  let mapsTried = 0, probes = c.fetches;
 
-  // 2) INLINE script'ler: sır + public-by-design + lib banner.
-  for (const [i, code] of inlineScripts.entries()) {
-    scanSecrets(code, `inline-script#${i + 1}`, findings, publicSeen);
-  }
+  // INLINE script'ler: sır + public-by-design.
+  for (const [i, code] of c.inlineScripts.entries()) scanSecrets(code, `inline-script#${i + 1}`, findings, publicSeen);
 
-  // 3) SAME-ORIGIN JS: çek + A/B/C.
-  for (const u of sameOriginJs.slice(0, MAX_JS_FILES)) {
-    const r = await getCapped(u); probes++;
-    if (!r || r.status >= 400 || !r.text) continue;
-    jsScanned++;
-    const short = new URL(u).pathname.split('/').pop() || u;
-    // A) sırlar
-    scanSecrets(r.text, short, findings, publicSeen);
-    // B) source map
+  // SAME-ORIGIN JS: A) sır, B) source-map, C) kütüphane.
+  for (const f of c.sameOriginJs) {
+    const short = (() => { try { return new URL(f.url).pathname.split('/').pop() || f.url; } catch { return f.url; } })();
+    scanSecrets(f.body, short, findings, publicSeen);
     if (mapsTried < MAX_MAP_TRIES) {
-      const mapUrl = sourceMapUrl(u, r.text);
+      const mapUrl = sourceMapUrl(f.url, f.body);
       if (mapUrl) {
         mapsTried++; probes++;
         const mr = await getCapped(mapUrl, 1_000_000);
@@ -200,8 +256,7 @@ export async function collectJsAnalysisEvidence(host: string): Promise<ActiveChe
         }
       }
     }
-    // C) kütüphane + sürüm + CVE
-    const lib = detectLib(u, r.text);
+    const lib = detectLib(f.url, f.body);
     if (lib && !libSeen.has(lib.lib)) {
       libSeen.add(lib.lib);
       libsDetected.push(`${lib.display}${lib.version ? ` ${lib.version}` : ' (sürüm okunamadı)'}`);
@@ -214,12 +269,11 @@ export async function collectJsAnalysisEvidence(host: string): Promise<ActiveChe
           confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
         });
       }
-      // sürüm yoksa: tespit edildi ama CVE eşleme YOK (CMS/CVE disiplini).
     }
   }
 
   // Harici (CDN) script'ler: yalnız URL'den lib+sürüm (fetch YOK) — CVE eşle.
-  for (const u of externalJs) {
+  for (const u of c.externalScripts) {
     const lib = detectLib(u, '');
     if (lib && lib.version && !libSeen.has(lib.lib)) {
       libSeen.add(lib.lib);
@@ -234,13 +288,12 @@ export async function collectJsAnalysisEvidence(host: string): Promise<ActiveChe
     }
   }
 
-  // --- POZİTİF GÜVENCE + BİLGİLENDİRİCİ (gerçek sayılar) ---
-  notes.push(`Tarandı: **${jsScanned}** same-origin JS dosyası + **${inlineScripts.length}** inline script; **${libsDetected.length}** kütüphane tespit edildi; **${mapsTried}** source-map adayı denendi. (${externalJs.length} harici/CDN script sürüm için incelendi.)`);
+  notes.push(`Tarandı: **${c.sameOriginJs.length}** same-origin JS dosyası + **${c.inlineScripts.length}** inline script; **${libsDetected.length}** kütüphane tespit edildi; **${mapsTried}** source-map adayı denendi. (${c.externalScripts.length} harici/CDN script sürüm için incelendi.)`);
   if (libsDetected.length) notes.push(`Tespit edilen kütüphaneler: ${libsDetected.join(' · ')}.`);
   if (publicSeen.size) notes.push(`Bilgilendirici (public-by-design — istismar edilebilir sır DEĞİL, bulgu sayılmaz): ${[...publicSeen].join(' · ')}.`);
-  if (!sameOriginJs.length && !inlineScripts.length) notes.push('Sayfada analiz edilebilir JS bulunamadı (ör. sunucu-render, JS’siz sayfa) — bu hedefte JS analizi sınırlıdır.');
+  if (!c.sameOriginJs.length && !c.inlineScripts.length) notes.push('Sayfada analiz edilebilir JS bulunamadı (ör. sunucu-render, JS’siz sayfa) — bu hedefte JS analizi sınırlıdır.');
 
-  return { ok: true, pagesScanned: 1, inputsFound: jsScanned, probesSent: probes, findings, stopped: null, notes };
+  return { ok: true, pagesScanned: 1, inputsFound: c.sameOriginJs.length, probesSent: probes, findings, stopped: null, notes };
 }
 
 // //# sourceMappingURL=... (dosya sonunda) veya <js>.map adayı.
@@ -249,16 +302,8 @@ function sourceMapUrl(jsUrl: string, body: string): string | null {
   if (m && m[1] && !m[1].startsWith('data:')) {
     try { return new URL(m[1], jsUrl).toString(); } catch { /* */ }
   }
-  return jsUrl + '.map'; // yaygın konvansiyon — erişilebilirse doğrulanır
+  return jsUrl + '.map';
 }
-
-// (Doğrulama için) tek metni tarayıp GERÇEK-sır bulgularını + public-by-design etiketlerini döndürür.
-export function scanTextForSecrets(text: string, where = 'test'): { findings: VFinding[]; publicByDesign: string[] } {
-  const findings: VFinding[] = []; const publicSeen = new Set<string>();
-  scanSecrets(text, where, findings, publicSeen);
-  return { findings, publicByDesign: [...publicSeen] };
-}
-export { detectLib, matchVuln };
 
 // A) tek metinde sır tara — GERÇEK sır → finding; public-by-design → publicSeen (bilgilendirici).
 function scanSecrets(text: string, where: string, findings: VFinding[], publicSeen: Set<string>): void {

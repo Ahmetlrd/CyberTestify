@@ -14,6 +14,7 @@ import {
 import { collectPrivilegeEscalationEvidence, collectMultiStepBusinessLogicEvidence } from './authAgentChecks.js';
 import { collectJwtAnalysis, collectLoginBypassEvidence } from './authExtraChecks.js';
 import { collectJsAnalysisEvidence } from './jsAnalysis.js';
+import { collectClientSideEvidence } from './clientSideChecks.js';
 import {
   buildActiveCheckReport, buildInjectionReport, buildIdorReport,
   RISK_WORD, levelRank, extractLevel, headlineOf, detailOnly, type Level,
@@ -160,6 +161,32 @@ const JS_ANALYSIS_CFG = {
   cleanGenel: 'Çekilen JS bundle’larında gerçek sır, erişilebilir source-map veya bilinen-zafiyetli (sürümü okunabilen) kütüphane gözlemlenmedi. Public-by-design anahtarlar (varsa) yukarıda bilgilendirici olarak ayrılmıştır.',
 };
 
+// (Faz 1-B) Client-Side Statik Analiz — 6 pasif kontrol (DOM-XSS gösterge / postMessage / storage /
+// SRI / tabnabbing / open-redirect). Sütun 0: DOM-XSS "gösterge", kanıtlanmış XSS değil.
+const CLIENT_SIDE_CFG = {
+  title: 'Client-Side Statik Analiz',
+  whatChecked: [
+    'Aynı JS/HTML corpus’u üzerinde **statik** olarak (aktif istismar YOK) 6 istemci-tarafı kontrol yapıldı.',
+    '**1) DOM-based XSS (gösterge):** tehlikeli sink (innerHTML/document.write/eval/.html()/location=) ile kullanıcı-kontrollü kaynak (location.hash/search, referrer, window.name) AYNI ifadede mi — **kanıtlanmış XSS DEĞİL**, düşük güvenli gösterge (dinamik doğrulama gerekir).',
+    '**2) postMessage:** `message` olay dinleyicilerinde **event.origin doğrulaması** var mı.',
+    '**3) Browser storage:** localStorage/sessionStorage’a **hassas veri** (token/JWT/oturum) yazımı (statik; değer REDAKTE).',
+    '**4) Eksik SRI:** harici script/style’larda `integrity` attribute’u var mı (tedarik-zinciri).',
+    '**5) Reverse tabnabbing:** `target="_blank"` linklerinde `rel="noopener/noreferrer"` var mı.',
+    '**6) Open redirect:** HTML’de GÖZLENEN yönlendirme parametrelerine **tek güvenli prob** — zararsız harici URL gönderilip Location gözlendi; **redirect TAKİP EDİLMEDİ**.',
+  ],
+  confidenceNote: 'DOM-XSS bulguları STATİK göstergedir (yanlış-pozitif potansiyeli yüksek; dinamik doğrulama gerekir). Diğerleri deterministik gözlemdir.',
+  fixTitle: 'Client-Side Statik Güvenlik',
+  fixFound: [
+    'DOM-XSS: kullanıcı-kontrollü veriyi innerHTML/eval/document.write yerine textContent + güvenli API ile işleyin; gerekiyorsa DOMPurify ile sanitize edin.',
+    'postMessage: her `message` handler’ında `event.origin`’i allowlist ile doğrulayın.',
+    'Storage: oturum token’ını localStorage yerine **HttpOnly + Secure çerezde** tutun.',
+    'SRI: harici script/style’lara `integrity` + `crossorigin` ekleyin. Tabnabbing: `target="_blank"` linklere `rel="noopener noreferrer"`.',
+    'Open redirect: yönlendirme hedeflerini sunucuda **allowlist** ile sınırlayın; harici mutlak URL’lere yönlendirmeyin.',
+  ],
+  fixClean: ['DOM sink’lerini güvenli API + sanitizasyonla kullanın; postMessage origin doğrulayın; token’ı HttpOnly çerezde tutun; SRI + rel=noopener + redirect allowlist uygulayın (proaktif).'],
+  cleanGenel: 'Statik ayrıştırmada belirgin bir DOM-XSS göstergesi, güvensiz message handler, hassas storage yazımı, eksik SRI, tabnabbing veya açık yönlendirme gözlemlenmedi.',
+};
+
 type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
@@ -195,6 +222,10 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   // (YENİ — 6. pakete özel) Client-Side / JS Analizi: pasif JS bundle sır + source-map + zafiyetli-kütüphane.
   const jsEv = await collectJsAnalysisEvidence(host).catch(() => null);
   runs.push({ title: 'Client-Side / JS Analizi', conf: 'Yüksek', rep: jsEv ? buildActiveCheckReport(jsEv, JS_ANALYSIS_CFG) : null, inputs: jsEv?.inputsFound ?? 0, probes: jsEv?.probesSent ?? 0, fc: jsEv?.findings.length ?? 0 });
+
+  // (YENİ — Faz 1-B) Client-Side Statik Analiz: DOM-XSS gösterge / postMessage / storage / SRI / tabnabbing / open-redirect.
+  const csEv = await collectClientSideEvidence(host).catch(() => null);
+  runs.push({ title: 'Client-Side Statik Analiz', conf: 'Orta', rep: csEv ? buildActiveCheckReport(csEv, CLIENT_SIDE_CFG) : null, inputs: csEv?.inputsFound ?? 0, probes: csEv?.probesSent ?? 0, fc: csEv?.findings.length ?? 0 });
 
   // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
   if (runs.every((r) => !r.rep)) return unscannableReport(host, 'kimlik-doğrulamalı kontroller');
