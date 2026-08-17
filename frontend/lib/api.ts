@@ -149,6 +149,12 @@ export const api = {
     request<{ lowSignal: boolean; jsRendered: boolean; inputCount: number; reachable: boolean }>(
       `/domains/${domainId}/scope-estimate`,
     ),
+  // (ÖDEME ÖNCESİ TEST GİRİŞİ) kendi doğrulanmış domainine test hesabıyla 1 login dener; saklamaz.
+  precheckLogin: (domainId: string, username: string, password: string) =>
+    request<{ ok: boolean; reason?: 'bad_credentials' | 'two_factor' | 'no_login_endpoint' | 'error' }>(
+      '/orders/precheck-login',
+      { method: 'POST', body: JSON.stringify({ domainId, username, password }) },
+    ),
   createBundleOrder: (body: {
     domainId: string; bundleKey: string; selectedModules?: string[];
     ownershipConfirmed: boolean; distanceContractAccepted: boolean; withdrawalWaived: boolean; crossBorderTransfer: boolean;

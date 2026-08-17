@@ -18,12 +18,25 @@ import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
 import { COMBO_BUNDLES, getBundle, bundlePrice, bundleMemberAmounts, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
 import { requireAuth } from '../middleware/auth.js';
+import { login as attemptLogin } from '../services/authLogin.js';
+import { isVerificationStillValid } from '../services/verification.js';
 
 export const ordersRouter = Router();
 
 // (BOT KORUMASI) Sipariş/ödeme OLUŞTURMA uçları — sahte sipariş / kart-deneme botlarına karşı IP
 // başına sıkı limit (create'ler zaten requireAuth + e-posta + domain-doğrulama arkasında; bu EK kat).
 const createLimiter = rateLimit({ windowMs: 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false, message: { error: 'Cok fazla islem denemesi. Lutfen biraz bekleyip tekrar deneyin.' } });
+
+// (ÖDEME ÖNCESİ TEST GİRİŞİ DOĞRULAMA) full_pentest/authenticated_scan kimlik bilgisiyle, satın
+// almadan ÖNCE tek bir login denenir → müşteri yanlış bilgi / erişilemez login'i önceden görür,
+// başarısız tarama + iade döngüsü kesilir. GÜVENLİK: yalnız MÜŞTERİNİN KENDİ DNS-doğrulanmış
+// domaini + SIKI rate-limit (login-oracle/brute-force önleme). Kimlik bilgileri SAKLANMAZ/LOGLANMAZ.
+const loginPrecheckLimiter = rateLimit({ windowMs: 60 * 1000, max: 6, standardHeaders: true, legacyHeaders: false, message: { error: 'Cok fazla giris denemesi. Lutfen biraz bekleyin.' } });
+const loginPrecheckSchema = z.object({
+  domainId: z.string().min(1),
+  username: z.string().min(1).max(200),
+  password: z.string().min(1).max(400),
+});
 
 // ?region=tr|us|ae — bolgesel fiyat + para birimi ile paket listesi.
 ordersRouter.get('/packages', async (req, res) => {
@@ -471,6 +484,26 @@ const bundleOrderSchema = z.object({
   // (Aktif Doğrulama Paketi) Ödeme öncesi "düşük kapsam" uyarısı gösterildiyse müşteri onayı.
   lowScopeAcknowledged: z.boolean().optional(),
 });
+// (ÖDEME ÖNCESİ TEST GİRİŞİ DOĞRULAMA) Kendi doğrulanmış domainine test hesabıyla 1 kez login
+// dener; sonucu döner (kimlik bilgisi saklanmaz). ok=true → giriş başarılı; ok=false + reason.
+ordersRouter.post('/precheck-login', loginPrecheckLimiter, requireAuth, async (req, res) => {
+  const parsed = loginPrecheckSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
+  const { domainId, username, password } = parsed.data;
+  // Yalnız MÜŞTERİNİN KENDİ domaini (oracle önleme) + DNS doğrulanmış olmalı (aktif login hakkı).
+  const domain = await prisma.domain.findFirst({ where: { id: domainId, customerId: req.customerId! } });
+  if (!domain) return res.status(404).json({ error: 'Alan adi bulunamadi.' });
+  if (!isVerificationStillValid(domain)) {
+    return res.status(403).json({ error: 'Once alan adi sahipliginizi DNS ile dogrulayin.' });
+  }
+  try {
+    const r = await attemptLogin(domain.hostname, { username, password });
+    return res.json(r.ok ? { ok: true } : { ok: false, reason: r.reason });
+  } catch {
+    return res.json({ ok: false, reason: 'error' });
+  }
+});
+
 ordersRouter.post('/bundle', createLimiter, requireAuth, async (req, res) => {
   // ODEME ONCESI E-POSTA DOGRULAMA ZORUNLU (bundle; fail-fast, sema parse'indan ONCE).
   const custB = await prisma.customer.findUnique({ where: { id: req.customerId! }, select: { emailVerified: true } });

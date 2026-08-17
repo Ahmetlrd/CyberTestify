@@ -65,6 +65,9 @@ export default function OrderPage() {
   // (#5) authenticated_scan — test hesabi kimlik bilgileri.
   const [authUser, setAuthUser] = useState('');
   const [authPass, setAuthPass] = useState('');
+  // (ÖDEME ÖNCESİ TEST GİRİŞİ) tek buton + tek satır sonuç — BLOKLAMAZ, sadece bilgilendirir.
+  const [loginCheck, setLoginCheck] = useState<'idle' | 'checking' | 'ok' | 'fail'>('idle');
+  const [loginCheckMsg, setLoginCheckMsg] = useState<string>('');
   // (Tam Kapsamlı Pentest — FAZ A) kimlik-doğrulamalı/otonom paketlerde 3 EK onay.
   const [credShare, setCredShare] = useState(false);
   const [testAcct, setTestAcct] = useState(false);
@@ -478,6 +481,32 @@ export default function OrderPage() {
   // (Tam Kapsamlı Pentest — FAZ A) Kimlik-doğrulamalı paketlerde: "test hesabı" uyarısı + kimlik
   // bilgisi girişleri + 3 EK onay. Kimlik-doğrulamalı üye seçiliyken gösterilir (comingSoon paket
   // FAZ E'de açıldığında canlı olur; şimdilik hazır).
+  // (ÖDEME ÖNCESİ TEST GİRİŞİ) Girilen test hesabıyla kendi doğrulanmış domainine 1 login dener.
+  // BLOKLAMAZ — sonuç bilgilendirmedir (yanlış-negatif olabilir; gerçek tarama daha kapsamlıdır).
+  async function runLoginCheck() {
+    if (!domainId || !authUser.trim() || !authPass || loginCheck === 'checking') return;
+    setLoginCheck('checking');
+    setLoginCheckMsg('');
+    try {
+      const r = await api.precheckLogin(domainId, authUser.trim(), authPass);
+      if (r.ok) {
+        setLoginCheck('ok');
+        setLoginCheckMsg('Test hesabıyla giriş doğrulandı.');
+      } else {
+        setLoginCheck('fail');
+        setLoginCheckMsg(
+          r.reason === 'bad_credentials' ? 'Bu kullanıcı adı/şifreyle giriş yapılamadı — bilgileri kontrol edin.'
+          : r.reason === 'two_factor' ? 'Hesapta 2FA görünüyor — 2FA’sız bir test hesabı verin.'
+          : r.reason === 'no_login_endpoint' ? 'Otomatik giriş formu bulunamadı — yine de devam edebilirsiniz (tarama daha kapsamlı deneyecektir).'
+          : 'Giriş şu an doğrulanamadı — yine de devam edebilirsiniz.',
+        );
+      }
+    } catch {
+      setLoginCheck('fail');
+      setLoginCheckMsg('Giriş şu an doğrulanamadı — yine de devam edebilirsiniz.');
+    }
+  }
+
   const authCredBlock = (
     <div className="mt-3 space-y-3">
       <div className="rounded-card border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -488,13 +517,24 @@ export default function OrderPage() {
         </span>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        <input placeholder="Test hesabı kullanıcı adı" value={authUser} onChange={(e) => setAuthUser(e.target.value)} className="field" autoComplete="off" />
-        <input type="password" placeholder="Test hesabı şifresi" value={authPass} onChange={(e) => setAuthPass(e.target.value)} className="field" autoComplete="new-password" />
+        <input placeholder="Test hesabı kullanıcı adı" value={authUser} onChange={(e) => { setAuthUser(e.target.value); setLoginCheck('idle'); }} className="field" autoComplete="off" />
+        <input type="password" placeholder="Test hesabı şifresi" value={authPass} onChange={(e) => { setAuthPass(e.target.value); setLoginCheck('idle'); }} className="field" autoComplete="new-password" />
       </div>
-      {/* (İŞ 3) Test-hesabı beyanı + kimlik-bilgisi yurt dışı açık rıza + yüksek-risk kabulü artık aşağıdaki
-          "2 · Onaylar" bölümündeki gruplu checkbox'lara taşındı (sunucu-tarafı alanlar AYNEN korunur). */}
-      <p className="text-xs text-ink-muted">
-      </p>
+      {/* (ÖDEME ÖNCESİ TEST GİRİŞİ) tek buton + tek satır sonuç — ek checkbox/uyarı YOK, bloklamaz. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <button
+          type="button"
+          onClick={runLoginCheck}
+          disabled={!domainId || !authUser.trim() || !authPass || loginCheck === 'checking'}
+          className="btn-outline shrink-0 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {loginCheck === 'checking' ? 'Giriş deneniyor…' : 'Test girişini doğrula'}
+        </button>
+        {loginCheck === 'ok' && <span className="text-sm font-medium text-emerald-700">✓ {loginCheckMsg}</span>}
+        {loginCheck === 'fail' && <span className="text-sm text-amber-700">{loginCheckMsg}</span>}
+      </div>
+      {/* (İŞ 3) Test-hesabı beyanı + kimlik-bilgisi yurt dışı açık rıza + yüksek-risk kabulü aşağıdaki
+          "2 · Onaylar" bölümündeki gruplu checkbox'larda (sunucu-tarafı alanlar AYNEN korunur). */}
     </div>
   );
 
