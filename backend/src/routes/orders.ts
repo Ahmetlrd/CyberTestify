@@ -505,7 +505,7 @@ ordersRouter.post('/precheck-login', loginPrecheckLimiter, requireAuth, async (r
     const TIMEOUT = Symbol('timeout');
     const r = await Promise.race([
       quickLoginPrecheck(domain.hostname, { username, password }),
-      new Promise<typeof TIMEOUT>((resolve) => setTimeout(() => resolve(TIMEOUT), 22_000)),
+      new Promise<typeof TIMEOUT>((resolve) => setTimeout(() => resolve(TIMEOUT), 28_000)),
     ]);
     if (r === TIMEOUT) return res.json({ ok: false, reason: 'timeout' });
     return res.json(r.ok ? { ok: true } : { ok: false, reason: r.reason });

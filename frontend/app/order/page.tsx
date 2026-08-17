@@ -553,6 +553,9 @@ export default function OrderPage() {
             'Test girişini doğrula (opsiyonel)'
           )}
         </button>
+        {loginCheck === 'checking' && (
+          <span className="text-xs text-ink-muted">Giriş formu aranıp deneniyor — birkaç saniye sürebilir…</span>
+        )}
         {loginCheck === 'ok' && (
           <span className="rounded-pill bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800">✓ {loginCheckMsg}</span>
         )}
