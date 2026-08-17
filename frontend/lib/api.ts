@@ -41,15 +41,25 @@ function friendlyError(body: any, status: number): string {
   return 'İşlem şu an tamamlanamadı. Lütfen bilgileri kontrol edip tekrar deneyin.';
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders(),
-      ...options.headers,
-    },
-  });
+async function request<T>(path: string, options: RequestInit & { timeoutMs?: number } = {}): Promise<T> {
+  // (HIZ) Opsiyonel istemci-tarafı zaman aşımı — uzun süren istekte UI takılı kalmasın (ör. ön-giriş).
+  const { timeoutMs, ...init } = options;
+  const ctrl = timeoutMs ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      signal: ctrl?.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+        ...init.headers,
+      },
+    });
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   if (!res.ok) {
     // (OTURUM TEMİZLİĞİ) 401 = token geçersiz/süresi dolmuş → localStorage'daki ölü token'ı SİL ki
     // Nav "giriş yapılmış" sanıp her istekte "geçersiz/süresi dolmuş oturum" döngüsüne girmesin.
@@ -151,9 +161,9 @@ export const api = {
     ),
   // (ÖDEME ÖNCESİ TEST GİRİŞİ) kendi doğrulanmış domainine test hesabıyla 1 login dener; saklamaz.
   precheckLogin: (domainId: string, username: string, password: string) =>
-    request<{ ok: boolean; reason?: 'bad_credentials' | 'two_factor' | 'no_login_endpoint' | 'error' }>(
+    request<{ ok: boolean; reason?: 'bad_credentials' | 'two_factor' | 'no_login_endpoint' | 'timeout' | 'error' }>(
       '/orders/precheck-login',
-      { method: 'POST', body: JSON.stringify({ domainId, username, password }) },
+      { method: 'POST', body: JSON.stringify({ domainId, username, password }), timeoutMs: 15_000 },
     ),
   createBundleOrder: (body: {
     domainId: string; bundleKey: string; selectedModules?: string[];

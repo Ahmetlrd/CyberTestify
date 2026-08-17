@@ -497,7 +497,14 @@ ordersRouter.post('/precheck-login', loginPrecheckLimiter, requireAuth, async (r
     return res.status(403).json({ error: 'Once alan adi sahipliginizi DNS ile dogrulayin.' });
   }
   try {
-    const r = await attemptLogin(domain.hostname, { username, password });
+    // (HIZ) Ön-giriş bilgilendiricidir; bloklamaz. Headless login uzun sürebilir → 12sn üst sınır.
+    // Süre aşımında "timeout" döner (müşteri yine de devam edebilir; gerçek tarama daha kapsamlı dener).
+    const TIMEOUT = Symbol('timeout');
+    const r = await Promise.race([
+      attemptLogin(domain.hostname, { username, password }),
+      new Promise<typeof TIMEOUT>((resolve) => setTimeout(() => resolve(TIMEOUT), 12_000)),
+    ]);
+    if (r === TIMEOUT) return res.json({ ok: false, reason: 'timeout' });
     return res.json(r.ok ? { ok: true } : { ok: false, reason: r.reason });
   } catch {
     return res.json({ ok: false, reason: 'error' });

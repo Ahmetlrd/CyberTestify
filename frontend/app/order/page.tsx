@@ -498,27 +498,43 @@ export default function OrderPage() {
           r.reason === 'bad_credentials' ? 'Bu kullanıcı adı/şifreyle giriş yapılamadı — bilgileri kontrol edin.'
           : r.reason === 'two_factor' ? 'Hesapta 2FA görünüyor — 2FA’sız bir test hesabı verin.'
           : r.reason === 'no_login_endpoint' ? 'Otomatik giriş formu bulunamadı — yine de devam edebilirsiniz (tarama daha kapsamlı deneyecektir).'
+          : r.reason === 'timeout' ? 'Doğrulama uzun sürdü — yine de devam edebilirsiniz (gerçek tarama daha kapsamlı deneyecektir).'
           : 'Giriş şu an doğrulanamadı — yine de devam edebilirsiniz.',
         );
       }
     } catch {
+      // (HIZ) İstemci zaman aşımı (AbortError) dahil — takılı kalmaz, bilgilendirici mesaj.
       setLoginCheck('fail');
-      setLoginCheckMsg('Giriş şu an doğrulanamadı — yine de devam edebilirsiniz.');
+      setLoginCheckMsg('Doğrulama uzun sürdü — yine de devam edebilirsiniz (gerçek tarama daha kapsamlı deneyecektir).');
     }
   }
 
   const authCredBlock = (
-    <div className="mt-3 space-y-3">
-      <div className="rounded-card border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
-        ⚠️ <strong>Ana/üretim hesabınızı DEĞİL</strong>, yalnız bu tarama için oluşturulmuş, sınırlı yetkili,
-        tek-kullanımlık bir <strong>TEST hesabı</strong> girin. Şifresini tarama sonrası değiştirin.
-        <span className="mt-1 block text-xs text-red-700">
-          <strong>2FA’sı olmayan</strong> bir hesap verin. Kimlik bilgileriniz şifreli saklanır ve tarama sonrası silinir.
-        </span>
+    <div className="mt-3 space-y-4 rounded-card border-2 border-brand/20 bg-brand-50/50 p-4 sm:p-5">
+      <p className="flex items-center gap-2 text-sm font-bold text-brand">
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand text-xs text-white">🔑</span>
+        Test hesabı bilgileri
+      </p>
+      {/* Uyarı — güçlü kontrast: sol accent bar + koyu kırmızı başlık + koyu metin */}
+      <div className="rounded-card border border-red-300 border-l-4 border-l-red-600 bg-red-50 px-4 py-3 text-red-900">
+        <p className="text-sm font-bold text-red-700">⚠️ Yalnız TEST hesabı girin — ana/üretim hesabınızı DEĞİL</p>
+        <p className="mt-1 text-sm">
+          Bu tarama için oluşturulmuş, <strong>sınırlı yetkili, tek-kullanımlık</strong> bir hesap kullanın; şifresini tarama sonrası değiştirin.
+        </p>
+        <p className="mt-1.5 text-xs text-red-800">
+          <strong>2FA’sı olmayan</strong> bir hesap verin. Kimlik bilgileriniz <strong>şifreli</strong> saklanır ve tarama sonrası <strong>silinir</strong>.
+        </p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <input placeholder="Test hesabı kullanıcı adı" value={authUser} onChange={(e) => { setAuthUser(e.target.value); setLoginCheck('idle'); }} className="field" autoComplete="off" />
-        <input type="password" placeholder="Test hesabı şifresi" value={authPass} onChange={(e) => { setAuthPass(e.target.value); setLoginCheck('idle'); }} className="field" autoComplete="new-password" />
+      {/* Etiketli girişler — beyaz alanlar tint zemine karşı belirgin */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className="label !mb-1 !text-ink">Kullanıcı adı / e-posta</span>
+          <input placeholder="test@örnek.com" value={authUser} onChange={(e) => { setAuthUser(e.target.value); setLoginCheck('idle'); }} className="field border-line/80" autoComplete="off" />
+        </label>
+        <label className="block">
+          <span className="label !mb-1 !text-ink">Şifre</span>
+          <input type="password" placeholder="Test hesabı şifresi" value={authPass} onChange={(e) => { setAuthPass(e.target.value); setLoginCheck('idle'); }} className="field border-line/80" autoComplete="new-password" />
+        </label>
       </div>
       {/* (ÖDEME ÖNCESİ TEST GİRİŞİ) tek buton + tek satır sonuç — ek checkbox/uyarı YOK, bloklamaz. */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -526,12 +542,23 @@ export default function OrderPage() {
           type="button"
           onClick={runLoginCheck}
           disabled={!domainId || !authUser.trim() || !authPass || loginCheck === 'checking'}
-          className="btn-outline shrink-0 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn-dark shrink-0 text-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loginCheck === 'checking' ? 'Giriş deneniyor…' : 'Test girişini doğrula'}
+          {loginCheck === 'checking' ? (
+            <span className="flex items-center gap-2">
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+              Giriş deneniyor…
+            </span>
+          ) : (
+            'Test girişini doğrula'
+          )}
         </button>
-        {loginCheck === 'ok' && <span className="text-sm font-medium text-emerald-700">✓ {loginCheckMsg}</span>}
-        {loginCheck === 'fail' && <span className="text-sm text-amber-700">{loginCheckMsg}</span>}
+        {loginCheck === 'ok' && (
+          <span className="rounded-pill bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800">✓ {loginCheckMsg}</span>
+        )}
+        {loginCheck === 'fail' && (
+          <span className="rounded-pill bg-amber-100 px-3 py-1 text-sm font-medium text-amber-900">{loginCheckMsg}</span>
+        )}
       </div>
       {/* (İŞ 3) Test-hesabı beyanı + kimlik-bilgisi yurt dışı açık rıza + yüksek-risk kabulü aşağıdaki
           "2 · Onaylar" bölümündeki gruplu checkbox'larda (sunucu-tarafı alanlar AYNEN korunur). */}
