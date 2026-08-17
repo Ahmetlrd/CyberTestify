@@ -89,7 +89,10 @@ export async function collectApiSecurityEvidence(host: string, session: AuthSess
     if (!/graphql|query/i.test(corpusText) && g !== '/graphql') continue;
     const u = new URL(g, `${origin}/`).toString();
     const r = await probe(u, { method: 'POST', headers: { ...authHeaders, 'content-type': 'application/json' }, body: JSON.stringify({ query: '{__typename}' }), label: `GraphQL keşif ${g}` }); probes++;
-    if (r && (/"__typename"|"data"\s*:/.test(r.text) || /graphql/i.test(r.text)) && md5(r.text) !== shellHash) { graphqlUrl = u; break; }
+    // Gerçek GraphQL yanıtı: JSON + ({data:{__typename}} çözümü) VEYA GraphQL-biçimli errors dizisi.
+    // "Cannot POST /graphql" gibi 404/HTML gövdesi ("graphql" substring) KABUL EDİLMEZ (yanlış-pozitif).
+    if (r && md5(r.text) !== shellHash && isJson(r) &&
+        (/"__typename"\s*:/.test(r.text) || (/"errors"\s*:\s*\[/.test(r.text) && /"(message|locations|extensions)"\s*:/.test(r.text)))) { graphqlUrl = u; break; }
   }
 
   // ---- SÜTUN 0 SCOPING: gerçek API yoksa TÜM bölüm kapsam dışı (hayalet-bulgu önleme) ----
