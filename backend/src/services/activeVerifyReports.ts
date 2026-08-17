@@ -44,9 +44,9 @@ const SCOPE_NOTE_ACTIVE =
 // injection_verify
 // ======================================================================================
 function injLevel(ev: InjEvidence): Level {
+  // (Faz 5) BANT = en yüksek tekil bulgu şiddeti; aşmaz (medium→'medium', low→'low').
   if (ev.findings.some((f) => f.severity === 'high')) return 'high';
-  if (ev.findings.some((f) => f.severity === 'medium')) return 'medium-high';
-  if (ev.findings.some((f) => f.severity === 'low')) return 'medium';
+  if (ev.findings.some((f) => f.severity === 'medium')) return 'medium';
   return 'low';
 }
 
@@ -140,8 +140,9 @@ export function buildInjectionReport(ev: InjEvidence): { findings: string; fixTe
 // idor_verify
 // ======================================================================================
 function idorLevel(ev: IdorEvidence): Level {
-  if (ev.findings.some((f) => f.severity === 'medium')) return 'medium-high';
-  if (ev.findings.some((f) => f.severity === 'low')) return 'medium';
+  // (Faz 5) BANT = en yüksek tekil bulgu şiddeti; aşmaz. medium (komşu-ID erişim) → 'medium'; low → 'low'.
+  if (ev.findings.some((f) => f.severity === 'high')) return 'high';
+  if (ev.findings.some((f) => f.severity === 'medium')) return 'medium';
   return 'low';
 }
 
@@ -159,14 +160,14 @@ export function buildIdorReport(ev: IdorEvidence): { findings: string; fixText: 
   const bullets = [
     noSurface
       ? noTestableSurfaceBullet('ana sayfada **tahmin edilebilir/sayısal ID içeren test edilebilir bir uç nokta bulunamadı**')
-      : `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'medium-high' ? 'kimlik doğrulaması olmadan komşu ID ile farklı kaynağa erişim göstergesi bulundu.' : level === 'medium' ? 'zayıf bir numaralandırma göstergesi bulundu (manuel doğrulama gerekli).' : 'test edilen ID’li uç noktalarda yetkisiz erişim göstergesi bulunmadı.'}`,
+      : `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${(level === 'high' || level === 'medium-high' || level === 'medium') ? 'kimlik doğrulaması olmadan komşu ID ile farklı kaynağa erişim göstergesi bulundu.' : ev.findings.length ? 'zayıf bir numaralandırma göstergesi bulundu (manuel doğrulama gerekli).' : 'test edilen ID’li uç noktalarda yetkisiz erişim göstergesi bulunmadı.'}`,
     `- Taranan sayfa/uç nokta: **${ev.pagesScanned}** · Aday ID uç noktası: **${ev.candidates}** · Gönderilen probe: **${ev.probesSent}** · Bulgu: ${ev.findings.length}.`,
     '- **Önerilen ilk adım:** ' + (ev.findings.length ? 'Nesne-düzeyi yetkilendirme kontrolü ekleyin; hazır adımlar "AI Çözüm Önerileri" bölümünde.' : 'Nesne-düzeyi yetkilendirmeyi standart hale getirin; hazır adımlar "AI Çözüm Önerileri" bölümünde.'),
   ];
 
-  const genel = level === 'medium-high'
+  const genel = (level === 'high' || level === 'medium-high' || level === 'medium')
     ? 'Kimlik doğrulaması olmadan, tahmin edilebilir bir ID’yi komşu değere değiştirerek farklı bir kaynağa erişilebildiği gözlemlendi; nesne-düzeyi yetkilendirme kontrolü önerilir.'
-    : level === 'medium'
+    : ev.findings.length
       ? 'Zayıf bir numaralandırma göstergesi bulundu; bağlama göre manuel doğrulama önerilir.'
       : ev.candidates
         ? `Test edilen ${ev.candidates} ID’li uç noktada, kimlik doğrulaması olmadan komşu ID’ye erişim denemesinde yetkisiz erişim göstergesi gözlemlenmedi.`
@@ -448,10 +449,13 @@ type CheckCfg = {
   fixClean: string[];
   cleanGenel: string;
 };
-function levelFromFindings(fs: ActiveCheckEvidence['findings']): Level {
+export function levelFromFindings(fs: ActiveCheckEvidence['findings']): Level {
+  // (Faz 5 düzeltme) BANT = EN YÜKSEK tekil bulgu şiddeti; ASLA aşmaz. medium→'medium' (Orta-Yüksek DEĞİL);
+  // hacim (çok sayıda düşük) bandı yukarı itmez. Hibrit 'medium-high' yalnız gerçek köprü-bulguda kullanılır
+  // ki bu motorda bulgu şiddeti high|medium|low olduğundan asla üretilmez → tek-yön max-severity eşlemesi.
   if (fs.some((f) => f.severity === 'high')) return 'high';
-  if (fs.some((f) => f.severity === 'medium')) return 'medium-high';
-  return 'low'; // sadece low-severity gözlem(ler) veya bulgu yok -> rozeti yükseltme
+  if (fs.some((f) => f.severity === 'medium')) return 'medium';
+  return 'low';
 }
 const SIDE_EFFECT_WORD: Record<string, string> = { none: 'yok', possible: 'olası', confirmed: 'doğrulandı' };
 
@@ -464,7 +468,7 @@ function buildActiveCheckReport(ev: ActiveCheckEvidence, cfg: CheckCfg): { findi
   const bullets = [
     noSurface
       ? noTestableSurfaceBullet('bu kontrol için **test edilebilir bir giriş/uç nokta saptanmadı**')
-      : `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'aktif doğrulama ile zafiyet göstergesi KANITLANDI.' : level === 'medium-high' ? 'dikkat gerektiren bir gösterge bulundu (manuel doğrulama önerilir).' : has ? 'yalnızca düşük-önemli gözlem(ler) bulundu.' : 'belirgin bir zafiyet göstergesi bulunamadı.'}`,
+      : `- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'aktif doğrulama ile zafiyet göstergesi KANITLANDI.' : (level === 'medium-high' || level === 'medium') ? 'dikkat gerektiren bir gösterge bulundu (manuel doğrulama önerilir).' : has ? 'yalnızca düşük-önemli gözlem(ler) bulundu.' : 'belirgin bir zafiyet göstergesi bulunamadı.'}`,
     `- Taranan sayfa/uç nokta: **${ev.pagesScanned}** · İncelenen giriş/uç nokta: **${ev.inputsFound}** · Gönderilen probe: **${ev.probesSent}** · Bulgu: ${ev.findings.length}.`,
     '- **Önerilen ilk adım:** ' + (has ? 'Bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.' : 'Sertleştirme adımları "AI Çözüm Önerileri" bölümünde.'),
   ];
