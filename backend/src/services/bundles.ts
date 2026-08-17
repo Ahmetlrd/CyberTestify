@@ -125,15 +125,9 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     displayName: 'Tam Kapsamlı Pentest Paketi',
     displayNameEn: 'Full-Scope Pentest Bundle',
     description:
-      'Sağladığınız bir **TEST hesabıyla kimlik doğrulamalı (login’li) derin tarama.** Login sonrası çerez/oturum/yetki, authenticated enjeksiyon ve IDOR, yetki yükseltme ve çok-adımlı iş mantığı göstergeleri **deterministik güvenlik kontrolleriyle** incelenir. Aktif-hafif sınırlar korunur; gerçek veri/hesap değişikliği ve ödeme tamamlama **kod seviyesinde engellidir**. ' +
-      'İsteğe bağlı, hafif bir **yapay zekâ danışma katmanı** (iki kontrolde) mevcuttur; **varsayılan olarak kapalıdır** ve yalnızca açıkken, ek ve doğrulanabilir bir gösterge bulduğunda devreye girer — kapalıyken sonuçlar tam deterministik authenticated kontrollerle üretilir (normal ve beklenen davranış). ' +
-      '**Önemli:** Bir **TEST hesabı** (2FA’sız, sınırlı yetkili, ana/üretim hesabınız DEĞİL, tek-kullanımlık) gerekir; kimlik bilgileriniz **şifreli/geçici** saklanır ve tarama sonrası silinir. Yetkilendirme beyanı gerekir. ' +
-      '**Kapsam:** Cross-account (başka bir kullanıcının verisine erişim) IDOR bu sürümün kapsamı dışındadır.',
+      'Sağladığınız **TEST hesabıyla login sonrası derin, deterministik güvenlik taraması**: authenticated enjeksiyon/IDOR, yetki & oturum, client-side/JS, API (OWASP API Top 10), CORS & güvenlik başlıkları, TLS, yapılandırma ifşaları ve e-posta/DNS. **İstismar edilmez**; sonuçlar hedefin yüzeyine göre değişir.',
     descriptionEn:
-      'A **deep authenticated (logged-in) scan** using a TEST account you provide. Post-login cookie/session/authorization, authenticated injection and IDOR, privilege escalation and multi-step business-logic indicators are examined with **deterministic security checks**. Active-light limits preserved; real data/account changes and payment completion are BLOCKED at the code level. ' +
-      'An optional, lightweight **AI advisory layer** (on two checks) is available; it is **off by default** and, only when enabled, kicks in when it finds an additional verifiable indicator — while off, results are produced by the full deterministic authenticated checks (normal and expected behavior). ' +
-      'Note: requires a dedicated TEST account (no 2FA, least-privilege, NOT your production account, single-use); credentials are stored encrypted/temporarily and deleted after the scan. Requires an authorization declaration. ' +
-      'Scope: cross-account IDOR (accessing another user’s data) is out of scope in this version.',
+      'A **deep, deterministic security scan after login** with a TEST account you provide: authenticated injection/IDOR, authorization & session, client-side/JS, API (OWASP API Top 10), CORS & security headers, TLS, configuration exposure and email/DNS. **No exploitation**; results vary with the target’s surface.',
     category: 'active-light',
     discountPct: 20,
     finalPriceMinorUnitTr: 2299900, // 22.999 TL (FAZ E — nihai sabit fiyat; üye order tutarları buna bölünür)

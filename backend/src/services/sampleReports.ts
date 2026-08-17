@@ -176,7 +176,7 @@ const REAL_SAMPLES: Record<string, { fileKey: string; hostname: string }> = {
   bundle_recon: { fileKey: 'bundle_recon', hostname: 'ornek.com' }, // gerçek tarama (anonimleştirildi: *.ornek.com)
   bundle_compliance: { fileKey: 'bundle_compliance', hostname: 'ornek.com' }, // gerçek tarama (anonimleştirildi)
   bundle_active_verify: { fileKey: 'bundle_active_verify', hostname: 'ornek.com' }, // gerçek aktif tarama (kendi fixture'ımız; gövde host-agnostik -> kapakta ornek.com)
-  bundle_full_pentest: { fileKey: 'bundle_full_pentest', hostname: 'demo.testfire.net' }, // gerçek pentest çıktısı (IBM public demo; alan adı görünür, tarih gizli)
+  bundle_full_pentest: { fileKey: 'bundle_full_pentest', hostname: 'test.cybertestify.com' }, // gerçek pentest çıktısı — BİLEREK zafiyetli test uygulaması (Faz 0–5 tüm kontroller görünür; sample-notice ile işaretli)
 };
 
 const pdfCache = new Map<string, Buffer>();
@@ -236,6 +236,11 @@ export async function getSampleReportPdf(packageKey: string): Promise<Buffer> {
   // reportIdentifiers hash'ini değiştirir; görünmez ama her örneğe benzersiz CT-ÖRNEK-XXXX verir. STABİL.
   const seedMin = [...packageKey].reduce((a, c) => a + c.charCodeAt(0), 0) % 720;
   const sampleCreatedAt = new Date(Date.parse('2026-08-15T10:00:00.000Z') + seedMin * 60_000);
+  // (ORNEK PDF — DÜRÜSTLÜK) Tam Kapsamlı örneği, BİLEREK zafiyetli bırakılmış bir test uygulamasından
+  // alınmıştır (bulgu sayısı/şiddeti gerçek sitelerde çok değişir) — bunu raporun başında açıkça belirt.
+  const sampleNotice = packageKey === 'bundle_full_pentest'
+    ? 'Bu örnek rapor, bilerek zafiyetli bırakılmış bir test uygulamasından alınmıştır. Gerçek sitelerde bulgu sayısı ve şiddeti hedefin mimarisine göre önemli ölçüde değişir.'
+    : null;
   const pdf = await renderReportPdf(
     md,
     {
@@ -245,7 +250,7 @@ export async function getSampleReportPdf(packageKey: string): Promise<Buffer> {
       locale: 'tr',
       packageKey: metaPackageKey,
     },
-    { fixMarkdown, assessOverride, hideDate: true }, // (ORNEK PDF) tarih HIC gosterilmez
+    { fixMarkdown, assessOverride, hideDate: true, sampleNotice }, // (ORNEK PDF) tarih HIC gosterilmez
   );
   pdfCache.set(packageKey, pdf);
   return pdf;

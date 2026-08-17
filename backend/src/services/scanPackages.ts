@@ -965,10 +965,10 @@ remaining checks report an explicit "not yet matured" note. Target: ${host}
     key: 'bundle_full_pentest',
     displayName: 'Tam Kapsamlı Pentest Paketi',
     description:
-      'Kombine paket: Kimlik doğrulamalı (login’li) tarama + AI-destekli otomatik güvenlik kontrolleri. ' +
-      'Sağladığınız TEST hesabıyla login sonrası çerez/oturum/yetki, authenticated enjeksiyon/IDOR, ' +
-      'yetki yükseltme ve çok-adımlı iş mantığı göstergeleri. Ödeme/hesap-değişikliği tamamlama kod ' +
-      'seviyesinde engellidir.',
+      'Sağladığınız TEST hesabıyla login sonrası derin, deterministik güvenlik taraması: authenticated ' +
+      'enjeksiyon/IDOR, yetki & oturum, client-side/JS, API (OWASP API Top 10), CORS & güvenlik başlıkları, ' +
+      'TLS, yapılandırma ifşaları ve e-posta/DNS. İstismar edilmez; ödeme/hesap-değişikliği tamamlama kod ' +
+      'seviyesinde engellidir. Sonuçlar hedefin yüzeyine göre değişir.',
     priceMinorUnit: 2299900,
     modelProvider: PROVIDER,
     maxToolCalls: 30,

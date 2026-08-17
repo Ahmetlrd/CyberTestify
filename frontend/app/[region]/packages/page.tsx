@@ -250,6 +250,49 @@ export default async function PackagesPage({ params }: { params: { region: strin
                             : 'Passive external-surface discovery; no active endpoint injection or authenticated testing.'}
                         </p>
                       </div>
+                    ) : b.key === 'bundle_full_pentest' ? (
+                      // (Tam Kapsamlı) İncelenen alanlar = gerçekten çalıştırdığımız kapsam (Faz 0–5).
+                      // Üye adları yerine dürüst kapsam maddeleri + sınırlar/güvence.
+                      <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
+                        <span className="font-semibold">{tr ? 'İncelenen alanlar' : 'What we examine'}:</span>
+                        <ul className="mt-1.5 space-y-1">
+                          {(tr
+                            ? [
+                                'Kimlik Doğrulamalı Derin Tarama — çerez/oturum/yetki, authenticated enjeksiyon (SQLi/XSS) ve IDOR göstergeleri, forced browsing, yetki yükseltme, çok-adımlı iş mantığı',
+                                'Client-Side & JS Analizi — JS bundle/sır taraması, source map ifşası, bilinen zafiyetli kütüphaneler, DOM-XSS/postMessage/tarayıcı-depolama, SRI / reverse-tabnabbing / open-redirect',
+                                'Oturum, CSRF & Kimlik-Doğrulama Derinliği — CSRF, oturum entropi/fixation, hesap enumerasyonu, zayıf kilitleme, parola politikası, MFA gözlemi',
+                                'API Güvenliği (OWASP API Top 10) — BOLA/BFLA, aşırı veri ifşası (BOPLA), rate-limit, shadow API sürümleri, GraphQL introspection',
+                                'CORS, Güvenlik Başlıkları & TLS — CORS yanlış yapılandırması, HSTS / clickjacking / CSP zayıflığı, TLS protokol ve cipher yapılandırması',
+                                'Yapılandırma & İfşa — yedek/eski dosyalar, admin arayüzleri, host-header injection, HTTP method keşfi, önbellek göstergeleri, yorum/metadata sızıntısı',
+                                'E-posta, DNS & Subdomain — DMARC/SPF/DKIM politika gücü, MTA-STS, DNSSEC, CAA, subdomain takeover (dangling DNS)',
+                              ]
+                            : [
+                                'Authenticated Deep Scan — cookie/session/authorization, authenticated injection (SQLi/XSS) and IDOR indicators, forced browsing, privilege escalation, multi-step business logic',
+                                'Client-Side & JS Analysis — JS bundle/secret scan, source-map exposure, known-vulnerable libraries, DOM-XSS/postMessage/browser-storage, SRI / reverse-tabnabbing / open-redirect',
+                                'Session, CSRF & Authentication Depth — CSRF, session entropy/fixation, account enumeration, weak lockout, password policy, MFA observation',
+                                'API Security (OWASP API Top 10) — BOLA/BFLA, excessive data exposure (BOPLA), rate-limit, shadow API versions, GraphQL introspection',
+                                'CORS, Security Headers & TLS — CORS misconfiguration, HSTS / clickjacking / CSP weakness, TLS protocol and cipher configuration',
+                                'Configuration & Exposure — backup/old files, admin interfaces, host-header injection, HTTP method discovery, cache indicators, comment/metadata leakage',
+                                'Email, DNS & Subdomain — DMARC/SPF/DKIM policy strength, MTA-STS, DNSSEC, CAA, subdomain takeover (dangling DNS)',
+                              ]
+                          ).map((it) => (
+                            <li key={it} className="flex gap-1.5">
+                              <span className="mt-0.5 text-accent-600">·</span>
+                              <span>{it}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 border-t border-line/60 pt-2 text-[11px] text-ink-muted">
+                          {tr
+                            ? 'Sınırlar & güvence: “Kanıtla, istismar etme.” Gerçek veri değiştirme/silme veya ödeme tamamlama kod seviyesinde engellidir. Cross-account (başka kullanıcının verisi) IDOR kapsam dışıdır. Kimlik bilgileriniz şifreli/geçici saklanır, tarama bitince silinir; yetkilendirme beyanı zorunludur.'
+                            : 'Limits & assurance: “Prove, don’t exploit.” Real data changes/deletion or payment completion are blocked at the code level. Cross-account IDOR (another user’s data) is out of scope. Credentials are stored encrypted/temporarily and deleted after the scan; an authorization declaration is required.'}
+                        </p>
+                        <p className="mt-1.5 text-[11px] italic text-ink-muted">
+                          {tr
+                            ? 'Önemli — TEST hesabı: 2FA’sız, sınırlı yetkili, ana/üretim hesabınız olmayan, tek kullanımlık bir hesap gerekir. Kapsam notu: sonuçlar hedefin mimarisine göre değişir; authenticated yüzeyi sınırlı/SPA ağırlıklı sitelerde bazı kontroller “kapsam dışı / incelenemedi” raporlanır — bu normaldir.'
+                            : 'Important — TEST account: a no-2FA, least-privilege, single-use account that is NOT your production account. Scope note: results vary with the target’s architecture; on sites with limited authenticated surface/SPA, some checks are reported as “out of scope / not scanned” — this is normal.'}
+                        </p>
+                      </div>
                     ) : b.members.length > 0 ? (
                       <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
                         <span className="font-semibold">{region.code === 'tr' ? 'İçindekiler' : 'Includes'}:</span>{' '}

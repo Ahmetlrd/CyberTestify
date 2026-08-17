@@ -40,6 +40,9 @@ export interface ReportPdfOptions {
   // banner "Tarih" alani gizlenir; Rapor No da tarih icermeyen "CT-ÖRNEK-XXXX" formatina doner.
   // GERCEK raporlar bunu ASLA gecmez -> tarih/rapor-no mantigi aynen korunur.
   hideDate?: boolean;
+  // (ORNEK PDF) Ornek raporun basina belirgin bir uyari afisi koyar ( or. "bilerek zafiyetli test
+  // uygulamasi"). Yalnizca sample-report yolu kullanir; GERCEK musteri raporlari ASLA gecmez.
+  sampleNotice?: string | null;
 }
 
 const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
@@ -810,6 +813,9 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     detailParts.push(chunk.replace(/^###\s/gm, '#### ').replace(/^##\s/gm, '### ')); // detay -> H3
   }
   const reorganize = hasExec && !opts.assessOverride;
+  // (ORNEK PDF) Uyari afisi — yalnizca sampleNotice verildiginde; belirgin amber kutu, raporun basinda.
+  const sampleNoticeHtml = opts.sampleNotice && opts.sampleNotice.trim()
+    ? `<div class="sample-notice">⚠️ ${escapeHtml(opts.sampleNotice.trim())}</div>` : '';
   const H2 = (id: string, tr: string, en: string) => `<h2 id="${id}">${escapeHtml(loc === 'tr' ? tr : en)}</h2>`;
 
   let contentInner0: string;
@@ -862,14 +868,14 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     // h3'e indir ki TOC'ta ayrı numarasız satır olarak görünüp numaralandırmayı bozmasın.
     const extrasSub = extrasHtml.replace(/<h2\b/g, '<h3').replace(/<\/h2>/g, '</h3>');
     contentInner0 =
-      H2('s-summary', '1. Yönetici Özeti', '1. Executive Summary') + assessBox + summaryBody +
+      H2('s-summary', '1. Yönetici Özeti', '1. Executive Summary') + sampleNoticeHtml + assessBox + summaryBody +
       findingsSection +
       H2('s-controls', `${cn}. Kontrol Özeti ve Metodoloji`, `${cn}. Controls & Methodology`) + detailBody +
       extrasSub + fixNum + glossNum;
   } else {
     // Yapısız gövde / örnek PDF: mevcut akış (assessBox + dağılım/master + gövde + AI + sözlük).
     const bodyHtml = dedupeBlockquotes(md.render(effectiveMd) + extrasHtml + fixHtml);
-    contentInner0 = `${assessBox}${distMasterHtml}${detailedHtml}${bodyHtml}${glossaryHtml}`;
+    contentInner0 = `${sampleNoticeHtml}${assessBox}${distMasterHtml}${detailedHtml}${bodyHtml}${glossaryHtml}`;
   }
   const { html: contentInner, entries: tocEntries } = injectTocIds(contentInner0);
   const tocPage = buildTocPage(tocEntries, meta.locale);
@@ -897,6 +903,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .meta .v { color: #123F3A; font-weight: 600; font-size: 12.5px; }
   .content { padding: 20px 34px 30px; }
   /* Genel Degerlendirme kutusu (banner alti) */
+  .sample-notice { border-radius: 8px; padding: 12px 16px; margin: 4px 0 16px; border: 1px solid #F5C77A; border-left: 4px solid #E8912B; background: #FDF5E6; color: #7A4B12; font-size: 12px; font-weight: 600; line-height: 1.5; }
   .assess { border-radius: 8px; padding: 14px 16px; margin: 4px 0 20px; border: 1px solid #DCEAE6; background: #F6FAF8; }
   .assess-high { background: #FCECEA; border-color: #F1C9C4; }
   .assess-medium-high { background: #FBE7D6; border-color: #EFC194; }
