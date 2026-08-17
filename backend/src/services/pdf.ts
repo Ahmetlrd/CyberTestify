@@ -390,6 +390,14 @@ export function parseFindings(md: string, locale: 'tr' | 'en'): { rows: Finding[
       const title = info ? info.label : (cleanTitle(rawName) || cleanTitle(curSection) || rawName);
       // Uç nokta: entry kolonundan (nameCol'dan farklıysa). "GET /rest/..." gibi.
       let endpoint = endpointCol !== -1 && endpointCol !== nameCol ? stripMd(c[endpointCol] ?? '') : '';
+      // (Faz 4 düzeltme — SALT ETİKET) Uç-nokta kolonu TEK anlamlı kolonsa (endpointCol===nameCol, ör.
+      // IDOR "| Uç Nokta | ID | Gözlem | Ciddiyet |") başlık SINIFLAMADAN gelir (info.label; rawName başlık
+      // DEĞİL) → o değeri UÇ-NOKTA etiketi yap ki tıpatıp görünen satırlar (CT-8/CT-9) ayrışsın. Yalnız
+      // gerçekten uç-nokta GÖRÜNÜMLÜyse (/, ? ya da HTTP fiili). Sayı/severity/de-dup DEĞİŞMEZ (epKey aynı değer).
+      if (!endpoint && info && endpointCol !== -1) {
+        const epCand = stripMd(c[endpointCol] ?? '');
+        if (epCand && /[/?]|^\s*(GET|POST|PUT|DELETE|PATCH|HEAD)\b/i.test(epCand) && epCand.toLocaleLowerCase('tr') !== info.label.toLocaleLowerCase('tr')) endpoint = epCand;
+      }
       if (endpoint.length > 60) endpoint = endpoint.slice(0, 60) + '…';
       const evidence = evidCol !== -1 ? stripMd(c[evidCol] ?? '') : '';
       // Güven (varsa) — DÜŞÜK/dolaylı kanıtı master tabloda da görünür kılmak için (yalnız detay kartında değil).
