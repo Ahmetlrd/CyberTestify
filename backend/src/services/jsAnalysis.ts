@@ -30,7 +30,7 @@ async function getCapped(url: string, cap = MAX_BYTES): Promise<Fetched | null> 
   const timer = setTimeout(() => ctrl.abort(), REQ_TIMEOUT);
   const t0 = Date.now();
   try {
-    const res = await fetch(url, { redirect: 'manual', signal: ctrl.signal, headers: { 'user-agent': 'CyberTestify-JSAnalysis/1.0', accept: '*/*' } });
+    const res = await fetch(url, { redirect: 'follow', signal: ctrl.signal, headers: { 'user-agent': 'CyberTestify-JSAnalysis/1.0', accept: '*/*' } });
     const buf = Buffer.from(await res.arrayBuffer());
     const text = (buf.length > cap ? buf.subarray(0, cap) : buf).toString('utf-8');
     logScanStep({ step: 'Client-Side / JS Analizi', method: 'GET', url, status: res.status, durationMs: Date.now() - t0, sizeBytes: buf.length });
@@ -251,6 +251,14 @@ function sourceMapUrl(jsUrl: string, body: string): string | null {
   }
   return jsUrl + '.map'; // yaygın konvansiyon — erişilebilirse doğrulanır
 }
+
+// (Doğrulama için) tek metni tarayıp GERÇEK-sır bulgularını + public-by-design etiketlerini döndürür.
+export function scanTextForSecrets(text: string, where = 'test'): { findings: VFinding[]; publicByDesign: string[] } {
+  const findings: VFinding[] = []; const publicSeen = new Set<string>();
+  scanSecrets(text, where, findings, publicSeen);
+  return { findings, publicByDesign: [...publicSeen] };
+}
+export { detectLib, matchVuln };
 
 // A) tek metinde sır tara — GERÇEK sır → finding; public-by-design → publicSeen (bilgilendirici).
 function scanSecrets(text: string, where: string, findings: VFinding[], publicSeen: Set<string>): void {
