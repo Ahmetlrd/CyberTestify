@@ -20,6 +20,7 @@ import { collectSessionDepthEvidence } from './sessionDepthChecks.js';
 import { collectInputHeaderEvidence, collectConfigExposureEvidence } from './configExposureChecks.js';
 import { collectApiSecurityEvidence } from './apiSecurityChecks.js';
 import { collectEmailDnsEvidence } from './emailDnsChecks.js';
+import { collectTransportSecurityEvidence, collectSubdomainTakeoverEvidence } from './transportSecurityChecks.js';
 import { suggestPricingForHost } from './pricingModel.js';
 import { logScanStep } from './scanLogger.js';
 import {
@@ -336,6 +337,45 @@ const EMAIL_DNS_CFG = {
   cleanGenel: 'Sorgulanan org-alanın e-posta/DNS kayıtlarında belirgin bir anti-spoofing zayıflığı (eksik/gevşek DMARC-SPF, açık +all, imzasız DNSSEC vb.) göstergesi bulunamadı.',
 };
 
+// (Faz 5) Taşıma Katmanı, CORS & Güvenlik Başlığı Derinliği — H1/H3/H4. Read-only/pasif.
+const TRANSPORT_CFG = {
+  title: 'Taşıma Katmanı, CORS & Güvenlik Başlığı Derinliği',
+  whatChecked: [
+    'Hepsi read-only/pasif gözlem — veri değiştirme, DoS, cipher istismarı YOK.',
+    '**H1 CORS:** keşfedilen GERÇEK uçlara kurgu `Origin` ile tek istek — ACAO yansıması + ACAC=true (kimlik-bilgili sızıntı → Yüksek), yalnız yansıma (Orta, "tasarım olabilir"), `*` (bilgilendirici), `null` kabul (gösterge).',
+    '**H3 TLS protokol/cipher:** protokol başına 1 güvenli handshake — TLS 1.0/1.1 (eski, gösterge), zayıf cipher (RC4/3DES/NULL/EXPORT). Sertifika süre/hostname/zincir yalnız GERÇEK sorunda bulgu (çift-CT yok).',
+    '**H4 güvenlik başlığı derinliği:** HSTS (varlık + max-age yeterlilik + preload), clickjacking (X-Frame-Options **veya** CSP frame-ancestors çift-mekanizma), CSP zayıflık (unsafe-inline/eval/*), Referrer-Policy / Permissions-Policy / X-Content-Type-Options.',
+    'Temel başlık VARLIK kontrolü diğer paketlerde kalır; bu bölüm DERİNLİK katar (kopyalanmadı).',
+  ],
+  confidenceNote: 'Bulgular gerçek gözleme dayanır ("gösterge, doğrulama gerekir"); reflected-CORS + credentials NET kötüdür (Yüksek), credentials\'sız yansıma tasarım olabilir (Orta). Deterministik (aynı host → aynı protokol/başlık).',
+  fixTitle: 'Taşıma Katmanı & Başlık Sertleştirme',
+  fixFound: [
+    'CORS: origin\'i allowlist\'leyin; `credentials` ile wildcard/yansıtma kullanmayın; `null` origin kabul etmeyin.',
+    'TLS: yalnız TLS 1.2/1.3 bırakın; RC4/3DES/NULL/EXPORT cipher\'ları kapatın; modern AEAD (ECDHE+AES-GCM/CHACHA20).',
+    'HSTS `max-age≥15768000; includeSubDomains; preload`; clickjacking için X-Frame-Options **ve/veya** CSP frame-ancestors.',
+    'CSP\'den unsafe-inline/unsafe-eval kaldırın (nonce/hash); Referrer-Policy/Permissions-Policy/X-Content-Type-Options ekleyin.',
+  ],
+  fixClean: ['CORS sıkı (allowlist, credentials\'sız), yalnız TLS 1.2/1.3 + modern cipher, HSTS/clickjacking/CSP/başlıklar tam — taşıma & tarayıcı-taraflı savunma güçlü (proaktif).'],
+  cleanGenel: 'Taşıma katmanı (CORS/TLS) ve güvenlik başlıklarında belirgin bir yanlış yapılandırma veya sertleştirme boşluğu göstergesi bulunamadı.',
+};
+// (Faz 5) Subdomain Takeover — recon/DNS. Yalnız DNS çözümü + tek güvenli GET (parmak-izi); claim YOK.
+const TAKEOVER_CFG = {
+  title: 'Subdomain Takeover (Dangling DNS)',
+  whatChecked: [
+    'Certificate Transparency (crt.sh/certSpotter) ile keşfedilen GERÇEK alt-alanlarda CNAME çözümü.',
+    'CNAME bilinen 3P servise (S3/GitHub Pages/Heroku/Azure/Netlify/Fastly/Shopify/… kapsamlı liste) işaret ediyor **VE** "sahiplenilmemiş" parmak-izi (NoSuchBucket / "There isn\'t a GitHub Pages site here" / NXDOMAIN vb.) dönüyorsa → OLASI takeover.',
+    'Yalnız DNS çözümü + tek güvenli GET (parmak-izi gözlemi) — HİÇBİR kayıt/registrasyon/claim YAPILMAZ. Uydurma alt-alan yok.',
+  ],
+  confidenceNote: 'Yalnız dangling + parmak-izi eşleşince bulgu; canlı/sahiplenilmiş CNAME bilgilendirici. CT kaynağı erişilemezse "incelenemedi" (temiz değil).',
+  fixTitle: 'Subdomain Takeover',
+  fixFound: [
+    'Kullanılmayan/boşta CNAME kayıtlarını DNS\'ten kaldırın (bulut kaynağını silmeden ÖNCE DNS kaydını silin).',
+    'Alt-alan envanteri tutun; terk edilen 3P servis kayıtlarını periyodik denetleyin.',
+  ],
+  fixClean: ['Alt-alan CNAME envanteri temiz; boşta/dangling kayıt yok (proaktif).'],
+  cleanGenel: 'Keşfedilen alt-alanlarda devralınabilir (dangling) CNAME + sahiplenilmemiş parmak-izi göstergesi bulunamadı.',
+};
+
 type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
@@ -400,6 +440,10 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   runs.push({ title: 'API Güvenliği Derinliği (OWASP API Top 10)', conf: 'Orta', rep: apiEv ? buildActiveCheckReport(apiEv, API_SECURITY_CFG) : null, inputs: apiEv?.inputsFound ?? 0, probes: apiEv?.probesSent ?? 0, fc: apiEv?.findings.length ?? 0 });
   const edEv = await collectEmailDnsEvidence(host).catch(() => null);
   runs.push({ title: 'E-posta & DNS Derinliği (Anti-Spoofing)', conf: 'Orta', rep: edEv ? buildActiveCheckReport(edEv, EMAIL_DNS_CFG) : null, inputs: edEv?.inputsFound ?? 0, probes: edEv?.probesSent ?? 0, fc: edEv?.findings.length ?? 0 });
+  const tsEv = await collectTransportSecurityEvidence(host).catch(() => null);
+  runs.push({ title: 'Taşıma Katmanı, CORS & Güvenlik Başlığı Derinliği', conf: 'Orta', rep: tsEv ? buildActiveCheckReport(tsEv, TRANSPORT_CFG) : null, inputs: tsEv?.inputsFound ?? 0, probes: tsEv?.probesSent ?? 0, fc: tsEv?.findings.length ?? 0 });
+  const stkEv = await collectSubdomainTakeoverEvidence(host).catch(() => null);
+  runs.push({ title: 'Subdomain Takeover (Dangling DNS)', conf: 'Orta', rep: stkEv ? buildActiveCheckReport(stkEv, TAKEOVER_CFG) : null, inputs: stkEv?.inputsFound ?? 0, probes: stkEv?.probesSent ?? 0, fc: stkEv?.findings.length ?? 0 });
 
   // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
   if (runs.every((r) => !r.rep)) return unscannableReport(host, 'kimlik-doğrulamalı kontroller');

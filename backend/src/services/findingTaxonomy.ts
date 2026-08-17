@@ -21,7 +21,9 @@ export type FindingType =
   | 'csrf' | 'session_in_url' | 'weak_session' | 'user_enum' | 'default_creds' | 'no_lockout'
   | 'weak_pw_policy' | 'weak_pw_reset' | 'host_header' | 'http_method' | 'web_cache' | 'comment_leak'
   | 'mixed_content' | 'cloud_exposure' | 'caa' | 'mta_sts' | 'client_storage' | 'postmessage'
-  | 'sri' | 'tabnabbing' | 'excessive_data' | 'rate_limit' | 'shadow_api' | 'graphql_introspection';
+  | 'sri' | 'tabnabbing' | 'excessive_data' | 'rate_limit' | 'shadow_api' | 'graphql_introspection'
+  // (Faz 5) Taşıma katmanı & başlık derinliği
+  | 'csp_weak' | 'permissions_policy';
 
 type Entry = { tr: string; en: string; cwe: string; owasp: string };
 
@@ -215,6 +217,12 @@ export const FINDING_TAXONOMY: Record<FindingType, Entry> = {
   graphql_introspection: { cwe: 'CWE-200', owasp: 'API9:2023 Improper Inventory Management',
     tr: 'GraphQL introspection açık; tüm şema (tipler/mutasyonlar) ifşa olur ve saldırı yüzeyini haritalar.',
     en: 'GraphQL introspection is open; the full schema (types/mutations) is exposed and maps the attack surface.' },
+  csp_weak: { cwe: 'CWE-693', owasp: 'A05:2021 Security Misconfiguration',
+    tr: 'CSP mevcut ama `unsafe-inline`/`unsafe-eval`/`*` içeriyor; XSS azaltması büyük ölçüde etkisiz kalır (sertleştirme boşluğu).',
+    en: 'CSP is present but includes `unsafe-inline`/`unsafe-eval`/`*`; its XSS mitigation is largely ineffective (hardening gap).' },
+  permissions_policy: { cwe: 'CWE-693', owasp: 'A05:2021 Security Misconfiguration',
+    tr: 'Permissions-Policy yok; tarayıcı özellik erişimi (kamera/mikrofon/konum vb.) kısıtlanmıyor (bilgilendirici sertleştirme).',
+    en: 'No Permissions-Policy; browser feature access (camera/mic/geolocation) is unrestricted (informational hardening).' },
 };
 
 // Başlıktan bulgu türü sınıflandırıcı — SPESİFİK önce (ör. authenticated SQLi -> sqli; forced browsing).
@@ -251,7 +259,10 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   { re: /[çc]erez|cookie|httponly|samesite|secure bayrak/i, type: 'cookie_flags' },
   { re: /x-frame-options|clickjacking|[çc]er[çc]eve/i, type: 'clickjacking' },
   { re: /x-content-type-options|mime/i, type: 'mime_sniffing' },
+  // csp_weak, csp_missing'ten ÖNCE: mevcut-ama-zayıf CSP "eksik" sayılmamalı.
+  { re: /unsafe-inline|unsafe-eval|csp.*(zay[ıi]f|unsafe|\*)|zay[ıi]f.*csp/i, type: 'csp_weak' },
   { re: /content-security-policy|\bcsp\b/i, type: 'csp_missing' },
+  { re: /permissions-policy|izin politikas[ıi]/i, type: 'permissions_policy' },
   { re: /referrer-policy/i, type: 'referrer_policy' },
   // https_missing hsts'ten ÖNCE: "HTTPS yok/desteklenmiyor/şifresiz/düz metin/http üzerinden".
   { re: /https\s*(deste[ğg]i\s*)?(yok|eksik|desteklenm|zorlan|kurul)|[şs]ifresiz|d[üu]z\s*metin|cleartext|clear.?text|http\s*[- ]?only|yaln[ıi]z.*http\b/i, type: 'https_missing' },
@@ -265,8 +276,10 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   { re: /\bdmarc\b/i, type: 'dmarc' },
   { re: /\bdk[iı]m\b/i, type: 'dkim' },
   { re: /\bdnssec\b/i, type: 'dnssec' },
-  { re: /zay[ıi]f.*cipher|cipher.*zay[ıi]f|weak.*tls|weak.*cipher|zay[ıi]f.*tls|3des|\brc4\b/i, type: 'weak_tls' },
+  { re: /zay[ıi]f.*cipher|cipher.*zay[ıi]f|weak.*tls|weak.*cipher|zay[ıi]f.*tls|3des|\brc4\b|sslv3|\bexport\b.*cipher|null.*cipher|tls\s*1\.[01]\b|eski protokol|deprecated.*(tls|protokol)/i, type: 'weak_tls' },
   { re: /rsa.*(1024|2048)|anahtar boyut|key size/i, type: 'weak_key' },
+  // caa, cert'ten ÖNCE: CAA bulgusunun kanıtı "…CA sertifika verebilir" içerir; yoksa cert'e düşer (yanlış tür).
+  { re: /\bcaa\b|sertifika verme|certificate authority auth/i, type: 'caa' },
   { re: /sertifika|certificate|hostname e[şs]le|son kullanma|expir/i, type: 'cert' },
   { re: /ayr[ıi]nt[ıi]l[ıi] hata|hata sayfas[ıi].*if[şs]a|verbose error|stack trace|error page/i, type: 'verbose_error' },
   { re: /s[üu]r[üu]m if[şs]a|version disclosure|server.*banner|server_tokens|banner/i, type: 'version_disclosure' },
@@ -282,7 +295,6 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   { re: /istemci depolama|localstorage|sessionstorage|browser storage|taray[ıi]c[ıi] depolama|storage statik|storage\.setitem/i, type: 'client_storage' },
   { re: /kar[ıi][şs][ıi]k i[çc]erik|mixed content/i, type: 'mixed_content' },
   { re: /cloud storage|\bbucket\b|amazonaws|storage\.googleapis|blob\.core|listelenebilir.*depo|public.*depo/i, type: 'cloud_exposure' },
-  { re: /\bcaa\b|sertifika verme|certificate authority auth/i, type: 'caa' },
   { re: /mta-sts|smtp.*downgrade|smtp tls zorla/i, type: 'mta_sts' },
   { re: /oturum kimli[ğg]i.*url|session id.*url|url'?de oturum|url.*oturum kimli/i, type: 'session_in_url' },
   { re: /oturum.*entropi|zay[ıi]f oturum kimli|session.*entropy|tahmin edilebilir oturum/i, type: 'weak_session' },
@@ -370,6 +382,8 @@ const FRIENDLY_LABEL: Record<FindingType, { tr: string; en: string }> = {
   rate_limit: { tr: 'API rate-limit yok', en: 'No API rate-limit' },
   shadow_api: { tr: 'Gölge/deprecated API sürümü', en: 'Shadow/deprecated API version' },
   graphql_introspection: { tr: 'GraphQL introspection açık', en: 'GraphQL introspection enabled' },
+  csp_weak: { tr: 'CSP zayıf (unsafe-inline/eval)', en: 'Weak CSP (unsafe-inline/eval)' },
+  permissions_policy: { tr: 'Permissions-Policy eksik', en: 'Missing Permissions-Policy' },
 };
 export function friendlyLabel(type: FindingType, locale: 'tr' | 'en'): string {
   return locale === 'tr' ? FRIENDLY_LABEL[type].tr : FRIENDLY_LABEL[type].en;
@@ -567,6 +581,12 @@ const FINDING_DETAIL: Record<FindingType, { tr: Detail; en: Detail }> = {
   graphql_introspection: D(
     { desc: 'GraphQL ucunda introspection açık; tüm şema ifşa oluyor.', how: 'GraphQL ucuna read-only introspection sorgusu; şema döndü (veri değiştirilmedi).', fix: 'Üretimde introspection’ı kapatın; sorgu derinliği/karmaşıklık limiti ekleyin.' },
     { desc: 'GraphQL introspection is open; the full schema is exposed.', how: 'A read-only introspection query to the GraphQL endpoint returned the schema (no data changed).', fix: 'Disable introspection in production; add query depth/complexity limits.' }),
+  csp_weak: D(
+    { desc: 'Content-Security-Policy mevcut ancak `unsafe-inline`/`unsafe-eval`/`*` gibi izinler taşıyor.', how: 'CSP başlığı ayrıştırıldı; zayıflatıcı direktif(ler) gözlendi.', fix: 'unsafe-inline/unsafe-eval kaldırın; nonce/hash tabanlı script politikası kullanın; kaynakları allowlist’leyin.' },
+    { desc: 'Content-Security-Policy is present but carries permissive directives like `unsafe-inline`/`unsafe-eval`/`*`.', how: 'CSP header parsed; weakening directive(s) observed.', fix: 'Remove unsafe-inline/unsafe-eval; use nonce/hash-based script policy; allowlist sources.' }),
+  permissions_policy: D(
+    { desc: 'Permissions-Policy başlığı yok; tarayıcı özellik erişimi kısıtlanmıyor.', how: 'HTTPS yanıt başlıkları incelendi; Permissions-Policy gözlenmedi.', fix: 'Kullanılmayan özellikleri kapatan bir `Permissions-Policy` ekleyin (ör. `geolocation=(), camera=(), microphone=()`).' },
+    { desc: 'No Permissions-Policy header; browser feature access is unrestricted.', how: 'HTTPS response headers inspected; no Permissions-Policy observed.', fix: 'Add a `Permissions-Policy` disabling unused features (e.g. `geolocation=(), camera=(), microphone=()`).' }),
 };
 export function findingDetail(type: FindingType, locale: 'tr' | 'en'): Detail {
   return locale === 'tr' ? FINDING_DETAIL[type].tr : FINDING_DETAIL[type].en;
