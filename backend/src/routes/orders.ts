@@ -18,7 +18,7 @@ import { getQueueStats, getQueuePosition } from '../services/queue.js';
 import { evaluatePromo, recordPromoUsage } from '../services/promo.js';
 import { COMBO_BUNDLES, getBundle, bundlePrice, bundleMemberAmounts, resolveMembers, isBundleOnlyPackage, primaryBundleForPackage } from '../services/bundles.js';
 import { requireAuth } from '../middleware/auth.js';
-import { login as attemptLogin } from '../services/authLogin.js';
+import { quickLoginPrecheck } from '../services/authLogin.js';
 import { isVerificationStillValid } from '../services/verification.js';
 
 export const ordersRouter = Router();
@@ -114,6 +114,7 @@ ordersRouter.get('/bundles', async (req, res) => {
         category: b.category,
         discountPct: price.discountPct, // GERCEK indirim (nihai fiyattan turetildi)
         popular: b.popular ?? false,
+        flagship: b.flagship ?? false,
         comingSoon: b.comingSoon ?? false,
         contactOnly: b.contactOnly ?? false, // (vitrin) sabit fiyat yok -> "Kuruma özel teklif"
         selectable: !!b.selectable,
@@ -501,7 +502,7 @@ ordersRouter.post('/precheck-login', loginPrecheckLimiter, requireAuth, async (r
     // Süre aşımında "timeout" döner (müşteri yine de devam edebilir; gerçek tarama daha kapsamlı dener).
     const TIMEOUT = Symbol('timeout');
     const r = await Promise.race([
-      attemptLogin(domain.hostname, { username, password }),
+      quickLoginPrecheck(domain.hostname, { username, password }), // headless YOK -> hızlı, gerçek sonuç
       new Promise<typeof TIMEOUT>((resolve) => setTimeout(() => resolve(TIMEOUT), 12_000)),
     ]);
     if (r === TIMEOUT) return res.json({ ok: false, reason: 'timeout' });

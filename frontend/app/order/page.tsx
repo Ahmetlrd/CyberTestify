@@ -550,7 +550,7 @@ export default function OrderPage() {
               Giriş deneniyor…
             </span>
           ) : (
-            'Test girişini doğrula'
+            'Test girişini doğrula (opsiyonel)'
           )}
         </button>
         {loginCheck === 'ok' && (

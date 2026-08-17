@@ -300,6 +300,25 @@ async function tryFormLogin(host: string, creds: TestCredentialInput): Promise<F
  * yanıtları elenir), SONRA HER ZAMAN headless form-login (SPA/form-only/Firebase için). Başarı →
  * AuthSession (şifre YOK, yalnız cookie/bearer). 2FA göstergesi → two_factor.
  */
+// (ÖDEME ÖNCESİ HIZLI ÖN-GİRİŞ) `login`in aksine headless `discoverSurface` YAPMAZ — yalnız iyi-bilinen
+// login yollarına doğrudan JSON POST dener. Böylece saniyeler içinde GERÇEK sonuç döner (uzun sürüp hep
+// "timeout" dememesi için). Form-only sitelerde API bulunamaz → 'no_login_endpoint' (yine devam edilebilir).
+export async function quickLoginPrecheck(host: string, creds: TestCredentialInput): Promise<AuthResult> {
+  let attempts = 0; let sawEndpoint = false; let sawTwoFactor = false;
+  const candidates = WELL_KNOWN_LOGIN.map((p) => sameHostAbs(p, host)).filter(Boolean) as string[];
+  for (const url of candidates) {
+    attempts++;
+    const r = await tryApiLogin(url, creds);
+    if (r === null) continue;            // ağ hatası / SPA-HTML — endpoint sayılmaz
+    sawEndpoint = true;
+    if (r.twoFactor) sawTwoFactor = true;
+    if ('session' in r) return { ok: true, session: r.session, attempts };
+  }
+  if (sawTwoFactor) return { ok: false, reason: 'two_factor', attempts };
+  if (!sawEndpoint) return { ok: false, reason: 'no_login_endpoint', attempts };
+  return { ok: false, reason: 'bad_credentials', attempts };
+}
+
 export async function login(host: string, creds: TestCredentialInput): Promise<AuthResult> {
   let attempts = 0;
   let sawTwoFactor = false;

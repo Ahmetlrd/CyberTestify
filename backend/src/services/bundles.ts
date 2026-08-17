@@ -34,6 +34,8 @@ export interface ComboBundle {
   anchorOriginalMinorUnitTr?: number;
   /** UI'da "Popüler" cercevesi/rozeti (pazarlama vurgusu). */
   popular?: boolean;
+  /** UI'da "Amiral Gemisi/Premium" cercevesi/rozeti — en kapsamli paket (Tam Kapsamlı Pentest). */
+  flagship?: boolean;
   /** true ise "Yakında" — listelenir ama satin ALINAMAZ (createBundleOrder reddeder). */
   comingSoon?: boolean;
   /**
@@ -108,7 +110,8 @@ export const COMBO_BUNDLES: ComboBundle[] = [
       'Scope: this bundle tests the unauthenticated (no-login) surface. Deep authorization/business-logic vulnerabilities that only appear after login are out of scope; results depend on the target’s structure.',
     category: 'active-light',
     discountPct: 25,
-    finalPriceMinorUnitTr: 1499900, // 14.999 TL (Vedat — nihai indirimli sabit fiyat; uye order tutarlari buna bolunur)
+    finalPriceMinorUnitTr: 999900,        // 9.999 TL (Vedat — indirildi; uye order tutarlari buna bolunur)
+    anchorOriginalMinorUnitTr: 1299900,   // 12.999 TL (ustu cizili referans: 12.999 → 9.999 = %23)
     comingSoon: false,
     memberKeys: [
       'injection_verify',
@@ -132,6 +135,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     discountPct: 20,
     finalPriceMinorUnitTr: 2299900, // 22.999 TL (FAZ E — nihai sabit fiyat; üye order tutarları buna bölünür)
     comingSoon: false,              // (FAZ E) LANSMAN
+    flagship: true,                 // amiral gemisi — premium çerçeve/rozet
     memberKeys: ['authenticated_scan', 'autonomous_pentest'],
   },
   {

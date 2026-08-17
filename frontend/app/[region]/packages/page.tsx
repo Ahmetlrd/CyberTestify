@@ -10,7 +10,7 @@ type Bundle = {
   key: string; displayName: string; description: string; discountPct: number;
   members: Array<{ key: string; displayName: string }>;
   selectable: boolean; selectableModules: Array<{ key: string; displayName: string }> | null;
-  originalMinorUnit: number; amountMinorUnit: number; currency: string; comingSoon?: boolean; popular?: boolean; contactOnly?: boolean;
+  originalMinorUnit: number; amountMinorUnit: number; currency: string; comingSoon?: boolean; popular?: boolean; flagship?: boolean; contactOnly?: boolean;
 };
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -189,16 +189,24 @@ export default async function PackagesPage({ params }: { params: { region: strin
                 const hasSaving = savedMinor > 0; // recon gibi nihai > tekil-toplam ise indirim GOSTERILMEZ
                 const savedPct = hasSaving && b.originalMinorUnit > 0 ? Math.round((savedMinor / b.originalMinorUnit) * 100) : 0;
                 const popular = !!b.popular && !b.comingSoon;
+                const flagship = !!b.flagship && !b.comingSoon;
+                const premium = popular || flagship;
                 return (
                   <div
                     key={b.key}
                     className={`card relative flex flex-col p-6 ${
-                      popular ? 'border-2 border-accent shadow-md ring-2 ring-accent/25' : 'border-2 border-accent/40'
+                      flagship ? 'border-2 border-brand shadow-lg ring-2 ring-brand/25 bg-brand-50/20'
+                        : popular ? 'border-2 border-accent shadow-md ring-2 ring-accent/25'
+                        : 'border-2 border-accent/40'
                     } ${b.comingSoon ? 'opacity-90' : ''}`}
                   >
                     {b.comingSoon ? (
                       <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
                         {tr ? 'Yakında' : 'Soon'}
+                      </span>
+                    ) : flagship ? (
+                      <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
+                        ★ {tr ? 'Amiral Gemisi' : 'Flagship'}
                       </span>
                     ) : popular ? (
                       <span className="absolute -top-3 left-6 rounded-pill bg-accent px-3 py-1 text-xs font-bold text-white">
@@ -321,30 +329,16 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         )
                       ) : (
                         <>
-                          <div>
+                          <div className="flex items-baseline gap-2">
+                            {/* Kompakt indirim: yalnizca ustu-cizili referans + nihai fiyat (metin kalabaligi yok). */}
+                            {hasSaving && (
+                              <span className="text-sm text-ink-muted line-through">{formatMoney(b.originalMinorUnit, region)}</span>
+                            )}
                             <span className="text-3xl font-extrabold text-ink">{formatMoney(b.amountMinorUnit, region)}</span>
-                            <span className="ml-1 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahil' : 'incl. tax'}</span>
+                            <span className="text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahil' : 'incl. tax'}</span>
                           </div>
-                          {/* Indirim satiri YALNIZCA gercek tasarruf varsa (nihai < tekil-toplam). */}
-                          {hasSaving && (
-                            <div className="mt-1.5 text-xs text-emerald-700">
-                              {tr ? (
-                                <>
-                                  Tek tek toplam <span className="line-through">{formatMoney(b.originalMinorUnit, region)}</span> →{' '}
-                                  <strong>{formatMoney(b.amountMinorUnit, region)}</strong> ({formatMoney(savedMinor, region)} / %{savedPct} avantaj)
-                                </>
-                              ) : (
-                                <>
-                                  Separately <span className="line-through">{formatMoney(b.originalMinorUnit, region)}</span> →{' '}
-                                  <strong>{formatMoney(b.amountMinorUnit, region)}</strong> (save {formatMoney(savedMinor, region)} / {savedPct}%)
-                                </>
-                              )}
-                            </div>
-                          )}
                           <div className="mt-1 text-[11px] text-ink-soft">
-                            {tr
-                              ? 'Tahmini süre: içeriğe göre değişir (kontroller sırayla çalışır)'
-                              : 'Est. time: varies by content (checks run sequentially)'}
+                            {tr ? 'Ödeme sonrası kısa süre içinde başlar' : 'Starts shortly after payment'}
                           </div>
                         </>
                       )}
