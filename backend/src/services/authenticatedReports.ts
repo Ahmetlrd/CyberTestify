@@ -17,6 +17,7 @@ import { collectJsAnalysisEvidence } from './jsAnalysis.js';
 import { collectClientSideEvidence } from './clientSideChecks.js';
 import { collectAuthDepthEvidence } from './authDepthChecks.js';
 import { collectSessionDepthEvidence } from './sessionDepthChecks.js';
+import { collectInputHeaderEvidence, collectConfigExposureEvidence } from './configExposureChecks.js';
 import {
   buildActiveCheckReport, buildInjectionReport, buildIdorReport,
   RISK_WORD, levelRank, extractLevel, headlineOf, detailOnly, type Level,
@@ -239,6 +240,51 @@ const SESSION_DEPTH_CFG = {
   cleanGenel: 'Sunucu oturum çerezi gözlemlendi ancak belirgin bir CSRF/SameSite eksiği, zayıf session-id, URL-ifşa veya prefix eksikliği göstergesi bulunamadı.',
 };
 
+// (Faz 3-A) Girdi & Header + Yapılandırma & İfşa derinliği — 10 kontrol (güvenli GET/OPTIONS/TRACE +
+// statik). SPA catch-all shell 200'ler bulgu sayılmaz (Faz 0 provenance); PUT/DELETE atılmaz; D5 gönderim yok.
+const INPUT_HEADER_CFG = {
+  title: 'Girdi & Header Derinliği',
+  whatChecked: [
+    'Güvenli/read-only girdi & header kontrolleri (yalnız GET/OPTIONS/TRACE — durum-değiştiren/yıkıcı istek YOK).',
+    '**D1 Host header injection:** sahte `X-Forwarded-Host` gönderilip yanıtta yansıma gözlendi (gösterge).',
+    '**D2 HTTP parameter pollution:** aynı parametre tekrarlanıp işleniş farkı gözlendi (gözlemsel).',
+    '**D3 HTTP methods / TRACE:** OPTIONS ile izinli method keşfi + TRACE gözlemi — **PUT/DELETE GÖNDERİLMEDİ**.',
+    '**D4 Mixed content:** HTTPS sayfada HTTP kaynak (script/img/iframe) statik tespit.',
+    '**D5 Stored-XSS giriş noktası:** kalıcı bağlama yansıyabilecek ADAY alanlar işaretlendi — **hiçbir veri GÖNDERİLMEDİ/kaydedilmedi** (düşük güven, dinamik doğrulama gerekir).',
+  ],
+  confidenceNote: 'Host-injection/HPP/D5 "gösterge/aday"dır (gerçek saldırı/gönderim yapılmadı). TRACE/mixed-content deterministik gözlemdir.',
+  fixTitle: 'Girdi & Header Sertleştirme',
+  fixFound: [
+    'Host header: uygulamada Host/X-Forwarded-Host değerini **allowlist** ile sabitleyin; mutlak URL üretiminde kullanmayın.',
+    'HTTP methods: **TRACE**\'i kapatın; durum-değiştiren method\'larda sunucu-taraflı yetkilendirme zorunlu.',
+    'Mixed content: tüm kaynakları **HTTPS**\'e taşıyın (upgrade-insecure-requests / CSP).',
+    'Stored-XSS: kalıcı alanlarda çıktı-kodlaması + sanitizasyon (DOMPurify) uygulayın; HPP\'ye karşı parametreleri tek-değer olarak işleyin.',
+  ],
+  fixClean: ['Host allowlist, TRACE kapalı, tüm kaynaklar HTTPS, kalıcı girdilerde çıktı-kodlama/sanitizasyon, parametre tekilleştirme (proaktif).'],
+  cleanGenel: 'Girdi/header kontrollerinde belirgin bir Host-injection, açık TRACE, mixed-content veya HPP göstergesi bulunamadı.',
+};
+const CONFIG_EXPOSURE_CFG = {
+  title: 'Yapılandırma & İfşa Derinliği',
+  whatChecked: [
+    'Güvenli GET + statik yapılandırma/ifşa kontrolleri. **SPA catch-all 200 (ana sayfa shell)** dönen tahmin edilen yollar GERÇEK sayılmaz — yalnız gerçekten erişilebilen, AYIRT EDİCİ yanıt bulgu üretir (Sütun 0 provenance).',
+    '**E1 Yedek/eski dosya:** `.env/.bak/.sql/.git/config` vb. güvenli GET (shell 200 elendi).',
+    '**E2 Admin arayüz:** yaygın yönetim yolları dışarıdan erişilebilir mi (aynı provenance).',
+    '**E3 Cloud storage:** HTML/JS\'te public S3/GCS/Azure bucket referansı + **listelenebilir** mi.',
+    '**E4 Cache / poisoning göstergesi:** Cache-Control/Vary + unkeyed-header yansıması (zehirleme YAPILMADI).',
+    '**E5 Yorum & metadata sızıntısı:** dev yorumu / iç IP-hostname / sunucu dosya yolu (statik).',
+  ],
+  confidenceNote: 'Yedek/admin bulguları yalnız GERÇEKTEN erişilebilen, SPA-shell OLMAYAN yanıtlar için üretilir. Cache/host göstergeleri "gösterge"dir; içerik/hassas veri REDAKTE.',
+  fixTitle: 'Yapılandırma & İfşa Sertleştirme',
+  fixFound: [
+    'Yedek/eski/`.git`/`.env` dosyalarını public dizinden kaldırın; web sunucusunda erişimi engelleyin.',
+    'Yönetim arayüzlerini ağ (IP allowlist/VPN) + kimlik-doğrulama arkasına alın; dışarı açmayın.',
+    'Cloud bucket: **liste iznini kapatın**, hassas nesneleri private yapın (public yalnız gerçekten public asset için).',
+    'Cache: unkeyed girdiyi yansıtmayın veya `Vary`\'e ekleyin. Yorumlar: üretim build\'inde dev yorumu/iç bilgi bırakmayın.',
+  ],
+  fixClean: ['Yedek/.git/.env dizin dışında, admin arayüzü kimlik/ağ arkasında, bucket private/list-kapalı, cache Vary doğru, üretimde yorum/metadata temiz (proaktif).'],
+  cleanGenel: 'Erişilebilir yedek/eski dosya, açık admin arayüzü, listelenebilir bucket, cache-poisoning göstergesi veya belirgin yorum/metadata sızıntısı gözlemlenmedi.',
+};
+
 type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
@@ -286,6 +332,12 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   // (YENİ — Faz 2-B) Oturum Güvenliği Derinliği: CSRF/SameSite, session-id entropi, oturum-URL, prefix, timeout.
   const sdEv = await collectSessionDepthEvidence(host, session).catch(() => null);
   runs.push({ title: 'Oturum Güvenliği Derinliği', conf: 'Orta', rep: sdEv ? buildActiveCheckReport(sdEv, SESSION_DEPTH_CFG) : null, inputs: sdEv?.inputsFound ?? 0, probes: sdEv?.probesSent ?? 0, fc: sdEv?.findings.length ?? 0 });
+
+  // (YENİ — Faz 3-A) Girdi & Header + Yapılandırma & İfşa derinliği (güvenli GET/OPTIONS/TRACE + statik).
+  const ihEv = await collectInputHeaderEvidence(host, session).catch(() => null);
+  runs.push({ title: 'Girdi & Header Derinliği', conf: 'Orta', rep: ihEv ? buildActiveCheckReport(ihEv, INPUT_HEADER_CFG) : null, inputs: ihEv?.inputsFound ?? 0, probes: ihEv?.probesSent ?? 0, fc: ihEv?.findings.length ?? 0 });
+  const ceEv = await collectConfigExposureEvidence(host, session).catch(() => null);
+  runs.push({ title: 'Yapılandırma & İfşa Derinliği', conf: 'Yüksek', rep: ceEv ? buildActiveCheckReport(ceEv, CONFIG_EXPOSURE_CFG) : null, inputs: ceEv?.inputsFound ?? 0, probes: ceEv?.probesSent ?? 0, fc: ceEv?.findings.length ?? 0 });
 
   // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
   if (runs.every((r) => !r.rep)) return unscannableReport(host, 'kimlik-doğrulamalı kontroller');
