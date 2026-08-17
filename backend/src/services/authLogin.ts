@@ -305,6 +305,7 @@ async function tryFormLogin(host: string, creds: TestCredentialInput): Promise<F
 // "timeout" dememesi için). Form-only sitelerde API bulunamaz → 'no_login_endpoint' (yine devam edilebilir).
 export async function quickLoginPrecheck(host: string, creds: TestCredentialInput): Promise<AuthResult> {
   let attempts = 0; let sawEndpoint = false; let sawTwoFactor = false;
+  // (1) API-login (JSON) — anında; başarı/başarısızlık kesin.
   const candidates = WELL_KNOWN_LOGIN.map((p) => sameHostAbs(p, host)).filter(Boolean) as string[];
   for (const url of candidates) {
     attempts++;
@@ -313,6 +314,20 @@ export async function quickLoginPrecheck(host: string, creds: TestCredentialInpu
     sawEndpoint = true;
     if (r.twoFactor) sawTwoFactor = true;
     if ('session' in r) return { ok: true, session: r.session, attempts };
+  }
+  // (2) API ucu YOKSA klasik/SPA FORM-login dene (headless AMA ağır discoverSurface YOK — hedefli).
+  //     Böylece "otomatik form bulunamadı" yerine GERÇEK başarılı/başarısız sonucu döner.
+  if (!sawEndpoint) {
+    attempts++;
+    const fr = await tryFormLogin(host, creds).catch(() => null);
+    if (fr) {
+      if (fr.twoFactor) sawTwoFactor = true;
+      if (fr.session) return { ok: true, session: fr.session, attempts };
+      if (fr.formFound) {
+        // Login formu vardı ama oturum doğrulanamadı -> yanlış kimlik (veya 2FA).
+        return sawTwoFactor ? { ok: false, reason: 'two_factor', attempts } : { ok: false, reason: 'bad_credentials', attempts };
+      }
+    }
   }
   if (sawTwoFactor) return { ok: false, reason: 'two_factor', attempts };
   if (!sawEndpoint) return { ok: false, reason: 'no_login_endpoint', attempts };

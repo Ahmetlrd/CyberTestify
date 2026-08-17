@@ -500,10 +500,12 @@ ordersRouter.post('/precheck-login', loginPrecheckLimiter, requireAuth, async (r
   try {
     // (HIZ) Ön-giriş bilgilendiricidir; bloklamaz. Headless login uzun sürebilir → 12sn üst sınır.
     // Süre aşımında "timeout" döner (müşteri yine de devam edebilir; gerçek tarama daha kapsamlı dener).
+    // API-login anında; form-login gerekiyorsa hedefli headless (ağır surface taraması YOK) — gerçek
+    // başarılı/başarısız için makul süre tanı (form genelde ilk 1-2 adayda bulunur). Üst sınır 22sn.
     const TIMEOUT = Symbol('timeout');
     const r = await Promise.race([
-      quickLoginPrecheck(domain.hostname, { username, password }), // headless YOK -> hızlı, gerçek sonuç
-      new Promise<typeof TIMEOUT>((resolve) => setTimeout(() => resolve(TIMEOUT), 12_000)),
+      quickLoginPrecheck(domain.hostname, { username, password }),
+      new Promise<typeof TIMEOUT>((resolve) => setTimeout(() => resolve(TIMEOUT), 22_000)),
     ]);
     if (r === TIMEOUT) return res.json({ ok: false, reason: 'timeout' });
     return res.json(r.ok ? { ok: true } : { ok: false, reason: r.reason });

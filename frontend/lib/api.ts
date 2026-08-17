@@ -163,7 +163,7 @@ export const api = {
   precheckLogin: (domainId: string, username: string, password: string) =>
     request<{ ok: boolean; reason?: 'bad_credentials' | 'two_factor' | 'no_login_endpoint' | 'timeout' | 'error' }>(
       '/orders/precheck-login',
-      { method: 'POST', body: JSON.stringify({ domainId, username, password }), timeoutMs: 15_000 },
+      { method: 'POST', body: JSON.stringify({ domainId, username, password }), timeoutMs: 26_000 },
     ),
   createBundleOrder: (body: {
     domainId: string; bundleKey: string; selectedModules?: string[];
