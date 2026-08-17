@@ -20,6 +20,8 @@ import { collectSessionDepthEvidence } from './sessionDepthChecks.js';
 import { collectInputHeaderEvidence, collectConfigExposureEvidence } from './configExposureChecks.js';
 import { collectApiSecurityEvidence } from './apiSecurityChecks.js';
 import { collectEmailDnsEvidence } from './emailDnsChecks.js';
+import { suggestPricingForHost } from './pricingModel.js';
+import { logScanStep } from './scanLogger.js';
 import {
   buildActiveCheckReport, buildInjectionReport, buildIdorReport,
   RISK_WORD, levelRank, extractLevel, headlineOf, detailOnly, type Level,
@@ -338,6 +340,13 @@ type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findin
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
 export async function generateAuthenticatedReport(host: string, session: AuthSession): Promise<{ findings: string; fixText: string } | null> {
+  // (Faz 4 / Bölüm 2) DİNAMİK FİYAT ÖNERİSİ — yalnız 6. paket; pasif sinyallerden deterministik skor.
+  // Müşteri PDF'ine GİRMEZ (satış sinyali); admin/panel için log'a yazılır. Ekstra tarama yapmaz (cache'li corpus).
+  try {
+    const { signals, suggestion } = await suggestPricingForHost(host);
+    logScanStep({ step: 'Fiyat Önerisi (dahili)', level: 'info', summary: `skor=${suggestion.score} kademe=${suggestion.tier.label} · sinyaller: uç=${signals.uniqueEndpoints} api=${signals.realApiEndpoints} auth=${signals.authSurface} altalan=${signals.subdomains} tekno=${signals.techDiversity} · ${suggestion.priceRange.placeholder ? 'fiyat=PLACEHOLDER (Vedat ayarlar)' : `fiyat=${suggestion.priceRange.minTL}-${suggestion.priceRange.maxTL} TL`}` });
+  } catch { /* fiyat önerisi rapor akışını asla bozmaz */ }
+
   const runs: Run[] = [];
   const cookieEv = collectCookieFlagsEvidence(session);
   runs.push({ title: 'Oturum Çerezi Bayrakları', conf: 'Yüksek', rep: buildActiveCheckReport(cookieEv, COOKIE_CFG), inputs: cookieEv.inputsFound, probes: cookieEv.probesSent, fc: cookieEv.findings.length });

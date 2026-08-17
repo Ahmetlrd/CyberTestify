@@ -394,7 +394,15 @@ export function parseFindings(md: string, locale: 'tr' | 'en'): { rows: Finding[
       const evidence = evidCol !== -1 ? stripMd(c[evidCol] ?? '') : '';
       // Güven (varsa) — DÜŞÜK/dolaylı kanıtı master tabloda da görünür kılmak için (yalnız detay kartında değil).
       const confidence = confCol !== -1 ? stripMd(c[confCol] ?? '') : '';
-      const key = (info ? info.type : title.toLocaleLowerCase('tr')).slice(0, 48);
+      // DE-DUP (tek bulgu-kaydı): anahtar = TÜR + UÇ NOKTA. Aynı türü AYNI uç noktada iki modül
+      // görürse tek CT'de birleşir (çift-sayım yok); FARKLI uç nokta (ör. localStorage['token'] vs
+      // localStorage['totp_tmp_token'], ya da /a vs /b) AYRI CT alır — tür-bazlı çökertme distinct
+      // bulguları kaybediyordu (client-side statik 2 storage bulgusu master'a hiç girmiyordu).
+      // Açık çapraz-referanslar (API F1 BOLA/BFLA → IDOR) zaten Ciddiyet'siz not olarak render edilir,
+      // BULGULAR tablosuna satır yazmaz → ikinci CT üretmez.
+      const typeKey = (info ? info.type : title.toLocaleLowerCase('tr')).slice(0, 48);
+      const epKey = (endpoint || rawName || title).toLocaleLowerCase('tr').replace(/\s+/g, ' ').trim().slice(0, 60);
+      const key = `${typeKey}|${epKey}`;
       if (seen.has(key)) continue;
       seen.add(key);
       rows.push({ title, sev, type: info?.type, endpoint: endpoint || undefined, evidence: evidence || undefined, confidence: confidence || undefined });

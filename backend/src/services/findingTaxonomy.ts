@@ -16,7 +16,12 @@ export type FindingType =
   | 'sqli' | 'xss' | 'idor' | 'ssrf' | 'open_redirect' | 'rce' | 'file_upload'
   | 'business_logic' | 'race'
   | 'forced_browsing' | 'weak_logout' | 'session_fixation' | 'jwt' | 'privilege_escalation' | 'login_bypass'
-  | 'exposed_api_docs' | 'staging_exposure' | 'stale_subdomain' | 'outdated_component' | 'subdomain_takeover';
+  | 'exposed_api_docs' | 'staging_exposure' | 'stale_subdomain' | 'outdated_component' | 'subdomain_takeover'
+  // (Faz 4) Derinlik modüllerinin somut bulguları — master'a girebilmesi için taksonomi türü ŞART.
+  | 'csrf' | 'session_in_url' | 'weak_session' | 'user_enum' | 'default_creds' | 'no_lockout'
+  | 'weak_pw_policy' | 'weak_pw_reset' | 'host_header' | 'http_method' | 'web_cache' | 'comment_leak'
+  | 'mixed_content' | 'cloud_exposure' | 'caa' | 'mta_sts' | 'client_storage' | 'postmessage'
+  | 'sri' | 'tabnabbing' | 'excessive_data' | 'rate_limit' | 'shadow_api' | 'graphql_introspection';
 
 type Entry = { tr: string; en: string; cwe: string; owasp: string };
 
@@ -138,6 +143,78 @@ export const FINDING_TAXONOMY: Record<FindingType, Entry> = {
   subdomain_takeover: { cwe: 'CWE-284', owasp: 'A05:2021 Security Misconfiguration',
     tr: 'Sahipsiz/dangling kaynağa işaret eden alt alan adı saldırganca devralınabilir; phishing ve itibar riski.',
     en: 'A subdomain pointing to a dangling resource can be taken over by an attacker; phishing and reputation risk.' },
+  csrf: { cwe: 'CWE-352', owasp: 'A01:2021 Broken Access Control',
+    tr: 'Anti-CSRF token / SameSite eksikliği; kullanıcı oturumu üzerinden istem-dışı işlem (CSRF) tetiklenebilir.',
+    en: 'Missing anti-CSRF token / SameSite; unintended actions can be triggered on the user session (CSRF).' },
+  session_in_url: { cwe: 'CWE-598', owasp: 'A07:2021 Identification & Authentication Failures',
+    tr: 'Oturum kimliği URL’de taşınıyor; tarayıcı geçmişi, referrer ve loglara sızarak oturum çalınabilir.',
+    en: 'Session id carried in the URL; leaks via history, referrer and logs, enabling session theft.' },
+  weak_session: { cwe: 'CWE-331', owasp: 'A07:2021 Identification & Authentication Failures',
+    tr: 'Oturum kimliği düşük entropili/tahmin edilebilir görünüyor; oturum ele geçirme riskini artırır.',
+    en: 'Session id appears low-entropy/predictable, increasing session-hijacking risk.' },
+  user_enum: { cwe: 'CWE-204', owasp: 'A07:2021 Identification & Authentication Failures',
+    tr: 'Uygulama, geçerli/geçersiz kullanıcıyı farklı yanıtla ayırt ediyor; hesap numaralandırma ve hedefli saldırıya zemin.',
+    en: 'The app distinguishes valid/invalid users via differing responses; enables account enumeration and targeting.' },
+  default_creds: { cwe: 'CWE-1392', owasp: 'A07:2021 Identification & Authentication Failures',
+    tr: 'Varsayılan/zayıf kimlik bilgileri kabul ediliyor göstergesi; doğrudan yetkisiz erişime yol açabilir.',
+    en: 'Indicator that default/weak credentials are accepted; can lead to direct unauthorized access.' },
+  no_lockout: { cwe: 'CWE-307', owasp: 'A07:2021 Identification & Authentication Failures',
+    tr: 'Ardışık başarısız girişte kilitleme/kısıtlama gözlenmedi; kaba-kuvvet (brute-force) saldırısına açık.',
+    en: 'No lockout/throttling observed after repeated failed logins; open to brute-force.' },
+  weak_pw_policy: { cwe: 'CWE-521', owasp: 'A07:2021 Identification & Authentication Failures',
+    tr: 'Zayıf parola politikası göstergesi (kısa/yaygın parolalar kabul); hesap ele geçirme riskini artırır.',
+    en: 'Weak password-policy indicator (short/common passwords accepted); raises account-takeover risk.' },
+  weak_pw_reset: { cwe: 'CWE-640', owasp: 'A07:2021 Identification & Authentication Failures',
+    tr: 'Parola sıfırlama akışında zayıflık göstergesi (tahmin edilebilir token / kullanıcı ifşası); hesap ele geçirme riski.',
+    en: 'Weakness indicator in password-reset flow (guessable token / user disclosure); account-takeover risk.' },
+  host_header: { cwe: 'CWE-644', owasp: 'A05:2021 Security Misconfiguration',
+    tr: 'Host başlığı yanıta/mantığa yansıyor göstergesi; parola-sıfırlama zehirleme ve cache poisoning’e zemin olabilir.',
+    en: 'Indicator that the Host header reflects into responses/logic; can enable reset poisoning and cache poisoning.' },
+  http_method: { cwe: 'CWE-650', owasp: 'A05:2021 Security Misconfiguration',
+    tr: 'Gereksiz/tehlikeli HTTP metodu (TRACE/PUT/DELETE vb.) açık göstergesi; saldırı yüzeyini genişletir.',
+    en: 'Indicator of unnecessary/dangerous HTTP methods (TRACE/PUT/DELETE) enabled; widens attack surface.' },
+  web_cache: { cwe: 'CWE-525', owasp: 'A05:2021 Security Misconfiguration',
+    tr: 'Hassas yanıt önbelleğe alınabiliyor / unkeyed başlık yansıması göstergesi; cache poisoning veya hassas veri sızıntısı.',
+    en: 'Indicator that sensitive responses are cacheable / unkeyed header reflection; cache poisoning or data leak.' },
+  comment_leak: { cwe: 'CWE-615', owasp: 'A05:2021 Security Misconfiguration',
+    tr: 'HTML/JS yorum veya metadata’sında iç bilgi (TODO, iç IP, yol) sızıntısı; saldırgana keşif kolaylığı.',
+    en: 'Internal info (TODO, internal IP, paths) leaks via HTML/JS comments or metadata; aids attacker recon.' },
+  mixed_content: { cwe: 'CWE-311', owasp: 'A02:2021 Cryptographic Failures',
+    tr: 'HTTPS sayfada HTTP kaynak yükleniyor (karışık içerik); MITM ile enjeksiyon/dinleme ve tarayıcı uyarısı.',
+    en: 'HTTP resources loaded on an HTTPS page (mixed content); MITM injection/eavesdropping and browser warnings.' },
+  cloud_exposure: { cwe: 'CWE-732', owasp: 'A05:2021 Security Misconfiguration',
+    tr: 'Public cloud storage (S3/GCS/Azure) referansı listelenebilir görünüyor; nesne envanteri/veri sızıntısı riski.',
+    en: 'Referenced public cloud storage (S3/GCS/Azure) appears listable; object-inventory/data-leak risk.' },
+  caa: { cwe: 'CWE-295', owasp: 'A05:2021 Security Misconfiguration',
+    tr: 'CAA kaydı yok; herhangi bir CA alan için sertifika verebilir — yanlış/kötü-amaçlı sertifika verme riski.',
+    en: 'No CAA record; any CA can issue certificates for the domain — mis-issuance risk.' },
+  mta_sts: { cwe: 'CWE-319', owasp: 'A02:2021 Cryptographic Failures',
+    tr: 'MTA-STS zorlayıcı değil (enforce yok); SMTP teslimi downgrade/MITM ile şifresiz taşınabilir.',
+    en: 'MTA-STS not enforcing; SMTP delivery can be downgraded/MITM to cleartext.' },
+  client_storage: { cwe: 'CWE-922', owasp: 'A04:2021 Insecure Design',
+    tr: 'Hassas veri (token/oturum) localStorage/sessionStorage’a yazılıyor; XSS ile okunabilir — HttpOnly çerez tercih edilmeli.',
+    en: 'Sensitive data (token/session) written to localStorage/sessionStorage; readable via XSS — prefer HttpOnly cookies.' },
+  postmessage: { cwe: 'CWE-346', owasp: 'A05:2021 Security Misconfiguration',
+    tr: 'postMessage origin doğrulaması eksik göstergesi; kötü-amaçlı sayfa mesaj enjekte edip veri sızdırabilir.',
+    en: 'Indicator of missing postMessage origin validation; a malicious page can inject messages/exfiltrate data.' },
+  sri: { cwe: 'CWE-353', owasp: 'A08:2021 Software & Data Integrity Failures',
+    tr: 'Harici script’te Subresource Integrity (SRI) yok; kaynak/CDN ele geçirilirse zararlı kod çalışabilir.',
+    en: 'External script lacks Subresource Integrity (SRI); if the source/CDN is compromised, malicious code can run.' },
+  tabnabbing: { cwe: 'CWE-1022', owasp: 'A01:2021 Broken Access Control',
+    tr: 'target=_blank bağlantılarda rel=noopener yok (reverse tabnabbing); açılan sayfa kaynak sekmeyi phishing’e yönlendirebilir.',
+    en: 'target=_blank links lack rel=noopener (reverse tabnabbing); the opened page can redirect the source tab to phishing.' },
+  excessive_data: { cwe: 'CWE-213', owasp: 'API3:2023 Broken Object Property Level Authorization',
+    tr: 'API yanıtı gerekenden fazla/hassas alan (parola-hash/rol/iç-ID) döndürüyor; veri sızıntısı ve yetki haritalama.',
+    en: 'API response returns excessive/sensitive fields (password-hash/role/internal-id); data leak and authz mapping.' },
+  rate_limit: { cwe: 'CWE-770', owasp: 'API4:2023 Unrestricted Resource Consumption',
+    tr: 'API ucunda rate-limit/kota gözlenmedi; brute-force, scraping ve kaynak tüketimi (DoS) riskine açık.',
+    en: 'No rate-limit/quota observed on the API endpoint; open to brute-force, scraping and resource exhaustion (DoS).' },
+  shadow_api: { cwe: 'CWE-1059', owasp: 'API9:2023 Improper Inventory Management',
+    tr: 'Eski/gölge API sürümleri (v1/v2) erişilebilir; yamasız kalıp saldırı yüzeyini genişletebilir.',
+    en: 'Old/shadow API versions (v1/v2) reachable; may stay unpatched and widen the attack surface.' },
+  graphql_introspection: { cwe: 'CWE-200', owasp: 'API9:2023 Improper Inventory Management',
+    tr: 'GraphQL introspection açık; tüm şema (tipler/mutasyonlar) ifşa olur ve saldırı yüzeyini haritalar.',
+    en: 'GraphQL introspection is open; the full schema (types/mutations) is exposed and maps the attack surface.' },
 };
 
 // Başlıktan bulgu türü sınıflandırıcı — SPESİFİK önce (ör. authenticated SQLi -> sqli; forced browsing).
@@ -169,6 +246,8 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   { re: /yar[ıi][şs]|race[- ]?condition|\brace\b|mass.?assign|over.?post/i, type: 'race' },
   { re: /i[şs] mant[ıi][ğg]|business.?logic|negatif|kupon|indirim/i, type: 'business_logic' },
   { re: /cors/i, type: 'cors' },
+  // csrf, cookie_flags'tan ÖNCE: CSRF tekniği "SameSite" içerir; yoksa cookie_flags'a düşer (yanlış tür).
+  { re: /\bcsrf\b|anti-csrf|siteler.?aras[ıi] istek|cross.?site request/i, type: 'csrf' },
   { re: /[çc]erez|cookie|httponly|samesite|secure bayrak/i, type: 'cookie_flags' },
   { re: /x-frame-options|clickjacking|[çc]er[çc]eve/i, type: 'clickjacking' },
   { re: /x-content-type-options|mime/i, type: 'mime_sniffing' },
@@ -184,13 +263,39 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   { re: /cms|wordpress|eklenti|\bcve\b|s[üu]r[üu]m.*eski|outdated|g[üu]ncel olmayan|eol\b|desteksiz|desteklenmeyen/i, type: 'outdated_component' },
   { re: /\bspf\b/i, type: 'spf' },
   { re: /\bdmarc\b/i, type: 'dmarc' },
-  { re: /\bdkim\b/i, type: 'dkim' },
+  { re: /\bdk[iı]m\b/i, type: 'dkim' },
   { re: /\bdnssec\b/i, type: 'dnssec' },
   { re: /zay[ıi]f.*cipher|cipher.*zay[ıi]f|weak.*tls|weak.*cipher|zay[ıi]f.*tls|3des|\brc4\b/i, type: 'weak_tls' },
   { re: /rsa.*(1024|2048)|anahtar boyut|key size/i, type: 'weak_key' },
   { re: /sertifika|certificate|hostname e[şs]le|son kullanma|expir/i, type: 'cert' },
   { re: /ayr[ıi]nt[ıi]l[ıi] hata|hata sayfas[ıi].*if[şs]a|verbose error|stack trace|error page/i, type: 'verbose_error' },
   { re: /s[üu]r[üu]m if[şs]a|version disclosure|server.*banner|server_tokens|banner/i, type: 'version_disclosure' },
+  // ——— (Faz 4) Derinlik modülleri: teknik/kanıt metnindeki AYIRT EDİCİ sözcüklere göre sınıflama.
+  // En sona eklendi: mevcut bulgular önce eşleşir; yalnız daha önce sınıflanamayanlar buraya düşer.
+  { re: /graphql|introspection|__schema/i, type: 'graphql_introspection' },
+  { re: /a[şs][ıi]r[ıi] veri|\bbopla\b|excessive data|hassas alan.*yan[ıi]t|yan[ıi]t.*hassas alan/i, type: 'excessive_data' },
+  { re: /rate.?limit|k[ıi]s[ıi]tlanmam[ıi][şs] t[üu]ketim|\b429\b|kota\b/i, type: 'rate_limit' },
+  { re: /shadow|g[öo]lge s[üu]r[üu]m|deprecated api|api s[üu]r[üu]m ucu|\/api\/v\d|sürüm ucu/i, type: 'shadow_api' },
+  { re: /subresource [iı]ntegr[iı]ty|\bsr[iı]\b/i, type: 'sri' },
+  { re: /tabnabbing|target=_blank|rel=.{0,4}noopener/i, type: 'tabnabbing' },
+  { re: /postmessage|web messaging|message handler/i, type: 'postmessage' },
+  { re: /istemci depolama|localstorage|sessionstorage|browser storage|taray[ıi]c[ıi] depolama|storage statik|storage\.setitem/i, type: 'client_storage' },
+  { re: /kar[ıi][şs][ıi]k i[çc]erik|mixed content/i, type: 'mixed_content' },
+  { re: /cloud storage|\bbucket\b|amazonaws|storage\.googleapis|blob\.core|listelenebilir.*depo|public.*depo/i, type: 'cloud_exposure' },
+  { re: /\bcaa\b|sertifika verme|certificate authority auth/i, type: 'caa' },
+  { re: /mta-sts|smtp.*downgrade|smtp tls zorla/i, type: 'mta_sts' },
+  { re: /oturum kimli[ğg]i.*url|session id.*url|url'?de oturum|url.*oturum kimli/i, type: 'session_in_url' },
+  { re: /oturum.*entropi|zay[ıi]f oturum kimli|session.*entropy|tahmin edilebilir oturum/i, type: 'weak_session' },
+  { re: /kullan[ıi]c[ıi] numaraland[ıi]|user enumeration|enumerasyon|kullan[ıi]c[ıi] say[ıi]m|hesap varl[ıi][ğg][ıi] if[şs]a|ge[çc]erli vs ge[çc]ersiz/i, type: 'user_enum' },
+  { re: /varsay[ıi]lan kimlik|default credential|varsay[ıi]lan parola|admin\/admin/i, type: 'default_creds' },
+  { re: /kilitleme|lockout|kaba.?kuvvet|brute.?force|deneme s[ıi]n[ıi]rlama/i, type: 'no_lockout' },
+  { re: /parola politikas[ıi]|password policy|zay[ıi]f parola politika/i, type: 'weak_pw_policy' },
+  { re: /parola s[ıi]f[ıi]rlama|password reset|[şs]ifre s[ıi]f[ıi]rlama/i, type: 'weak_pw_reset' },
+  { re: /host header|host ba[şs]l[ıi][ğg][ıi]|host.?header injection|x-forwarded-host|host.*yans[ıi]/i, type: 'host_header' },
+  { re: /trace metodu|http method|tehlikeli.*metod|put\/delete|webdav|options allow/i, type: 'http_method' },
+  { re: /cache poison|[öo]nbellek zehir|cacheable|[öo]nbelle[ğg]e al[ıi]n|unkeyed|cache ba[şs]l|cache-control|yan[ıi]t cache/i, type: 'web_cache' },
+  { re: /yorum.*s[ıi]z|comment.*leak|metadata s[ıi]z|html yorum|yorum\/metadata/i, type: 'comment_leak' },
+  { re: /y[öo]netici aray[üu]z|admin aray[üu]z|admin panel|y[öo]netici aray/i, type: 'forced_browsing' },
 ];
 
 export function classifyFinding(title: string): FindingType | null {
@@ -241,6 +346,30 @@ const FRIENDLY_LABEL: Record<FindingType, { tr: string; en: string }> = {
   stale_subdomain: { tr: 'Bakım-dışı alt alan adı', en: 'Stale subdomain' },
   outdated_component: { tr: 'Güncel olmayan bileşen (CVE)', en: 'Outdated component (CVE)' },
   subdomain_takeover: { tr: 'Alt alan adı devralma riski', en: 'Subdomain takeover risk' },
+  csrf: { tr: 'CSRF koruması eksik', en: 'Missing CSRF protection' },
+  session_in_url: { tr: 'Oturum kimliği URL’de', en: 'Session id in URL' },
+  weak_session: { tr: 'Zayıf oturum kimliği entropisi', en: 'Weak session id entropy' },
+  user_enum: { tr: 'Kullanıcı numaralandırma göstergesi', en: 'User enumeration indicator' },
+  default_creds: { tr: 'Varsayılan kimlik bilgileri göstergesi', en: 'Default credentials indicator' },
+  no_lockout: { tr: 'Hesap kilitleme / brute-force koruması yok', en: 'No account lockout / brute-force protection' },
+  weak_pw_policy: { tr: 'Zayıf parola politikası', en: 'Weak password policy' },
+  weak_pw_reset: { tr: 'Zayıf parola sıfırlama akışı', en: 'Weak password-reset flow' },
+  host_header: { tr: 'Host header injection göstergesi', en: 'Host header injection indicator' },
+  http_method: { tr: 'Tehlikeli HTTP metodu açık', en: 'Dangerous HTTP method enabled' },
+  web_cache: { tr: 'Web cache / hassas önbellekleme göstergesi', en: 'Web cache / sensitive caching indicator' },
+  comment_leak: { tr: 'Yorum/metadata bilgi sızıntısı', en: 'Comment/metadata information leak' },
+  mixed_content: { tr: 'Karışık içerik (HTTP kaynak)', en: 'Mixed content (HTTP resource)' },
+  cloud_exposure: { tr: 'Listelenebilir cloud storage bucket', en: 'Listable cloud storage bucket' },
+  caa: { tr: 'CAA kaydı eksik', en: 'Missing CAA record' },
+  mta_sts: { tr: 'MTA-STS zorlayıcı değil', en: 'MTA-STS not enforcing' },
+  client_storage: { tr: 'Hassas veri istemci depolamasında', en: 'Sensitive data in client storage' },
+  postmessage: { tr: 'Güvensiz postMessage origin', en: 'Insecure postMessage origin' },
+  sri: { tr: 'Subresource Integrity (SRI) eksik', en: 'Missing Subresource Integrity (SRI)' },
+  tabnabbing: { tr: 'Reverse tabnabbing (rel=noopener yok)', en: 'Reverse tabnabbing (no rel=noopener)' },
+  excessive_data: { tr: 'Aşırı veri ifşası (API/BOPLA)', en: 'Excessive data exposure (API/BOPLA)' },
+  rate_limit: { tr: 'API rate-limit yok', en: 'No API rate-limit' },
+  shadow_api: { tr: 'Gölge/deprecated API sürümü', en: 'Shadow/deprecated API version' },
+  graphql_introspection: { tr: 'GraphQL introspection açık', en: 'GraphQL introspection enabled' },
 };
 export function friendlyLabel(type: FindingType, locale: 'tr' | 'en'): string {
   return locale === 'tr' ? FRIENDLY_LABEL[type].tr : FRIENDLY_LABEL[type].en;
@@ -366,6 +495,78 @@ const FINDING_DETAIL: Record<FindingType, { tr: Detail; en: Detail }> = {
   subdomain_takeover: D(
     { desc: 'Devralınabilir (dangling) alt alan göstergesi.', how: 'Alt alan CNAME kayıtları çözümlenip terk-edilmiş bulut imzalarıyla karşılaştırıldı.', fix: 'Bulut kaynağını silmeden önce DNS kaydını kaldırın; sahipsiz CNAME’leri temizleyin.' },
     { desc: 'Dangling subdomain takeover indicator.', how: 'Subdomain CNAMEs resolved and compared against abandoned-cloud signatures.', fix: 'Remove the DNS record before deleting the cloud resource; clean dangling CNAMEs.' }),
+  csrf: D(
+    { desc: 'Durum-değiştiren istekte anti-CSRF token yok ve/veya çerez SameSite değil.', how: 'POST formları ve oturum çerezleri incelendi; anti-CSRF token / SameSite gözlenmedi (istismar yapılmadı).', fix: 'Durum-değiştiren isteklere anti-CSRF token ekleyin; oturum çerezine `SameSite=Lax/Strict`.' },
+    { desc: 'No anti-CSRF token on a state-changing request and/or cookie is not SameSite.', how: 'POST forms and session cookies inspected; no anti-CSRF token / SameSite observed (not exploited).', fix: 'Add anti-CSRF tokens to state-changing requests; set `SameSite=Lax/Strict` on session cookies.' }),
+  session_in_url: D(
+    { desc: 'Oturum kimliği URL parametresinde taşınıyor.', how: 'URL/bağlantılarda oturum kimliği kalıbı gözlendi (değer gösterilmez).', fix: 'Oturum kimliğini yalnız HttpOnly çerezde taşıyın; URL’den kaldırın.' },
+    { desc: 'Session id carried in a URL parameter.', how: 'A session-id pattern observed in URLs/links (value redacted).', fix: 'Carry the session id only in an HttpOnly cookie; remove it from URLs.' }),
+  weak_session: D(
+    { desc: 'Oturum kimliği düşük entropili/tahmin edilebilir görünüyor.', how: 'Oturum kimliğinin uzunluk/karakter-uzayı gözlendi (JWT hariç); düşük entropi göstergesi.', fix: 'Kriptografik olarak güçlü, ≥128-bit rastgele oturum kimliği üretin.' },
+    { desc: 'Session id appears low-entropy/predictable.', how: 'Length/char-space of the session id observed (JWT excluded); low-entropy indicator.', fix: 'Generate cryptographically strong, ≥128-bit random session ids.' }),
+  user_enum: D(
+    { desc: 'Geçerli/geçersiz kullanıcı farklı yanıtla ayırt edilebiliyor.', how: 'Var-olmayan ve olası bir kullanıcıyla (throwaway) yanıt/zaman farkı gözlendi; hesap kilitlenmedi.', fix: 'Giriş/sıfırlama/kayıt akışlarında tek-tip yanıt ve süre döndürün.' },
+    { desc: 'Valid/invalid users can be distinguished by differing responses.', how: 'Response/timing difference observed with a non-existent vs. a likely (throwaway) user; no account locked.', fix: 'Return uniform responses and timing across login/reset/registration.' }),
+  default_creds: D(
+    { desc: 'Varsayılan/zayıf kimlik bilgisi kabul ediliyor göstergesi.', how: 'Küçük, throwaway bir varsayılan-çift denendi; başarı göstergesi gözlendi (istismar edilmedi).', fix: 'Varsayılan hesapları kaldırın/kilitleyin; ilk açılışta güçlü parola zorunlu kılın.' },
+    { desc: 'Indicator that default/weak credentials are accepted.', how: 'A small, throwaway default pair was tried; a success indicator was observed (not exploited).', fix: 'Remove/disable default accounts; force a strong password at first setup.' }),
+  no_lockout: D(
+    { desc: 'Ardışık başarısız girişte kilitleme/kısıtlama gözlenmedi.', how: 'Throwaway bir kullanıcıyla düşük hacimli başarısız giriş denendi; kilitleme/gecikme gözlenmedi (gerçek hesap kilitlenmedi).', fix: 'Hesap+IP bazlı kademeli gecikme/kilitleme ve CAPTCHA ekleyin.' },
+    { desc: 'No lockout/throttling observed after repeated failed logins.', how: 'Low-volume failed logins with a throwaway user; no lockout/delay observed (no real account locked).', fix: 'Add per-account+IP progressive delay/lockout and CAPTCHA.' }),
+  weak_pw_policy: D(
+    { desc: 'Zayıf parola politikası göstergesi (kısa/yaygın parola kabul).', how: 'Kayıt/parola akışında politika sinyalleri gözlendi (gerçek hesap oluşturulmadı).', fix: 'Minimum uzunluk + yaygın-parola engeli (NIST 800-63B) uygulayın.' },
+    { desc: 'Weak password-policy indicator (short/common passwords accepted).', how: 'Policy signals observed in the registration/password flow (no real account created).', fix: 'Enforce minimum length + common-password blocklist (NIST 800-63B).' }),
+  weak_pw_reset: D(
+    { desc: 'Parola sıfırlama akışında zayıflık göstergesi (kullanıcı ifşası / tahmin edilebilir token).', how: 'Sıfırlama akışı GET/gözlem ile incelendi; gerçek sıfırlama e-postası tetiklenmedi.', fix: 'Tek-tip yanıt + yüksek-entropili, kısa ömürlü, tek-kullanımlık token kullanın.' },
+    { desc: 'Weakness indicator in password-reset (user disclosure / guessable token).', how: 'Reset flow inspected via GET/observation; no real reset email triggered.', fix: 'Uniform responses + high-entropy, short-lived, single-use tokens.' }),
+  host_header: D(
+    { desc: 'Host başlığı yanıta/mantığa yansıyor göstergesi.', how: 'Alternatif Host başlığıyla tek güvenli istek gönderildi; yansıma gözlendi (zehirleme yapılmadı).', fix: 'Host’u allowlist ile doğrulayın; mutlak URL üretiminde güvenilen sabit alan kullanın.' },
+    { desc: 'Indicator that the Host header reflects into responses/logic.', how: 'A single safe request with an alternate Host header; reflection observed (no poisoning).', fix: 'Validate Host against an allowlist; use a trusted fixed domain for absolute URLs.' }),
+  http_method: D(
+    { desc: 'Gereksiz/tehlikeli HTTP metodu (TRACE/PUT/DELETE) açık göstergesi.', how: 'OPTIONS ile izin verilen metodlar listelendi / TRACE gözlendi (durum-değiştiren metod ÇAĞRILMADI).', fix: 'Yalnız gerekli metodlara izin verin; TRACE ve kullanılmayan WebDAV metodlarını kapatın.' },
+    { desc: 'Indicator of unnecessary/dangerous HTTP methods (TRACE/PUT/DELETE) enabled.', how: 'Allowed methods enumerated via OPTIONS / TRACE observed (no state-changing method called).', fix: 'Allow only required methods; disable TRACE and unused WebDAV methods.' }),
+  web_cache: D(
+    { desc: 'Hassas yanıt önbelleğe alınabiliyor veya unkeyed başlık yansıması var.', how: 'Cache-Control/response gözlendi; unkeyed başlık yansıması için tek güvenli prob (zehirleme yapılmadı).', fix: 'Hassas yanıtlara `Cache-Control: no-store`; cache anahtarına ilgili başlıkları dahil edin.' },
+    { desc: 'Sensitive responses are cacheable or there is unkeyed header reflection.', how: 'Cache-Control/response observed; a single safe probe for unkeyed reflection (no poisoning).', fix: 'Set `Cache-Control: no-store` on sensitive responses; include relevant headers in the cache key.' }),
+  comment_leak: D(
+    { desc: 'HTML/JS yorum veya metadata’sında iç bilgi (TODO/iç IP/yol) sızıntısı.', how: 'Sayfa/JS yorumları pasif tarandı; iç bilgi kalıpları gözlendi.', fix: 'Üretim çıktısından yorumları/metadata’yı temizleyin (minify + comment strip).' },
+    { desc: 'Internal info (TODO/internal IP/path) leaks via HTML/JS comments or metadata.', how: 'Page/JS comments passively scanned; internal-info patterns observed.', fix: 'Strip comments/metadata from production output (minify + comment strip).' }),
+  mixed_content: D(
+    { desc: 'HTTPS sayfada HTTP üzerinden kaynak yükleniyor (karışık içerik).', how: 'HTTPS sayfanın kaynakları pasif incelendi; `http://` alt-kaynak gözlendi.', fix: 'Tüm alt-kaynakları HTTPS’e taşıyın; `upgrade-insecure-requests` CSP direktifi ekleyin.' },
+    { desc: 'Resources loaded over HTTP on an HTTPS page (mixed content).', how: 'The HTTPS page resources inspected passively; an `http://` sub-resource observed.', fix: 'Move all sub-resources to HTTPS; add the `upgrade-insecure-requests` CSP directive.' }),
+  cloud_exposure: D(
+    { desc: 'Referans verilen public cloud storage (S3/GCS/Azure) listelenebilir görünüyor.', how: 'Kaynaklardaki bucket referansına güvenli GET; dizin listeleme yanıtı gözlendi.', fix: 'Bucket liste iznini kapatın; nesneleri private yapın; gereksiz public erişimi kaldırın.' },
+    { desc: 'Referenced public cloud storage (S3/GCS/Azure) appears listable.', how: 'Safe GET to the referenced bucket; a directory-listing response observed.', fix: 'Disable bucket listing; make objects private; remove unnecessary public access.' }),
+  caa: D(
+    { desc: 'CAA kaydı yok; herhangi bir CA sertifika verebilir.', how: 'Org-alanın CAA kaydı sorgulandı; bulunamadı.', fix: 'Yetkili CA’ları `CAA` kaydıyla kısıtlayın (ör. `0 issue "letsencrypt.org"`).' },
+    { desc: 'No CAA record; any CA can issue certificates.', how: 'The org-domain CAA record queried; not found.', fix: 'Restrict authorized CAs with a `CAA` record (e.g. `0 issue "letsencrypt.org"`).' }),
+  mta_sts: D(
+    { desc: 'MTA-STS zorlayıcı değil (enforce yok); SMTP downgrade’e açık.', how: '`_mta-sts` TXT + politika dosyası (tek güvenli GET) okundu; mode enforce değil.', fix: 'MTA-STS politikasını `mode: enforce` yapın; TLS-RPT ile raporlamayı açın.' },
+    { desc: 'MTA-STS not enforcing; open to SMTP downgrade.', how: '`_mta-sts` TXT + policy file (single safe GET) read; mode not enforce.', fix: 'Set the MTA-STS policy to `mode: enforce`; enable reporting via TLS-RPT.' }),
+  client_storage: D(
+    { desc: 'Hassas veri (token/oturum) localStorage/sessionStorage’a yazılıyor.', how: 'İstemci JS statik olarak tarandı; `storage.setItem` ile hassas anahtar yazımı gözlendi (değer REDAKTE).', fix: 'Oturum token’ını localStorage yerine `HttpOnly + Secure` çerezde tutun.' },
+    { desc: 'Sensitive data (token/session) written to localStorage/sessionStorage.', how: 'Client JS scanned statically; a sensitive-key `storage.setItem` write observed (value redacted).', fix: 'Keep the session token in an `HttpOnly + Secure` cookie instead of localStorage.' }),
+  postmessage: D(
+    { desc: 'postMessage mesaj işleyicisinde origin doğrulaması eksik göstergesi.', how: 'İstemci JS statik tarandı; origin kontrolü olmayan `message` handler gözlendi.', fix: '`message` işleyicilerinde `event.origin`’i katı allowlist ile doğrulayın.' },
+    { desc: 'Indicator of missing origin validation in a postMessage handler.', how: 'Client JS scanned statically; a `message` handler without origin checks observed.', fix: 'Validate `event.origin` against a strict allowlist in `message` handlers.' }),
+  sri: D(
+    { desc: 'Harici script Subresource Integrity (SRI) olmadan yükleniyor.', how: 'Sayfadaki harici `<script>` etiketleri incelendi; `integrity` özniteliği gözlenmedi.', fix: 'Harici script/stil için `integrity` + `crossorigin` (SRI) hash’i ekleyin.' },
+    { desc: 'External script loaded without Subresource Integrity (SRI).', how: 'External `<script>` tags inspected; no `integrity` attribute observed.', fix: 'Add `integrity` + `crossorigin` (SRI) hashes to external scripts/styles.' }),
+  tabnabbing: D(
+    { desc: '`target=_blank` bağlantıda `rel=noopener` yok (reverse tabnabbing).', how: 'Dış bağlantılar statik incelendi; `noopener/noreferrer` olmayan `_blank` gözlendi.', fix: '`target=_blank` bağlantılara `rel="noopener noreferrer"` ekleyin.' },
+    { desc: '`target=_blank` link lacks `rel=noopener` (reverse tabnabbing).', how: 'External links inspected statically; a `_blank` without `noopener/noreferrer` observed.', fix: 'Add `rel="noopener noreferrer"` to `target=_blank` links.' }),
+  excessive_data: D(
+    { desc: 'API yanıtı gerekenden fazla/hassas alan (parola-hash/rol/iç-ID) döndürüyor.', how: 'Gerçek API yanıtında hassas/aşırı alan adı gözlendi (değer REDAKTE).', fix: 'Yanıtları alan-allowlist (response DTO) ile sınırlayın; hassas alanları hiç göndermeyin.' },
+    { desc: 'API response returns excessive/sensitive fields (password-hash/role/internal-id).', how: 'A sensitive/excessive field name observed in a real API response (value redacted).', fix: 'Constrain responses with a field allowlist (response DTO); never send sensitive fields.' }),
+  rate_limit: D(
+    { desc: 'API ucunda rate-limit/kota gözlenmedi.', how: 'Bir API ucuna MODEST burst (DoS değil) sonrası 429/rate-limit başlığı gözlenmedi; hedef yorulmadı.', fix: 'Hesap+IP+endpoint bazlı rate-limit + kota; ağır uçlara maliyet-tabanlı sınır ekleyin.' },
+    { desc: 'No rate-limit/quota observed on the API endpoint.', how: 'After a MODEST burst (not DoS) no 429/rate-limit header observed; target not stressed.', fix: 'Add per-account+IP+endpoint rate-limit + quota; cost-based limits on heavy endpoints.' }),
+  shadow_api: D(
+    { desc: 'Eski/gölge API sürümleri (v1/v2) aynı anda erişilebilir.', how: 'Sürüm uçlarına güvenli GET; SPA-shell olmayan, JSON dönen birden fazla sürüm gözlendi.', fix: 'Kullanılmayan/eski API sürümlerini kapatın veya kaldırın; sürüm envanteri tutun.' },
+    { desc: 'Old/shadow API versions (v1/v2) reachable simultaneously.', how: 'Safe GET to version endpoints; multiple non-shell JSON versions observed.', fix: 'Disable/remove unused/old API versions; maintain a version inventory.' }),
+  graphql_introspection: D(
+    { desc: 'GraphQL ucunda introspection açık; tüm şema ifşa oluyor.', how: 'GraphQL ucuna read-only introspection sorgusu; şema döndü (veri değiştirilmedi).', fix: 'Üretimde introspection’ı kapatın; sorgu derinliği/karmaşıklık limiti ekleyin.' },
+    { desc: 'GraphQL introspection is open; the full schema is exposed.', how: 'A read-only introspection query to the GraphQL endpoint returned the schema (no data changed).', fix: 'Disable introspection in production; add query depth/complexity limits.' }),
 };
 export function findingDetail(type: FindingType, locale: 'tr' | 'en'): Detail {
   return locale === 'tr' ? FINDING_DETAIL[type].tr : FINDING_DETAIL[type].en;
