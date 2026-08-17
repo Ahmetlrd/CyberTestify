@@ -13,6 +13,7 @@ import {
 } from './authenticatedChecks.js';
 import { collectPrivilegeEscalationEvidence, collectMultiStepBusinessLogicEvidence } from './authAgentChecks.js';
 import { collectJwtAnalysis, collectLoginBypassEvidence } from './authExtraChecks.js';
+import { collectJsAnalysisEvidence } from './jsAnalysis.js';
 import {
   buildActiveCheckReport, buildInjectionReport, buildIdorReport,
   RISK_WORD, levelRank, extractLevel, headlineOf, detailOnly, type Level,
@@ -137,6 +138,28 @@ function toAuthenticatedContext(md: string): string {
     .replace(/kimlik doğrulaması olmadan/g, 'kimlik-doğrulamalı oturumla');
 }
 
+// (Client-Side / JS Analizi) PASİF JS bundle analizi — 6. pakete özel bölüm. Sütun 0: public-by-design
+// anahtarlar bulgu değildir; sürüm okunamayan kütüphaneye CVE atanmaz.
+const JS_ANALYSIS_CFG = {
+  title: 'Client-Side / JS Analizi',
+  whatChecked: [
+    'Sayfanın yüklediği JS bundle’ları (script src’leri + inline) çekilip **statik** analiz edildi — aktif istismar YOK, yalnız indir + oku.',
+    '**A) Sır taraması:** özel anahtar, AWS/GCP kimliği, Stripe **sk_live_**, GitHub/GitLab/Slack token, DB bağlantı dizesi gibi GERÇEK sırlar arandı (değerler REDAKTE).',
+    '**Public-by-design ayrımı:** Firebase apiKey, GTM/GA ölçüm ID, Google Maps browser key, Stripe **pk_**, reCAPTCHA site key tasarım gereği herkese açıktır → "ifşa/sır" SAYILMAZ, yalnız bilgilendirici listelenir.',
+    '**B) Source-map ifşası:** `//# sourceMappingURL` yorumları + `.js.map` adayları denendi; erişilebilir `.map` → orijinal kaynak kod/ağaç sızıntısı.',
+    '**C) Bilinen-zafiyetli kütüphane:** yüklenen kütüphaneler + SÜRÜMLERİ tespit edilip bilinen CVE’lerle MUHAFAZAKÂR eşlendi; sürüm güvenle okunamazsa CVE eşleme YAPILMADI ("yama teyidi gerekir" dili; "istismar edilebilir" denmez).',
+  ],
+  confidenceNote: 'Tümü pasif/statiktir; kütüphane bulguları sürüm-tabanlı göstergedir (dağıtımınız yamalı/backport’lu olabilir — teyit önerilir).',
+  fixTitle: 'Client-Side / JS Güvenliği',
+  fixFound: [
+    'İstemci JS’ine GERÇEK sır koymayın; tespit edilenleri **derhal döndürün/geçersizleştirin** ve sunucu-taraflı proxy + gizli-yönetimi (secret manager) kullanın.',
+    'Üretimde source-map yayımlamayın (veya erişimi kısıtlayın); public dizinden `.map` dosyalarını kaldırın.',
+    'Zafiyetli kütüphaneleri güncel/yamalı sürüme çıkarın; SRI + bağımlılık taraması (retire.js/Dependabot) ekleyin.',
+  ],
+  fixClean: ['İstemci JS’inde sır bulundurmayın; source-map’leri üretimde yayımlamayın; kütüphaneleri güncel tutup bağımlılık taraması uygulayın (proaktif).'],
+  cleanGenel: 'Çekilen JS bundle’larında gerçek sır, erişilebilir source-map veya bilinen-zafiyetli (sürümü okunabilen) kütüphane gözlemlenmedi. Public-by-design anahtarlar (varsa) yukarıda bilgilendirici olarak ayrılmıştır.',
+};
+
 type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
@@ -168,6 +191,10 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   runs.push({ title: 'JWT / Token Güvenliği', conf: 'Yüksek', rep: jwtEv ? buildActiveCheckReport(jwtEv, JWT_CFG) : null, inputs: jwtEv?.inputsFound ?? 0, probes: jwtEv?.probesSent ?? 0, fc: jwtEv?.findings.length ?? 0 });
   const loginBypassEv = await collectLoginBypassEvidence(host, session.loginUrl).catch(() => null);
   runs.push({ title: 'Giriş Baypası (SQLi Göstergesi)', conf: 'Yüksek', rep: loginBypassEv ? buildActiveCheckReport(loginBypassEv, LOGIN_BYPASS_CFG) : null, inputs: loginBypassEv?.inputsFound ?? 0, probes: loginBypassEv?.probesSent ?? 0, fc: loginBypassEv?.findings.length ?? 0 });
+
+  // (YENİ — 6. pakete özel) Client-Side / JS Analizi: pasif JS bundle sır + source-map + zafiyetli-kütüphane.
+  const jsEv = await collectJsAnalysisEvidence(host).catch(() => null);
+  runs.push({ title: 'Client-Side / JS Analizi', conf: 'Yüksek', rep: jsEv ? buildActiveCheckReport(jsEv, JS_ANALYSIS_CFG) : null, inputs: jsEv?.inputsFound ?? 0, probes: jsEv?.probesSent ?? 0, fc: jsEv?.findings.length ?? 0 });
 
   // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
   if (runs.every((r) => !r.rep)) return unscannableReport(host, 'kimlik-doğrulamalı kontroller');
