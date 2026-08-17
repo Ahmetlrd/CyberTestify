@@ -205,8 +205,8 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         {tr ? 'Yakında' : 'Soon'}
                       </span>
                     ) : flagship ? (
-                      <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
-                        ★ {tr ? 'Amiral Gemisi' : 'Flagship'}
+                      <span className="absolute -top-3 left-6 whitespace-nowrap rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
+                        ★ {tr ? 'En Kapsamlı Paket' : 'Most Complete'}
                       </span>
                     ) : popular ? (
                       <span className="absolute -top-3 left-6 rounded-pill bg-accent px-3 py-1 text-xs font-bold text-white">
