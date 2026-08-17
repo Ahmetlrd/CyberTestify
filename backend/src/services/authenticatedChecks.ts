@@ -16,9 +16,9 @@ import { createHash } from 'node:crypto';
 import { cachedOriginUrl } from './surfaceEvidence.js';
 import { ProbeCtx, type ActiveCheckEvidence, type VFinding } from './activeVerifyEvidence.js';
 import { type AuthSession, applyAuthHeaders } from './authSession.js';
+import { isSessionCookieName, isAnalyticsCookie } from './cookieClassify.js';
 
 const md5 = (s: string) => createHash('md5').update(s).digest('hex');
-const SESSION_COOKIE_RE = /(token|jwt|session|sid|auth|_session|connect\.sid|phpsessid|jsessionid|asp\.net)/i;
 const LOGIN_PAGE_RE = /(login|sign\s?in|giriş yap|oturum aç|password|şifre|kullanıcı adı|unauthorized|forbidden|access denied)/i;
 
 function abs(host: string, p: string): string | null {
@@ -32,9 +32,13 @@ export function collectCookieFlagsEvidence(session: AuthSession): ActiveCheckEvi
   const findings: VFinding[] = [];
   const notes: string[] = [];
   const flags = session.cookieFlags ?? [];
-  const authish = flags.filter((f) => SESSION_COOKIE_RE.test(f.name));
-  const target = authish.length ? authish : flags;
-  for (const f of target) {
+  // (SÜTUN 0 — ÇEREZ SINIFLAMA) YALNIZ gerçek SUNUCU oturum çerezleri değerlendirilir. Client-side
+  // analitik çerezler (_ga/_gid/_fbp/_clck …) "oturum çerezi" DEĞİLdir ve HttpOnly bunlarda
+  // imkânsızdır → asla "HttpOnly eksik" bulgusu üretilmez. ESKİ HATA: gerçek oturum çerezi
+  // yoksa TÜM çerezlere düşülüp analitikler "Oturum çerezi HttpOnly eksik" diye işaretleniyordu.
+  const sessionCookies = flags.filter((f) => isSessionCookieName(f.name));
+  const analyticsSeen = flags.filter((f) => isAnalyticsCookie(f.name)).length;
+  for (const f of sessionCookies) {
     const missing: string[] = [];
     if (!f.secure) missing.push('Secure');
     if (!f.httpOnly) missing.push('HttpOnly');
@@ -42,14 +46,20 @@ export function collectCookieFlagsEvidence(session: AuthSession): ActiveCheckEvi
     if (missing.length) {
       findings.push({
         check: 'cookie_flags', inputPoint: `cookie:${f.name}`, vulnerable: true,
-        technique: 'Set-Cookie güvenlik bayrağı analizi',
+        technique: 'oturum çerezi güvenlik bayrağı analizi',
         evidence: `Oturum çerezi \`${f.name}\` şu güvenlik bayraklarından yoksun: ${missing.join(', ')}. (HttpOnly yoksa XSS ile çalınabilir; Secure yoksa düz HTTP'de sızabilir; SameSite yoksa CSRF riski.)`,
         confidence: 'high', severity: missing.includes('HttpOnly') ? 'medium' : 'low', sideEffectRisk: 'none',
       });
     }
   }
-  if (!flags.length) notes.push('Oturum çerez-tabanlı değil (bearer/token ile taşınıyor) — Set-Cookie güvenlik bayrağı analizi bu hedef için **kapsam dışıdır**.');
-  return { ok: true, pagesScanned: 1, inputsFound: target.length, probesSent: 0, findings, stopped: null, notes };
+  if (!sessionCookies.length) {
+    notes.push(
+      analyticsSeen
+        ? `Sunucu-taraflı oturum çerezi gözlemlenmedi; oturum bearer/token ile taşınıyor. Gözlenen ${analyticsSeen} çerez analitik/3rd-party (client-side JS) çerezidir — bunlar oturum çerezi değildir ve HttpOnly değerlendirmesine tabi tutulamaz. Oturum çerezi güvenlik bayrağı analizi bu hedef için **kapsam dışıdır**.`
+        : 'Sunucu-taraflı oturum çerezi gözlemlenmedi (oturum bearer/token ile taşınıyor) — Set-Cookie güvenlik bayrağı analizi bu hedef için **kapsam dışıdır**.',
+    );
+  }
+  return { ok: true, pagesScanned: 1, inputsFound: sessionCookies.length, probesSent: 0, findings, stopped: null, notes };
 }
 
 // ======================================================================================
@@ -59,7 +69,7 @@ export async function collectSessionFixationEvidence(host: string, session: Auth
   const notes: string[] = [];
   const findings: VFinding[] = [];
   const postCookies = (session.cookie ?? '').split(';').map((s) => s.trim()).filter(Boolean);
-  const postAuth = postCookies.map((c) => ({ name: c.split('=')[0], value: c.split('=').slice(1).join('=') })).filter((c) => SESSION_COOKIE_RE.test(c.name));
+  const postAuth = postCookies.map((c) => ({ name: c.split('=')[0], value: c.split('=').slice(1).join('=') })).filter((c) => isSessionCookieName(c.name));
   if (!postAuth.length) {
     notes.push('Oturum çerez-tabanlı değil (bearer/token) — session fixation (çerez yenileme) analizi bu hedef için **kapsam dışıdır**.');
     return { ok: true, pagesScanned: 1, inputsFound: 0, probesSent: 0, findings, stopped: null, notes };
@@ -73,7 +83,7 @@ export async function collectSessionFixationEvidence(host: string, session: Auth
     clearTimeout(t); probes++;
     for (const line of ((res.headers as any).getSetCookie?.() ?? []) as string[]) {
       const nv = line.split(';')[0]; const name = nv.split('=')[0].trim();
-      if (SESSION_COOKIE_RE.test(name)) preValues.set(name, nv.split('=').slice(1).join('='));
+      if (isSessionCookieName(name)) preValues.set(name, nv.split('=').slice(1).join('='));
     }
   } catch { /* ağ hatası -> aşağıda kapsam dışı */ }
   const compared = postAuth.filter((c) => preValues.has(c.name));
@@ -114,17 +124,32 @@ export async function collectLogoutEvidence(host: string, session: AuthSession):
   const ctx = new ProbeCtx();
   ctx.authHeaders = applyAuthHeaders({}, session);
 
-  // 1) auth'la 200 dönen bir korumalı uç bul (whoami-benzeri)
+  // (SÜTUN 0 — ENDPOINT PROVENANCE + SPA CATCH-ALL) Ana sayfa (shell) hash'i: WHOAMI_PATHS TAHMİN
+  // listesidir. Bir yol SPA catch-all 200'ü (gövde = index.html shell, ayırt edici DEĞİL) dönüyorsa
+  // o "gerçek endpoint" DEĞİLdir → bulguya KAYNAK olamaz. Böylece bu hedefte OLMAYAN bir uç noktaya
+  // (ör. eğitim-verisi /rest/user/whoami) atıfta bulunan uydurma "logout geçersizleştirme" bulgusu üretilmez.
+  const home = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
+  const shellHash = home && home.status === 200 ? md5(home.text) : '';
+  const isDistinctiveAuthed = (r: { status: number; text: string } | null): boolean => {
+    if (!r || !looksAuthed(r.status, r.text)) return false;
+    const body = r.text ?? '';
+    const isJson = /^\s*[[{]/.test(body.trim());
+    const isShell = !!shellHash && md5(body) === shellHash; // SPA shell -> gerçekte gözlemlenen uç değil
+    const isLoginish = LOGIN_PAGE_RE.test(body.slice(0, 800)) && !isJson;
+    return !isShell && !isLoginish; // yalnız bu hedefte GERÇEKTEN ayırt edici yanıt veren uç
+  };
+
+  // 1) auth'la 200 dönen, AYIRT EDİCİ (SPA shell olmayan) bir korumalı uç bul (whoami-benzeri)
   let protectedUrl: string | null = null;
   for (const p of WHOAMI_PATHS) {
     if (ctx.stopped) break;
     const u = abs(host, p); if (!u) continue;
     const r = await ctx.fetchOnce(u);
-    if (r && looksAuthed(r.status, r.text)) { protectedUrl = u; break; }
+    if (isDistinctiveAuthed(r)) { protectedUrl = u; break; }
   }
   if (!protectedUrl) {
     if (ctx.stopped) notes.push(ctx.stopped);
-    notes.push('Oturumla 200 dönen bir korumalı doğrulama uç noktası (whoami/profil) bulunamadı — logout geçersizleştirme testi bu hedef için **kapsam dışıdır**.');
+    notes.push('Oturumla 200 dönen, AYIRT EDİCİ (SPA catch-all shell olmayan) bir korumalı doğrulama uç noktası (whoami/profil) bu hedefte gözlemlenmedi — logout geçersizleştirme testi bu hedef için **kapsam dışıdır**.');
     return { ok: true, pagesScanned: 1, inputsFound: 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
   }
 
@@ -142,9 +167,9 @@ export async function collectLogoutEvidence(host: string, session: AuthSession):
     return { ok: true, pagesScanned: 1, inputsFound: 1, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
   }
 
-  // 3) logout SONRASI aynı token ile korumalı kaynağa TEKRAR eriş — hâlâ 200 ise bulgu
+  // 3) logout SONRASI aynı token ile korumalı kaynağa TEKRAR eriş — hâlâ AYIRT EDİCİ 200 ise bulgu
   const after = await ctx.fetchOnce(protectedUrl);
-  if (after && looksAuthed(after.status, after.text)) {
+  if (isDistinctiveAuthed(after)) {
     findings.push({
       check: 'logout_invalidation', inputPoint: new URL(protectedUrl).pathname, vulnerable: true,
       technique: 'logout sonrası token yeniden kullanımı',

@@ -18,6 +18,7 @@ import { resolveOrigin, cachedOriginUrl } from './surfaceEvidence.js';
 import { consumeTestCredential, type TestCredentialInput } from './testCredentials.js';
 import { sendAuthLoginFailed } from './mailer.js';
 import { type AuthSession, type CookieFlag, applyAuthHeaders, parseSetCookie } from './authSession.js';
+import { isAnalyticsCookie } from './cookieClassify.js';
 import { logScanStep } from './scanLogger.js';
 import { prisma } from '../db.js';
 
@@ -259,7 +260,12 @@ async function tryFormLogin(host: string, creds: TestCredentialInput): Promise<F
         const bearer = await extractBrowserToken(page);
         const cookies = await page.cookies();
         const authCookies = cookies.filter((c) => AUTH_COOKIE_RE.test(c.name)).map((c) => `${c.name}=${c.value}`);
-        const cookieFlags: CookieFlag[] = cookies.map((c) => ({ name: c.name, secure: !!c.secure, httpOnly: !!c.httpOnly, sameSite: (c as any).sameSite ?? null }));
+        // (SÜTUN 0 — ÇEREZ SINIFLAMA) page.cookies() TÜM tarayıcı çerez kavanozunu döndürür (analitik
+        // _ga/_fbp/_clck dahil, client-side JS yazdı). Analitik çerezleri cookieFlags'e KOYMA — oturum
+        // çerezi değildir, HttpOnly imkânsızdır; downstream "Oturum çerezi HttpOnly eksik" halüsinasyonunu keser.
+        const cookieFlags: CookieFlag[] = cookies
+          .filter((c) => !isAnalyticsCookie(c.name))
+          .map((c) => ({ name: c.name, secure: !!c.secure, httpOnly: !!c.httpOnly, sameSite: (c as any).sameSite ?? null }));
         // (KRİTİK) Login GERÇEKTEN başarılı mı? Cookie varlığı YETMEZ — klasik app'ler (JSP/PHP) JSESSIONID'yi
         // login'den ÖNCE de set eder; yanlış şifre de cookie'li "başarı" görünürdü. Sayfa durumundan doğrula:
         //  - başarısızlık metni (login failed/invalid/hatalı) VARSA -> başarısız

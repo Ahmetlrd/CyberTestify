@@ -415,16 +415,44 @@ async function checkRobotsSitemap(host: string): Promise<PassiveCheckResult> {
   }
 }
 
+// (SÜTUN 0 — "VAR" ≠ "GEÇERLİ/DOLU") Parse edilebilir ama BOŞ/default içerik ([] , {apps:[]},
+// default template) "mevcut ve geçerli" diye sunulmamalı → fonksiyonel gerçek kayıt var mı bak.
+function assetContentPopulated(id: string, parsed: unknown): boolean {
+  if (id === 'assetlinks') {
+    // Android assetlinks: dolu dizi + en az bir gerçek statement (relation + target.package_name/sha256).
+    if (!Array.isArray(parsed) || parsed.length === 0) return false;
+    return parsed.some((e: any) =>
+      e && typeof e === 'object' &&
+      (e.target?.package_name ||
+        (Array.isArray(e.target?.sha256_cert_fingerprints) && e.target.sha256_cert_fingerprints.length > 0)));
+  }
+  // apple-app-site-association: applinks/webcredentials/appclips'ten en az biri DOLU olmalı.
+  if (parsed && typeof parsed === 'object') {
+    const o = parsed as Record<string, any>;
+    const al = o.applinks;
+    const alPop = !!al && ((Array.isArray(al.details) && al.details.length > 0) || (Array.isArray(al.apps) && al.apps.length > 0));
+    const wcPop = Array.isArray(o.webcredentials?.apps) && o.webcredentials.apps.length > 0;
+    const acPop = Array.isArray(o.appclips?.apps) && o.appclips.apps.length > 0;
+    return !!(alPop || wcPop || acPop);
+  }
+  return false;
+}
+
 async function jsonAssetCheck(host: string, path: string, id: string, title: string): Promise<PassiveCheckResult> {
   try {
     const r = await safeGet(`https://${host}${path}`, host);
     if (!r.ok || !r.text.trim()) return { id, title, status: 'absent', summary: `${path} bulunamadı.` };
+    let parsed: unknown;
     try {
-      JSON.parse(r.text);
-      return { id, title, status: 'present', summary: `${path} mevcut ve geçerli JSON.`, details: { location: path } };
+      parsed = JSON.parse(r.text);
     } catch {
       return { id, title, status: 'misconfigured', summary: `${path} mevcut ama geçerli JSON değil.`, details: { location: path } };
     }
+    // "var" ≠ "geçerli/dolu": boş/default içerik fonksiyonel değildir.
+    if (!assetContentPopulated(id, parsed)) {
+      return { id, title, status: 'misconfigured', summary: `${path} var ama boş/default (fonksiyonel değil) — geçerli kayıt içermiyor.`, details: { location: path } };
+    }
+    return { id, title, status: 'present', summary: `${path} mevcut ve dolu/geçerli JSON.`, details: { location: path } };
   } catch (e) {
     return { id, title, status: 'error', summary: `Kontrol edilemedi: ${(e as Error).message}` };
   }

@@ -21,9 +21,9 @@ import type { AuthSession } from './authSession.js';
 
 const COOKIE_CFG = {
   title: 'Oturum Çerezi Bayrakları', whatChecked: [
-    'Login yanıtındaki `Set-Cookie` başlıkları toplandı (FAZ B oturum yakalama).',
+    'Login sonrası gözlemlenen çerezler arasından yalnızca gerçek **sunucu oturum çerezleri** değerlendirildi.',
     'Her oturum çerezi için **Secure / HttpOnly / SameSite** güvenlik bayrakları kontrol edildi.',
-    'Ağ isteği gönderilmedi — yalnız login yanıtı analiz edildi.',
+    'Analitik/3rd-party çerezler (_ga, _fbp, _clck vb.) oturum çerezi sayılmaz (HttpOnly bunlarda imkânsız) — değerlendirmeye alınmaz.',
   ],
   fixTitle: 'Çerez Güvenliği',
   fixFound: ['Oturum çerezlerine **Secure + HttpOnly + SameSite=Strict/Lax** bayraklarını ekleyin.', 'HttpOnly, çerezin JavaScript ile (XSS) okunmasını engeller; Secure, düz HTTP’de sızmasını önler; SameSite CSRF’i azaltır.'],

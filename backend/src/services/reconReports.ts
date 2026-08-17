@@ -355,8 +355,10 @@ function cveLevel(ev: CmsEvidence): Level {
   const hasHigh = ev.cves.some((c) => c.severity === 'HIGH' || c.score >= 7);
   const hasMed = ev.cves.some((c) => c.severity === 'MEDIUM' || c.score >= 4);
   if (hasCrit || hasHigh) return 'high';
-  if (hasMed || worst > 0) return 'medium-high';
+  // (SÜTUN 0 — TUTARLI RİSK) MEDIUM CVE = 'Orta' (yapay 'Orta-Yüksek' şişirmesi kaldırıldı).
+  if (hasMed) return 'medium';
   if (ev.cms && !ev.version) return 'medium'; // CMS var ama surum yok -> guncellik dogrulanamiyor
+  if (worst > 0) return 'low'; // yalnız düşük-skor CVE -> Düşük
   return 'low';
 }
 
@@ -470,10 +472,9 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
   const ranked = available.map((a) => a).sort((x, y) => levelRank(y.level) - levelRank(x.level));
   const baseWorst: Level = ranked.length ? ranked[0].level : 'low';
   const worstArea = ranked.length ? ranked[0] : areas[0];
-  // Birikimli risk (surface ile tutarli): en yuksek 'Orta-Yüksek' iken 2+ alan Orta+ ise -> Yüksek.
-  const mediumPlus = available.filter((a) => levelRank(a.level) >= 1).length;
-  const cumulative = baseWorst === 'medium-high' && mediumPlus >= 2;
-  const areaLevel: Level = cumulative ? 'high' : baseWorst;
+  // (SÜTUN 0 — TUTARLI RİSK) Birikimli şişirme KALDIRILDI (surface ile tutarlı): genel = en yüksek
+  // TEK alanın seviyesi. Gerçek 'Yüksek' yalnız kritik/yüksek CVE veya httpOnly'dan gelir.
+  const areaLevel: Level = baseWorst;
   // (HALÜSİNASYON GUARD) https_missing (Yüksek) 3 keşif ALANININ (subdomain/API/CMS) hiçbirine ait
   // DEĞİLDİR — ayrı, bağımsız kontroldür. Eğer genel seviyeyi yükselten etken buysa, "en yüksek risk
   // [alan] alanında" cümlesi TEMİZ bir alanı yüksek riskin kaynağıymış gibi göstermemeli.
@@ -487,9 +488,7 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
       ? `- **Genel risk seviyesi: Düşük** — keşif yüzeyiniz ${available.length} alanda incelendi${scannedNote}; devralınabilir alt domain, açık hassas API veya sürümü kapsayan bilinen yüksek CVE öne çıkmadı. Dışarıdan görünen yüzeyiniz şu an için dar ve kontrollü görünüyor.`
       : worstIsHttps
         ? `- **Genel risk seviyesi: Yüksek** — ${available.length} alan incelendi${scannedNote}; en yüksek risk **HTTPS/TLS yapılandırmasında** (HTTPS desteklenmiyor — şifresiz iletişim). Keşif alanlarının (alt domain, API, CMS) en yükseği **${worstArea.title}** (${RISK_WORD[worstArea.level]}); bu alanlarda öne çıkan ayrı bir risk yok.`
-        : cumulative
-          ? `- **Genel risk seviyesi: Yüksek** — ${available.length} alan incelendi${scannedNote}; birden fazla alan aynı anda risk taşıyor (en yükseği **${worstArea.title}** — ${worstArea.headline}).`
-          : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — ${available.length} alan incelendi${scannedNote}; en yüksek risk **${worstArea.title}** alanında (${worstArea.headline}).`,
+        : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — ${available.length} alan incelendi${scannedNote}; en yüksek risk **${worstArea.title}** alanında (${worstArea.headline}).`,
   );
   if (httpOnly) summary.push('- ⚠️ **HTTPS desteklenmiyor:** Hedef HTTPS (443) üzerinden yanıt vermedi; keşif http:// üzerinden yürütüldü. Şifresiz iletişim başlı başına ciddi bir bulgudur (aşağıda).');
   for (const a of areas) summary.push(a.dataUnavailable ? `- **${a.title}:** ⚠️ incelenemedi (veri kaynağına ulaşılamadı) — "temiz" anlamına gelmez` : `- **${a.title}:** ${RISK_WORD[a.level]} — ${a.headline}`);
@@ -504,8 +503,6 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
   const genelSentence =
     worstIsHttps
       ? `Keşif alanlarında (alt domain devralma, açık API, bilinen CVE) öne çıkan bir risk tespit edilmedi; genel değerlendirmeyi Yüksek'e taşıyan etken **şifresiz iletişimdir** (HTTPS desteklenmiyor — yukarıda). Aşağıda her alan ayrı ayrı raporlanmıştır.`
-      : cumulative
-      ? `Birden fazla keşif alanı aynı anda risk taşıyor (en yükseği **${worstArea.title}** — ${worstArea.headline}); birikimli risk nedeniyle genel değerlendirme Yüksek. Aşağıda her alan ayrı ayrı raporlanmıştır.`
       : worst === 'high'
         ? `En yüksek risk **${worstArea.title}** alanında (${worstArea.headline}) tespit edildi; öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`
         : worst === 'medium-high'
