@@ -481,6 +481,55 @@ function buildMasterTable(rows: Finding[], locale: 'tr' | 'en', unscannable = fa
 // 2.3 Detaylı Bulgular — her GERÇEK bulgu için blok: CT-N + başlık + şiddet + Durum + İŞ ETKİSİ +
 // Referans (CWE/OWASP). İş Etkisi/CWE deterministik eşlemeden (findingTaxonomy); eşleme yoksa blok
 // ATLANIR (UYDURMA YOK). Sadece GERÇEK raporlarda (örneklerin kendi İş Etkisi bölümleri zaten var).
+// (Faz 9 — SUNUM) Yönetim Kararı call-out: master COUNTS'tan türer (yeni veri/severity YOK).
+function buildManagementDecision(counts: Record<Sev, number>, locale: 'tr' | 'en'): string {
+  const hi = counts.critical + counts.high;
+  const title = locale === 'tr' ? 'Yönetim Kararı' : 'Management Decision';
+  let body: string;
+  if (hi > 0) body = locale === 'tr'
+    ? `Öncelikli ele alınması gereken <strong>${hi}</strong> yüksek/kritik seviyeli gösterge tespit edildi; bunlar için acil bir düzeltme planı önerilir. Orta/düşük göstergeler planlı iyileştirmeyle giderilebilir.`
+    : `<strong>${hi}</strong> high/critical indicator(s) requiring priority attention were found; an urgent remediation plan is recommended. Medium/low items can be addressed via planned improvement.`;
+  else if (counts.medium > 0) body = locale === 'tr'
+    ? 'Doğrulanmış kritik/yüksek bir bulgu <strong>öne çıkmadı</strong>; tespit edilen orta/düşük göstergeler planlı bir iyileştirme döngüsüyle giderilebilir.'
+    : 'No confirmed critical/high finding <strong>stood out</strong>; the medium/low indicators can be addressed in a planned improvement cycle.';
+  else body = locale === 'tr'
+    ? 'Bu taramada doğrulanmış kritik/yüksek/orta seviyeli bir gösterge <strong>öne çıkmadı</strong>. Sonuçlar hedefin yüzeyine göre değişir; düzenli tekrar önerilir.'
+    : 'No confirmed critical/high/medium indicator <strong>stood out</strong> in this scan. Results vary by target surface; periodic re-scanning is recommended.';
+  return `<div class="mgmt-box"><div class="mgmt-t">${hi > 0 ? '⚡ ' : ''}${title}</div><p>${body}</p></div>`;
+}
+
+// (Faz 9 — SUNUM) Statik/deterministik Metodoloji + Risk Derecelendirme Kriterleri tabloları (yeni veri YOK).
+function buildMethodologyTables(locale: 'tr' | 'en'): string {
+  const tr = locale === 'tr';
+  const mRows = (tr
+    ? [['Keşif', 'Hedefin dış yüzeyi, sayfaları ve (SPA ise) JS bundle\'ından gerçek uç/parametreler çıkarılır.'],
+       ['Otomatik tespit', 'Keşfedilen yüzeyde deterministik, güvenli (read-only) göstergeler aranır.'],
+       ['Manuel-deterministik doğrulama', 'Bulgular kod-tabanlı kurallarla doğrulanır; “kanıtla, istismar etme”.'],
+       ['Yetki & oturum', 'Kimlik-doğrulamalı pakette çerez/oturum/yetki ve login-sonrası yüzey incelenir.'],
+       ['Yapılandırma', 'Başlık, TLS, e-posta/DNS ve ifşa yapılandırmaları gözlemlenir.']]
+    : [['Discovery', 'The external surface, pages and (for SPAs) real endpoints/params from the JS bundle are extracted.'],
+       ['Automated detection', 'Deterministic, safe (read-only) indicators are sought on the discovered surface.'],
+       ['Manual-deterministic verification', 'Findings are verified with code-based rules; “prove, don\'t exploit”.'],
+       ['Authz & session', 'In the authenticated package, cookie/session/authorization and post-login surface are examined.'],
+       ['Configuration', 'Header, TLS, email/DNS and exposure configurations are observed.']]
+  ).map((r) => `<tr><td>${escapeHtml(r[0])}</td><td>${escapeHtml(r[1])}</td></tr>`).join('');
+  const rRows = (tr
+    ? [['critical', 'Kritik', 'Doğrudan/kolay istismar edilebilen, ciddi veri/erişim etkisi olan gösterge.'],
+       ['high', 'Yüksek', 'Öne çıkan, öncelikli giderilmesi gereken güçlü gösterge.'],
+       ['medium', 'Orta', 'Dikkat gerektiren, bağlama göre doğrulanması önerilen gösterge.'],
+       ['low', 'Düşük', 'Sertleştirme/olgunluk fırsatı; düşük öncelikli.']]
+    : [['critical', 'Critical', 'Directly/easily exploitable indicator with serious data/access impact.'],
+       ['high', 'High', 'Prominent, priority-to-fix strong indicator.'],
+       ['medium', 'Medium', 'Requires attention; context-dependent verification recommended.'],
+       ['low', 'Low', 'Hardening/maturity opportunity; low priority.']]
+  ).map((r) => `<tr><td><span class="sev-chip chip-${r[0]}">${escapeHtml(r[1])}</span></td><td>${escapeHtml(r[2])}</td></tr>`).join('');
+  return `<h3 class="pres-h3">${tr ? 'Metodoloji' : 'Methodology'}</h3>
+    <table class="pres-table"><thead><tr><th>${tr ? 'Aşama' : 'Stage'}</th><th>${tr ? 'Açıklama' : 'Description'}</th></tr></thead><tbody>${mRows}</tbody></table>
+    <h3 class="pres-h3">${tr ? 'Risk Derecelendirme Kriterleri' : 'Risk Rating Criteria'}</h3>
+    <table class="pres-table"><thead><tr><th>${tr ? 'Şiddet' : 'Severity'}</th><th>${tr ? 'Tanım' : 'Definition'}</th></tr></thead><tbody>${rRows}</tbody></table>
+    <p class="pres-note">${tr ? 'Şiddet yalnız bant etiketidir (sayısal CVSS skoru kullanılmaz); tüm bulgular “gösterge, doğrulama gerekir” çerçevesindedir.' : 'Severity is a band label only (no numeric CVSS score); all findings are framed as “indicator, verification required”.'}</p>`;
+}
+
 function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en'): string {
   const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const sorted = [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]);
@@ -496,13 +545,15 @@ function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en'): string {
     // Açıklama = türe-özgü tanım + (varsa) GERÇEK uç nokta. NASIL TESPİT = önce GERÇEK kanıt (taranan
     // veriden), yoksa türe-özgü zararsız-gösterge yedeği. ÇALIŞAN EXPLOIT YOK — yalnız gösterge.
     const howText = (f.evidence && f.evidence.length > 8) ? f.evidence : det.how;
-    blocks.push(`<div class="finding-block">
-      <h3 id="s-fb-${idx + 1}">CT-${idx + 1} · ${escapeHtml(f.title)}${f.endpoint ? ` <span class="mt-ep">— ${escapeHtml(f.endpoint)}</span>` : ''}</h3>
-      <div class="fb-meta"><span class="sev-badge badge-${f.sev}">${locale === 'tr' ? sm.tr : sm.en}</span> · ${L.state}</div>
-      <p><strong>${L.desc}:</strong> ${escapeHtml(det.desc)}${f.endpoint ? ` <strong>${L.ep}:</strong> <code>${escapeHtml(f.endpoint)}</code>` : ''}</p>
-      <p><strong>${L.how}:</strong> ${escapeHtml(howText)}</p>
-      <p><strong>${L.impact}:</strong> ${escapeHtml(info.impact)}</p>
-      <p><strong>${L.fix}:</strong> ${escapeHtml(det.fix)}</p>
+    const sevLabel = (locale === 'tr' ? sm.tr : sm.en).toLocaleUpperCase(locale === 'tr' ? 'tr' : 'en');
+    blocks.push(`<div class="finding-block fb-${f.sev}">
+      <h3 id="s-fb-${idx + 1}"><span class="sev-chip chip-${f.sev}">[${sevLabel}]</span> CT-${idx + 1} · ${escapeHtml(f.title)}</h3>
+      <div class="fb-meta">${L.state}</div>
+      ${f.endpoint ? `<p class="fb-row"><strong>${L.ep}:</strong> <code>${escapeHtml(f.endpoint)}</code></p>` : ''}
+      <p class="fb-row"><strong>${L.desc}:</strong> ${escapeHtml(det.desc)}</p>
+      <p class="fb-row"><strong>${L.how}:</strong> ${escapeHtml(howText)}</p>
+      <p class="fb-row"><strong>${L.impact}:</strong> ${escapeHtml(info.impact)}</p>
+      <div class="fix-box"><div class="fix-box-t">${locale === 'tr' ? 'Önerilen Düzeltme' : 'Recommended Fix'}</div><div class="fix-box-b">${escapeHtml(det.fix)}</div></div>
       <p class="finding-ref"><strong>${L.ref}:</strong> ${escapeHtml(info.cwe)} · OWASP ${escapeHtml(info.owasp)}</p>
     </div>`);
   });
@@ -868,9 +919,9 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     // h3'e indir ki TOC'ta ayrı numarasız satır olarak görünüp numaralandırmayı bozmasın.
     const extrasSub = extrasHtml.replace(/<h2\b/g, '<h3').replace(/<\/h2>/g, '</h3>');
     contentInner0 =
-      H2('s-summary', '1. Yönetici Özeti', '1. Executive Summary') + sampleNoticeHtml + assessBox + summaryBody +
+      H2('s-summary', '1. Yönetici Özeti', '1. Executive Summary') + sampleNoticeHtml + assessBox + (parsed ? buildManagementDecision(parsed.counts, loc) : '') + summaryBody +
       findingsSection +
-      H2('s-controls', `${cn}. Kontrol Özeti ve Metodoloji`, `${cn}. Controls & Methodology`) + detailBody +
+      H2('s-controls', `${cn}. Kontrol Özeti ve Metodoloji`, `${cn}. Controls & Methodology`) + detailBody + buildMethodologyTables(loc) +
       extrasSub + fixNum + glossNum;
   } else {
     // Yapısız gövde / örnek PDF: mevcut akış (assessBox + dağılım/master + gövde + AI + sözlük).
@@ -1025,6 +1076,25 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .finding-block .finding-ref { font-size: 10.5px; color: #35618a; }
   .badge-critical { background: #B3261E; } .badge-high { background: #D64545; }
   .badge-medium { background: #E0940E; } .badge-low { background: #9AA0A6; }
+  /* (Faz 9 — SUNUM) şiddet chip'i, düzeltme kutusu, yönetim kutusu, sunum tabloları — yalnız görsel */
+  .sev-chip { display: inline-block; color: #fff; padding: 1px 7px; border-radius: 4px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.03em; vertical-align: middle; margin-right: 6px; }
+  .chip-critical { background: #B3261E; } .chip-high { background: #D64545; }
+  .chip-medium { background: #E0940E; } .chip-low { background: #6B7280; }
+  .fb-critical { border-left-color: #B3261E !important; } .fb-high { border-left-color: #D64545 !important; }
+  .fb-medium { border-left-color: #E0940E !important; } .fb-low { border-left-color: #9AA0A6 !important; }
+  .finding-block .fb-row { margin: 4px 0; }
+  .fix-box { margin: 8px 0 6px; border: 1px solid #CFE6DE; border-left: 4px solid #1C6B60; background: #F1F8F5; border-radius: 6px; overflow: hidden; }
+  .fix-box-t { background: #1C6B60; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 3px 10px; text-transform: uppercase; }
+  .fix-box-b { padding: 7px 10px; font-size: 11px; color: #14403A; }
+  .mgmt-box { margin: 8px 0 16px; border: 1px solid #E6C88F; border-left: 4px solid #E0940E; background: #FEF8EC; border-radius: 8px; padding: 10px 14px; }
+  .mgmt-box .mgmt-t { font-size: 12px; font-weight: 800; color: #8A5A0B; margin-bottom: 3px; }
+  .mgmt-box p { margin: 0; font-size: 11.5px; color: #4a4033; line-height: 1.5; }
+  .pres-h3 { color: #123F3A; font-size: 12.5px; margin: 16px 0 6px; }
+  .pres-table { width: 100%; border-collapse: collapse; margin: 4px 0 8px; font-size: 11px; }
+  .pres-table th { background: #123F3A; color: #EEF5F3; text-align: left; padding: 5px 9px; font-size: 10px; font-weight: 700; }
+  .pres-table td { border: 1px solid #E1EAE7; padding: 5px 9px; vertical-align: top; color: #263c38; }
+  .pres-table td:first-child { white-space: nowrap; width: 150px; font-weight: 600; }
+  .pres-note { font-size: 10px; color: #5b6b67; font-style: italic; margin: 4px 0 0; }
 </style></head>
 <body>
   <div class="cover">
