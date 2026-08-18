@@ -21,6 +21,7 @@ import { collectInputHeaderEvidence, collectConfigExposureEvidence } from './con
 import { collectApiSecurityEvidence } from './apiSecurityChecks.js';
 import { collectEmailDnsEvidence } from './emailDnsChecks.js';
 import { collectTransportSecurityEvidence, collectSubdomainTakeoverEvidence } from './transportSecurityChecks.js';
+import { collectActiveIndicatorsEvidence } from './activeIndicators.js';
 import { suggestPricingForHost } from './pricingModel.js';
 import { logScanStep } from './scanLogger.js';
 import {
@@ -376,6 +377,26 @@ const TAKEOVER_CFG = {
   cleanGenel: 'Keşfedilen alt-alanlarda devralınabilir (dangling) CNAME + sahiplenilmemiş parmak-izi göstergesi bulunamadı.',
 };
 
+// (Faz 8) Authenticated Güvenli Aktif Göstergeler — Faz 6 modülü login-sonrası yüzeyde. Read-only.
+const AUTH_INDICATORS_CFG = {
+  title: 'Authenticated Güvenli Aktif Göstergeler (LFI/Redirect/HPP/SSTI)',
+  whatChecked: [
+    'Faz 6 güvenli aktif göstergeleri **login sonrası** (TEST oturumu) erişilen GET parametreleri + Faz 7 SPA-keşif/auth-kapılı uçlarda — hepsi read-only (veri yazma/yükleme/komut/time-based YOK).',
+    '**B1 LFI/path-traversal:** kademeli prob; yalnız dosya İMZASI=bulgu (Yüksek), içerik **REDAKTE**.',
+    '**B2 Open redirect:** zararsız kanarya (redirect TAKİP EDİLMEZ). **B3 HPP:** tekrarlı parametre (salt gözlem).',
+    '**B5 SSTI:** yalnız aritmetik `{{1234*3}}`→`3702` (kod/komut YOK).',
+    '**B4 boolean-SQLi** → Authenticated Enjeksiyon (SQLi/XSS) bölümünde; **B6 dosya yükleme** → konfig gözlemi (gerçek yükleme YOK). Çift-CT önlemek için çapraz-referans.',
+  ],
+  confidenceNote: 'Login-sonrası yüzey login-öncesinden farklıdır (paketin süper-set gerekçesi). "gösterge, doğrulama gerekir"; yalnız gözlemlenen parametrelerde. İyi-yapılandırılmış authenticated backend\'de temiz/az bulgu BEKLENEN sonuçtur.',
+  fixTitle: 'Authenticated Güvenli Aktif Göstergeler',
+  fixFound: [
+    'LFI: girdiyi dosya yoluna koymayın; allowlist + `basename` + kök-dizin hapsi. Open redirect: hedefleri sunucuda allowlist.',
+    'HPP: parametreleri tek-değere normalize edin. SSTI: girdiyi şablona interpolasyonla koymayın (logic-less + kaçış + sandbox).',
+  ],
+  fixClean: ['Login-sonrası parametrelerde dosya-yolu/şablon/yönlendirme hedefine doğrudan girdi konmuyor (proaktif).'],
+  cleanGenel: 'Login-sonrası erişilen parametrelerde LFI imzası, açık yönlendirme, HTTP parametre kirliliği veya SSTI göstergesi bulunamadı.',
+};
+
 type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
@@ -444,6 +465,8 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   runs.push({ title: 'Taşıma Katmanı, CORS & Güvenlik Başlığı Derinliği', conf: 'Orta', rep: tsEv ? buildActiveCheckReport(tsEv, TRANSPORT_CFG) : null, inputs: tsEv?.inputsFound ?? 0, probes: tsEv?.probesSent ?? 0, fc: tsEv?.findings.length ?? 0 });
   const stkEv = await collectSubdomainTakeoverEvidence(host).catch(() => null);
   runs.push({ title: 'Subdomain Takeover (Dangling DNS)', conf: 'Orta', rep: stkEv ? buildActiveCheckReport(stkEv, TAKEOVER_CFG) : null, inputs: stkEv?.inputsFound ?? 0, probes: stkEv?.probesSent ?? 0, fc: stkEv?.findings.length ?? 0 });
+  const aiEv = await collectActiveIndicatorsEvidence(host, session).catch(() => null);
+  runs.push({ title: 'Authenticated Güvenli Aktif Göstergeler (LFI/Redirect/HPP/SSTI)', conf: 'Orta', rep: aiEv ? buildActiveCheckReport(aiEv, AUTH_INDICATORS_CFG) : null, inputs: aiEv?.inputsFound ?? 0, probes: aiEv?.probesSent ?? 0, fc: aiEv?.findings.length ?? 0 });
 
   // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
   if (runs.every((r) => !r.rep)) return unscannableReport(host, 'kimlik-doğrulamalı kontroller');
