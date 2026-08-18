@@ -921,7 +921,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     contentInner0 =
       H2('s-summary', '1. Yönetici Özeti', '1. Executive Summary') + sampleNoticeHtml + assessBox + (parsed ? buildManagementDecision(parsed.counts, loc) : '') + summaryBody +
       findingsSection +
-      H2('s-controls', `${cn}. Kontrol Özeti ve Metodoloji`, `${cn}. Controls & Methodology`) + detailBody + buildMethodologyTables(loc) +
+      H2('s-controls', `${cn}. Kontrol Özeti ve Metodoloji`, `${cn}. Controls & Methodology`) + detailBody + (parsed ? buildMethodologyTables(loc) : '') +
       extrasSub + fixNum + glossNum;
   } else {
     // Yapısız gövde / örnek PDF: mevcut akış (assessBox + dağılım/master + gövde + AI + sözlük).
