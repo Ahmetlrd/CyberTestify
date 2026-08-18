@@ -5,16 +5,6 @@ type Flow = {
   scopeViolationTarget?: string | null;
 };
 
-function formatDuration(start?: string | null, end?: string | null): string {
-  if (!start || !end) return '—';
-  const ms = new Date(end).getTime() - new Date(start).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return '—';
-  const s = Math.round(ms / 1000);
-  const m = Math.floor(s / 60);
-  const rs = s % 60;
-  return m > 0 ? `${m} dk ${rs} sn` : `${rs} sn`;
-}
-
 /**
  * Kapsam Doğrulama Sertifikası — rakiplerde OLMAYAN, gerçek egress-kilidi/scope
  * audit verimizin doğal UI çıktısı. "İddia değil, ölçülebilir kanıt" güven sinyali.
@@ -46,8 +36,8 @@ export function ScopeCertificate({ hostname, flow }: { hostname: string; flow?: 
           <dd className="truncate text-sm font-semibold text-ink" title={hostname}>{hostname}</dd>
         </div>
         <div>
-          <dt className="text-xs text-ink-muted">Tarama süresi</dt>
-          <dd className="text-sm font-semibold text-ink">{formatDuration(flow?.startedAt, flow?.finishedAt)}</dd>
+          <dt className="text-xs text-ink-muted">Analiz yöntemi</dt>
+          <dd className="text-sm font-semibold text-emerald-600">Kanıt-tabanlı <span className="text-xs">· doğrulama ✓</span></dd>
         </div>
         <div>
           <dt className="text-xs text-ink-muted">Erişim denetimi</dt>
