@@ -216,7 +216,7 @@ export function InstantScan() {
                     bunları ancak <strong>aktif/kimlik-doğrulamalı</strong> testler ortaya çıkarır.
                   </p>
                   <div className="mt-3 flex flex-col items-stretch gap-2">
-                    <Link href={activeBuyHref} className="btn-primary justify-center">Aktif Doğrulama Paketi ile Derinleştir → ₺14.999</Link>
+                    <Link href={activeBuyHref} className="btn-primary justify-center"></Link>
                     <Link href="/tr/packages" className="text-center text-xs font-semibold text-accent-600 hover:underline">Tüm paketleri incele →</Link>
                   </div>
                 </div>
@@ -242,7 +242,7 @@ export function InstantScan() {
                     </p>
                     <div className="mt-3 flex flex-col items-stretch gap-2">
                       {highScore ? (
-                        <Link href={activeBuyHref} className="btn-primary justify-center">Aktif Doğrulama Paketi ile Derinleştir → ₺14.999</Link>
+                        <Link href={activeBuyHref} className="btn-primary justify-center">Aktif Doğrulama Paketi ile Derinleştir → ₺9.999</Link>
                       ) : (
                         <Link href={passiveBuyHref} className="btn-primary justify-center">Detaylı Raporu Aç (₺699)</Link>
                       )}

@@ -23,7 +23,9 @@ export type FindingType =
   | 'mixed_content' | 'cloud_exposure' | 'caa' | 'mta_sts' | 'client_storage' | 'postmessage'
   | 'sri' | 'tabnabbing' | 'excessive_data' | 'rate_limit' | 'shadow_api' | 'graphql_introspection'
   // (Faz 5) Taşıma katmanı & başlık derinliği
-  | 'csp_weak' | 'permissions_policy';
+  | 'csp_weak' | 'permissions_policy'
+  // (Faz 6) Güvenli aktif göstergeler (login'siz)
+  | 'lfi' | 'ssti' | 'hpp';
 
 type Entry = { tr: string; en: string; cwe: string; owasp: string };
 
@@ -223,6 +225,15 @@ export const FINDING_TAXONOMY: Record<FindingType, Entry> = {
   permissions_policy: { cwe: 'CWE-693', owasp: 'A05:2021 Security Misconfiguration',
     tr: 'Permissions-Policy yok; tarayıcı özellik erişimi (kamera/mikrofon/konum vb.) kısıtlanmıyor (bilgilendirici sertleştirme).',
     en: 'No Permissions-Policy; browser feature access (camera/mic/geolocation) is unrestricted (informational hardening).' },
+  lfi: { cwe: 'CWE-22', owasp: 'A01:2021 Broken Access Control',
+    tr: 'Dosya/yol parametresi sunucu dosya sistemine yol geçişi (path traversal / LFI) yapabiliyor göstergesi; hassas dosya okuma/kaynak sızıntısı riski.',
+    en: 'A file/path parameter appears to allow path traversal / LFI into the server filesystem; risk of sensitive file read/source leakage.' },
+  ssti: { cwe: 'CWE-1336', owasp: 'A03:2021 Injection',
+    tr: 'Girdi bir şablon motorunda değerlendiriliyor göstergesi (SSTI — aritmetik ifade sonuca yansıdı); sunucu-taraflı kod/veri ifşası riski.',
+    en: 'Indicator that input is evaluated by a template engine (SSTI — arithmetic reflected in output); risk of server-side code/data exposure.' },
+  hpp: { cwe: 'CWE-235', owasp: 'A05:2021 Security Misconfiguration',
+    tr: 'HTTP Parametre Kirliliği (HPP) göstergesi — tekrarlanan parametrenin işlenişi tutarsız; filtre atlatma/mantık sapması yüzeyi.',
+    en: 'HTTP Parameter Pollution (HPP) indicator — duplicated parameter is parsed inconsistently; filter-bypass/logic-deviation surface.' },
 };
 
 // Başlıktan bulgu türü sınıflandırıcı — SPESİFİK önce (ör. authenticated SQLi -> sqli; forced browsing).
@@ -249,6 +260,9 @@ const CLASSIFIERS: Array<{ re: RegExp; type: FindingType }> = [
   { re: /\b[iı]dor\b|yetkisiz (nesne|eri[şs]im)|nesne eri[şs]im|numaraland[ıi]r[ıi]labilir|do[ğg]rudan nesne/i, type: 'idor' },
   { re: /\bssrf\b|sunucu.?tarafl[ıi] istek/i, type: 'ssrf' },
   { re: /a[çc][ıi]k y[öo]nlendirme|open.?redirect/i, type: 'open_redirect' },
+  { re: /\blfi\b|yol ge[çc]i[şs]i|path.?traversal|dizin ge[çc]i[şs]i|dosya ok(u|uma).*ge[çc]|root:x:0:0/i, type: 'lfi' },
+  { re: /\bssti\b|[şs]ablon enjeksiyon|template injection|server.?side template/i, type: 'ssti' },
+  { re: /\bhpp\b|parametre kirlili|parameter pollution/i, type: 'hpp' },
   { re: /\brce\b|uzaktan kod|komut [çc]al[ıi][şs]t[ıi]r/i, type: 'rce' },
   { re: /dosya y[üu]kleme|file.?upload/i, type: 'file_upload' },
   { re: /yar[ıi][şs]|race[- ]?condition|\brace\b|mass.?assign|over.?post/i, type: 'race' },
@@ -384,6 +398,9 @@ const FRIENDLY_LABEL: Record<FindingType, { tr: string; en: string }> = {
   graphql_introspection: { tr: 'GraphQL introspection açık', en: 'GraphQL introspection enabled' },
   csp_weak: { tr: 'CSP zayıf (unsafe-inline/eval)', en: 'Weak CSP (unsafe-inline/eval)' },
   permissions_policy: { tr: 'Permissions-Policy eksik', en: 'Missing Permissions-Policy' },
+  lfi: { tr: 'Yol geçişi / LFI göstergesi', en: 'Path traversal / LFI indicator' },
+  ssti: { tr: 'Şablon enjeksiyonu (SSTI) göstergesi', en: 'Template injection (SSTI) indicator' },
+  hpp: { tr: 'HTTP Parametre Kirliliği (HPP)', en: 'HTTP Parameter Pollution (HPP)' },
 };
 export function friendlyLabel(type: FindingType, locale: 'tr' | 'en'): string {
   return locale === 'tr' ? FRIENDLY_LABEL[type].tr : FRIENDLY_LABEL[type].en;
@@ -587,6 +604,15 @@ const FINDING_DETAIL: Record<FindingType, { tr: Detail; en: Detail }> = {
   permissions_policy: D(
     { desc: 'Permissions-Policy başlığı yok; tarayıcı özellik erişimi kısıtlanmıyor.', how: 'HTTPS yanıt başlıkları incelendi; Permissions-Policy gözlenmedi.', fix: 'Kullanılmayan özellikleri kapatan bir `Permissions-Policy` ekleyin (ör. `geolocation=(), camera=(), microphone=()`).' },
     { desc: 'No Permissions-Policy header; browser feature access is unrestricted.', how: 'HTTPS response headers inspected; no Permissions-Policy observed.', fix: 'Add a `Permissions-Policy` disabling unused features (e.g. `geolocation=(), camera=(), microphone=()`).' }),
+  lfi: D(
+    { desc: 'Bir dosya/yol parametresi sunucu dosya sistemine yol geçişine (../) izin veriyor göstergesi.', how: 'Kademeli, zararsız probla (önce tek `../`, sinyal varsa derin) yanıtta bilinen dosya İMZASI (ör. `root:x:0:0:`) arandı — içerik DÖKÜLMEZ, dosya çekilmez/saklanmaz; yalnız imza gözlemi.', fix: 'Kullanıcı girdisini dosya yoluna koymayın; allowlist + `basename` + kök-dizin hapsi (chroot/realpath) uygulayın.' },
+    { desc: 'Indicator that a file/path parameter allows filesystem path traversal (../).', how: 'A staged, harmless probe (single `../` first, deeper only if a signal appears) looked for a known file SIGNATURE (e.g. `root:x:0:0:`) in the response — content is NOT dumped, no file retrieved/stored; signature observation only.', fix: 'Never place user input in file paths; use an allowlist + `basename` + root-dir confinement (chroot/realpath).' }),
+  ssti: D(
+    { desc: 'Girdi bir şablon motorunda değerlendiriliyor göstergesi (SSTI).', how: 'Yansıyan parametreye yalnız aritmetik ifade (`{{7*7}}`/`${7*7}`/`#{7*7}`) gönderildi; çıktıda `49` belirdi — kod/komut ÇALIŞTIRILMADI (yalnız aritmetik gösterge).', fix: 'Kullanıcı girdisini şablona interpolasyonla koymayın; mantıksız-şablon (logic-less) motoru + otomatik kaçış kullanın; sandbox uygulayın.' },
+    { desc: 'Indicator that input is evaluated by a template engine (SSTI).', how: 'Only an arithmetic expression (`{{7*7}}`/`${7*7}`/`#{7*7}`) was sent to a reflected parameter and `49` appeared in the output — no code/command executed (arithmetic indicator only).', fix: 'Do not interpolate user input into templates; use a logic-less engine + auto-escaping; apply a sandbox.' }),
+  hpp: D(
+    { desc: 'Tekrarlanan aynı parametre sunucuda tutarsız işleniyor (HTTP Parameter Pollution).', how: 'Aynı parametre iki kez (`?p=A&p=B`) gönderilip tekil isteklerle karşılaştırıldı; işleniş farkı gözlendi — veri gönderilmedi, salt gözlem.', fix: 'Parametreleri tek-değer olarak normalize edin; sunucu/framework katmanları arası tutarlı ayrıştırma sağlayın.' },
+    { desc: 'A duplicated parameter is parsed inconsistently on the server (HTTP Parameter Pollution).', how: 'The same parameter was sent twice (`?p=A&p=B`) and compared with single requests; a parsing difference was observed — no data submitted, observation only.', fix: 'Normalize parameters to a single value; ensure consistent parsing across server/framework layers.' }),
 };
 export function findingDetail(type: FindingType, locale: 'tr' | 'en'): Detail {
   return locale === 'tr' ? FINDING_DETAIL[type].tr : FINDING_DETAIL[type].en;

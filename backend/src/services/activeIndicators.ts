@@ -1,0 +1,148 @@
+/**
+ * (Aktif Doğrulama — Faz 6) GÜVENLİ AKTİF GÖSTERGELER (login'siz). Yalnız "Aktif Doğrulama" paketine girer.
+ * Hepsi READ-ONLY / non-destructive: veri yazma/silme, yükleme, komut, ödeme, state değişimi YOK.
+ * PROVENANCE (Sütun 0): yalnız hedefte GERÇEKTEN gözlenen GET parametreleri/formlar üzerinde çalışır
+ * (discoverSurface çıktısı) — tahmin/eğitim-verisi endpoint UYDURMA yok. İçerik REDAKTE (imza gözlemi).
+ *
+ *   A1 LFI / path traversal (kademeli; yalnız İMZA eşleşmesi = bulgu, içerik DÖKÜLMEZ)
+ *   A2 Open redirect (zararsız harici kanarya; redirect TAKİP EDİLMEZ)
+ *   A3 HTTP Parameter Pollution (tekrarlı parametre işleniş farkı — gözlemsel)
+ *   A5 SSTI (yalnız aritmetik {{1234*3}} → 3702; kod/komut YOK)
+ *   A4 boolean-SQLi → **Enjeksiyon (SQLi/XSS) Doğrulama** bölümünde değerlendirilir (çift-CT yok, çapraz-ref)
+ *   A6 dosya yükleme → **Dosya Yükleme Doğrulama** bölümünde değerlendirilir (çapraz-ref)
+ */
+import { discoverSurface, type InputPoint } from './activeVerifyEvidence.js';
+import type { ActiveCheckEvidence, VFinding } from './activeVerifyEvidence.js';
+import { logScanStep } from './scanLogger.js';
+
+const REQ_TIMEOUT = 10_000;
+const MIN_DELAY = 200;
+let lastAt = 0;
+
+type Resp = { status: number; text: string; len: number; headers: Headers };
+async function get(url: string, label: string, noFollow = true): Promise<Resp | null> {
+  const w = MIN_DELAY - (Date.now() - lastAt); if (w > 0) await new Promise((r) => setTimeout(r, w));
+  lastAt = Date.now();
+  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), REQ_TIMEOUT); const t0 = Date.now();
+  try {
+    const res = await fetch(url, { redirect: noFollow ? 'manual' : 'follow', signal: ctrl.signal, headers: { 'user-agent': 'CyberTestify-ActiveIndicator/1.0', accept: 'text/html,application/json,*/*' } });
+    const buf = Buffer.from(await res.arrayBuffer());
+    const text = buf.subarray(0, 200_000).toString('utf-8');
+    logScanStep({ step: 'Güvenli Aktif Göstergeler', method: 'GET', url, status: res.status, durationMs: Date.now() - t0, sizeBytes: buf.length });
+    return { status: res.status, text, len: buf.length, headers: res.headers };
+  } catch { logScanStep({ step: 'Güvenli Aktif Göstergeler', method: 'GET', url, status: 0, level: 'warn', durationMs: Date.now() - t0 }); return null; }
+  finally { clearTimeout(t); }
+}
+
+function buildUrl(ip: InputPoint, value: string): string {
+  const u = new URL(ip.action);
+  for (const [k, v] of Object.entries(ip.params)) u.searchParams.set(k, k === ip.param ? value : (v || '1'));
+  return u.toString();
+}
+function buildUrlDup(ip: InputPoint, values: string[]): string {
+  const u = new URL(ip.action);
+  for (const [k, v] of Object.entries(ip.params)) if (k !== ip.param) u.searchParams.set(k, v || '1');
+  for (const val of values) u.searchParams.append(ip.param, val);
+  return u.toString();
+}
+const short = (s: string) => (s.length > 60 ? s.slice(0, 60) + '…' : s);
+const epLabel = (ip: InputPoint) => { try { return `${new URL(ip.action).pathname}?${ip.param}=`; } catch { return `${ip.action}?${ip.param}=`; } };
+
+const FILE_PARAM_RE = /^(file|page|doc|document|include|inc|path|tmpl|template|view|load|read|download|dir|folder|filename|filepath|src|f)$/i;
+const REDIRECT_PARAM_RE = /^(url|next|redirect|redirect_uri|redir|return|returnurl|return_to|dest|destination|continue|to|goto|target|forward|out|link|u)$/i;
+// Bilinen dosya imzaları — içerik DÖKÜLMEZ; yalnız eşleşme doğrulanır.
+const LFI_SIGN_RE = /root:x:0:0:|\[fonts\]\s*[\r\n]|\[extensions\]\s*[\r\n]|for 16-bit app support|<\?php[\s\S]{0,60}(include|require|\$_(GET|POST|REQUEST|SERVER))/i;
+const CANARY = 'https://cybertestify-redirect-probe.example/ct';
+
+const FILE_PAYLOADS_SHALLOW = ['../../etc/passwd', '..\\..\\windows\\win.ini'];
+const FILE_PAYLOADS_DEEP = ['../../../../../../../../etc/passwd', '..%2f..%2f..%2f..%2f..%2f..%2fetc%2fpasswd', '....//....//....//....//....//etc/passwd', '..\\..\\..\\..\\..\\..\\..\\windows\\win.ini', '/etc/passwd'];
+
+export async function collectActiveIndicatorsEvidence(host: string): Promise<ActiveCheckEvidence> {
+  const findings: VFinding[] = []; const notes: string[] = [];
+  const surf = await discoverSurface(host).catch(() => null);
+  if (!surf || !surf.ok) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: ['Hedef yüzeyi keşfedilemedi — güvenli aktif göstergeler bu hedef için **kapsam dışıdır**.'] };
+  const getParams = surf.inputs.filter((ip) => ip.method === 'GET' && ip.source === 'url');
+  const inputsFound = getParams.length + surf.uploadForms.length;
+  let probes = 0;
+
+  if (getParams.length === 0 && surf.uploadForms.length === 0) {
+    return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: 0, probesSent: 1, findings, stopped: null,
+      notes: [`Gözlemlenebilir, enjekte-edilebilir bir yüzey (GET parametresi / yükleme formu) bu hedefte bulunamadı — güvenli aktif göstergeler **kapsam dışıdır** (modern SPA/API sitelerde bu beklenen bir sonuçtur).`] };
+  }
+
+  // ── A1 LFI / path traversal (kademeli; yalnız imza = bulgu) ──
+  const lfiSeen = new Set<string>();
+  for (const ip of getParams.filter((p) => FILE_PARAM_RE.test(p.param)).slice(0, 6)) {
+    if (lfiSeen.has(ip.param)) continue; lfiSeen.add(ip.param);
+    const base = await get(buildUrl(ip, ip.params[ip.param] || 'index'), `LFI base ${ip.param}`); probes++;
+    let hit = false; let signal = false;
+    for (const p of FILE_PAYLOADS_SHALLOW) {
+      const r = await get(buildUrl(ip, p), `LFI shallow ${ip.param}`); probes++;
+      if (!r) continue;
+      if (LFI_SIGN_RE.test(r.text)) { hit = true; break; }
+      if (base && (r.status !== base.status || Math.abs(r.len - base.len) > Math.max(40, base.len * 0.05))) signal = true;
+    }
+    // Kademeli: yalnız shallow bir SİNYAL verdiyse derin payload'a yüksel (WAF gürültüsünü azalt).
+    if (!hit && signal) {
+      for (const p of FILE_PAYLOADS_DEEP) {
+        const r = await get(buildUrl(ip, p), `LFI deep ${ip.param}`); probes++;
+        if (r && LFI_SIGN_RE.test(r.text)) { hit = true; break; }
+      }
+    }
+    if (hit) findings.push({ check: 'lfi', inputPoint: epLabel(ip), vulnerable: true, technique: 'yol geçişi / LFI (path traversal) — kademeli güvenli prob', evidence: `\`${ip.param}\` parametresine yol-geçişi payload'ı gönderildiğinde yanıtta **bilinen sistem dosyası imzası** (ör. \`root:x:0:0:\` / \`[fonts]\`) gözlendi — sunucu dosya sistemine LFI/path-traversal göstergesi. Dosya içeriği **REDAKTE** (çekilmedi/saklanmadı). Girdi dosya yoluna konmamalı; allowlist + kök-dizin hapsi uygulanmalı.`, confidence: 'high', severity: 'high', sideEffectRisk: 'none' });
+  }
+
+  // ── A2 Open redirect (kanarya; redirect TAKİP EDİLMEZ) ──
+  const orSeen = new Set<string>();
+  for (const ip of getParams.filter((p) => REDIRECT_PARAM_RE.test(p.param)).slice(0, 8)) {
+    if (orSeen.has(ip.param)) continue; orSeen.add(ip.param);
+    const r = await get(buildUrl(ip, CANARY), `open-redirect ${ip.param}`); probes++;
+    if (!r) continue;
+    const loc = r.headers.get('location') ?? '';
+    const metaRefresh = /<meta[^>]+http-equiv=["']?refresh["']?[^>]+url=([^"'>\s]+)/i.exec(r.text)?.[1] ?? '';
+    const reflectsCanary = (s: string) => /cybertestify-redirect-probe\.example/i.test(s);
+    if ((r.status >= 300 && r.status < 400 && reflectsCanary(loc)) || reflectsCanary(metaRefresh)) {
+      findings.push({ check: 'open_redirect', inputPoint: epLabel(ip), vulnerable: true, technique: 'açık yönlendirme (open redirect) — zararsız kanarya gözlemi (redirect TAKİP EDİLMEDİ)', evidence: `\`${ip.param}\` parametresine verilen **harici kanarya** URL'i yanıtın \`Location\`/meta-refresh hedefine **yansıdı** (\`…cybertestify-redirect-probe.example…\`) — açık yönlendirme göstergesi (phishing/oturum-token sızıntısı yüzeyi). Yönlendirme hedefleri sunucuda allowlist ile sınırlanmalı. Yönlendirme TAKİP EDİLMEDİ.`, confidence: 'high', severity: 'medium', sideEffectRisk: 'none' });
+    }
+  }
+
+  // ── A3 HTTP Parameter Pollution (gözlemsel; yalnız net concat/iki-değer yansıması) ──
+  const hppSeen = new Set<string>();
+  for (const ip of getParams.slice(0, 6)) {
+    if (hppSeen.has(ip.param)) continue; hppSeen.add(ip.param);
+    const single = await get(buildUrl(ip, 'CTPPA'), `HPP single ${ip.param}`); probes++;
+    const dbl = await get(buildUrlDup(ip, ['CTPPA', 'CTPPB']), `HPP dup ${ip.param}`); probes++;
+    if (!single || !dbl) continue;
+    const both = /CTPPA\s*[,;| ]?\s*CTPPB|CTPPACTPPB/.test(dbl.text); // iki değer birlikte (concat) — net HPP
+    const onlyB = dbl.text.includes('CTPPB') && !dbl.text.includes('CTPPA') && single.text.includes('CTPPA'); // last-wins ayrıştırma farkı
+    if (both) findings.push({ check: 'hpp', inputPoint: epLabel(ip), vulnerable: true, technique: 'HTTP parametre kirliliği (HPP) — tekrarlı parametre işleniş gözlemi (veri gönderilmedi)', evidence: `\`${ip.param}\` iki kez gönderildiğinde (\`?${ip.param}=A&${ip.param}=B\`) sunucu **her iki değeri birleştirerek** işledi — HTTP Parameter Pollution göstergesi (filtre atlatma/mantık sapması yüzeyi). Parametreler tek-değere normalize edilmeli. Salt gözlem.`, confidence: 'medium', severity: 'low', sideEffectRisk: 'none' });
+    else if (onlyB) notes.push(`HPP: \`${ip.param}\` tekrarında son-değer (last-wins) ayrıştırma gözlendi — tek başına zafiyet değil, bilgilendirici.`);
+  }
+
+  // ── A5 SSTI (yalnız aritmetik gösterge; kod/komut YOK) ──
+  const SSTI_PROBES: Array<[string, string]> = [['{{1234*3}}', '3702'], ['${1234*3}', '3702'], ['#{1234*3}', '3702'], ['{{1234*3}}', '3702']];
+  const sstiSeen = new Set<string>();
+  for (const ip of getParams.slice(0, 6)) {
+    if (sstiSeen.has(ip.param)) continue; sstiSeen.add(ip.param);
+    // önce yansıma: benzersiz marker echo ediliyor mu
+    const mark = 'CTSSTI' + (ip.param.length) + 'Z';
+    const refl = await get(buildUrl(ip, mark), `SSTI reflect ${ip.param}`); probes++;
+    if (!refl || !refl.text.includes(mark)) continue; // yansımıyorsa SSTI aramaya değmez
+    let done = false;
+    for (const [payload, expect] of SSTI_PROBES) {
+      if (done) break;
+      const r = await get(buildUrl(ip, payload), `SSTI ${ip.param}`); probes++;
+      if (r && r.text.includes(expect) && !r.text.includes(payload)) {
+        findings.push({ check: 'ssti', inputPoint: epLabel(ip), vulnerable: true, technique: 'şablon enjeksiyonu (SSTI) — yalnız aritmetik gösterge (kod/komut YOK)', evidence: `\`${ip.param}\` parametresine yalnız aritmetik ifade (\`${short(payload)}\`) gönderildiğinde çıktıda **değerlendirilmiş sonuç** (\`${expect}\`) belirdi (ifade ham geçmedi) — sunucu-taraflı şablon enjeksiyonu (SSTI) göstergesi. Yalnız aritmetik denendi; kod/komut çalıştırılmadı. Girdi şablona interpolasyonla konmamalı.`, confidence: 'high', severity: 'medium', sideEffectRisk: 'none' });
+        done = true;
+      }
+    }
+  }
+
+  // ── A4/A6 çapraz-referans (çift-CT yok) ──
+  notes.push('Boolean-tabanlı SQL Enjeksiyonu **Enjeksiyon (SQLi/XSS) Doğrulama** bölümünde katı yanlış-pozitif kalkanıyla değerlendirilir (burada tekrar edilmez).');
+  if (surf.uploadForms.length) notes.push(`Dosya yükleme yüzeyi (**${surf.uploadForms.length}** form) **Dosya Yükleme Doğrulama** bölümünde değerlendirilir (gerçek dosya yüklenmeden, güvenli).`);
+
+  notes.push(`Denenen: **${probes}** güvenli read-only prob (yalnız GET; yükleme/komut/time-based YOK). LFI yalnız imza eşleşmesinde bulgu — içerik REDAKTE; open-redirect kanaryası TAKİP EDİLMEDİ; SSTI yalnız aritmetik; HPP salt gözlem. Test edilen GET parametresi: **${getParams.length}**.`);
+  return { ok: true, pagesScanned: surf.pagesScanned, inputsFound, probesSent: probes, findings, stopped: null, notes };
+}

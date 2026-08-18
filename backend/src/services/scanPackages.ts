@@ -40,7 +40,7 @@ export interface ScanPackageDef {
     | 'bundle_surface' // kombine paket (tek-siparis modeli)
     | 'bundle_compliance' // kombine paket (Uyum: KVKK+PCI+ISO, tek-siparis)
     | 'bundle_recon' // kombine paket (Keşif: subdomain+api+cms/cve, tek-siparis)
-    | 'bundle_active_verify' // kombine paket (Aktif Doğrulama: 7 aktif-hafif kontrol, login'siz yüzey; ₺14.999)
+    | 'bundle_active_verify' // kombine paket (Aktif Doğrulama: 7 aktif-hafif kontrol, login'siz yüzey; ₺9.999)
     | 'bundle_full_pentest'; // kombine paket (Tam Kapsamlı Pentest: login'li + sınırlı-otonom ajan; ₺22.999)
   displayName: string;
   description: string;

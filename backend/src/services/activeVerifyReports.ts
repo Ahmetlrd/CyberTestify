@@ -12,6 +12,7 @@ import {
   type ActiveCheckEvidence, discoverSurface, spaHint, discoveryMethodNote,
 } from './activeVerifyEvidence.js';
 import { collectLoginBypassEvidence } from './authExtraChecks.js';
+import { collectActiveIndicatorsEvidence } from './activeIndicators.js';
 import { resolveOrigin } from './surfaceEvidence.js';
 import { unscannableReport } from './unscannable.js';
 
@@ -222,6 +223,27 @@ export function buildIdorReport(ev: IdorEvidence): { findings: string; fixText: 
 // Her uye: collector'i calistir (sayac icin) + section'i kur. Tumu gercek (7/7).
 type MemberRun = { rep: { findings: string; fixText: string } | null; pages: number; inputs: number; probes: number; fc: number; formsTested?: number; formsSkipped?: Array<{ action: string; reason: string }> };
 type ActiveMember = { key: string; title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; run: (host: string) => Promise<MemberRun> };
+const ACTIVE_INDICATORS_CFG: CheckCfg = {
+  title: 'Güvenli Aktif Göstergeler (LFI/Redirect/HPP/SSTI)',
+  whatChecked: [
+    'Yalnız hedefte GERÇEKTEN gözlenen GET parametreleri üzerinde, read-only güvenli göstergeler (veri yazma/yükleme/komut YOK).',
+    '**A1 LFI / path traversal:** dosya/yol parametrelerinde kademeli, zararsız prob — yalnız bilinen dosya İMZASI (ör. `root:x:0:0:`) eşleşirse bulgu; **içerik REDAKTE** (dosya çekilmez).',
+    '**A2 Open redirect:** yönlendirme parametrelerine zararsız harici kanarya; Location/meta-refresh yansıması gözlenir (**redirect TAKİP EDİLMEZ**).',
+    '**A3 HTTP Parameter Pollution:** tekrarlı parametrenin işleniş farkı (salt gözlem; veri gönderilmez).',
+    '**A5 SSTI:** yansıyan parametrede yalnız aritmetik ifade (`{{1234*3}}`→`3702`) — kod/komut YOK.',
+    '**A4 boolean-SQLi** ve **A6 dosya yükleme** ilgili bölümlerde (Enjeksiyon / Dosya Yükleme Doğrulama) değerlendirilir — çift bulgu üretilmez (çapraz-referans).',
+  ],
+  confidenceNote: 'Hepsi "gösterge, doğrulama gerekir"; yalnız gözlemlenen parametrelerde. LFI-imza Yüksek; open-redirect/SSTI Orta; HPP Düşük. Modern SPA/API sitelerde çoğu zaman "kapsam dışı"/az bulgu çıkması BEKLENEN ve doğru sonuçtur.',
+  fixTitle: 'Güvenli Aktif Göstergeler',
+  fixFound: [
+    'LFI: kullanıcı girdisini dosya yoluna koymayın; allowlist + `basename` + kök-dizin hapsi (realpath/chroot).',
+    'Open redirect: yönlendirme hedeflerini sunucuda allowlist ile sınırlayın; harici mutlak URL\'lere yönlendirmeyin.',
+    'HPP: parametreleri tek-değere normalize edin; katmanlar arası tutarlı ayrıştırma. SSTI: girdiyi şablona interpolasyonla koymayın (logic-less motor + kaçış + sandbox).',
+  ],
+  fixClean: ['Girdi dosya-yolu/şablon/yönlendirme hedefine doğrudan konmuyor; parametreler normalize (proaktif).'],
+  cleanGenel: 'Gözlemlenen parametrelerde LFI imzası, açık yönlendirme, HTTP parametre kirliliği veya şablon-enjeksiyonu (SSTI) göstergesi bulunamadı.',
+};
+
 const ACTIVE_BUNDLE_MEMBERS: ActiveMember[] = [
   { key: 'injection_verify', title: 'Enjeksiyon (SQLi/XSS) Doğrulama', conf: 'Yüksek', run: async (h) => { const ev = await collectInjectionEvidence(h); return { rep: buildInjectionReport(ev), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length, formsTested: ev.formsTested, formsSkipped: ev.formsSkipped }; } },
   { key: 'idor_verify', title: 'Yetkisiz Erişim (IDOR) Doğrulama', conf: 'Orta', run: async (h) => { const ev = await collectIdorEvidence(h); return { rep: buildIdorReport(ev), pages: ev.pagesScanned, inputs: ev.candidates, probes: ev.probesSent, fc: ev.findings.length }; } },
@@ -231,6 +253,7 @@ const ACTIVE_BUNDLE_MEMBERS: ActiveMember[] = [
   { key: 'race_massassign_verify', title: 'Race / Mass-Assignment Doğrulama', conf: 'Düşük', run: async (h) => { const ev = await collectRaceMassAssignEvidence(h); return { rep: buildActiveCheckReport(ev, RACE_CFG), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
   { key: 'rce_verify', title: 'RCE / Komut Enjeksiyonu Doğrulama', conf: 'Orta', run: async (h) => { const ev = await collectRceEvidence(h); return { rep: buildActiveCheckReport(ev, RCE_CFG), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
   // (İŞ 3) Giriş baypası (SQLi göstergesi) — login POST'a kontrol vs SQLi karşılaştırması (gözlemsel).
+  { key: 'active_indicators', title: 'Güvenli Aktif Göstergeler (LFI/Redirect/HPP/SSTI)', conf: 'Orta', run: async (h) => { const ev = await collectActiveIndicatorsEvidence(h); return { rep: buildActiveCheckReport(ev, ACTIVE_INDICATORS_CFG), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
   { key: 'login_bypass', title: 'Giriş Baypası (SQLi Göstergesi)', conf: 'Yüksek', run: async (h) => { const ev = await collectLoginBypassEvidence(h); return { rep: buildActiveCheckReport(ev, LOGIN_BYPASS_CFG), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
 ];
 
@@ -294,7 +317,7 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
   // --- ÜST ÖZET KUTUSU (ilk sayfa; gerçek N/M/P; input yoksa "gerçek prob yok" netliği) ---
   const box =
     `> ### Değerlendirme Özeti\n` +
-    `> **7 aktif güvenlik kontrol kategorisinin tamamı değerlendirildi.** ` +
+    `> **${ACTIVE_BUNDLE_MEMBERS.length} aktif güvenlik kontrol kategorisinin tamamı değerlendirildi.** ` +
     (noInputs
       ? `**${pagesScanned}** benzersiz sayfa/uç nokta tarandı; **test edilebilir giriş noktası (parametre/form/ID) bulunamadı** — bu nedenle gerçek doğrulama probu gönderilmedi (yalnızca ${totalProbes} erişilebilirlik/baseline isteği). Bu **zafiyet olmadığının kanıtı değildir**; kapsam sınırına bakınız.` + spaHint(surf)
       : `**${pagesScanned}** benzersiz sayfa/uç nokta tarandı, **${totalInputs}** giriş noktası test edildi, toplam **${totalProbes}** istek gönderildi. ` +
@@ -328,7 +351,7 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
       : httpOnly && worst === 'low'
       ? `- **Genel risk seviyesi: Yüksek** — hedef HTTPS desteklemiyor (şifresiz iletişim); bu tek başına yüksek riskli bir bulgudur. Aktif kontroller http:// üzerinden yürütüldü ve ek doğrulanmış kritik/yüksek zafiyet öne çıkmadı.`
       : verdictLevel === 'low'
-      ? `- **Genel risk seviyesi: Düşük** — 7 kontrol kategorisinin tamamı değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`
+      ? `- **Genel risk seviyesi: Düşük** — ${ACTIVE_BUNDLE_MEMBERS.length} kontrol kategorisinin tamamı değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`
       : `- **Genel risk seviyesi: ${RISK_WORD[verdictLevel]}** — en yüksek risk **${worstTitle || 'HTTPS eksikliği'}** alanında${worstHl ? ` (${worstHl})` : ''}.`,
   );
   // DÜRÜSTLÜK (dinamik — gerçek en yüksek ciddiyetli kontrolden türer): bu paketin kimlik-doğrulamasız
@@ -357,16 +380,16 @@ export async function generateBundleActiveVerifyReport(host: string): Promise<{ 
   });
   summary.push(
     noInputs
-      ? `- **Şeffaflık:** ${dataOk}/7 kontrol çalıştı; **${pagesScanned}** benzersiz sayfa tarandı ancak **test edilebilir giriş noktası bulunamadı** — gerçek doğrulama probu gönderilmedi (yalnızca ${totalProbes} baseline erişilebilirlik isteği). Bu, zafiyet olmadığının kanıtı değildir.` + spaHint(surf)
-      : `- **Şeffaflık:** ${dataOk}/7 kontrol veri toplayabildi; **${pagesScanned}** benzersiz sayfa, **${totalInputs}** giriş noktası${surf.method === 'headless' ? ' (JS render sırasında gözlemlenen API uçları dâhil)' : ''}, **${totalProbes}** istek.${surf.method === 'headless' && surf.apiWrites.length ? ` Ayrıca **${surf.apiWrites.length}** durum-değiştiren API ucu (ör. login/sepet/sipariş) gözlemlendi ancak güvenlik gereği **probe edilmedi**.` : ''} SSRF/RCE tespitleri OOB altyapısı olmadan zaman-tabanlı/dolaylı (orta güven); gözlemsel kontroller (Dosya Yükleme/İş Mantığı/Race) kesin doğrulama için manuel test gerektirir.`,
+      ? `- **Şeffaflık:** ${dataOk}/${ACTIVE_BUNDLE_MEMBERS.length} kontrol çalıştı; **${pagesScanned}** benzersiz sayfa tarandı ancak **test edilebilir giriş noktası bulunamadı** — gerçek doğrulama probu gönderilmedi (yalnızca ${totalProbes} baseline erişilebilirlik isteği). Bu, zafiyet olmadığının kanıtı değildir.` + spaHint(surf)
+      : `- **Şeffaflık:** ${dataOk}/${ACTIVE_BUNDLE_MEMBERS.length} kontrol veri toplayabildi; **${pagesScanned}** benzersiz sayfa, **${totalInputs}** giriş noktası${surf.method === 'headless' ? ' (JS render sırasında gözlemlenen API uçları dâhil)' : ''}, **${totalProbes}** istek.${surf.method === 'headless' && surf.apiWrites.length ? ` Ayrıca **${surf.apiWrites.length}** durum-değiştiren API ucu (ör. login/sepet/sipariş) gözlemlendi ancak güvenlik gereği **probe edilmedi**.` : ''} SSRF/RCE tespitleri OOB altyapısı olmadan zaman-tabanlı/dolaylı (orta güven); gözlemsel kontroller (Dosya Yükleme/İş Mantığı/Race) kesin doğrulama için manuel test gerektirir.`,
   );
   summary.push('- **Önerilen ilk adım:** Çalıştırılan kontrollerdeki bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.');
 
   const genel =
     (noRealTest
-      ? '7 aktif doğrulama kontrol kategorisi denendi ancak bu hedefte **test edilebilir bir yüzey bulunamadığından** gerçek doğrulama probu çalıştırılamadı; sonuç **değerlendirilemedi** ("güvenli/temiz" anlamına gelmez).'
+      ? `${ACTIVE_BUNDLE_MEMBERS.length} aktif doğrulama kontrol kategorisi denendi ancak bu hedefte **test edilebilir bir yüzey bulunamadığından** gerçek doğrulama probu çalıştırılamadı; sonuç **değerlendirilemedi** ("güvenli/temiz" anlamına gelmez).`
       : worst === 'low'
-      ? '7 aktif doğrulama kontrol kategorisinin tamamı değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.'
+      ? `${ACTIVE_BUNDLE_MEMBERS.length} aktif doğrulama kontrol kategorisinin tamamı değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`
       : `Çalıştırılan kontrollerde en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi/doğrulanması önerilir.`) +
     (noInputs
       ? ` ${pagesScanned} benzersiz sayfa/uç nokta tarandı; test edilebilir bir giriş noktası (parametre/form/ID) bulunamadığından gerçek doğrulama probu gönderilmedi (yalnızca baseline istekleri). Aşağıda her kontrol ayrı ayrı raporlanmıştır.`
