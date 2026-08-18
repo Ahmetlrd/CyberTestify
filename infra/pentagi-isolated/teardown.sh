@@ -11,5 +11,14 @@ sleep 8
 [ -n "$F" ] && { echo "firewall $F siliniyor"; curl -s "${auth[@]}" -X DELETE "$API/firewalls/$F" >/dev/null; }
 [ -n "$K" ] && { echo "ssh key $K siliniyor"; curl -s "${auth[@]}" -X DELETE "$API/account/keys/$K" >/dev/null; }
 sleep 5
-[ -n "$V" ] && { echo "vpc $V siliniyor (üye kaynak temizlenene kadar retry)"; for i in 1 2 3 4 5 6; do R=$(curl -s -o /dev/null -w "%{http_code}" "${auth[@]}" -X DELETE "$API/vpcs/$V"); echo "  vpc delete http=$R"; [ "$R" = "204" ] && break; sleep 10; done; }
+if [ -n "$V" ]; then
+  echo "vpc $V siliniyor (droplet çıkışı için retry)"
+  for i in 1 2 3 4 5 6; do
+    RESP=$(curl -s "${auth[@]}" -X DELETE "$API/vpcs/$V"); MSG=$(echo "$RESP" | grep -o "default VPC" || true)
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" "${auth[@]}" "$API/vpcs/$V")
+    if [ "$CODE" = "404" ]; then echo "  vpc SİLİNDİ"; break; fi
+    if echo "$RESP" | grep -qi "default VPC"; then echo "  vpc bölge-varsayılanı (silinemez) — boş+ücretsiz, bırakıldı"; break; fi
+    echo "  vpc henüz silinemedi (retry $i)"; sleep 10
+  done
+fi
 echo "teardown bitti"
