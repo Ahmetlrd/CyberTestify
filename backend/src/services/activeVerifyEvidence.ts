@@ -21,6 +21,7 @@ import { collectHttp, resolveOrigin, cachedOriginUrl } from './surfaceEvidence.j
 import { requestAgentScenarios, type AgentSuggestion } from './agentAdvisor.js';
 import { type AuthSession, applyAuthHeaders } from './authSession.js';
 import { logScanStep } from './scanLogger.js';
+import { discoverSpaApiSurface, type SpaApiDiscovery } from './spaApiSurface.js';
 
 // Headless render (SPA keşfi) — PDF üretimiyle AYNI sistem Chromium'unu kullanır (ek kurulum yok).
 const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
@@ -276,6 +277,8 @@ export type Surface = {
   // (401/403/auth-400) keşfedilen uç sayısı (şeffaflık: yüzey haritalandı ama kapsam dışı).
   minedApiPaths?: string[];
   apiAuthGated?: number;
+  // (Faz 7) SPA JS bundle'dan çıkarılan+doğrulanan API yüzeyi istatistiği (yüzey — BULGU DEĞİL).
+  spaApiDiscovery?: SpaApiDiscovery;
 };
 
 // Ağ-trafiğinde dosya-yükleme uç noktası işareti: path'te upload/file/avatar/image/attachment vb.
@@ -780,6 +783,19 @@ async function buildSurface(host: string, session?: AuthSession): Promise<Surfac
   // (A+B+C) Crawl'dan SONRA API/REST keşfini birleştir — link/HTML olmasa da uç çıkar (YALNIZ GET).
   // Hedefe ulaşıldıysa dener; ulaşılamadıysa (surf.ok=false) atlar -> "İncelenemedi" mantığı korunur.
   if (surf.ok) surf = await mergeApiSurface(surf, host, session).catch(() => surf);
+  // (Faz 7) SPA JS bundle yüzey keşfi — link/HTML/spec olmasa da JS literallerinden GERÇEK API uçları
+  // çıkarır, read-only doğrular, SPA-catch-all eler ve yüzeye MERGE eder (yeni BULGU üretmez).
+  if (surf.ok) {
+    try {
+      const spa = await discoverSpaApiSurface(host, session);
+      surf.spaApiDiscovery = spa.stats;
+      const inK = (i: InputPoint) => `${i.method} ${i.action} ${i.param}`;
+      const seenIn = new Set(surf.inputs.map(inK));
+      for (const ip of spa.inputs) { const k = inK(ip); if (!seenIn.has(k)) { seenIn.add(k); surf.inputs.push(ip); } }
+      const seenAr = new Set(surf.apiReads.map((a) => a.toLowerCase()));
+      for (const ar of spa.apiReads) { if (!seenAr.has(ar.toLowerCase())) { seenAr.add(ar.toLowerCase()); surf.apiReads.push(ar); } }
+    } catch { /* SPA keşfi yüzey akışını bozmaz */ }
+  }
   return prioritizeInputs(surf);
 }
 
@@ -918,9 +934,14 @@ export async function quickScopeSignal(host: string): Promise<ScopeSignal> {
 
 // Kesif yontemi seffaflik notu (rapor icin).
 export function discoveryMethodNote(surf: Surface): string {
-  return surf.method === 'headless'
+  const base = surf.method === 'headless'
     ? 'Bu tarama, JavaScript ile render edilen (SPA) hedef tespit edildiği için sayfalar **headless tarayıcı ile render edilerek** gerçekleştirilmiştir.'
     : 'Standart HTML taraması yeterli kapsam sağladığından JavaScript render (headless) kullanılmadı.';
+  const spa = surf.spaApiDiscovery;
+  if (spa && spa.candidates > 0) {
+    return base + ` SPA JS analizi ile **${spa.candidates}** API ucu adayı çıkarıldı, **${spa.validated}** doğrulandı ve test edilebilir yüzeye eklendi` + (spa.shellEliminated ? ` (${spa.shellEliminated} SPA-catch-all shell elendi)` : '') + '.';
+  }
+  return base;
 }
 
 // ======================================================================================
