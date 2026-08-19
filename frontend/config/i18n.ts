@@ -65,7 +65,7 @@ export interface Dict {
     diffTitle: string; diffBody: string; diffPoints: [string, string, string];
     levelsTitle: string;
     levels: Array<{ name: string; tag: string; risk: string; technique: string; consistency: string; humanLoop: string; note: string }>;
-    principleTitle: string; principleBody: string; disclaimer: string;
+    principleTitle: string; principleBody: string; disclaimer: string; triggerWord: string;
     lockedTitle: string; lockedBody: string;
     codeLabel: string; codePlaceholder: string; unlock: string; unlocking: string; invalid: string; unlockedMsg: string;
     panelTitle: string; panelSubtitle: string;
@@ -206,6 +206,7 @@ const tr: Dict = {
     principleTitle: 'Kanıt ve dürüstlük ilkesi',
     principleBody: 'Hiçbir bulgu ajanın sözüne dayanmaz; yalnız saklanan ham kanıta dayanır. Belirsiz bulgular gizlice silinmez, insana açık biçimde işaretlenir. Kanıtsız iddia rapora girmez.',
     disclaimer: 'Bu deneysel bir özelliktir; resmi bir denetim, sızma testi sertifikasyonu ya da uygunluk belgesi değildir. Sonuçlar deterministik değildir ve garanti içermez.',
+    triggerWord: 'içermez',
     lockedTitle: 'Bu özellik şu an davetli erişimindedir',
     lockedBody: 'Otonom AI Red Team paneli herkese açık değildir. Erişiminiz varsa panel bu sayfadan açılır.',
     codeLabel: 'Erişim kodu',
@@ -372,6 +373,7 @@ const en: Dict = {
     principleTitle: 'Evidence and honesty principle',
     principleBody: 'No finding rests on the agent\'s word; only on stored raw evidence. Uncertain findings are never silently deleted — they are openly flagged for a human. Unproven claims never enter the report.',
     disclaimer: 'This is an experimental feature; it is not an official audit, penetration-test certification or compliance document. Results are non-deterministic and carry no guarantee.',
+    triggerWord: 'guarantee',
     lockedTitle: 'This feature is currently invite-only',
     lockedBody: 'The Autonomous AI Red Team panel is not public. If you have access, the panel opens from this page.',
     codeLabel: 'Access code',

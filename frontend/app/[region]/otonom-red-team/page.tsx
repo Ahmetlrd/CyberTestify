@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { VISIBLE_REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 import { getDict } from '../../../config/i18n';
 import { RedTeamGate } from '../../../components/otonom/RedTeamGate';
+import { DisclaimerReveal } from '../../../components/otonom/DisclaimerReveal';
 
 export function generateStaticParams() {
   return VISIBLE_REGION_CODES.map((region) => ({ region }));
@@ -142,7 +143,11 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
         <section className="card p-6">
           <h2 className="text-lg font-bold text-ink">{d.principleTitle}</h2>
           <p className="mt-2 text-sm text-ink-soft">{d.principleBody}</p>
-          <p className="mt-4 border-t border-line pt-4 text-xs text-ink-muted">{d.disclaimer}</p>
+          <DisclaimerReveal
+            text={d.disclaimer}
+            word={d.triggerWord}
+            className="mt-4 border-t border-line pt-4 text-xs text-ink-muted"
+          />
         </section>
       </div>
     </main>

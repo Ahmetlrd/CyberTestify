@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, BETA_TOKEN_KEY } from '../../lib/api';
+import { RT_REVEAL_EVENT } from './DisclaimerReveal';
 import type { Dict } from '../../config/i18n';
 
 type D = Dict['otonom'];
@@ -33,19 +34,17 @@ export function RedTeamGate({ d }: { d: D }) {
 /* ————————————————— KİLİTLİ DURUM (public "Yakında") ————————————————— */
 function Locked({ d, onUnlock }: { d: D; onUnlock: () => void }) {
   const [showCode, setShowCode] = useState(false);
-  const [taps, setTaps] = useState(0);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Gizli tetik: rozete 3 kez tıklanınca kod alanı GÖRÜNÜR olur (yalnız görünürlük; kod istemcide değil).
-  function tapBadge() {
-    setTaps((n) => {
-      const next = n + 1;
-      if (next >= 3) setShowCode(true);
-      return next;
-    });
-  }
+  // Gizli tetik: disclaimer'daki "içermez" kelimesine 3-tık -> DisclaimerReveal olay yayınlar,
+  // burada dinleyip kod alanını açarız (yalnız görünürlük; kod istemcide DEĞİL).
+  useEffect(() => {
+    const onReveal = () => setShowCode(true);
+    window.addEventListener(RT_REVEAL_EVENT, onReveal);
+    return () => window.removeEventListener(RT_REVEAL_EVENT, onReveal);
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -65,14 +64,10 @@ function Locked({ d, onUnlock }: { d: D; onUnlock: () => void }) {
   return (
     <div className="card overflow-hidden">
       <div className="flex flex-col items-center gap-4 p-8 text-center">
-        <button
-          type="button"
-          onClick={tapBadge}
-          aria-label={d.comingSoon}
-          className="select-none rounded-pill bg-brand px-4 py-1.5 text-xs font-extrabold uppercase tracking-wide text-accent transition active:scale-95"
-        >
+        {/* Yalnız etiket — tıklama tetiği DEĞİL (gizli tetik disclaimer'daki kelimede). */}
+        <span className="rounded-pill bg-brand px-4 py-1.5 text-xs font-extrabold uppercase tracking-wide text-accent">
           {d.comingSoon}
-        </button>
+        </span>
         <h3 className="text-xl font-bold text-ink">{d.lockedTitle}</h3>
         <p className="max-w-md text-sm text-ink-soft">{d.lockedBody}</p>
 
