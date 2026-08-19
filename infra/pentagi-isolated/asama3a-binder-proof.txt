@@ -1,0 +1,23 @@
+============================================================================
+  PENTAGI KANIT-BAĞLAYICI — GERÇEK DB SATIRLARI (flow_id=1, uydurma YOK)
+============================================================================
+  ham artefakt (komut→yanıt çiftleri): 3
+    • q=apple    -> HTTP 200  items=3  len=921B  [termlog#2]
+    • q=%27      -> HTTP 200  items=0  len=30B  [termlog#4]
+    • q=%27))--  -> HTTP 200  items=56  len=21581B  [termlog#6]
+  ham artefaktta SQL-hata imzası: YOK (0)   |   ajan anlatısında 'SQLITE_ERROR': 11 toolcall (iddia, kanıt değil)
+----------------------------------------------------------------------------
+  3-KATMAN (ajanın SÖZÜNE değil, HAM ARTEFAKTA bağlı):
+----------------------------------------------------------------------------
+[KANITLI] SQL Enjeksiyonu (boolean/comment-based) — /rest/products/search?q=
+      -> HAM KANIT termlog#6: q=')) -- => 56 ürün vs baseline 3 (18x şişme, 21581B vs 921B). Deterministik & tekrarlanabilir.
+
+[HAYALET] SQL Enjeksiyonu (error-based / 'SQLITE_ERROR') — ajan anlatısında geçiyor
+      -> ajan 11 toolcall'da 'SQLITE_ERROR' yazdı; HAM artefaktlarda SQL-hata imzası SIFIR => error-based yorum ELENİR (hata hiç oluşmadı). 'Ajanın iddiasına güvenme'nin canlı örneği.
+
+[BELİRSİZ] Tek-tırnak probe q=' — boş sonuç kümesi
+      -> HAM KANIT termlog#4: HTTP 200, 0 ürün (boş). Ne hata ne şişme => tek başına sonuçsuz; SİLİNMEZ, insan-inceleme.
+
+----------------------------------------------------------------------------
+  ÖZET: KANITLI=1  HAYALET=1  BELİRSİZ=1  — üçü de tek gerçek bulgudan, GERÇEK satırlardan doğdu.
+============================================================================
