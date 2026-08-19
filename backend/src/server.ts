@@ -18,6 +18,7 @@ import { internalRouter } from './routes/internal.js';
 import { schedulesRouter } from './routes/schedules.js';
 import { adminAuthRouter } from './routes/adminAuth.js';
 import { adminRouter } from './routes/admin.js';
+import { betaRouter } from './routes/beta.js';
 import { requireAdmin, adminIpAllowlist } from './middleware/adminAuth.js';
 import cors from 'cors';
 
@@ -104,6 +105,8 @@ app.use('/payments', paymentsRouter);
 app.use('/reports', apiLimiter, reportsRouter);
 app.use('/blog', apiLimiter, blogRouter); // PUBLIC blog (yalniz published; auth yok)
 app.use('/schedules', apiLimiter, schedulesRouter);
+// (OTONOM AI RED TEAM — 3b beta kapısı) /unlock kendi sıkı limiter'ını router içinde uygular.
+app.use('/beta', apiLimiter, betaRouter);
 
 // --- Ic yonetim paneli (admin) — MUSTERI sisteminden TAMAMEN AYRI ---------
 // Opsiyonel IP allowlist (bos ise kisitlama yok) hepsine uygulanir. Login ayri

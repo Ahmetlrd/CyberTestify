@@ -22,6 +22,15 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// (OTONOM AI RED TEAM — beta kapısı) Sunucu-imzalı beta grant token'ı (kod DEĞİL) yerelde saklanır;
+// beta uçlarında X-Beta-Token başlığı ile gider. Backend her istekte imzayı doğrular.
+export const BETA_TOKEN_KEY = 'rt_beta';
+function betaHeaders(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const t = window.localStorage.getItem(BETA_TOKEN_KEY);
+  return t ? { 'X-Beta-Token': t } : {};
+}
+
 // API hatasını her zaman TEMİZ, kullanıcı-dostu bir cümleye indirger — ham Zod objesini
 // ({fieldErrors,formErrors}) veya "[object Object]" ASLA gösterme (savunma katmanı; asıl temiz
 // mesaj backend httpErrors.zodError'dan gelir).
@@ -159,6 +168,39 @@ export const api = {
     request<{ lowSignal: boolean; jsRendered: boolean; inputCount: number; reachable: boolean }>(
       `/domains/${domainId}/scope-estimate`,
     ),
+  // (OTONOM AI RED TEAM — 3b) Beta kodunu SUNUCUDA doğrula; başarılıysa imzalı grant token döner.
+  betaUnlock: (code: string) =>
+    request<{ ok: boolean; betaToken: string; expiresInDays: number }>('/beta/unlock', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    }),
+  // Pasif kompleksite → fiyat bandı ÖNERİSİ (PentAGI yok, ekstra tarama yok). Grant token gerekli.
+  betaEstimate: (domain: string) =>
+    request<{
+      host: string;
+      signals: { uniqueEndpoints: number; realApiEndpoints: number; authSurface: boolean; subdomains: number; techDiversity: number } | null;
+      suggestion: {
+        score: number;
+        tier: { key: string; label: string };
+        priceRange: { minTL: number | null; maxTL: number | null; placeholder: boolean };
+        note: string;
+      } | null;
+      note?: string;
+    }>('/beta/estimate', { method: 'POST', headers: betaHeaders(), body: JSON.stringify({ domain }), timeoutMs: 30_000 }),
+  // 3b-i STUB: gerçek koşu YOK. Sahiplik/onay sunucuda doğrulanır; "Hazırlanıyor" döner.
+  betaStart: (payload: {
+    domain: string;
+    level: 'S1' | 'S2' | 'S3';
+    environment: 'test' | 'staging' | 'prod';
+    ownershipConfirmed: boolean;
+    riskAccepted: boolean;
+    prodElevatedAccepted?: boolean;
+  }) =>
+    request<{ status: string; started: boolean; message: string }>('/beta/start', {
+      method: 'POST',
+      headers: betaHeaders(),
+      body: JSON.stringify(payload),
+    }),
   // (ÖDEME ÖNCESİ TEST GİRİŞİ) kendi doğrulanmış domainine test hesabıyla 1 login dener; saklamaz.
   precheckLogin: (domainId: string, username: string, password: string) =>
     request<{ ok: boolean; reason?: 'bad_credentials' | 'two_factor' | 'no_login_endpoint' | 'timeout' | 'error' }>(

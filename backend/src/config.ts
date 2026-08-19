@@ -44,6 +44,11 @@ export const config = {
     serviceToken: required('PENTAGI_SERVICE_TOKEN'),
   },
   jwtSecret: required('JWT_SECRET'),
+  // (OTONOM AI RED TEAM — 3b BETA KAPISI) Deneysel otonom-pentest paneli PUBLIC'e "Yakında" görünür;
+  // yalnız bu kod ile açılır. Kod SUNUCUDA doğrulanır (front-end'e GÖMÜLMEZ). Boş ise gate FAIL-CLOSED
+  // (hiç kimse açamaz). Vedat prod .env'e BETA_ACCESS_CODE=CYBER-TEST-2026 koyar. Başarılı doğrulamada
+  // jwtSecret ile imzalı, 'rt-beta' kapsamlı kısa-ömürlü bir "beta grant" token'ı verilir (kod değil).
+  betaAccessCode: process.env.BETA_ACCESS_CODE ?? '',
   // Ic yonetim paneli (admin) — MUSTERI JWT'sinden TAMAMEN AYRI secret. Musteri
   // token'i (jwtSecret ile imzali) admin endpoint'lerinde ASLA gecerli olmasin.
   adminJwtSecret: required('ADMIN_JWT_SECRET'),

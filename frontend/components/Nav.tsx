@@ -14,6 +14,7 @@ export function Nav({ region }: { region: RegionConfig }) {
     [d.how, `${base}#nasil-calisir`],
     [d.why, `${base}#neden-biz`],
     [d.packages, `${base}/packages`],
+    [d.otonom, `${base}/otonom-red-team`], // (Otonom AI Red Team — deneysel, ayrı katman)
     ['Blog', '/blog'], // SEO: her sayfada blog'a internal link (Google kesfi icin)
   ];
 
