@@ -1,0 +1,14 @@
+[Unit]
+Description=PentAGI izole droplet — container egress izolasyon tabanı (DOCKER-USER)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# --no-llm: reboot sonrası GÜVENLİ idle taban (Anthropic KAPALI; CyberTestify/dış/metadata DROP).
+# Bir 3b koşusu başlatmadan önce egress-harden-docker.sh (bayraksız) ile Anthropic açılır.
+ExecStart=/opt/pentagi-run/egress-harden-docker.sh --no-llm
+
+[Install]
+WantedBy=multi-user.target
