@@ -24,40 +24,40 @@ enum DomainVerificationStatus {
 
 enum OrderStatus {
   awaiting_payment
-  awaiting_review  // (Tam Kapsamlı Pentest) ödendi ama YARI-MANUEL onay bekliyor: biz hedef/test hesabı/kapsamı gözden geçirip onaylayınca tarama başlar
-  awaiting_domain_verification  // (AKTİF paketler — ÇELİK KAPI) ödeme alınmış olsa BİLE alan adı DNS ile doğrulanmadan aktif tarama BAŞLAMAZ; müşteri /verify'da DNS TXT'i tamamlayınca tarama otomatik başlar
+  awaiting_review // (Tam Kapsamlı Pentest) ödendi ama YARI-MANUEL onay bekliyor: biz hedef/test hesabı/kapsamı gözden geçirip onaylayınca tarama başlar
+  awaiting_domain_verification // (AKTİF paketler — ÇELİK KAPI) ödeme alınmış olsa BİLE alan adı DNS ile doğrulanmadan aktif tarama BAŞLAMAZ; müşteri /verify'da DNS TXT'i tamamlayınca tarama otomatik başlar
   paid
   scan_queued
   scan_running
   scan_completed
-  awaiting_admin_review  // (İç kalite kapısı) tarama BİTTİ + rapor üretildi; müşteriye AÇILMADAN önce admin (Vedat) raporu inceleyip onaylamalı. Müşteriye "hala taranıyor" gibi görünür (kod/e-posta onaydan sonra gider).
+  awaiting_admin_review // (İç kalite kapısı) tarama BİTTİ + rapor üretildi; müşteriye AÇILMADAN önce admin (Vedat) raporu inceleyip onaylamalı. Müşteriye "hala taranıyor" gibi görünür (kod/e-posta onaydan sonra gider).
   scan_failed
-  scope_violation  // izin disi hedefe erisim tespit edildi, tarama durduruldu
+  scope_violation // izin disi hedefe erisim tespit edildi, tarama durduruldu
   report_delivered
-  report_purged   // saklama suresi doldu, rapor icerigi silindi (siparis kaydi durur)
+  report_purged // saklama suresi doldu, rapor icerigi silindi (siparis kaydi durur)
   refunded
 }
 
 enum ScanPackageKey {
-  basit_tarama       // Ucuz, guvenli, pasif OWASP on-taramasi
-  ssl_tls            // SSL/TLS yapilandirma denetimi
-  header_leak        // Guvenlik basliklari + bilgi sizintisi (.git/.env vb.)
-  dns_email          // DNS + e-posta guvenligi (SPF/DKIM/DMARC)
-  cms_cve            // CMS/framework parmak izi + bilinen CVE tespiti
-  pci_hazirlik       // PCI-DSS hazirlik on-degerlendirmesi (resmi ASV/QSA testi DEGIL)
-  kvkk_hazirlik      // KVKK on uyum kontrolu (hukuki danismanlik DEGIL)
-  iso27001_hazirlik  // ISO 27001 hazirlik kontrol listesi (resmi sertifikasyon DEGIL)
-  cors_cookie        // CORS + cerez (Set-Cookie) guvenligi — pasif header kontrolu
-  csp_analiz         // Content-Security-Policy analizi — pasif header kontrolu
+  basit_tarama // Ucuz, guvenli, pasif OWASP on-taramasi
+  ssl_tls // SSL/TLS yapilandirma denetimi
+  header_leak // Guvenlik basliklari + bilgi sizintisi (.git/.env vb.)
+  dns_email // DNS + e-posta guvenligi (SPF/DKIM/DMARC)
+  cms_cve // CMS/framework parmak izi + bilinen CVE tespiti
+  pci_hazirlik // PCI-DSS hazirlik on-degerlendirmesi (resmi ASV/QSA testi DEGIL)
+  kvkk_hazirlik // KVKK on uyum kontrolu (hukuki danismanlik DEGIL)
+  iso27001_hazirlik // ISO 27001 hazirlik kontrol listesi (resmi sertifikasyon DEGIL)
+  cors_cookie // CORS + cerez (Set-Cookie) guvenligi — pasif header kontrolu
+  csp_analiz // Content-Security-Policy analizi — pasif header kontrolu
   subdomain_takeover // Alt alan adi devralma (dangling CNAME) — pasif DNS/CT kesfi
-  api_discovery      // API & Swagger/OpenAPI dokuman kesfi — pasif GET
-  injection_verify   // Zafiyet dogrulama — enjeksiyon (SQLi/XSS), active-light
-  idor_verify        // Zafiyet dogrulama — yetkisiz erisim/IDOR, active-light
-  ssrf_verify        // SSRF dogrulama, active-light
+  api_discovery // API & Swagger/OpenAPI dokuman kesfi — pasif GET
+  injection_verify // Zafiyet dogrulama — enjeksiyon (SQLi/XSS), active-light
+  idor_verify // Zafiyet dogrulama — yetkisiz erisim/IDOR, active-light
+  ssrf_verify // SSRF dogrulama, active-light
   file_upload_verify // Dosya yukleme dogrulama, active-light
   business_logic_verify // Is mantigi dogrulama, active-light
   race_massassign_verify // Race/mass-assignment dogrulama, active-light
-  rce_verify         // RCE/komut enjeksiyonu kanit, active-verify-only
+  rce_verify // RCE/komut enjeksiyonu kanit, active-verify-only
   authenticated_scan // Login'li tarama, active-light
   autonomous_pentest // Tam otonom cok-adimli, active-light
   // --- Asagidakiler eski/pasif, sadece gecmis kayit butunlugu icin duruyor ---
@@ -76,11 +76,11 @@ enum ScanPackageKey {
 }
 
 model Customer {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  passwordHash  String
-  fullName      String?
-  createdAt     DateTime @default(now())
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String?
+  createdAt    DateTime @default(now())
 
   // Kayit aninda Kullanim Kosullari + KVKK Aydinlatma metninin okundugunun
   // teyidi (zaman damgali + metin surumu). Aydinlatma bilgilendiricidir; ToS
@@ -96,9 +96,9 @@ model Customer {
   // E-posta dogrulama: kayittan sonra 6 haneli kod (SHA-256 hash'lenir) ile dogrulanir.
   // ODEME (satin alma) adimi yalniz emailVerified=true icin acilir. Eski hesaplar
   // migration ile true isaretlenir (bkz 20260806130000_email_verification).
-  emailVerified          Boolean   @default(false)
-  emailVerifyCodeHash    String?
-  emailVerifyCodeExpiry  DateTime?
+  emailVerified         Boolean   @default(false)
+  emailVerifyCodeHash   String?
+  emailVerifyCodeExpiry DateTime?
 
   // Google OAuth ile baglanti (Google 'sub'). Ayni e-posta hesabi hem sifre hem Google
   // ile girebilir. Google ile gelen hesaplar emailVerified=true'dur (Google dogrulamis).
@@ -108,6 +108,7 @@ model Customer {
   orders             Order[]
   scheduledScans     ScheduledScan[]
   activeTestConsents ActiveTestConsent[]
+  redTeamJobs        RedTeamJob[]
 }
 
 // (Faz 3) Active-light paketler icin ZORUNLU yetkilendirme/onay beyani. Bir active-light
@@ -115,23 +116,23 @@ model Customer {
 // Beyan = elektronik imza YERINE gecen yasal ad + risk kabul checkbox'i; kriptografik
 // e-imza DEGIL. Kabul edilen metnin VERSIYONU + IP + zaman damgasi ispat icin saklanir.
 model ActiveTestConsent {
-  id           String         @id @default(uuid())
-  customerId   String
-  customer     Customer       @relation(fields: [customerId], references: [id])
-  orderId      String         @unique
-  order        Order          @relation(fields: [orderId], references: [id])
-  packageKey   ScanPackageKey
-  legalName    String         // kullanicinin tam yasal adi (beyan)
-  companyName  String?        // varsa sirket unvani
-  riskAccepted Boolean        // risk onay checkbox'i (true olmadan siparis yok)
-  textVersion  String         // kabul edilen onay metninin versiyonu
-  consentIp    String?
-  pdfDelivered Boolean        @default(false) // onay PDF'i uretildi/gonderildi mi
+  id                          String         @id @default(uuid())
+  customerId                  String
+  customer                    Customer       @relation(fields: [customerId], references: [id])
+  orderId                     String         @unique
+  order                       Order          @relation(fields: [orderId], references: [id])
+  packageKey                  ScanPackageKey
+  legalName                   String // kullanicinin tam yasal adi (beyan)
+  companyName                 String? // varsa sirket unvani
+  riskAccepted                Boolean // risk onay checkbox'i (true olmadan siparis yok)
+  textVersion                 String // kabul edilen onay metninin versiyonu
+  consentIp                   String?
+  pdfDelivered                Boolean        @default(false) // onay PDF'i uretildi/gonderildi mi
   // (Tam Kapsamlı Pentest — FAZ A) kimlik-doğrulamalı/otonom paketler için EK 3 onay (zaman damgası = kabul).
   credentialSharingAcceptedAt DateTime? // test hesabı kimlik bilgisi şifreli saklanır + LLM (Anthropic/ABD) iletilir + tarama sonrası silinir onayı (KVKK cross-border, ayrı)
   testAccountDeclaredAt       DateTime? // "üretim/ana hesap değil, sınırlı yetkili, tek-kullanımlık TEST hesabı" beyanı
   elevatedRiskAcceptedAt      DateTime? // authenticated + otonom testin yükseltilmiş riskini kabul
-  createdAt    DateTime       @default(now())
+  createdAt                   DateTime       @default(now())
 
   @@index([customerId])
 }
@@ -145,7 +146,7 @@ model TestCredential {
   orderId    String
   order      Order     @relation(fields: [orderId], references: [id])
   label      String    @default("primary") // 'primary' | 'secondary'
-  ciphertext String?   // encryptSecret çıktısı (base64 iv|tag|ct); silinince null
+  ciphertext String? // encryptSecret çıktısı (base64 iv|tag|ct); silinince null
   createdAt  DateTime  @default(now())
   purgedAt   DateTime? // kullanıldığında veya purge cron ile temizlenince damgalanır
 
@@ -163,55 +164,55 @@ enum InvoiceType {
 
 enum InvoiceStatus {
   requested // müşteri talep etti (kesilmeyi bekliyor)
-  issued    // fatura kesildi
-  sent      // fatura gönderildi
+  issued // fatura kesildi
+  sent // fatura gönderildi
 }
 
 model InvoiceRequest {
-  id           String        @id @default(uuid())
-  orderId      String        @unique
-  order        Order         @relation(fields: [orderId], references: [id])
-  type         InvoiceType
+  id      String      @id @default(uuid())
+  orderId String      @unique
+  order   Order       @relation(fields: [orderId], references: [id])
+  type    InvoiceType
 
   // Kurumsal
-  companyName  String? // ticari unvan
-  taxOffice    String? // vergi dairesi
-  taxNumber    String? // VKN — 10 hane
+  companyName String? // ticari unvan
+  taxOffice   String? // vergi dairesi
+  taxNumber   String? // VKN — 10 hane
 
   // Bireysel
-  fullName     String? // ad soyad
-  nationalId   String? // TCKN — 11 hane
+  fullName   String? // ad soyad
+  nationalId String? // TCKN — 11 hane
 
   // Ortak
   address      String
-  invoiceEmail String  // varsayılan sipariş e-postası; müşteri değiştirebilir
+  invoiceEmail String // varsayılan sipariş e-postası; müşteri değiştirebilir
 
-  status       InvoiceStatus @default(requested)
-  notes        String?       // admin notu (Vedat)
-  requestedAt  DateTime      @default(now())
-  issuedAt     DateTime?
-  sentAt       DateTime?
-  updatedAt    DateTime      @updatedAt
+  status      InvoiceStatus @default(requested)
+  notes       String? // admin notu (Vedat)
+  requestedAt DateTime      @default(now())
+  issuedAt    DateTime?
+  sentAt      DateTime?
+  updatedAt   DateTime      @updatedAt
 
   @@index([status])
 }
 
 model Domain {
-  id                 String                    @id @default(uuid())
+  id                 String                   @id @default(uuid())
   customerId         String
-  customer           Customer                  @relation(fields: [customerId], references: [id])
+  customer           Customer                 @relation(fields: [customerId], references: [id])
   hostname           String
-  verificationToken  String                    // "pentest-verify=<random>" seklinde uretilir
-  verificationMethod String                    @default("dns_txt") // dns_txt | file_upload
-  status             DomainVerificationStatus  @default(pending)
+  verificationToken  String // "pentest-verify=<random>" seklinde uretilir
+  verificationMethod String                   @default("dns_txt") // dns_txt | file_upload
+  status             DomainVerificationStatus @default(pending)
   verifiedAt         DateTime?
   lastCheckedAt      DateTime?
-  createdAt          DateTime                  @default(now())
+  createdAt          DateTime                 @default(now())
 
   // Dogrulama aninda cozumlenen hedef IP'ler (virgulle) — kapsam kontrolu icin.
-  resolvedIps        String?
+  resolvedIps String?
   // Paylasimli mi dedicated mi (kapsam kilidi icin). unknown|shared|dedicated.
-  hostingType        String                    @default("unknown")
+  hostingType String  @default("unknown")
 
   orders         Order[]
   scheduledScans ScheduledScan[]
@@ -223,15 +224,15 @@ model Domain {
 // Her paketin maliyet tavani PentAGI'deki MAX_GENERAL_AGENT_TOOL_CALLS /
 // MAX_LIMITED_AGENT_TOOL_CALLS limitlerini flow bazinda override eder.
 model ScanPackage {
-  id              String         @id @default(uuid())
-  key             ScanPackageKey @unique
-  displayName     String
-  description     String
-  priceMinorUnit  Int            // kurus cinsinden (TRY)
-  modelProvider   String         // pentagi provider profile adi (ör. "claude-haiku", "claude-opus")
-  maxToolCalls    Int            // flow'a uygulanacak sert tavan
-  promptTemplate  String         // sabit, kullanicinin degistiremedigi prompt sablonu
-  active          Boolean        @default(true)
+  id             String         @id @default(uuid())
+  key            ScanPackageKey @unique
+  displayName    String
+  description    String
+  priceMinorUnit Int // kurus cinsinden (TRY)
+  modelProvider  String // pentagi provider profile adi (ör. "claude-haiku", "claude-opus")
+  maxToolCalls   Int // flow'a uygulanacak sert tavan
+  promptTemplate String // sabit, kullanicinin degistiremedigi prompt sablonu
+  active         Boolean        @default(true)
 
   orders  Order[]
   pricing PackagePricing[]
@@ -243,48 +244,48 @@ model PackagePricing {
   id              String         @id @default(uuid())
   packageKey      ScanPackageKey
   package         ScanPackage    @relation(fields: [packageKey], references: [key])
-  region          String         // 'tr' | 'us' | 'ae' ...
-  currency        String         // 'TRY' | 'USD' | 'AED'
+  region          String // 'tr' | 'us' | 'ae' ...
+  currency        String // 'TRY' | 'USD' | 'AED'
   amountMinorUnit Int
 
   @@unique([packageKey, region])
 }
 
 model Order {
-  id              String       @id @default(uuid())
-  customerId      String
-  customer        Customer     @relation(fields: [customerId], references: [id])
-  domainId        String
-  domain          Domain       @relation(fields: [domainId], references: [id])
-  packageId       String
-  package         ScanPackage  @relation(fields: [packageId], references: [id])
+  id         String      @id @default(uuid())
+  customerId String
+  customer   Customer    @relation(fields: [customerId], references: [id])
+  domainId   String
+  domain     Domain      @relation(fields: [domainId], references: [id])
+  packageId  String
+  package    ScanPackage @relation(fields: [packageId], references: [id])
 
-  status          OrderStatus  @default(awaiting_payment)
+  status          OrderStatus @default(awaiting_payment)
   amountMinorUnit Int
-  currency        String       @default("TRY")
+  currency        String      @default("TRY")
 
   // (UX) Musteri raporu/siparisi ARSIVLEYEBILIR — veri SILINMEZ, sadece ana listede
   // gizlenir (geri alinabilir). Silme (hard delete) ayri; bu yalniz gorunurluk.
-  archived        Boolean      @default(false)
+  archived Boolean @default(false)
 
-  paymentProvider String?      // "iyzico"
-  paymentRef      String?      // saglayicidaki islem id'si
+  paymentProvider String? // "iyzico"
+  paymentRef      String? // saglayicidaki islem id'si
   paidAt          DateTime?
 
   // --- Rizalar (siparis aninda, ayri ayri; ispat yuku bizde) --------------
   // 1) Pentest yetkilendirmesi (TCK 243 hukuka uygunluk): "bu alan adinin VE
   //    altyapisinin sahibiyim/yasal yetkilisiyim, yalnizca dogrulanan hostname
   //    kapsaminda pasif taramaya riza gosteriyorum".
-  ownershipConfirmedAt DateTime?
+  ownershipConfirmedAt       DateTime?
   // 2) Mesafeli Satis Sozlesmesi + On Bilgilendirme Formu onayi.
   distanceContractAcceptedAt DateTime?
   // 3) Cayma hakki feragati (dijital/aninda ifa — Mesafeli Sozlesmeler Yon. m.15). AYRI checkbox.
-  withdrawalWaivedAt DateTime?
+  withdrawalWaivedAt         DateTime?
   // 4) Yurt disi (Anthropic, PBC — ABD) veri aktarimina KVKK m.9 ACIK RIZA (ayri checkbox).
-  crossBorderConsentAt DateTime?
+  crossBorderConsentAt       DateTime?
   // Rizanin alindigi IP ve yururlukteki hukuki metin surumu (ispat icin).
-  consentIp      String?
-  consentVersion String?
+  consentIp                  String?
+  consentVersion             String?
 
   // (Aktif Doğrulama Paketi) Ödeme öncesi "düşük kapsam" uyarısı gösterildi mi + müşteri
   // "yine de devam" onayı zaman damgası (ispat: az/hiç giriş noktası bulunabileceği önceden bildirildi).
@@ -292,29 +293,29 @@ model Order {
   lowScopeWarningAcknowledgedAt DateTime?
 
   // Cikti dili (rapor + ajan yaniti). Bolgeden turetilir: tr->tr, us/ae->en.
-  locale         String       @default("tr")
+  locale String @default("tr")
 
   // BYOK: musteri kendi anahtarini girdiyse burada (encrypted) tutulur,
   // flow bitince veya 24s icinde silinir — asla log'lanmaz.
   byokKeyEncrypted String?
-  customPrompt     String?     // sadece byok_custom paketinde dolu
+  customPrompt     String? // sadece byok_custom paketinde dolu
 
   // (İŞ 2) Tarama başarısız olduğunda sebep (özellikle full_pentest login-başarısız) — admin görünürlüğü.
   // Vedat bunu görüp gerekirse iyzico'dan MANUEL iade yapar (otomatik kredi YOK).
-  failureReason   String?
+  failureReason       String?
   // Tarama deneme sayısı (ilk deneme=1; her "tekrar dene" +1). 2'den fazla başarısızlıkta müşteriye
   // tekrar-dene yerine "iade talebi" gösterilir.
-  attemptCount    Int      @default(1)
+  attemptCount        Int       @default(1)
   // Müşteri iade talebinde bulunduysa (admin panelde görünür; Vedat iyzico'dan manuel iade yapar).
   refundRequestedAt   DateTime?
   refundRequestReason String?
 
-  flow   Flow?
-  report Report?
-  invoiceRequest    InvoiceRequest?    // (Fatura talebi — MANUEL) ödeme sonrası opsiyonel
+  flow              Flow?
+  report            Report?
+  invoiceRequest    InvoiceRequest? // (Fatura talebi — MANUEL) ödeme sonrası opsiyonel
   activeTestConsent ActiveTestConsent? // (Faz 3) active-light paketlerde zorunlu
-  testCredentials   TestCredential[]   // (Tam Kapsamlı Pentest — FAZ A) şifreli test hesabı kimlik bilgileri
-  scanLogs          ScanLog[]          // (Gözlemlenebilirlik) taramanın adım-adım yapılandırılmış logu
+  testCredentials   TestCredential[] // (Tam Kapsamlı Pentest — FAZ A) şifreli test hesabı kimlik bilgileri
+  scanLogs          ScanLog[] // (Gözlemlenebilirlik) taramanın adım-adım yapılandırılmış logu
 
   // Bu siparis bir periyodik taramadan otomatik olusturulduysa, kaynak kayit.
   scheduledScanId String?
@@ -326,31 +327,31 @@ model Order {
 
 // PentAGI tarafinda acilan flow'un bizim tarafimizdaki izi.
 model Flow {
-  id              String    @id @default(uuid())
-  orderId         String    @unique
-  order           Order     @relation(fields: [orderId], references: [id])
+  id      String @id @default(uuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
 
-  pentagiFlowId   String    @unique   // PentAGI GraphQL createFlow donus ID'si
-  status          String    @default("created") // created|running|finished|stopped|error
-  toolCallCount   Int       @default(0)
-  startedAt       DateTime  @default(now())
-  finishedAt      DateTime?
+  pentagiFlowId        String    @unique // PentAGI GraphQL createFlow donus ID'si
+  status               String    @default("created") // created|running|finished|stopped|error
+  toolCallCount        Int       @default(0)
+  startedAt            DateTime  @default(now())
+  finishedAt           DateTime?
   // Ajan >0 arac cagrisi yaptiktan sonra KESINTISIZ 'waiting'e (idle) girdigi AN.
   // Aktivite donerse (status running / toolCallCount artar) null'a cekilir. Worker,
   // idle bu andan itibaren idleWaitingGraceSeconds boyunca surerse flow'u bitirir —
   // adimlar-arasi kisa molada YANLISLIKLA erken bitirmemek icin (bkz worker idle grace).
-  idleSince       DateTime?
-  errorMessage    String?
+  idleSince            DateTime?
+  errorMessage         String?
   // (Deterministik/authenticated rapor) generateAndStoreReport CLAIM damgasi. Kimlik-dogrulamali
   // (full_pentest) rapor uretimi DAKIKALAR surer + test kimlik bilgisi TEK KULLANIMLIK. Worker bu
   // sirada YENIDEN BASLARSA, ayni 'running' flow TEKRAR islenip kimligi ikinci kez tuketiyordu ->
   // no_login_endpoint. Bu damga set edilince flow "uretimde"; ikinci isleme reddedilir (bkz worker).
-  reportGenStartedAt DateTime?
+  reportGenStartedAt   DateTime?
   // Kapsam ihlali tespit edilirse, izin disi hedef(ler) buraya audit icin yazilir.
   scopeViolationTarget String?
   // Musteriye gosterilen DOSTANE aktivite akisi (JSON ActivityItem[]) — ham log
   // DEGIL; redakte + kategorilenmis. worker her tick guncelller (bkz activityFeed.ts).
-  activityFeed String?
+  activityFeed         String?
 
   // Rapor olusturulduktan sonra PentAGI tarafindaki ham veri temizlenince damgalanir.
   rawDataPurgedAt DateTime?
@@ -366,8 +367,8 @@ model ScheduledScan {
   domain        Domain         @relation(fields: [domainId], references: [id])
   packageKey    ScanPackageKey
   region        String         @default("tr")
-  intervalDays  Int            // IS KURALI: min 7 (haftaliktan sik YOK)
-  remainingRuns Int            // pesin odenen N; 0 -> active=false
+  intervalDays  Int // IS KURALI: min 7 (haftaliktan sik YOK)
+  remainingRuns Int // pesin odenen N; 0 -> active=false
   nextRunAt     DateTime
   active        Boolean        @default(true)
   failCount     Int            @default(0) // ardarda basarisizlik; 3 -> deactivate
@@ -377,9 +378,9 @@ model ScheduledScan {
 }
 
 model Report {
-  id                String    @id @default(uuid())
-  orderId           String    @unique
-  order             Order     @relation(fields: [orderId], references: [id])
+  id      String @id @default(uuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id])
 
   // Rapor iceriği musteriye ozel bir anahtarla AES-256-GCM ile sifrelenir.
   // Anahtarin kendisi bu tabloda TUTULMAZ — sadece sifreli blob + IV + authTag.
@@ -387,39 +388,39 @@ model Report {
   encryptedBlob     Bytes
   iv                Bytes
   authTag           Bytes
-  keyDerivationSalt Bytes     // musteri sifresinden anahtar turetmek icin (scrypt/argon2)
+  keyDerivationSalt Bytes // musteri sifresinden anahtar turetmek icin (scrypt/argon2)
 
-  createdAt         DateTime  @default(now())
-  deliveredAt       DateTime?
+  createdAt   DateTime  @default(now())
+  deliveredAt DateTime?
 
   // (İç kalite kapısı) Admin (Vedat) raporu inceleyip müşteriye açtığı an. null = henüz onaylanmadı
   // (sipariş awaiting_admin_review'da bekler, müşteri "hala taranıyor" görür). Dolu = onaylandı,
   // scan_completed'a geçti + erişim kodu e-postası gönderildi.
-  adminReleasedAt   DateTime?
+  adminReleasedAt DateTime?
 
   // Tarama beklenenden erken bitti/durduruldu ve rapor icerigi eksik/bos olabilir
   // (or. PentAGI'den manuel durdurma, cokme). Musteriye acik uyari gostermek icin.
-  incomplete        Boolean   @default(false)
-  incompleteReason  String?
+  incomplete       Boolean @default(false)
+  incompleteReason String?
 
   // SADECE DEV/MOCK modu icin: e-posta servisi henuz yokken erisim sifresini
   // panelde gosterebilmek adina burada tutulur. Gercek odeme (mockPayment=false)
   // modunda ASLA doldurulmaz — sifre sadece e-posta ile ayri kanaldan gider.
-  devAccessSecret   String?
+  devAccessSecret String?
 
   // --- Ucretli eklenti: AI Cozum Onerileri (fix suggestions) --------------------
   // Ayni flow'da (ekstra LLM cagrisi olmadan) uretilir; ANA rapordan AYRI, ayni
   // accessSecret ile sifreli saklanir. Odeme (unlock) yapilana kadar API bunu
   // DONDURMEZ (kilitli). Icerik: remediation/duzeltme — asla istismar kodu.
-  fixSuggestions        Bytes?
-  fixSuggestionsIv      Bytes?
-  fixSuggestionsAuthTag Bytes?
-  fixSuggestionsSalt    Bytes?
+  fixSuggestions            Bytes?
+  fixSuggestionsIv          Bytes?
+  fixSuggestionsAuthTag     Bytes?
+  fixSuggestionsSalt        Bytes?
   // Odeme onayi (mock/sandbox). null = kilitli. Dolu = eklenti satin alindi.
-  fixSuggestionsUnlockedAt DateTime?
+  fixSuggestionsUnlockedAt  DateTime?
   // AI Cozum Onerileri ek-odemesi (iyzico): baslatilan checkout token'i + tahsil edilecek tutar.
   // Callback bu token ile raporu bulur, tutari dogrular ve fixSuggestionsUnlockedAt set eder.
-  fixSuggestionsPaymentRef String?
+  fixSuggestionsPaymentRef  String?
   fixSuggestionsAmountMinor Int?
 }
 
@@ -442,11 +443,11 @@ model AdminUser {
 // odeme adimi ATLANIR (krediyle-ode mantigina benzer kisayol; gercek iyzico cagrisi YOK).
 model PromoCode {
   id            String    @id @default(uuid())
-  code          String    @unique   // kullanici girdisi (case-insensitive: hep UPPER saklanir)
-  discountType  String    // "percentage" (0-100) | "fixed" (kurus)
+  code          String    @unique // kullanici girdisi (case-insensitive: hep UPPER saklanir)
+  discountType  String // "percentage" (0-100) | "fixed" (kurus)
   discountValue Int
   active        Boolean   @default(true)
-  maxUses       Int?      // null = sinirsiz
+  maxUses       Int? // null = sinirsiz
   usedCount     Int       @default(0)
   expiresAt     DateTime? // null = suresiz
   createdAt     DateTime  @default(now())
@@ -461,7 +462,7 @@ model PromoCodeUsage {
   promoCode               PromoCode @relation(fields: [promoCodeId], references: [id])
   orderId                 String    @unique
   customerId              String
-  code                    String    // o anki kod (kod silinse de iz kalsin)
+  code                    String // o anki kod (kod silinse de iz kalsin)
   originalAmountMinorUnit Int
   discountMinorUnit       Int
   finalAmountMinorUnit    Int
@@ -474,9 +475,9 @@ model PromoCodeUsage {
 model BlogPost {
   id          String    @id @default(uuid())
   title       String
-  description String    // meta aciklama (SEO)
+  description String // meta aciklama (SEO)
   slug        String    @unique // Turkce karaktersiz, tire ayrimli (backend normalize eder)
-  contentMd   String    // Markdown icerik
+  contentMd   String // Markdown icerik
   status      String    @default("draft") // draft | scheduled | published
   createdAt   DateTime  @default(now())
   publishedAt DateTime? // null = henuz yayinlanmadi
@@ -490,23 +491,65 @@ model BlogPost {
 // body TAM loglanmaz; yalnız status/süre/boyut + kısa özet. Hassas header değerleri maskelidir.
 // Retention: worker periyodik olarak eski kayıtları siler (sonsuza kadar biriktirilmez).
 model ScanLog {
-  id        String   @id @default(uuid())
-  orderId   String
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  seq       Int      // taramaya özel artan sıra (kronolojik gösterim için)
-  ts        DateTime // adımın gerçekleştiği an
-  step      String   // kontrol/adım adı (ör. "Enjeksiyon Doğrulama", "TLS Kontrolü")
-  level     String   @default("info") // info | warn | error | circuit_breaker
-  method    String?  // GET/POST
-  url       String?  // istek URL'i (hassas query/header değerleri maskeli)
-  status    Int?     // HTTP status
-  durationMs Int?    // yanıt süresi
-  sizeBytes Int?     // yanıt boyutu
-  rule      String?  // tetiklenen taxonomy anahtarı/kural (ör. "missing_hsts", "R5")
-  severity  String?  // atanan şiddet/güven
-  summary   String?  // kısa özet (eşleşen header, regex parçası, hata mesajı, devre-kesici nedeni)
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  seq        Int // taramaya özel artan sıra (kronolojik gösterim için)
+  ts         DateTime // adımın gerçekleştiği an
+  step       String // kontrol/adım adı (ör. "Enjeksiyon Doğrulama", "TLS Kontrolü")
+  level      String   @default("info") // info | warn | error | circuit_breaker
+  method     String? // GET/POST
+  url        String? // istek URL'i (hassas query/header değerleri maskeli)
+  status     Int? // HTTP status
+  durationMs Int? // yanıt süresi
+  sizeBytes  Int? // yanıt boyutu
+  rule       String? // tetiklenen taxonomy anahtarı/kural (ör. "missing_hsts", "R5")
+  severity   String? // atanan şiddet/güven
+  summary    String? // kısa özet (eşleşen header, regex parçası, hata mesajı, devre-kesici nedeni)
+  createdAt  DateTime @default(now())
 
   @@index([orderId, seq])
   @@index([createdAt]) // retention temizliği için
+}
+
+// (OTONOM AI RED TEAM — 3b-ii) Gated "Hazırla" tetiğinden oluşan iş kaydı. Deterministik
+// paketlerin Order/Report akışından TAMAMEN AYRI (6 paket bozulmaz). started:true = kuyruğa
+// alındı; orkestrasyon runner'ı (provision→egress→cap'li kampanya→binder→rapor→teardown)
+// bu kaydı işler. idempotencyKey: aynı istek tekrarında yeni iş açılmaz.
+model RedTeamJob {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
+  idempotencyKey String @unique
+  domain         String // hedef host (sahiplik/yetki beyanıyla)
+  level          String // S1 | S2 | S3
+  environment    String // test | staging | prod
+
+  // Onaylar (koşudan ÖNCE zorunlu; ispat yükü bizde — IP + zaman)
+  ownershipConfirmed   Boolean @default(false)
+  riskAccepted         Boolean @default(false)
+  prodElevatedAccepted Boolean @default(false)
+  consentIp            String?
+
+  // Durum makinesi: queued→provisioning→hardening→running→binding→reporting→completed
+  //                 / failed / torn_down
+  status     String    @default("queued")
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  // Orkestrasyon/audit referansları (runner doldurur; secret TUTULMAZ)
+  dropletId  String?
+  targetIp   String?
+  llmCalls   Int?
+  costUsd    Float?
+  reportJson Json? // binder→rapor çıktısı (deterministik)
+  log        Json? // audit olay dizisi [{at,phase,message}]
+  error      String?
+
+  @@index([status])
+  @@index([createdAt])
 }

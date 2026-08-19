@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { config } from '../config.js';
+import { prisma } from '../db.js';
 import { zodError } from '../httpErrors.js';
 import { requireBeta, BETA_TOKEN_SCOPE } from '../middleware/beta.js';
 import { suggestPricingForHost } from '../services/pricingModel.js';
@@ -96,19 +97,84 @@ const startSchema = z.object({
   prodElevatedAccepted: z.boolean().optional(),
 });
 
-// POST /beta/start — 3b-i STUB. GERÇEK KOŞU YOK. Sahiplik/onay HARD-GATE sunucuda doğrulanır;
-// S3+prod ek-onay zorunlu; her şey geçerliyse "Hazırlanıyor" stub'ı döner (3b-ii'de bağlanacak).
-betaRouter.post('/start', requireBeta, (req, res) => {
+/** Opsiyonel: Authorization Bearer (kullanıcı JWT'si) varsa customerId çıkar (non-fatal). */
+function optionalCustomerId(req: import('express').Request): string | null {
+  const h = req.header('authorization');
+  if (!h?.startsWith('Bearer ')) return null;
+  try {
+    return (jwt.verify(h.slice(7), config.jwtSecret) as { sub?: string }).sub ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// POST /beta/start — 3b-ii: gated tetik → İŞ KAYDI (idempotent, started:true, audit).
+// Sahiplik/risk HARD-GATE + S3+prod ek-onay sunucuda doğrulanır. İş 'queued' olur; orkestrasyon
+// runner'ı (provision→egress→cap'li kampanya→binder→rapor→teardown) işler. Bu uç GERÇEK koşuyu
+// KENDİ başlatmaz (runner ayrı, DO token + hedef ile operatör-tetikli) — kazara provision olmasın.
+betaRouter.post('/start', requireBeta, async (req, res) => {
   const parsed = startSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
-  const { level, environment, prodElevatedAccepted } = parsed.data;
+  const { domain, level, environment, ownershipConfirmed, riskAccepted, prodElevatedAccepted } = parsed.data;
   if (level === 'S3' && environment === 'prod' && prodElevatedAccepted !== true) {
     return res.status(400).json({ error: 'Prod + Agresif (S3) için ek yüksek-risk onayı zorunludur (test/staging önerilir).' });
   }
-  // Bilerek: hiçbir tarama/orkestrasyon başlatılmaz. Yalnız akış ispatı.
-  return res.json({
-    status: 'preparing',
-    started: false,
-    message: 'Hazırlanıyor — otonom orkestrasyon yakında etkinleşecek (3b-ii). Bu aşamada gerçek koşu başlatılmaz.',
+  const host = normalizeHost(domain);
+  if (!host) return res.status(400).json({ error: 'Geçerli, herkese açık bir alan adı girin (ör. example.com).' });
+
+  const consentIp = req.ip ?? null;
+  const customerId = optionalCustomerId(req);
+  const now = new Date();
+  const dateBucket = now.toISOString().slice(0, 10); // gün bazlı — aynı gün aynı hedef tekrar = aynı iş
+  const idempotencyKey = crypto
+    .createHash('sha256')
+    .update([host, level, environment, consentIp ?? '', customerId ?? '', dateBucket].join('|'))
+    .digest('hex');
+
+  const job = await prisma.redTeamJob.upsert({
+    where: { idempotencyKey },
+    update: {}, // idempotent: aynı istek yeni iş AÇMAZ
+    create: {
+      idempotencyKey,
+      customerId,
+      domain: host,
+      level,
+      environment,
+      ownershipConfirmed,
+      riskAccepted,
+      prodElevatedAccepted: prodElevatedAccepted ?? false,
+      consentIp,
+      status: 'queued',
+      startedAt: now,
+      log: [
+        {
+          at: now.toISOString(),
+          phase: 'queued',
+          message: 'gated tetik: beta-grant + sahiplik + risk onayı doğrulandı; iş kuyruğa alındı',
+        },
+      ],
+    },
   });
+
+  return res.json({
+    status: job.status,
+    started: true,
+    jobId: job.id,
+    message:
+      'İş kuyruğa alındı. Otonom orkestrasyon (izole droplet + cap + kanıt-bağlayıcı) runner tarafından işlenecek.',
+  });
+});
+
+// GET /beta/job/:id — iş durumu (secret/log-detay dönmez; panel polling için).
+betaRouter.get('/job/:id', requireBeta, async (req, res) => {
+  const job = await prisma.redTeamJob.findUnique({
+    where: { id: req.params.id },
+    select: {
+      id: true, status: true, domain: true, level: true, environment: true,
+      createdAt: true, startedAt: true, finishedAt: true,
+      llmCalls: true, costUsd: true, reportJson: true, error: true,
+    },
+  });
+  if (!job) return res.status(404).json({ error: 'İş bulunamadı.' });
+  return res.json(job);
 });
