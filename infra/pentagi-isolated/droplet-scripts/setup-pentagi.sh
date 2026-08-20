@@ -43,8 +43,15 @@ cd /opt/pentagi
 
 # 3) .env: COOKIE_SIGNING_SALT (JWT bootstrap için sabit) + DOCKER_NETWORK + ANTHROPIC boş (off-disk)
 [ -f .env ] || cp .env.example .env
-grep -q '^COOKIE_SIGNING_SALT=' .env || echo "COOKIE_SIGNING_SALT=$(openssl rand -hex 16)" >> .env
-sed -i "s|^COOKIE_SIGNING_SALT=.*|COOKIE_SIGNING_SALT=${COOKIE_SIGNING_SALT:-$(grep '^COOKIE_SIGNING_SALT=' .env | cut -d= -f2)}|" .env
+# COOKIE_SIGNING_SALT: JWT imzalama anahtarının kaynağı — SERVER ve bootstrap AYNI değeri kullanmalı.
+# Taze rastgele SET et (deterministik; .env.example default'u/boş bırakma). set +x zaten aktif → değer basılmaz.
+_SALT="$(openssl rand -hex 16)"
+if grep -q '^COOKIE_SIGNING_SALT=' .env; then
+  sed -i "s|^COOKIE_SIGNING_SALT=.*|COOKIE_SIGNING_SALT=${_SALT}|" .env
+else
+  printf 'COOKIE_SIGNING_SALT=%s\n' "$_SALT" >> .env
+fi
+unset _SALT
 sed -i "s|^DOCKER_NETWORK=.*|DOCKER_NETWORK=pentagi-network|" .env
 sed -i "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=|" .env    # anahtar .env'e YAZILMAZ
 
@@ -76,10 +83,13 @@ done
 python3 - <<'PY'
 import subprocess, hashlib, hmac, base64, json, time, os, secrets, urllib.request, ssl
 def psql(sql): return subprocess.run(["docker","exec","pgvector","psql","-U","postgres","-d","pentagidb","-tAc",sql],capture_output=True,text=True).stdout.strip()
-salt=""
-for line in open("/opt/pentagi/.env"):
-    if line.startswith("COOKIE_SIGNING_SALT="): salt=line.split("=",1)[1].strip()
-assert salt, "COOKIE_SIGNING_SALT yok"
+# Salt'ı SERVER'ın GERÇEK env'inden oku (çalışan pentagi container'ı → .env'den olası sapma YOK;
+# JWT tam olarak server'ın kullandığı salt ile imzalanır → 403 uyuşmazlığı biter). Fallback: .env.
+salt=subprocess.run(["docker","exec","pentagi","printenv","COOKIE_SIGNING_SALT"],capture_output=True,text=True).stdout.strip()
+if not salt:
+    for line in open("/opt/pentagi/.env"):
+        if line.startswith("COOKIE_SIGNING_SALT="): salt=line.split("=",1)[1].strip()
+assert salt, "COOKIE_SIGNING_SALT yok (container env + .env boş)"
 uid=1; rid=1; ttl=86400
 uhash=psql("SELECT hash FROM users WHERE id=1;")
 tid=secrets.token_hex(5)
@@ -95,6 +105,21 @@ tok=(h+b"."+c+b"."+sig).decode()
 os.makedirs("/opt/pentagi-run",exist_ok=True)
 open("/opt/pentagi-run/api_token","w").write(tok); os.chmod("/opt/pentagi-run/api_token",0o600)
 open("/opt/pentagi-run/graphql_path","w").write("/api/v1/graphql")
-print("API-TOKEN BOOTSTRAP OK (token diske yazıldı, ekrana basılmadı)")
+# DOĞRULAMA: authed {__typename} DATA dönmeli (403 DEĞİL). Server tam hazır olması için retry (~80s).
+# Token/salt ASLA basılmaz; yalnız yanıt-özeti (403 ise kısa hata, secret değil).
+CTX=ssl.create_default_context(); CTX.check_hostname=False; CTX.verify_mode=ssl.CERT_NONE
+ok=False; diag=""
+for _ in range(20):
+    try:
+        req=urllib.request.Request("https://localhost:8443/api/v1/graphql",data=b'{"query":"{__typename}"}',
+            headers={"Authorization":"Bearer "+tok,"content-type":"application/json"},method="POST")
+        body=urllib.request.urlopen(req,context=CTX,timeout=15).read().decode()
+        if '"data"' in body and '__typename' in body: ok=True; break
+        diag=body[:80]
+    except Exception as e:
+        diag=str(e)[:80]
+    time.sleep(4)
+print("BOOTSTRAP AUTH:", "OK (token diske yazıldı, basılmadı)" if ok else ("FAIL: "+diag))
+if not ok: raise SystemExit("bootstrap auth DOĞRULANAMADI (403? salt/token uyuşmazlığı) — setup DURDU")
 PY
 echo "setup-pentagi tamam."
