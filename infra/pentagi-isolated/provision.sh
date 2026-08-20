@@ -2,7 +2,7 @@
 # AŞAMA 1 — İzole PentAGI droplet (fra1 + ayrı VPC + firewall). PentAGI KURMAZ.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-DO_TOKEN="$(grep -E '^DIGITAL_OCEAN_API_KEY=' "$HERE/../../backend/.env" | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')"
+DO_TOKEN="${DIGITAL_OCEAN_API_KEY:-$(grep -E '^DIGITAL_OCEAN_API_KEY=' "$HERE/../../backend/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')}"
 [ -n "$DO_TOKEN" ] || { echo "token yok"; exit 1; }
 API="https://api.digitalocean.com/v2"
 auth=(-H "Authorization: Bearer $DO_TOKEN" -H "Content-Type: application/json")
@@ -53,8 +53,8 @@ CI
 echo "== 4) Droplet (fra1, VPC içinde, key-only) =="
 DROP_ID="$(curl -s "${auth[@]}" "$API/droplets?name=$NAME" | jq -r --arg n "$NAME" '.droplets[]|select(.name==$n)|.id' | head -1)"
 if [ -z "$DROP_ID" ]; then
-  DROP_ID="$(curl -s "${auth[@]}" -X POST "$API/droplets" -d "$(jq -n --arg n "$NAME" --arg fp "$FP" --arg vpc "$VPC_ID" --arg ud "$UD" \
-    '{name:$n,region:"fra1",size:"s-2vcpu-4gb",image:"ubuntu-22-04-x64",ssh_keys:[$fp],vpc_uuid:$vpc,user_data:$ud,ipv6:false,monitoring:false,tags:["pentagi-isolated"]}')" | jq -r '.droplet.id')"
+  DROP_ID="$(curl -s "${auth[@]}" -X POST "$API/droplets" -d "$(jq -n --arg n "$NAME" --arg fp "$FP" --arg vpc "$VPC_ID" --arg ud "$UD" --arg sz "${SIZE:-s-4vcpu-8gb}" \
+    '{name:$n,region:"fra1",size:$sz,image:"ubuntu-22-04-x64",ssh_keys:[$fp],vpc_uuid:$vpc,user_data:$ud,ipv6:false,monitoring:false,tags:["pentagi-isolated"]}')" | jq -r '.droplet.id')"
 fi
 echo "  droplet_id=$DROP_ID"
 

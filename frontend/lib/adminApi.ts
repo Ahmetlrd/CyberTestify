@@ -104,6 +104,17 @@ export const adminApi = {
       `/admin/redteam-jobs/${id}/logs?after=${after}`,
     ),
   redteamKill: (id: string) => areq<{ ok: boolean; output: string }>(`/admin/redteam-jobs/${id}/kill`, { method: 'POST' }),
+  // (MODEL YÖNETİMİ + MALİYET + CANLI TETİK)
+  redteamModelCatalog: () =>
+    areq<{ catalog: Array<{ id: string; label: string; tier: string; price: { inM: number; outM: number }; expensive: boolean }>; roles: string[]; defaults: Record<string, string>; levels: Record<string, { capSec: number; capCalls: number; capCostUsd: number; size: string; profile: string }> }>(
+      '/admin/redteam/model-catalog',
+    ),
+  redteamEstimate: (body: { level: string; modelConfig?: Record<string, string>; capCallsOverride?: number }) =>
+    areq<{ estUsd: number; dominantModel: string; hasOpus: boolean; note: string; perModel: Array<{ model: string; sharePct: number; estUsd: number }> }>(
+      '/admin/redteam/estimate', { method: 'POST', body: JSON.stringify(body) },
+    ),
+  redteamCreate: (body: { domain: string; level: string; modelConfig?: Record<string, string>; capCallsOverride?: number; capSecOverride?: number; capCostOverride?: number; dryRun?: boolean }) =>
+    areq<{ ok: boolean; jobId: string; dryRun: boolean; estimate: any }>('/admin/redteam-jobs', { method: 'POST', body: JSON.stringify(body) }),
 
   // (HESAP VEREBİLİRLİK) Admin rapor-erişim audit'i (değiştirilemez; secret içermez).
   reportAccessLogs: (page = 1, opts: { reportId?: string; customerId?: string } = {}) =>

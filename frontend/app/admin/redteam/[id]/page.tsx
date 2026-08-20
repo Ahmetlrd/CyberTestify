@@ -123,6 +123,22 @@ export default function AdminRedTeamDetail({ params }: { params: { id: string } 
           <p style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>Hedef IP: {job.targetIp || '—'} · droplet: {job.dropletIp || '—'} · son pull: {fmtDate(job.lastPulledAt)}</p>
         </div>
 
+        {/* Model dağılımı + maliyet */}
+        <div style={card}>
+          <h3 style={{ fontSize: 14, margin: '0 0 10px', color: '#e2e8f0' }}>Model dağılımı + maliyet</h3>
+          {job.estCostUsd != null && <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 6px' }}>tahmini: ~${Number(job.estCostUsd).toFixed(3)}{job.costUsd != null && ` · gerçek: $${Number(job.costUsd).toFixed(4)}`}</p>}
+          {Array.isArray(job.modelUsage) && job.modelUsage.length ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {job.modelUsage.map((m: any, i: number) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#cbd5e1' }}>
+                  <span style={{ color: '#c4b5fd' }}>{m.model}</span>
+                  <span>{m.calls} çağrı · <b>${Number(m.costUsd).toFixed(4)}</b></span>
+                </div>
+              ))}
+            </div>
+          ) : <p style={{ fontSize: 12, color: '#64748b' }}>Model kullanımı koşu sırasında (canlı) dolar.</p>}
+        </div>
+
         {/* Bulgular */}
         <div style={card}>
           <h3 style={{ fontSize: 14, margin: '0 0 10px', color: '#e2e8f0' }}>Bulgular</h3>

@@ -30,7 +30,10 @@ export default function AdminRedTeam() {
 
   return (
     <>
-      <H1>Otonom Red Team — İşler</H1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <H1>Otonom Red Team — İşler</H1>
+        <Link href="/admin/redteam/new" style={{ padding: '8px 16px', borderRadius: 8, background: '#0369a1', color: '#fff', fontWeight: 700, fontSize: 13 }}>+ Yeni koşu</Link>
+      </div>
       <p style={{ fontSize: 12, color: '#64748b', margin: '-8px 0 14px' }}>
         Canlı gözlem: veri, orchestrator'ın SSH kontrol-kanalından çektiği (droplet→CyberTestify PUSH yok) verilerden gelir. Yalnız admin görür.
       </p>

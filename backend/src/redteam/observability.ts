@@ -47,6 +47,7 @@ export async function persistPull(jobId: string, result: PullResult, phase?: str
       ...(live.costUsd != null ? { costUsd: live.costUsd } : {}),
       ...(live.egressTargetOk != null ? { egressTargetOk: live.egressTargetOk } : {}),
       ...(live.egressCyberBlocked != null ? { egressCyberBlocked: live.egressCyberBlocked } : {}),
+      ...(live.modelUsage ? { modelUsage: live.modelUsage as any } : {}),
       lastPulledAt: new Date(),
     },
   });

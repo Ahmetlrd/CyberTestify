@@ -37,6 +37,11 @@ export const REMOTE = {
     `(SELECT count(*) FROM msgchains)||'|'||` +
     `COALESCE((SELECT SUM(usage_cost_in+usage_cost_out)::numeric(12,4) FROM msgchains),0)||'|'||` +
     `(SELECT count(*) FROM toolcalls);" 2>/dev/null`,
+  // Model başına: model | çağrı | maliyet (canlı breakdown)
+  perModel:
+    `docker exec pgvector psql -U postgres -d pentagidb -tAc ` +
+    `"SELECT COALESCE(model,'?')||':'||count(*)||':'||COALESCE(SUM(usage_cost_in+usage_cost_out),0)::numeric(12,4) ` +
+    `FROM msgchains GROUP BY model;" 2>/dev/null`,
   campaignTail: `tail -n 3 /opt/pentagi-run/campaign.log 2>/dev/null`,
   auditTail: `tail -n 8 /opt/pentagi-run/audit/*.log 2>/dev/null`,
   // egress ampirik gate (throwaway konteyner): TARGET_OK / CYBERTESTIFY_BLOCKED / METADATA_BLOCKED
@@ -50,6 +55,7 @@ export type PullLive = {
   toolCalls?: number;
   egressTargetOk?: boolean;
   egressCyberBlocked?: boolean;
+  modelUsage?: Array<{ model: string; calls: number; costUsd: number }>;
 };
 export type PullLogLine = { source: string; level: 'info' | 'warn' | 'error'; message: string };
 export type PullResult = { live: PullLive; logs: PullLogLine[] };
@@ -86,6 +92,19 @@ export async function pullOnce(exec: RemoteExec, opts: { targetIp?: string | nul
     live.costUsd = n(cost);
     live.toolCalls = n(tools);
     logs.push({ source: 'pentagi', level: 'info', message: `flow=${st} çağrı=${calls} maliyet=$${cost} toolcall=${tools}` });
+  }
+
+  // 1b) Model başına breakdown (canlı)
+  const pm = await safe('perModel', REMOTE.perModel);
+  if (pm && pm.trim()) {
+    const rows = pm.trim().split('\n').map((l) => {
+      const [model, calls, cost] = l.split(':');
+      return { model: (model || '?').trim(), calls: Number(calls) || 0, costUsd: Number(cost) || 0 };
+    }).filter((r) => r.model);
+    if (rows.length) {
+      live.modelUsage = rows;
+      logs.push({ source: 'pentagi', level: 'info', message: 'model dağılımı: ' + rows.map((r) => `${r.model}×${r.calls} ($${r.costUsd})`).join(' · ') });
+    }
   }
 
   // 2) Cap / kampanya kuyruğu (son satırlar)

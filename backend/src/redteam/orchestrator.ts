@@ -47,6 +47,7 @@ export type OrchestratorCtx = {
   doTokenPresent: boolean; // çağıran env'de DIGITAL_OCEAN_API_KEY var mı diye bakar (değeri buraya GELMEZ)
   exec: ExecFn;
   resolver?: Resolver; // hedef çözme (varsayılan nodeResolver; unit-test'te mock)
+  cap?: { capSec: number; capCalls: number; capCostUsd: number }; // panelden ayar (yoksa seviye varsayılanı)
   onStep?: (s: StepLog) => void | Promise<void>;
 };
 
@@ -81,7 +82,7 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
 }> {
   const steps: StepLog[] = [];
   const { job } = ctx;
-  const cfg = LEVEL_CFG[job.level];
+  const cfg = { ...LEVEL_CFG[job.level], ...(ctx.cap ?? {}) };
   let provisioned = false;
   let report: RedTeamReport | undefined;
 

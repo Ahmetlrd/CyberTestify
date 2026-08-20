@@ -2,7 +2,7 @@
 # İmha: droplet + firewall + VPC + SSH key kaydı (ephemeral model).
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-DO_TOKEN="$(grep -E '^DIGITAL_OCEAN_API_KEY=' "$HERE/../../backend/.env" | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')"
+DO_TOKEN="${DIGITAL_OCEAN_API_KEY:-$(grep -E '^DIGITAL_OCEAN_API_KEY=' "$HERE/../../backend/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')}"
 API="https://api.digitalocean.com/v2"; auth=(-H "Authorization: Bearer $DO_TOKEN")
 S="$HERE/state.json"; [ -f "$S" ] || { echo "state yok"; exit 1; }
 D=$(jq -r '.droplet_id//empty' "$S"); F=$(jq -r '.firewall_id//empty' "$S"); V=$(jq -r '.vpc_id//empty' "$S"); K=$(jq -r '.ssh_key_id//empty' "$S")

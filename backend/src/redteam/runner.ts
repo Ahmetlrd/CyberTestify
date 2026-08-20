@@ -1,0 +1,161 @@
+/**
+ * (OTONOM RED TEAM — CANLI RUNNER) runPipeline'ı GERÇEK exec + onStep ile çalıştırır.
+ * Faz-farkında exec: provision/teardown = prod host'ta LOKAL (DO token process.env'den, ARGA/LOG'A
+ * yazılmaz); droplet fazları (setup/harden/verify/campaign/bind) = SSH kontrol-kanalı (droplet IP
+ * provision sonrası state.json'dan). onStep → persistStep (faz+log DB'ye). Campaign sırasında puller
+ * döngüsü (canlı ilerleme/maliyet). teardown finally (orchestrator'da).
+ *
+ * SECRET: DO token yalnız child env'e geçer (process.env), ASLA arg/log/string'e yazılmaz. LLM anahtarı
+ * droplet'e SSH-stdin ile akıtılır (dosyaya, chmod 600), değeri LOG'lanmaz. maskSecrets tüm loglarda.
+ *
+ * `dryRun`: hiçbir DO/SSH komutu çalışmaz — zincir + persist yolu doğrulanır (maliyet YOK).
+ */
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
+import { prisma } from '../db.js';
+import { runPipeline, LEVEL_CFG, type ExecFn, type Level, type Env } from './orchestrator.js';
+import { makeSshExec, redteamKeyPath } from './controlChannel.js';
+import { persistStep, persistPull } from './observability.js';
+import { pullOnce, maskSecrets } from './puller.js';
+import { nodeResolver } from './targetGuard.js';
+
+const execFileAsync = promisify(execFile);
+
+/** Infra scriptleri kökü (prod: /opt/cybertestify/app/infra/pentagi-isolated). */
+function scriptsDir(): string {
+  return process.env.REDTEAM_SCRIPTS_DIR ?? 'infra/pentagi-isolated';
+}
+
+/** Prod host'ta LOKAL komut (provision/teardown). DO token child ENV'den (arga/log'a KONMAZ). */
+const localExec: ExecFn = async (cmd, args) => {
+  // Yorum-argümanları (# ile başlayan meta) at — bunlar orchestrator'ın plan notları.
+  const realArgs = args.filter((a) => !a.startsWith('#'));
+  try {
+    const { stdout, stderr } = await execFileAsync(cmd, realArgs, {
+      timeout: 240_000,
+      maxBuffer: 8 * 1024 * 1024,
+      env: process.env, // DIGITAL_OCEAN_API_KEY buradan gelir; string'e YAZILMAZ
+    });
+    return { code: 0, stdout, stderr };
+  } catch (e: any) {
+    return { code: typeof e?.code === 'number' ? e.code : 1, stdout: e?.stdout ?? '', stderr: e?.stderr ?? String(e?.message ?? e) };
+  }
+};
+
+/** LLM anahtarını droplet'e SSH-STDIN ile akıt (dosyaya; değeri ARG/LOG'a KONMAZ). setup öncesi. */
+async function deliverLlmKeyToDroplet(ip: string): Promise<void> {
+  const key = process.env.LLM_API_KEY ?? process.env.ANTHROPIC_API_KEY; // env-only; asla loglanmaz
+  if (!key) throw new Error('LLM anahtarı env yok (LLM_API_KEY/ANTHROPIC_API_KEY)');
+  await new Promise<void>((resolve, reject) => {
+    const p = spawn(
+      'ssh',
+      ['-i', redteamKeyPath(), '-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes', `root@${ip}`,
+        'mkdir -p /opt/pentagi-run && cat > /opt/pentagi-run/llmkey && chmod 600 /opt/pentagi-run/llmkey'],
+      { stdio: ['pipe', 'ignore', 'pipe'] },
+    );
+    let err = '';
+    p.stderr.on('data', (d) => (err += d));
+    p.on('error', reject);
+    p.on('close', (c) => (c === 0 ? resolve() : reject(new Error(`llmkey aktarım exit ${c} ${err.slice(0, 120)}`))));
+    p.stdin.write(key); // stdin ile akar — arg/log'da DEĞİL
+    p.stdin.end();
+  });
+}
+
+/** state.json'dan droplet public IP'sini oku (provision sonrası). */
+async function readDropletIp(): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('cat', [`${scriptsDir()}/state.json`], { timeout: 8000 });
+    const j = JSON.parse(stdout);
+    return j.public_ip ?? j.publicIp ?? j.ip ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Bir RedTeamJob'u uçtan uca çalıştırır. Admin trigger'dan (arka planda) çağrılır.
+ */
+export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<void> {
+  const job = await prisma.redTeamJob.findUnique({ where: { id: jobId } });
+  if (!job) return;
+
+  const level = job.level as Level;
+  const cap = {
+    capSec: job.capSecOverride ?? LEVEL_CFG[level].capSec,
+    capCalls: job.capCallsOverride ?? LEVEL_CFG[level].capCalls,
+    capCostUsd: job.capCostOverride ?? LEVEL_CFG[level].capCostUsd,
+  };
+
+  let dropletIp: string | null = job.dropletIp ?? null;
+  let pullTimer: NodeJS.Timeout | null = null;
+
+  // Faz-farkında exec: provision/teardown LOKAL; droplet fazları SSH.
+  const exec: ExecFn = async (cmd, args) => {
+    if (/\/(provision|teardown)\.sh$/.test(cmd)) return localExec(cmd, args);
+    if (!dropletIp) return { code: 1, stdout: '', stderr: 'droplet IP yok (provision başarısız?)' };
+    // setup'tan önce LLM anahtarını akıt (bir kez)
+    const realArgs = args.filter((a) => !a.startsWith('#'));
+    return makeSshExec(dropletIp)([cmd, ...realArgs].join(' '));
+  };
+
+  const onStep = async (s: Parameters<NonNullable<Parameters<typeof runPipeline>[0]['onStep']>>[0]) => {
+    // provision bittiğinde droplet IP'yi yakala + kaydet + LLM anahtarını akıt
+    if (s.phase === 'provision' && s.ok && !opts.dryRun && !dropletIp) {
+      dropletIp = await readDropletIp();
+      if (dropletIp) {
+        await prisma.redTeamJob.update({ where: { id: jobId }, data: { dropletIp } });
+        try { await deliverLlmKeyToDroplet(dropletIp); } catch (e) {
+          await persistStep(jobId, { phase: 'setup', ok: false, detail: 'LLM anahtar aktarımı başarısız: ' + maskSecrets((e as Error).message) });
+        }
+      }
+    }
+    // durum makinesini fazdan türet
+    const statusByPhase: Record<string, string> = {
+      provision: 'provisioning', setup: 'provisioning', harden: 'hardening', verify: 'hardening',
+      campaign: 'running', bind: 'binding', report: 'reporting', teardown: 'torn_down',
+    };
+    await prisma.redTeamJob.update({ where: { id: jobId }, data: { status: statusByPhase[s.phase] ?? undefined, phase: s.phase } }).catch(() => {});
+    await persistStep(jobId, s);
+
+    // campaign başında puller döngüsünü başlat (canlı ilerleme/maliyet/per-model)
+    if (s.phase === 'campaign' && s.ok && !opts.dryRun && dropletIp && !pullTimer) {
+      const ip = dropletIp;
+      pullTimer = setInterval(async () => {
+        try { await persistPull(jobId, await pullOnce(makeSshExec(ip), { targetIp: job.targetIp }), 'campaign'); } catch { /* yoksay */ }
+      }, 5000);
+    }
+  };
+
+  try {
+    await prisma.redTeamJob.update({ where: { id: jobId }, data: { status: opts.dryRun ? 'queued' : 'provisioning', startedAt: new Date() } });
+    const result = await runPipeline({
+      job: {
+        id: job.id, domain: job.domain, level, environment: job.environment as Env,
+        ownershipConfirmed: job.ownershipConfirmed, riskAccepted: job.riskAccepted, prodElevatedAccepted: job.prodElevatedAccepted,
+      },
+      scriptsDir: scriptsDir(), keyPath: redteamKeyPath(),
+      dryRun: opts.dryRun, doTokenPresent: !!process.env.DIGITAL_OCEAN_API_KEY,
+      exec, resolver: nodeResolver, cap, onStep,
+    });
+
+    if (pullTimer) { clearInterval(pullTimer); pullTimer = null; }
+
+    await prisma.redTeamJob.update({
+      where: { id: jobId },
+      data: {
+        status: result.ok ? 'completed' : 'failed',
+        phase: result.ok ? 'teardown' : job.phase,
+        finishedAt: new Date(),
+        error: result.error ?? null,
+        ...(result.report ? { reportJson: result.report as any, costUsd: (result.report.meta as any).costUsd ?? job.costUsd } : {}),
+      },
+    });
+  } catch (e) {
+    if (pullTimer) clearInterval(pullTimer);
+    await prisma.redTeamJob.update({
+      where: { id: jobId },
+      data: { status: 'failed', finishedAt: new Date(), error: maskSecrets((e as Error).message).slice(0, 500) },
+    }).catch(() => {});
+  }
+}

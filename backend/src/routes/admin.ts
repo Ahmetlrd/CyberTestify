@@ -16,6 +16,9 @@ import { triggerKillSwitch } from '../redteam/puller.js';
 import { makeSshExec } from '../redteam/controlChannel.js';
 import { appendLogs } from '../redteam/observability.js';
 import { logReportAccess } from '../services/reportAudit.js';
+import crypto from 'node:crypto';
+import { runJob } from '../redteam/runner.js';
+import { MODEL_CATALOG, DEFAULT_ROLE_MODELS, PENTAGI_ROLES, estimateRunCost } from '../redteam/models.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -650,4 +653,71 @@ adminRouter.get('/report-access-logs', async (req, res) => {
     }),
   ]);
   res.json({ page, pageSize, total, items: rows });
+});
+
+// --- Otonom Red Team: MODEL YÖNETİMİ + MALİYET + CANLI TETİK (yalnız admin) ---------------------
+const RT_LEVELS = ['S1', 'S2', 'S3'] as const;
+
+// Model kataloğu + fiyatlar + rol varsayılanları + seviye cap'leri (panel için).
+adminRouter.get('/redteam/model-catalog', (_req, res) => {
+  res.json({ catalog: MODEL_CATALOG, roles: PENTAGI_ROLES, defaults: DEFAULT_ROLE_MODELS, levels: LEVEL_CFG });
+});
+
+// Koşu-öncesi maliyet TAHMİNİ (seviye + model config + cap).
+adminRouter.post('/redteam/estimate', (req, res) => {
+  const b = req.body ?? {};
+  const level = (RT_LEVELS as readonly string[]).includes(b.level) ? (b.level as 'S1' | 'S2' | 'S3') : 'S1';
+  const calls = Number.isFinite(+b.capCallsOverride) && +b.capCallsOverride > 0 ? +b.capCallsOverride : LEVEL_CFG[level].capCalls;
+  res.json(estimateRunCost(calls, b.modelConfig ?? null));
+});
+
+// CANLI KOŞU TETİK — admin (Vedat) kendi hedefi + seviye seçip başlatır. Ownership OTOMATİK (admin +
+// kendi hedef); yine de audit'e (job log) yazılır. Runner arka planda çalışır (istek beklemez).
+adminRouter.post('/redteam-jobs', async (req, res) => {
+  const b = req.body ?? {};
+  if (typeof b.domain !== 'string' || b.domain.trim().length < 3) return res.status(400).json({ error: 'Geçerli bir hedef girin.' });
+  if (!(RT_LEVELS as readonly string[]).includes(b.level)) return res.status(400).json({ error: 'Seviye S1/S2/S3 olmalı.' });
+  const host = b.domain.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+  const level = b.level as 'S1' | 'S2' | 'S3';
+  const now = new Date();
+  const num = (v: any) => (Number.isFinite(+v) && +v > 0 ? +v : null);
+  const capCallsOverride = num(b.capCallsOverride);
+  const est = estimateRunCost(capCallsOverride ?? LEVEL_CFG[level].capCalls, b.modelConfig ?? null);
+  const idempotencyKey = crypto.createHash('sha256').update(['admin', host, level, now.toISOString()].join('|')).digest('hex');
+
+  const job = await prisma.redTeamJob.create({
+    data: {
+      idempotencyKey, domain: host, level, environment: 'test',
+      ownershipConfirmed: true, riskAccepted: true, prodElevatedAccepted: false,
+      consentIp: req.ip ?? null, status: 'queued', startedAt: now,
+      modelConfig: b.modelConfig ?? undefined,
+      capCallsOverride, capSecOverride: num(b.capSecOverride), capCostOverride: num(b.capCostOverride),
+      estCostUsd: est.estUsd,
+      log: [{ at: now.toISOString(), phase: 'queued', message: `admin(${req.adminId}) başlattı — kendi hedefi, seviye ${level}, tahmini $${est.estUsd}${est.hasOpus ? ' (OPUS!)' : ''}` }],
+    },
+  });
+  // Arka planda çalıştır (isteği bekletme). dryRun=true → maliyet YAKMADAN zinciri doğrular.
+  const dryRun = b.dryRun === true;
+  setImmediate(() => { runJob(job.id, { dryRun }).catch((e) => console.error('[redteam] runJob hata:', (e as Error).message)); });
+  res.json({ ok: true, jobId: job.id, dryRun, estimate: est });
+});
+
+// Koşu-öncesi model/cap düzenleme (yalnız 'queued' işte).
+adminRouter.patch('/redteam-jobs/:id', async (req, res) => {
+  const job = await prisma.redTeamJob.findUnique({ where: { id: req.params.id }, select: { status: true, level: true } });
+  if (!job) return res.status(404).json({ error: 'İş bulunamadı.' });
+  if (job.status !== 'queued') return res.status(409).json({ error: 'Yalnız kuyruktaki (başlamamış) iş düzenlenebilir.' });
+  const b = req.body ?? {};
+  const num = (v: any) => (Number.isFinite(+v) && +v > 0 ? +v : null);
+  const capCallsOverride = num(b.capCallsOverride);
+  const est = estimateRunCost(capCallsOverride ?? LEVEL_CFG[job.level as 'S1' | 'S2' | 'S3'].capCalls, b.modelConfig ?? null);
+  await prisma.redTeamJob.update({
+    where: { id: req.params.id },
+    data: {
+      ...(b.modelConfig !== undefined ? { modelConfig: b.modelConfig } : {}),
+      capCallsOverride, capSecOverride: num(b.capSecOverride), capCostOverride: num(b.capCostOverride),
+      estCostUsd: est.estUsd,
+    },
+  });
+  res.json({ ok: true, estimate: est });
 });

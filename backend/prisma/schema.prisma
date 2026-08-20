@@ -558,6 +558,14 @@ model RedTeamJob {
   egressCyberBlocked Boolean?
   lastPulledAt       DateTime?
 
+  // Model yönetimi + bütçe (admin panelden koşu-öncesi ayarlanır)
+  modelConfig      Json? // { role: modelId } — PentAGI ajan-rolleri model seçimi
+  capCallsOverride Int? // panelden cap ayarı (yoksa seviye varsayılanı)
+  capSecOverride   Int?
+  capCostOverride  Float?
+  estCostUsd       Float? // koşu-öncesi maliyet tahmini
+  modelUsage       Json? // canlı: [{ model, calls, costUsd }] (puller msgchains'ten)
+
   logs RedTeamJobLog[]
 
   @@index([status])
