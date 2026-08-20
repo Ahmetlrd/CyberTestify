@@ -16,14 +16,14 @@
  */
 
 import { buildRedTeamReport, type BinderOutput, type RedTeamReport } from './report.js';
+import { resolveAndPin, nodeResolver, type Resolver } from './targetGuard.js';
 
 export type Level = 'S1' | 'S2' | 'S3';
 export type Env = 'test' | 'staging' | 'prod';
 
 export type RedTeamJobInput = {
   id: string;
-  domain: string;
-  targetIp: string | null; // yetkili hedef IP (allow-target için); yoksa guard reddeder (canlıda)
+  domain: string; // hedef (domain ya da IP) — guard ÇÖZER + PINLER; saldırı yalnız pinlenen IP'ye
   level: Level;
   environment: Env;
   ownershipConfirmed: boolean;
@@ -46,6 +46,7 @@ export type OrchestratorCtx = {
   dryRun: boolean;
   doTokenPresent: boolean; // çağıran env'de DIGITAL_OCEAN_API_KEY var mı diye bakar (değeri buraya GELMEZ)
   exec: ExecFn;
+  resolver?: Resolver; // hedef çözme (varsayılan nodeResolver; unit-test'te mock)
   onStep?: (s: StepLog) => void | Promise<void>;
 };
 
@@ -56,20 +57,13 @@ export const LEVEL_CFG: Record<Level, { capSec: number; capCalls: number; capCos
   S3: { capSec: 420, capCalls: 25, capCostUsd: 1.5, size: 's-4vcpu-8gb', profile: 'geniş sömürü yüzeyi, zincirleme denemeler (agresif)' },
 };
 
-// Hedef IP guard: CyberTestify prod (public + VPC) + özel/metadata REDDEDİLİR.
-const CT_PUBLIC = '164.92.223.208';
-export function isForbiddenTargetIp(ip: string): boolean {
-  if (ip === CT_PUBLIC) return true;
-  if (/^10\./.test(ip)) return true; // CyberTestify VPC + tüm 10/8
-  if (/^127\./.test(ip) || /^0\./.test(ip) || /^169\.254\./.test(ip) || /^192\.168\./.test(ip)) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return true;
-  return false;
-}
+// Hedef IP yasak-aralık kontrolü artık targetGuard.ts'te (IPv4+IPv6, çok-IP, çöz+pinle).
 
-function levelPrompt(job: RedTeamJobInput): string {
+function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
   const p = LEVEL_CFG[job.level].profile;
   return (
-    `You are testing an AUTHORIZED target the operator owns: ${job.domain} (${job.targetIp}). ` +
+    `You are testing an AUTHORIZED target the operator owns: ${job.domain} (PINNED IP ${pinnedIp}). ` +
+    `Attack ONLY the pinned IP ${pinnedIp} (do NOT re-resolve the domain). ` +
     `Aggressiveness profile (${job.level}): ${p}. Bind every finding to concrete evidence. ` +
     `Do NOT touch any other host. Stop after confirming findings.`
   );
@@ -114,10 +108,20 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
       job.riskAccepted &&
       (!(job.level === 'S3' && job.environment === 'prod') || job.prodElevatedAccepted);
     if (!consentsOk) throw new Error('reddedildi: sahiplik/risk (veya S3+prod ek-) onayı eksik');
-    if (!job.targetIp) throw new Error('reddedildi: yetkili hedef IP yok (allow-target için zorunlu)');
-    if (isForbiddenTargetIp(job.targetIp)) throw new Error(`reddedildi: yasak hedef IP (${job.targetIp}) — CyberTestify/özel/metadata`);
     if (!ctx.dryRun && !ctx.doTokenPresent) throw new Error('reddedildi: DO token env yok (provision imkânsız)');
-    await record({ phase: 'guard', ok: true, detail: `onaylar + hedef (${job.targetIp}) doğrulandı; cap ${cfg.capSec}s/${cfg.capCalls}/$${cfg.capCostUsd}` });
+
+    // HEDEFİ ÇÖZ + PINLE (domain ise TÜM A+AAAA). Yasak IP'ye çözülürse (çok-IP: HERHANGİ biri)
+    // TÜM hedef reddedilir. Bundan sonra egress/saldırı YALNIZ pinlenen IP'ye — domain bir daha
+    // çözülmez (DNS-rebinding engeli).
+    const pin = await resolveAndPin(job.domain, ctx.resolver ?? nodeResolver);
+    if (!pin.ok) throw new Error(`reddedildi: ${pin.reason}`);
+    const pinnedIps = pin.pinnedIps;
+    const primaryIp = pin.family.v4[0] ?? pinnedIps[0]; // saldırı/doğrulama için birincil
+    await record({
+      phase: 'guard',
+      ok: true,
+      detail: `onaylar + hedef ÇÖZÜLDÜ+PİNLENDİ [${pinnedIps.join(', ')}] (birincil ${primaryIp}); cap ${cfg.capSec}s/${cfg.capCalls}/$${cfg.capCostUsd}`,
+    });
 
     // ——— 2) PROVISION (efemer izole droplet; boyut seviyeye göre) ———
     await run('provision', `${ctx.scriptsDir}/provision.sh`, [`# SIZE=${cfg.size}`]);
@@ -126,20 +130,22 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
     // ——— 3) SETUP (PentAGI + hedef-erişimi + API-token bootstrap) ———
     await run('setup', `${ctx.scriptsDir}/droplet-scripts/setup-pentagi.sh`, []);
 
-    // ——— 4) HARDEN egress: Anthropic AÇ + yalnız yetkili hedef IP ———
+    // ——— 4) HARDEN egress: Anthropic AÇ + YALNIZ pinlenen hedef IP('ler) ———
     await run('harden', `${ctx.scriptsDir}/droplet-scripts/egress-harden-docker.sh`, []);
-    await run('harden', `${ctx.scriptsDir}/droplet-scripts/allow-target.sh`, [job.targetIp]);
+    for (const ip of pinnedIps) {
+      await run('harden', `${ctx.scriptsDir}/droplet-scripts/allow-target.sh`, [ip]);
+    }
 
-    // ——— 5) VERIFY isolation (AMPİRİK): hedef erişilir + CyberTestify BLOCKED. Geçmezse ABORT ———
-    const v = await run('verify', `${ctx.scriptsDir}/droplet-scripts/verify-egress.sh`, [job.targetIp]);
-    if (!ctx.dryRun && !/TARGET_OK.*CYBERTESTIFY_BLOCKED/s.test(v.stdout)) {
+    // ——— 5) VERIFY isolation (AMPİRİK): PİNLENEN hedef erişilir + CyberTestify BLOCKED. Geçmezse ABORT ———
+    const v = await run('verify', `${ctx.scriptsDir}/droplet-scripts/verify-egress.sh`, [primaryIp]);
+    if (!ctx.dryRun && !/TARGET_OK[\s\S]*CYBERTESTIFY_BLOCKED/.test(v.stdout)) {
       throw new Error('izolasyon doğrulaması BAŞARISIZ — kampanya iptal (hedef erişilemez ya da CyberTestify açık)');
     }
 
-    // ——— 6) CAMPAIGN (cap'li; seviyeye göre profil/prompt) ———
+    // ——— 6) CAMPAIGN (cap'li; seviyeye göre profil/prompt; saldırı YALNIZ pinlenen IP'ye) ———
     await run('campaign', `${ctx.scriptsDir}/droplet-scripts/launch_cap.py`, [
       `# CAP_SEC=${cfg.capSec} CAP_CALLS=${cfg.capCalls} CAP_COST=${cfg.capCostUsd}`,
-      `# CAMPAIGN_PROMPT=${JSON.stringify(levelPrompt(job))}`,
+      `# CAMPAIGN_PROMPT=${JSON.stringify(levelPrompt(job, primaryIp))}`,
     ]);
 
     // ——— 7) BIND (PentAGI Postgres → 3-katman JSON; ham artefakta bağlı) ———

@@ -25,6 +25,17 @@ iptables -I DOCKER-USER 1 -d 169.254.0.0/16  -j DROP
 iptables -I DOCKER-USER 1 -d 172.16.0.0/12   -j ACCEPT
 iptables -I DOCKER-USER 1 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
+# IPv6: konteyner egress'ini TÜMDEN kapat (yalnız v6 pinlenen hedef varsa allow-target v6 açar).
+# En üstte DROP (best-effort; ip6tables/DOCKER-USER yoksa sessiz geç). Anthropic v4 IP kullanır.
+if command -v ip6tables >/dev/null 2>&1; then
+  ip6tables -N DOCKER-USER 2>/dev/null || true
+  ip6tables -C FORWARD -j DOCKER-USER 2>/dev/null || ip6tables -I FORWARD -j DOCKER-USER 2>/dev/null || true
+  ip6tables -F DOCKER-USER 2>/dev/null || true
+  ip6tables -A DOCKER-USER -j RETURN 2>/dev/null || true
+  ip6tables -I DOCKER-USER 1 -j DROP 2>/dev/null || true                                  # v6 egress default-deny
+  ip6tables -I DOCKER-USER 1 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+fi
+
 # reboot için snapshot (iptables-save)
 mkdir -p /etc/pentagi
 iptables-save > /etc/pentagi/iptables.rules 2>/dev/null || true
