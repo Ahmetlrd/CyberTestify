@@ -4,10 +4,18 @@
 # (compose override ile konteyner env'ine enjekte). Sonuç: /opt/pentagi-run/api_token + graphql_path.
 # NOT: İlk CANLI koşuda uçtan uca doğrulanacak; DO/secret basılmaz.
 set -euo pipefail
-# Anahtar runner tarafından SSH-STDIN ile /opt/pentagi-run/llmkey'e (chmod 600) akıtılır — bu izole,
-# tek-kullanımlık droplet'te; iş bitince teardown ile imha edilir. env varsa onu kullan, yoksa dosyadan.
-: "${ANTHROPIC_API_KEY:=$(cat /opt/pentagi-run/llmkey 2>/dev/null || true)}"
-: "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY env ya da /opt/pentagi-run/llmkey gerekli}"
+# ————————————————————————————————————————————————————————————————————————————————————
+# LLM ANAHTARI — GÜVENLİK KRİTİK (iki-leak vektörü). Anahtar runner tarafından SSH-STDIN ile
+# /opt/pentagi-run/llmkey'e (chmod 600) akıtıldı (izole, tek-kullanımlık droplet; teardown'da imha).
+# Burada shell env'ine EXPORT edilir ki `docker compose` ${ANTHROPIC_API_KEY:?} onu okusun (OFF-DISK:
+# değer PentAGI .env'ine YAZILMAZ). set +x: değer komut-tracing ile log'a/panele ASLA BASILMAZ.
+# ————————————————————————————————————————————————————————————————————————————————————
+set +x
+if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -f /opt/pentagi-run/llmkey ]; then
+  ANTHROPIC_API_KEY="$(cat /opt/pentagi-run/llmkey)"   # değer echo EDİLMEZ
+fi
+[ -n "${ANTHROPIC_API_KEY:-}" ] || { echo "HATA: ANTHROPIC_API_KEY bulunamadı (/opt/pentagi-run/llmkey)"; exit 1; }
+export ANTHROPIC_API_KEY   # docker compose SHELL ENV'den okur (off-disk); değer basılmaz
 PENTAGI_REF="${PENTAGI_REF:-v2.1.0}"
 mkdir -p /opt/pentagi-run
 
