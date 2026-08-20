@@ -7,7 +7,9 @@ DO_TOKEN="${DIGITAL_OCEAN_API_KEY:-$(grep -E '^DIGITAL_OCEAN_API_KEY=' "$HERE/..
 API="https://api.digitalocean.com/v2"
 auth=(-H "Authorization: Bearer $DO_TOKEN" -H "Content-Type: application/json")
 STATE="$HERE/state.json"
-MYIP="${MYIP:-$(curl -s https://api.ipify.org)}"
+# SSH kaynak IP'si: orchestration PROD sunucuda çalışır → bu = prod public IPv4 (164.92.223.208).
+# -4 zorla: DO firewall inbound-SSH kaynağı, konteynerin IPv4 egress'iyle eşleşsin (v6 uyuşmazlığı yok).
+MYIP="${MYIP:-$(curl -s4 https://api.ipify.org || curl -s4 https://ifconfig.me)}"
 NAME="pentagi-isolated-fra1"; VPC_NAME="pentagi-vpc-fra1"; FW_NAME="pentagi-fw"; KEY_NAME="pentagi-isolated-key"
 BLOCK_IPS=("164.92.223.208" "10.110.0.0/16")   # CyberTestify prod public + AMS3 private (superset of /20)
 

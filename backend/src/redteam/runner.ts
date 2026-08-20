@@ -65,6 +65,25 @@ async function deliverLlmKeyToDroplet(ip: string): Promise<void> {
 const SSH_OPTS = ['-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10'];
 const DROPLET_DIR = '/opt/pentagi-run';
 
+/**
+ * Droplet SSH-HAZIR olana kadar bekle (boot + sshd). Tek-seferde deneme yerine poll+backoff.
+ * "Connection refused/timeout" boot sırasında normaldir; sshd cevap verince (exit 0) döner.
+ */
+async function waitForSsh(ip: string, maxMs = 180_000): Promise<boolean> {
+  const start = Date.now();
+  let delay = 5000;
+  while (Date.now() - start < maxMs) {
+    try {
+      await execFileAsync('ssh', ['-i', redteamKeyPath(), ...SSH_OPTS, `root@${ip}`, 'true'], { timeout: 12_000 });
+      return true; // sshd cevap verdi
+    } catch {
+      await new Promise((r) => setTimeout(r, delay));
+      delay = Math.min(delay + 3000, 12_000); // 5→8→11→12s backoff
+    }
+  }
+  return false;
+}
+
 /** Droplet-scripts'i droplet'e KOPYALA (scp) + çalıştırılabilir yap. provision sonrası bir kez. */
 async function pushDropletScripts(ip: string): Promise<void> {
   const dir = scriptsDir();
@@ -117,11 +136,20 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
       dropletIp = await readDropletIp();
       if (dropletIp) {
         await prisma.redTeamJob.update({ where: { id: jobId }, data: { dropletIp } });
+        // Droplet YENİ boot etti — sshd hazır olana kadar BEKLE (tek-seferde deneme yok).
+        await persistStep(jobId, { phase: 'setup', ok: true, detail: `droplet ${dropletIp} açıldı — SSH (sshd) hazır bekleniyor…` });
+        const sshReady = await waitForSsh(dropletIp);
+        if (!sshReady) {
+          await persistStep(jobId, { phase: 'setup', ok: false, detail: 'SSH ~3 dk içinde hazır olmadı (droplet boot/firewall?) — teardown edilecek' });
+          throw new Error('SSH hazır olmadı');
+        }
+        await persistStep(jobId, { phase: 'setup', ok: true, detail: 'SSH hazır — scriptler ve LLM anahtarı aktarılıyor' });
         try {
           await pushDropletScripts(dropletIp); // droplet-scripts'i droplet'e kopyala + chmod
           await deliverLlmKeyToDroplet(dropletIp); // LLM anahtarı SSH-stdin ile (log'da değil)
         } catch (e) {
           await persistStep(jobId, { phase: 'setup', ok: false, detail: 'script/anahtar aktarımı başarısız: ' + maskSecrets((e as Error).message) });
+          throw e;
         }
       }
     }
