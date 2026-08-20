@@ -62,6 +62,14 @@ services:
     container_name: cybertestify-api
     restart: always
     env_file: ./.env
+    # (Otonom Red Team runner) infra scriptleri container'a MOUNT edilir (provision/teardown lokal,
+    # droplet-scripts scp ile droplet'e gider). id_pentagi provision.sh tarafından burada ÜRETİLİR
+    # (gitignored; secret imaja gömülmez). DO/LLM token .env'den (env), asla imaja/log'a yazılmaz.
+    volumes:
+      - ./infra/pentagi-isolated:/opt/redteam-scripts
+    environment:
+      - REDTEAM_SCRIPTS_DIR=/opt/redteam-scripts
+      - REDTEAM_SSH_KEY=/opt/redteam-scripts/id_pentagi
     depends_on:
       egress-proxy:
         condition: service_healthy   # proxy saglikli olmadan API kalkmaz

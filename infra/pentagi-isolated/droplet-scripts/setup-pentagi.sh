@@ -4,7 +4,10 @@
 # (compose override ile konteyner env'ine enjekte). Sonuç: /opt/pentagi-run/api_token + graphql_path.
 # NOT: İlk CANLI koşuda uçtan uca doğrulanacak; DO/secret basılmaz.
 set -euo pipefail
-: "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY env ile verilmeli (diske yazılmaz)}"
+# Anahtar runner tarafından SSH-STDIN ile /opt/pentagi-run/llmkey'e (chmod 600) akıtılır — bu izole,
+# tek-kullanımlık droplet'te; iş bitince teardown ile imha edilir. env varsa onu kullan, yoksa dosyadan.
+: "${ANTHROPIC_API_KEY:=$(cat /opt/pentagi-run/llmkey 2>/dev/null || true)}"
+: "${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY env ya da /opt/pentagi-run/llmkey gerekli}"
 PENTAGI_REF="${PENTAGI_REF:-v2.1.0}"
 mkdir -p /opt/pentagi-run
 

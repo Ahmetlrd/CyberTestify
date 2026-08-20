@@ -62,6 +62,17 @@ async function deliverLlmKeyToDroplet(ip: string): Promise<void> {
   });
 }
 
+const SSH_OPTS = ['-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10'];
+const DROPLET_DIR = '/opt/pentagi-run';
+
+/** Droplet-scripts'i droplet'e KOPYALA (scp) + çalıştırılabilir yap. provision sonrası bir kez. */
+async function pushDropletScripts(ip: string): Promise<void> {
+  const dir = scriptsDir();
+  await execFileAsync('ssh', ['-i', redteamKeyPath(), ...SSH_OPTS, `root@${ip}`, `mkdir -p ${DROPLET_DIR}`], { timeout: 20_000 });
+  await execFileAsync('scp', ['-i', redteamKeyPath(), ...SSH_OPTS, '-r', `${dir}/droplet-scripts/.`, `root@${ip}:${DROPLET_DIR}/`], { timeout: 90_000 });
+  await execFileAsync('ssh', ['-i', redteamKeyPath(), ...SSH_OPTS, `root@${ip}`, `chmod +x ${DROPLET_DIR}/*.sh ${DROPLET_DIR}/*.py 2>/dev/null || true`], { timeout: 15_000 });
+}
+
 /** state.json'dan droplet public IP'sini oku (provision sonrası). */
 async function readDropletIp(): Promise<string | null> {
   try {
@@ -90,13 +101,14 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
   let dropletIp: string | null = job.dropletIp ?? null;
   let pullTimer: NodeJS.Timeout | null = null;
 
-  // Faz-farkında exec: provision/teardown LOKAL; droplet fazları SSH.
+  // Faz-farkında exec: provision/teardown LOKAL (prod host); droplet fazları SSH (droplet path'e rewrite).
   const exec: ExecFn = async (cmd, args) => {
     if (/\/(provision|teardown)\.sh$/.test(cmd)) return localExec(cmd, args);
     if (!dropletIp) return { code: 1, stdout: '', stderr: 'droplet IP yok (provision başarısız?)' };
-    // setup'tan önce LLM anahtarını akıt (bir kez)
     const realArgs = args.filter((a) => !a.startsWith('#'));
-    return makeSshExec(dropletIp)([cmd, ...realArgs].join(' '));
+    // container path (${scriptsDir}/droplet-scripts/X) → droplet path (/opt/pentagi-run/X)
+    const dropletCmd = cmd.replace(/.*\/droplet-scripts\//, `${DROPLET_DIR}/`);
+    return makeSshExec(dropletIp)([dropletCmd, ...realArgs].join(' '));
   };
 
   const onStep = async (s: Parameters<NonNullable<Parameters<typeof runPipeline>[0]['onStep']>>[0]) => {
@@ -105,8 +117,11 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
       dropletIp = await readDropletIp();
       if (dropletIp) {
         await prisma.redTeamJob.update({ where: { id: jobId }, data: { dropletIp } });
-        try { await deliverLlmKeyToDroplet(dropletIp); } catch (e) {
-          await persistStep(jobId, { phase: 'setup', ok: false, detail: 'LLM anahtar aktarımı başarısız: ' + maskSecrets((e as Error).message) });
+        try {
+          await pushDropletScripts(dropletIp); // droplet-scripts'i droplet'e kopyala + chmod
+          await deliverLlmKeyToDroplet(dropletIp); // LLM anahtarı SSH-stdin ile (log'da değil)
+        } catch (e) {
+          await persistStep(jobId, { phase: 'setup', ok: false, detail: 'script/anahtar aktarımı başarısız: ' + maskSecrets((e as Error).message) });
         }
       }
     }
