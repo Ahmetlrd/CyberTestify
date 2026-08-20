@@ -44,7 +44,7 @@ const localExec: ExecFn = async (cmd, args) => {
 
 /** LLM anahtarını droplet'e SSH-STDIN ile akıt (dosyaya; değeri ARG/LOG'a KONMAZ). setup öncesi. */
 async function deliverLlmKeyToDroplet(ip: string): Promise<void> {
-  const key = process.env.LLM_API_KEY ?? process.env.ANTHROPIC_API_KEY; // env-only; asla loglanmaz
+  const key = process.env.LLM_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? process.env.ADVISORY_LLM_API_KEY; // env-only; asla loglanmaz
   if (!key) throw new Error('LLM anahtarı env yok (LLM_API_KEY/ANTHROPIC_API_KEY)');
   await new Promise<void>((resolve, reject) => {
     const p = spawn(
