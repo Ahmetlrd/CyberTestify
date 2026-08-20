@@ -10,9 +10,10 @@ WORKDIR /app
 # INDIRMEZ (sistemdekini kullaniriz) — PUPPETEER_SKIP_DOWNLOAD + EXECUTABLE_PATH.
 RUN apk add --no-cache wget openssl \
       chromium nss freetype harfbuzz ca-certificates ttf-freefont font-noto \
-      openssh-client curl jq
+      openssh-client curl jq bash
 # (Otonom Red Team runner) openssh-client=ssh/ssh-keygen/scp (droplet kontrol-kanalı), curl+jq
-# = DO API provision/teardown. python3 GEREKMEZ (launch_cap.py/binder.py DROPLET'te çalışır).
+# = DO API provision/teardown. bash = provision.sh/teardown.sh shebang (#!/usr/bin/env bash;
+# Alpine busybox sh yetmez). python3 GEREKMEZ (launch_cap.py/binder.py DROPLET'te çalışır).
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 COPY package.json package-lock.json* ./
