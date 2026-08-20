@@ -53,6 +53,25 @@ export default function AdminRedTeamDetail({ params }: { params: { id: string } 
     return () => clearInterval(t);
   }, [params.id]);
 
+  async function openReport(kind: 'html' | 'pdf') {
+    try {
+      const blob = await adminApi.redteamReportBlob(params.id, kind);
+      const url = URL.createObjectURL(blob);
+      if (kind === 'pdf') {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `redteam-${params.id.slice(0, 8)}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } else {
+        window.open(url, '_blank');
+      }
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  }
+
   async function kill() {
     if (!confirm('KILL-SWITCH: ajanı durdur + egress kes. Emin misiniz?')) return;
     setKilling(true);
@@ -145,15 +164,19 @@ export default function AdminRedTeamDetail({ params }: { params: { id: string } 
           {report ? (
             <>
               <p style={{ fontSize: 13, color: '#cbd5e1' }}>
-                Genel risk: <b>{report.overallRisk}</b> · kanıtlı {report.summary?.kanitli} · belirsiz {report.summary?.belirsiz} · elenen {report.summary?.hayalet}
+                Genel risk: <b>{report.overallRisk}</b> · kanıtlı {report.counts?.kanitli ?? 0} · belirsiz {report.counts?.belirsiz ?? 0} · elenen {report.eliminated ?? 0}
               </p>
               <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {(report.findings || []).filter((f: any) => f.tier !== 'HAYALET').map((f: any, i: number) => (
+                {[...(report.proven || []).map((f: any) => ({ ...f, tier: 'KANITLI' })), ...(report.needsReview || []).map((f: any) => ({ ...f, tier: 'BELIRSIZ' }))].map((f: any, i: number) => (
                   <div key={i} style={{ fontSize: 12, color: '#cbd5e1' }}>
                     <TierPill tier={f.tier} /> {f.title} <span style={{ color: '#64748b' }}>({f.category}/{f.severity})</span>
                     {f.evidence && <div style={{ color: '#64748b', paddingLeft: 8 }}>↳ {f.evidence.detail} [{f.evidence.artifactRef}]</div>}
                   </div>
                 ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button onClick={() => openReport('html')} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#7dd3fc', cursor: 'pointer', fontSize: 12 }}>Raporu Gör</button>
+                <button onClick={() => openReport('pdf')} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#a3e635', cursor: 'pointer', fontSize: 12 }}>PDF indir</button>
               </div>
             </>
           ) : <p style={{ fontSize: 13, color: '#64748b' }}>Henüz rapor yok (koşu tamamlanınca sınıflandırma gelir).</p>}

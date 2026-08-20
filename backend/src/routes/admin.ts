@@ -9,7 +9,8 @@ import { createDraftsFromBulk, listAllAdmin, publishNextDraft } from '../service
 import { enqueueOrStartScan } from '../services/orchestrator.js';
 import { hasTestCredential } from '../services/testCredentials.js';
 import { decryptReport, decryptSecret } from '../services/crypto.js';
-import { renderReportPdf } from '../services/pdf.js';
+import { renderReportPdf, htmlToPdfBuffer } from '../services/pdf.js';
+import { renderRedTeamFullHtml } from '../redteam/report.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
 import { LEVEL_CFG } from '../redteam/orchestrator.js';
 import { triggerKillSwitch } from '../redteam/puller.js';
@@ -720,4 +721,21 @@ adminRouter.patch('/redteam-jobs/:id', async (req, res) => {
     },
   });
   res.json({ ok: true, estimate: est });
+});
+
+// --- Otonom Red Team: TAM RAPOR (okunur HTML + indirilebilir PDF; geriye-dönük) -----------------
+adminRouter.get('/redteam-jobs/:id/report.html', async (req, res) => {
+  const job = await prisma.redTeamJob.findUnique({ where: { id: req.params.id }, select: { reportJson: true } });
+  if (!job?.reportJson) return res.status(404).json({ error: 'Bu koşu için rapor yok (koşu tamamlanmamış olabilir).' });
+  res.type('html').send(renderRedTeamFullHtml(job.reportJson as any));
+});
+
+adminRouter.get('/redteam-jobs/:id/report.pdf', async (req, res) => {
+  const job = await prisma.redTeamJob.findUnique({ where: { id: req.params.id }, select: { reportJson: true, domain: true } });
+  if (!job?.reportJson) return res.status(404).json({ error: 'Bu koşu için rapor yok.' });
+  const pdf = await htmlToPdfBuffer(renderRedTeamFullHtml(job.reportJson as any));
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="redteam-${(job.domain || 'hedef').replace(/[^a-z0-9.-]/gi, '_')}-${req.params.id.slice(0, 8)}.pdf"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(pdf);
 });

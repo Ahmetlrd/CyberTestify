@@ -137,3 +137,51 @@ export function renderRedTeamHtml(r: RedTeamReport): string {
   <p><small>Ajanın iddia ettiği ama ham kanıtı olmayan bulgular elendi, rapora alınmadı.</small></p>
 </section>`;
 }
+
+/** Yapısal rapor → TAM, kendi-kendine yeten HTML DOKÜMANI (panelde "Raporu Gör" + PDF için). */
+export function renderRedTeamFullHtml(r: RedTeamReport): string {
+  const esc = (s: string) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
+  const riskColor: Record<string, string> = { kritik: '#b91c1c', yüksek: '#c2410c', orta: '#a16207', düşük: '#15803d', temiz: '#15803d' };
+  const rc = riskColor[r.overallRisk] ?? '#334155';
+  const finding = (f: BinderFinding, tierColor: string) => `
+    <li style="margin:0 0 12px;padding:10px 12px;border-left:4px solid ${tierColor};background:#f8fafc;border-radius:0 8px 8px 0;">
+      <div style="font-weight:700;color:#0f172a;">${esc(f.title)}</div>
+      <div style="font-size:12px;color:#64748b;margin-top:2px;">${esc(f.category)} · şiddet: ${esc(RISK_LABEL[f.severity] ?? f.severity)}${f.endpoint ? ` · <code>${esc(f.endpoint)}</code>` : ''}</div>
+      ${f.evidence ? `<div style="font-size:12px;color:#334155;margin-top:6px;padding:6px 8px;background:#eef2ff;border-radius:6px;">
+        <b>Ham kanıt:</b> <code>${esc(f.evidence.artifactRef)}</code>${f.evidence.signature ? ` · imza: <code>${esc(f.evidence.signature)}</code>` : ''}<br>${esc(f.evidence.detail)}</div>` : ''}
+      <div style="font-size:11px;color:#94a3b8;margin-top:4px;">${esc(f.reason)}</div>
+    </li>`;
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Otonom AI Red Team — Bulgu Raporu</title>
+<style>
+  *{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;margin:0;padding:28px 32px;line-height:1.5;}
+  h1{font-size:22px;margin:0 0 4px} h2{font-size:15px;margin:22px 0 8px;color:#1e293b;border-bottom:1px solid #e2e8f0;padding-bottom:4px}
+  .disc{background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px 14px;font-size:12px;color:#7c2d12;margin:12px 0 18px}
+  .meta{font-size:13px;color:#475569} .risk{display:inline-block;padding:3px 12px;border-radius:999px;color:#fff;font-weight:700;background:${rc}}
+  ul{list-style:none;padding:0;margin:0} code{background:#e2e8f0;padding:1px 4px;border-radius:4px;font-size:11px}
+  .sum{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin:8px 0}
+  .sum b{font-size:18px;display:block}
+</style></head><body>
+  <h1>Otonom AI Red Team — Bulgu Raporu</h1>
+  <div class="meta"><b>Hedef:</b> ${esc(r.meta.target)} · <b>Seviye:</b> ${esc(r.meta.level)} · <b>Ortam:</b> ${esc(r.meta.environment)} · <b>Tarih:</b> ${esc(r.meta.generatedAt)}${r.meta.costUsd != null ? ` · <b>Maliyet:</b> ~$${Number(r.meta.costUsd).toFixed(4)}` : ''}${r.meta.llmCalls != null ? ` · ${r.meta.llmCalls} LLM çağrısı` : ''}</div>
+  <div class="disc">${esc(r.disclaimer)}</div>
+  <div class="sum">
+    <div><span class="risk">Genel risk: ${esc(RISK_LABEL[r.overallRisk] ?? r.overallRisk)}</span> <span style="color:#94a3b8;font-size:11px">(yalnız kanıtlı bulgulardan; belirsiz/elenen şişirmez)</span></div>
+  </div>
+  <div class="sum">
+    <div><b style="color:#15803d">${r.counts.kanitli}</b>Kanıtlı</div>
+    <div><b style="color:#a16207">${r.counts.belirsiz}</b>İnceleme gerektiren</div>
+    <div><b style="color:#64748b">${r.eliminated}</b>Elenen (hayalet)</div>
+    <div><b style="color:#334155">${r.counts.artifacts}</b>Ham artefakt</div>
+  </div>
+
+  <h2>Kanıtlı bulgular (${r.proven.length})</h2>
+  <ul>${r.proven.map((f) => finding(f, '#16a34a')).join('') || '<li style="color:#64748b;font-style:italic">Kanıtlı bulgu yok.</li>'}</ul>
+
+  <h2>İnceleme gerektiren — belirsiz (${r.needsReview.length})</h2>
+  <p style="font-size:12px;color:#64748b;margin:0 0 8px">Ham artefaktı olan ama kesin deterministik imzası olmayan iddialar. Silinmemiştir; insan doğrulaması önerilir.</p>
+  <ul>${r.needsReview.map((f) => finding(f, '#d97706')).join('') || '<li style="color:#64748b;font-style:italic">Belirsiz bulgu yok.</li>'}</ul>
+
+  <h2>Elenen (hayalet): ${r.eliminated}</h2>
+  <p style="font-size:12px;color:#64748b;margin:0">Ajanın iddia ettiği ama hiçbir ham kanıtı bulunmayan bulgular elendi ve rapora ALINMADI.</p>
+</body></html>`;
+}

@@ -1289,3 +1289,29 @@ export async function renderConsentPdf(d: ConsentPdfData): Promise<Buffer> {
     await browser.close();
   }
 }
+
+/**
+ * (Otonom Red Team) Ham HTML dokümanını PDF'e çevirir — paket rapor şablonundan BAĞIMSIZ (kendi
+ * stilini taşır). Mevcut Chromium'u kullanır. renderReportPdf'in paket-özel mantığına dokunmaz.
+ */
+export async function htmlToPdfBuffer(html: string, footerText = 'CyberTestify · Otonom AI Red Team (deneysel)'): Promise<Buffer> {
+  const browser = await puppeteer.launch({
+    executablePath: CHROMIUM_PATH,
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--font-render-hinting=none'],
+  });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'load' });
+    const pdf = await page.pdf({
+      format: 'A4', printBackground: true,
+      margin: { top: '14mm', bottom: '16mm', left: '10mm', right: '10mm' },
+      displayHeaderFooter: true, headerTemplate: '<div></div>',
+      footerTemplate: `<div style="width:100%;font-size:8px;color:#94a3b8;padding:0 12mm;display:flex;justify-content:space-between;">
+        <span>${escapeHtml(footerText)}</span><span>Sayfa <span class="pageNumber"></span>/<span class="totalPages"></span></span></div>`,
+    });
+    return Buffer.from(pdf);
+  } finally {
+    await browser.close();
+  }
+}
