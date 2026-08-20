@@ -97,7 +97,8 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
       return { code: 0, stdout: '', stderr: '' };
     }
     const r = await ctx.exec(cmd, args);
-    await record({ phase, command, ok: r.code === 0, detail: r.code === 0 ? 'ok' : `exit ${r.code}: ${r.stderr.slice(0, 200)}` });
+    // Hata detayının SONUNU göster (patlama noktası genellikle çıktının sonundadır).
+    await record({ phase, command, ok: r.code === 0, detail: r.code === 0 ? 'ok' : `exit ${r.code}: …${(r.stderr || r.stdout || '').slice(-1200)}` });
     if (r.code !== 0) throw new Error(`${phase} başarısız: ${command}`);
     return r;
   };
@@ -125,8 +126,10 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
     });
 
     // ——— 2) PROVISION (efemer izole droplet; boyut seviyeye göre) ———
-    await run('provision', `${ctx.scriptsDir}/provision.sh`, [`# SIZE=${cfg.size}`]);
+    // provisioned=true'yu provision DENENMEDEN ÖNCE set et: provision yarım droplet bırakıp patlarsa
+    // teardown-finally yine çalışsın (orphan droplet kalmasın). teardown state/name'den temizler.
     provisioned = true;
+    await run('provision', `${ctx.scriptsDir}/provision.sh`, [`# SIZE=${cfg.size}`]);
 
     // ——— 3) SETUP (PentAGI + hedef-erişimi + API-token bootstrap) ———
     await run('setup', `${ctx.scriptsDir}/droplet-scripts/setup-pentagi.sh`, []);

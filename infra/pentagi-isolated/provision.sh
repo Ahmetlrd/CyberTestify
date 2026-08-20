@@ -7,6 +7,12 @@ DO_TOKEN="${DIGITAL_OCEAN_API_KEY:-$(grep -E '^DIGITAL_OCEAN_API_KEY=' "$HERE/..
 API="https://api.digitalocean.com/v2"
 auth=(-H "Authorization: Bearer $DO_TOKEN" -H "Content-Type: application/json")
 STATE="$HERE/state.json"
+# ID boş/null ise DO API yanıtını GÖSTER + net hata ile dur (neden patladığı görünsün).
+require_id() {
+  if [ -z "${1:-}" ] || [ "$1" = "null" ]; then
+    echo "HATA: $2 alınamadı. DO API yanıtı (ilk 800):"; printf '%s' "${3:-}" | head -c 800; echo; exit 1
+  fi
+}
 # SSH kaynak IP'si: orchestration PROD sunucuda çalışır → bu = prod public IPv4 (164.92.223.208).
 # -4 zorla: DO firewall inbound-SSH kaynağı, konteynerin IPv4 egress'iyle eşleşsin (v6 uyuşmazlığı yok).
 MYIP="${MYIP:-$(curl -s4 https://api.ipify.org || curl -s4 https://ifconfig.me)}"
@@ -19,16 +25,21 @@ KEYFILE="$HERE/id_pentagi"
 PUB="$(cat "$KEYFILE.pub")"
 # DO'da aynı isimli anahtar varsa onu kullan
 KEY_ID="$(curl -s "${auth[@]}" "$API/account/keys" | jq -r --arg n "$KEY_NAME" '.ssh_keys[]|select(.name==$n)|.id' | head -1)"
-if [ -z "$KEY_ID" ]; then
-  KEY_ID="$(curl -s "${auth[@]}" -X POST "$API/account/keys" -d "$(jq -n --arg n "$KEY_NAME" --arg k "$PUB" '{name:$n,public_key:$k}')" | jq -r '.ssh_key.id')"
+if [ -z "$KEY_ID" ] || [ "$KEY_ID" = "null" ]; then
+  KRESP="$(curl -s "${auth[@]}" -X POST "$API/account/keys" -d "$(jq -n --arg n "$KEY_NAME" --arg k "$PUB" '{name:$n,public_key:$k}')")"
+  KEY_ID="$(printf '%s' "$KRESP" | jq -r '.ssh_key.id // empty')"
+  require_id "$KEY_ID" "SSH key" "$KRESP"
 fi
-FP="$(curl -s "${auth[@]}" "$API/account/keys/$KEY_ID" | jq -r '.ssh_key.fingerprint')"
+FP="$(curl -s "${auth[@]}" "$API/account/keys/$KEY_ID" | jq -r '.ssh_key.fingerprint // empty')"
+require_id "$FP" "SSH key fingerprint" "$KEY_ID"
 echo "  ssh_key_id=$KEY_ID"
 
 echo "== 2) VPC (fra1, ayrı) =="
 VPC_ID="$(curl -s "${auth[@]}" "$API/vpcs" | jq -r --arg n "$VPC_NAME" '.vpcs[]|select(.name==$n)|.id' | head -1)"
-if [ -z "$VPC_ID" ]; then
-  VPC_ID="$(curl -s "${auth[@]}" -X POST "$API/vpcs" -d "$(jq -n --arg n "$VPC_NAME" '{name:$n,region:"fra1",ip_range:"10.200.0.0/24"}')" | jq -r '.vpc.id')"
+if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "null" ]; then
+  VRESP="$(curl -s "${auth[@]}" -X POST "$API/vpcs" -d "$(jq -n --arg n "$VPC_NAME" '{name:$n,region:"fra1",ip_range:"10.200.0.0/24"}')")"
+  VPC_ID="$(printf '%s' "$VRESP" | jq -r '.vpc.id // empty')"
+  require_id "$VPC_ID" "VPC" "$VRESP"
 fi
 echo "  vpc_id=$VPC_ID (fra1)"
 
@@ -53,12 +64,21 @@ CI
 )"
 
 echo "== 4) Droplet (fra1, VPC içinde, key-only) =="
-DROP_ID="$(curl -s "${auth[@]}" "$API/droplets?name=$NAME" | jq -r --arg n "$NAME" '.droplets[]|select(.name==$n)|.id' | head -1)"
-if [ -z "$DROP_ID" ]; then
-  DROP_ID="$(curl -s "${auth[@]}" -X POST "$API/droplets" -d "$(jq -n --arg n "$NAME" --arg fp "$FP" --arg vpc "$VPC_ID" --arg ud "$UD" --arg sz "${SIZE:-s-4vcpu-8gb}" \
-    '{name:$n,region:"fra1",size:$sz,image:"ubuntu-22-04-x64",ssh_keys:[$fp],vpc_uuid:$vpc,user_data:$ud,ipv6:false,monitoring:false,tags:["pentagi-isolated"]}')" | jq -r '.droplet.id')"
+# Leftover droplet (önceki koşudan orphan) varsa REUSE ETME → İMHA et (temiz başlangıç; yarım-init
+# orphan yeniden kullanılmasın). Firewall/key/VPC reuse edilir (stabil), droplet ephemeral.
+OLD_DROP="$(curl -s "${auth[@]}" "$API/droplets?name=$NAME" | jq -r --arg n "$NAME" '.droplets[]|select(.name==$n)|.id' | head -1)"
+if [ -n "$OLD_DROP" ] && [ "$OLD_DROP" != "null" ]; then
+  echo "  leftover droplet $OLD_DROP bulundu — imha ediliyor (temiz başlangıç)"
+  curl -s "${auth[@]}" -X DELETE "$API/droplets/$OLD_DROP" >/dev/null; sleep 12
 fi
+DRESP="$(curl -s "${auth[@]}" -X POST "$API/droplets" -d "$(jq -n --arg n "$NAME" --arg fp "$FP" --arg vpc "$VPC_ID" --arg ud "$UD" --arg sz "${SIZE:-s-4vcpu-8gb}" \
+  '{name:$n,region:"fra1",size:$sz,image:"ubuntu-22-04-x64",ssh_keys:[$fp],vpc_uuid:$vpc,user_data:$ud,ipv6:false,monitoring:false,tags:["pentagi-isolated"]}')")"
+DROP_ID="$(printf '%s' "$DRESP" | jq -r '.droplet.id // empty')"
+require_id "$DROP_ID" "Droplet" "$DRESP"
 echo "  droplet_id=$DROP_ID"
+# STATE'i HEMEN yaz (firewall/ip'den ÖNCE) → sonraki adım patlarsa teardown orphan'ı bulup imha eder.
+jq -n --arg d "$DROP_ID" --arg v "$VPC_ID" --arg k "$KEY_ID" --arg ip "$MYIP" \
+  '{droplet_id:$d,vpc_id:$v,ssh_key_id:$k,myip:$ip}' > "$STATE"
 
 echo "== 5) DO Cloud Firewall (inbound: yalnız SSH benim IP'imden; outbound: setup portları) =="
 FW_ID="$(curl -s "${auth[@]}" "$API/firewalls" | jq -r --arg n "$FW_NAME" '.firewalls[]|select(.name==$n)|.id' | head -1)"
@@ -71,8 +91,10 @@ FW_BODY="$(jq -n --arg n "$FW_NAME" --arg ip "$MYIP" --argjson did "$DROP_ID" '{
     {protocol:"tcp",ports:"80",destinations:{addresses:["0.0.0.0/0","::/0"]}},
     {protocol:"tcp",ports:"443",destinations:{addresses:["0.0.0.0/0","::/0"]}}
   ]}')"
-if [ -z "$FW_ID" ]; then
-  FW_ID="$(curl -s "${auth[@]}" -X POST "$API/firewalls" -d "$FW_BODY" | jq -r '.firewall.id')"
+if [ -z "$FW_ID" ] || [ "$FW_ID" = "null" ]; then
+  FRESP="$(curl -s "${auth[@]}" -X POST "$API/firewalls" -d "$FW_BODY")"
+  FW_ID="$(printf '%s' "$FRESP" | jq -r '.firewall.id // empty')"
+  require_id "$FW_ID" "Firewall" "$FRESP"
 else
   curl -s "${auth[@]}" -X PUT "$API/firewalls/$FW_ID" -d "$FW_BODY" >/dev/null
 fi

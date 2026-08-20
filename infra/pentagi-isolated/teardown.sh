@@ -1,24 +1,23 @@
 #!/usr/bin/env bash
-# İmha: droplet + firewall + VPC + SSH key kaydı (ephemeral model).
+# İmha: EPHEMERAL droplet (tek maliyet kaynağı). firewall/SSH-key/VPC REUSE için BIRAKILIR (stabil,
+# ücretsiz; provision onları isimle reuse eder). ORPHAN-PROOF: state.json yoksa/yanlışsa droplet'i
+# İSİMLE bulup imha eder → provision yarım bıraksa bile orphan kalmaz.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DO_TOKEN="${DIGITAL_OCEAN_API_KEY:-$(grep -E '^DIGITAL_OCEAN_API_KEY=' "$HERE/../../backend/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'"' \r')}"
+[ -n "$DO_TOKEN" ] || { echo "token yok"; exit 1; }
 API="https://api.digitalocean.com/v2"; auth=(-H "Authorization: Bearer $DO_TOKEN")
-S="$HERE/state.json"; [ -f "$S" ] || { echo "state yok"; exit 1; }
-D=$(jq -r '.droplet_id//empty' "$S"); F=$(jq -r '.firewall_id//empty' "$S"); V=$(jq -r '.vpc_id//empty' "$S"); K=$(jq -r '.ssh_key_id//empty' "$S")
-[ -n "$D" ] && { echo "droplet $D siliniyor"; curl -s "${auth[@]}" -X DELETE "$API/droplets/$D" >/dev/null; }
-sleep 8
-[ -n "$F" ] && { echo "firewall $F siliniyor"; curl -s "${auth[@]}" -X DELETE "$API/firewalls/$F" >/dev/null; }
-[ -n "$K" ] && { echo "ssh key $K siliniyor"; curl -s "${auth[@]}" -X DELETE "$API/account/keys/$K" >/dev/null; }
-sleep 5
-if [ -n "$V" ]; then
-  echo "vpc $V siliniyor (droplet çıkışı için retry)"
-  for i in 1 2 3 4 5 6; do
-    RESP=$(curl -s "${auth[@]}" -X DELETE "$API/vpcs/$V"); MSG=$(echo "$RESP" | grep -o "default VPC" || true)
-    CODE=$(curl -s -o /dev/null -w "%{http_code}" "${auth[@]}" "$API/vpcs/$V")
-    if [ "$CODE" = "404" ]; then echo "  vpc SİLİNDİ"; break; fi
-    if echo "$RESP" | grep -qi "default VPC"; then echo "  vpc bölge-varsayılanı (silinemez) — boş+ücretsiz, bırakıldı"; break; fi
-    echo "  vpc henüz silinemedi (retry $i)"; sleep 10
-  done
-fi
-echo "teardown bitti"
+NAME="pentagi-isolated-fra1"
+S="$HERE/state.json"
+
+# 1) state.json'daki droplet (varsa)
+D=""; [ -f "$S" ] && D="$(jq -r '.droplet_id//empty' "$S" 2>/dev/null)"
+if [ -n "$D" ]; then echo "droplet $D (state) imha ediliyor"; curl -s "${auth[@]}" -X DELETE "$API/droplets/$D" >/dev/null; fi
+
+# 2) İSİMLE orphan droplet(ler) — state eksik/yanlış olsa bile temizle (orphan-proof)
+for OID in $(curl -s "${auth[@]}" "$API/droplets?name=$NAME" | jq -r --arg n "$NAME" '.droplets[]|select(.name==$n)|.id' 2>/dev/null); do
+  [ -n "$OID" ] && [ "$OID" != "null" ] && { echo "  isimle orphan droplet $OID imha ediliyor"; curl -s "${auth[@]}" -X DELETE "$API/droplets/$OID" >/dev/null; }
+done
+
+[ -f "$S" ] && rm -f "$S"
+echo "teardown bitti (droplet imha; firewall/key/VPC reuse için bırakıldı — ücretsiz)"

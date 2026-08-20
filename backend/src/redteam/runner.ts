@@ -38,7 +38,11 @@ const localExec: ExecFn = async (cmd, args) => {
     });
     return { code: 0, stdout, stderr };
   } catch (e: any) {
-    return { code: typeof e?.code === 'number' ? e.code : 1, stdout: e?.stdout ?? '', stderr: e?.stderr ?? String(e?.message ?? e) };
+    // Hata detayını GÖRÜNÜR yap: provision.sh ilerlemeyi stdout'a basar, gerçek hata stderr'de olabilir
+    // — ikisini birleştir ki panelde "neden patladı" görünsün (maskeleme persistStep'te uygulanır).
+    const combined = [(e?.stdout ?? '').toString(), (e?.stderr ?? '').toString(), e?.stderr ? '' : String(e?.message ?? e)]
+      .filter(Boolean).join('\n').trim();
+    return { code: typeof e?.code === 'number' ? e.code : 1, stdout: e?.stdout ?? '', stderr: combined };
   }
 };
 
