@@ -62,6 +62,16 @@ docker pull vxcontrol/kali-linux >/dev/null 2>&1 &
 docker pull debian:latest >/dev/null 2>&1 &
 wait
 
+# 5b) HAZIRLIK BEKLEME: compose up -d hemen döner; DB + GraphQL server DİNLEMEYE başlamadan bootstrap/
+# createFlow bağlanamaz. Önce pgvector (INSERT için), sonra PentAGI GraphQL (8443) hazır olsun.
+echo "== pgvector (DB) hazır bekleniyor =="
+for i in $(seq 1 40); do docker exec pgvector pg_isready -U postgres >/dev/null 2>&1 && { echo "  DB hazır ($i)"; break; } || sleep 3; done
+echo "== PentAGI GraphQL API (8443) hazır bekleniyor =="
+for i in $(seq 1 60); do
+  code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost:8443/ 2>/dev/null || echo 000)"
+  [ "$code" != "000" ] && { echo "  API dinliyor (http=$code, $i)"; break; } || sleep 3
+done
+
 # 6) API-token bootstrap (OAuth'suz): default admin (id=1) için api_tokens satırı + HS256 JWT
 python3 - <<'PY'
 import subprocess, hashlib, hmac, base64, json, time, os, secrets, urllib.request, ssl

@@ -98,7 +98,7 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
     }
     const r = await ctx.exec(cmd, args);
     // Hata detayının SONUNU göster (patlama noktası genellikle çıktının sonundadır).
-    await record({ phase, command, ok: r.code === 0, detail: r.code === 0 ? 'ok' : `exit ${r.code}: …${(r.stderr || r.stdout || '').slice(-1200)}` });
+    await record({ phase, command, ok: r.code === 0, detail: r.code === 0 ? 'ok' : `exit ${r.code}: …${(r.stderr || r.stdout || '').slice(-2000)}` });
     if (r.code !== 0) throw new Error(`${phase} başarısız: ${command}`);
     return r;
   };

@@ -66,7 +66,23 @@ def hard_stop(fid,reason):
     except Exception as e: print("  [2] finishFlow ERR",str(e)[:100],flush=True)
     print("  [3] worker temizliği:",flush=True); kill_workers()
 
+def wait_api_ready(max_s=180):
+    # PentAGI GraphQL DİNLEMEYE + token GEÇERLİ olana kadar bekle (compose up hemen döner; server geç kalkar).
+    start=time.time(); last=""
+    while time.time()-start < max_s:
+        try:
+            r=gql("{__typename}")
+            if isinstance(r,dict) and r.get("data"): return True
+            last=str(r)[:120]
+        except Exception as e:
+            last=str(e)[:120]
+        time.sleep(4)
+    print(f"== API hazır olmadı ({max_s}s): {last} ==",flush=True); return False
+
 def main():
+    print(f"== PentAGI GraphQL API hazırlığı bekleniyor ==",flush=True)
+    if not wait_api_ready():
+        sys.exit(1)
     print(f"== createFlow (anthropic) caps: {CAP_SEC}s/{CAP_CALLS}calls/${CAP_COST} ==",flush=True)
     r=gql("mutation($p:String!,$i:String!){createFlow(modelProvider:$p,input:$i){id status title}}",
           {"p":"anthropic","i":PROMPT})
