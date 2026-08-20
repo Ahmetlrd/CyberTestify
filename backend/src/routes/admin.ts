@@ -11,6 +11,10 @@ import { hasTestCredential } from '../services/testCredentials.js';
 import { decryptReport, decryptSecret } from '../services/crypto.js';
 import { renderReportPdf } from '../services/pdf.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
+import { LEVEL_CFG } from '../redteam/orchestrator.js';
+import { triggerKillSwitch } from '../redteam/puller.js';
+import { makeSshExec } from '../redteam/controlChannel.js';
+import { appendLogs } from '../redteam/observability.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -45,6 +49,86 @@ adminRouter.get('/customers', async (req, res) => {
     items: rows.map((c) => ({
       id: c.id, email: c.email, createdAt: c.createdAt,
       domainCount: c._count.domains, orderCount: c._count.orders,
+    })),
+  });
+});
+
+// --- Musteri DETAY (her sey: alan adlari, siparisler, raporlar, planli taramalar, rizalar) ---
+adminRouter.get('/customers/:id', async (req, res) => {
+  const c = await prisma.customer.findUnique({
+    where: { id: req.params.id },
+    select: {
+      id: true, email: true, fullName: true, createdAt: true, emailVerified: true,
+      termsAcceptedAt: true, termsVersion: true, googleId: true,
+      domains: {
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true, hostname: true, status: true, verificationMethod: true, verifiedAt: true,
+          lastCheckedAt: true, createdAt: true, resolvedIps: true, hostingType: true,
+        },
+      },
+      orders: {
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true, status: true, amountMinorUnit: true, currency: true, createdAt: true, paidAt: true,
+          archived: true, paymentProvider: true, paymentRef: true,
+          ownershipConfirmedAt: true,
+          package: { select: { key: true, displayName: true } },
+          domain: { select: { hostname: true } },
+          report: {
+            select: {
+              id: true, createdAt: true, deliveredAt: true, adminReleasedAt: true,
+              incomplete: true, incompleteReason: true,
+            },
+          },
+          flow: {
+            select: {
+              status: true, toolCallCount: true, pentagiFlowId: true, scopeViolationTarget: true,
+              errorMessage: true, startedAt: true, finishedAt: true,
+            },
+          },
+        },
+      },
+      scheduledScans: {
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true, packageKey: true, region: true, intervalDays: true, remainingRuns: true,
+          nextRunAt: true, active: true, failCount: true, createdAt: true,
+          domain: { select: { hostname: true } },
+        },
+      },
+      activeTestConsents: {
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, orderId: true, legalName: true, riskAccepted: true, textVersion: true, createdAt: true },
+      },
+    },
+  });
+  if (!c) return res.status(404).json({ error: 'Musteri bulunamadi.' });
+  const { googleId, ...rest } = c;
+  res.json({ ...rest, hasGoogle: !!googleId });
+});
+
+// --- Tum alan adlari (global; musteri e-postasi ile) --------------------------
+adminRouter.get('/domains', async (req, res) => {
+  const { skip, take, page, pageSize } = paginate(req.query);
+  const q = typeof req.query.q === 'string' && req.query.q.trim() ? req.query.q.trim() : undefined;
+  const where = q ? { hostname: { contains: q, mode: 'insensitive' as const } } : {};
+  const [total, rows] = await Promise.all([
+    prisma.domain.count({ where }),
+    prisma.domain.findMany({
+      where, skip, take, orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, hostname: true, status: true, verifiedAt: true, resolvedIps: true, hostingType: true,
+        createdAt: true, customer: { select: { id: true, email: true } }, _count: { select: { orders: true } },
+      },
+    }),
+  ]);
+  res.json({
+    page, pageSize, total,
+    items: rows.map((d) => ({
+      id: d.id, hostname: d.hostname, status: d.status, verifiedAt: d.verifiedAt, resolvedIps: d.resolvedIps,
+      hostingType: d.hostingType, createdAt: d.createdAt,
+      customerId: d.customer.id, customerEmail: d.customer.email, orderCount: d._count.orders,
     })),
   });
 });
@@ -452,4 +536,70 @@ adminRouter.get('/system-health', async (_req, res) => {
     scopeEnforcement: config.scopeEnforcement,
     checkedAt: new Date().toISOString(),
   });
+});
+
+// --- Otonom Red Team işleri — CANLI GÖZLEM (yalnız admin; beta-müşteri GÖRMEZ) ------------------
+// Veri, orchestrator'ın SSH kontrol-kanalından PULL edip yazdığı RedTeamJob/RedTeamJobLog'dan gelir.
+// Droplet CyberTestify'a HİÇ bağlanmaz (PUSH yok). reportJson/log secret İÇERMEZ (puller maskeler).
+adminRouter.get('/redteam-jobs', async (req, res) => {
+  const { skip, take, page, pageSize } = paginate(req.query);
+  const [total, rows] = await Promise.all([
+    prisma.redTeamJob.count(),
+    prisma.redTeamJob.findMany({
+      skip, take, orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, domain: true, level: true, environment: true, status: true, phase: true,
+        createdAt: true, startedAt: true, finishedAt: true, costUsd: true, llmCalls: true,
+        egressTargetOk: true, egressCyberBlocked: true, lastPulledAt: true,
+      },
+    }),
+  ]);
+  res.json({ page, pageSize, total, items: rows });
+});
+
+adminRouter.get('/redteam-jobs/:id', async (req, res) => {
+  const job = await prisma.redTeamJob.findUnique({
+    where: { id: req.params.id },
+    select: {
+      id: true, domain: true, level: true, environment: true, status: true, phase: true,
+      createdAt: true, startedAt: true, finishedAt: true, ownershipConfirmed: true, riskAccepted: true,
+      prodElevatedAccepted: true, consentIp: true, dropletId: true, dropletIp: true, targetIp: true,
+      llmCalls: true, costUsd: true, elapsedSec: true, egressTargetOk: true, egressCyberBlocked: true,
+      lastPulledAt: true, reportJson: true, error: true,
+    },
+  });
+  if (!job) return res.status(404).json({ error: 'İş bulunamadı.' });
+  const cap = LEVEL_CFG[job.level as 'S1' | 'S2' | 'S3'] ?? null; // cap metresi için tavanlar
+  res.json({ ...job, cap });
+});
+
+// Canlı log akışı (polling): ?after=<seq> ile artımlı çek.
+adminRouter.get('/redteam-jobs/:id/logs', async (req, res) => {
+  const after = Math.max(0, Number(req.query.after) || 0);
+  const logs = await prisma.redTeamJobLog.findMany({
+    where: { jobId: req.params.id, seq: { gt: after } },
+    orderBy: { seq: 'asc' }, take: 500,
+    select: { seq: true, at: true, source: true, phase: true, level: true, message: true },
+  });
+  res.json({ logs });
+});
+
+// KILL-SWITCH — kontrol-kanalından kill-switch.sh (ajan durdur + egress kes). Yalnız admin.
+adminRouter.post('/redteam-jobs/:id/kill', async (req, res) => {
+  const job = await prisma.redTeamJob.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, dropletIp: true, status: true },
+  });
+  if (!job) return res.status(404).json({ error: 'İş bulunamadı.' });
+  if (!job.dropletIp) return res.status(400).json({ error: 'Droplet IP yok (aktif/canlı iş değil).' });
+
+  const result = await triggerKillSwitch(makeSshExec(job.dropletIp));
+  await prisma.redTeamJob.update({
+    where: { id: job.id },
+    data: { status: 'failed', phase: 'teardown', error: 'admin kill-switch' },
+  });
+  await appendLogs(job.id, [
+    { source: 'killswitch', level: 'warn', message: `admin KILL-SWITCH: ${result.ok ? 'OK' : 'HATA'} — ${result.output.slice(0, 400)}` },
+  ]);
+  res.json({ ok: result.ok, output: result.output });
 });

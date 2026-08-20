@@ -90,4 +90,18 @@ export const adminApi = {
   blogPublishNext: () =>
     areq<{ ok: boolean; published: { slug: string; title: string } | null; message?: string }>('/admin/blog/publish-next', { method: 'POST' }),
   systemHealth: () => areq<any>('/admin/system-health'),
+
+  // (HER ŞEYİ GÖSTER) Müşteri detay: alan adları + siparişler + raporlar + planlı taramalar + rızalar.
+  customerDetail: (id: string) => areq<any>(`/admin/customers/${id}`),
+  // Tüm alan adları (global; müşteri e-postasıyla).
+  domains: (page = 1, q = '') => areq<Page<any>>(`/admin/domains?page=${page}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
+
+  // (OTONOM RED TEAM — canlı gözlem; yalnız admin) faz/log/cap/egress/bulgu/kill-switch/maliyet.
+  redteamJobs: (page = 1) => areq<Page<any>>(`/admin/redteam-jobs?page=${page}`),
+  redteamJob: (id: string) => areq<any>(`/admin/redteam-jobs/${id}`),
+  redteamJobLogs: (id: string, after = 0) =>
+    areq<{ logs: Array<{ seq: number; at: string; source: string; phase: string | null; level: string; message: string }> }>(
+      `/admin/redteam-jobs/${id}/logs?after=${after}`,
+    ),
+  redteamKill: (id: string) => areq<{ ok: boolean; output: string }>(`/admin/redteam-jobs/${id}/kill`, { method: 'POST' }),
 };

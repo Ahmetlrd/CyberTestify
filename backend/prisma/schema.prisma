@@ -543,6 +543,7 @@ model RedTeamJob {
 
   // Orkestrasyon/audit referansları (runner doldurur; secret TUTULMAZ)
   dropletId  String?
+  dropletIp  String? // SSH kontrol-kanalı (pull/kill); droplet public IP
   targetIp   String?
   llmCalls   Int?
   costUsd    Float?
@@ -550,6 +551,32 @@ model RedTeamJob {
   log        Json? // audit olay dizisi [{at,phase,message}]
   error      String?
 
+  // Canlı gözlem (puller SSH kontrol-kanalından çeker; droplet CyberTestify'a BAĞLANMAZ)
+  phase              String?
+  elapsedSec         Int?
+  egressTargetOk     Boolean?
+  egressCyberBlocked Boolean?
+  lastPulledAt       DateTime?
+
+  logs RedTeamJobLog[]
+
   @@index([status])
   @@index([createdAt])
+}
+
+// (3b-ii gözlemlenebilirlik) İzolasyon-koruyan PULL ile droplet'ten çekilen canlı log satırları.
+// Droplet→CyberTestify PUSH YOK; prod SSH kontrol-kanalından çeker, buraya yazar. Secret MASKELİ.
+model RedTeamJobLog {
+  id      String     @id @default(cuid())
+  jobId   String
+  job     RedTeamJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  seq     Int
+  at      DateTime   @default(now())
+  source  String // orchestrator | pentagi | audit | cap | egress | killswitch | puller
+  phase   String?
+  level   String     @default("info")
+  message String
+
+  @@unique([jobId, seq])
+  @@index([jobId, seq])
 }

@@ -8,7 +8,9 @@ import { ADMIN_TOKEN_KEY, adminApi } from '../../lib/adminApi';
 const NAV = [
   { href: '/admin/dashboard', label: 'Özet' },
   { href: '/admin/customers', label: 'Müşteriler' },
+  { href: '/admin/domains', label: 'Alan Adları' },
   { href: '/admin/orders', label: 'Siparişler' },
+  { href: '/admin/redteam', label: 'Red Team' },
   { href: '/admin/invoices', label: 'Faturalar' },
   { href: '/admin/scope-violations', label: 'Kapsam İhlalleri' },
   { href: '/admin/blog', label: 'Blog' },

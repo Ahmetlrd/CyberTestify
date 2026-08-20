@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { adminApi } from '../../../lib/adminApi';
 import { H1, Table, Pager, fmtDate } from '../../../components/admin/ui';
 
@@ -20,8 +21,12 @@ export default function AdminCustomers() {
     <>
       <H1>Müşteriler</H1>
       <Table
-        columns={['E-posta', 'Kayıt', 'Alan adı', 'Sipariş']}
-        rows={data.items.map((c: any) => [c.email, fmtDate(c.createdAt), c.domainCount, c.orderCount])}
+        columns={['E-posta', 'Kayıt', 'Alan adı', 'Sipariş', '']}
+        rows={data.items.map((c: any) => [
+          <Link key={c.id} href={`/admin/customers/${c.id}`} style={{ color: '#7dd3fc', fontWeight: 600 }}>{c.email}</Link>,
+          fmtDate(c.createdAt), c.domainCount, c.orderCount,
+          <Link key="d" href={`/admin/customers/${c.id}`} style={{ color: '#94a3b8' }}>detay →</Link>,
+        ])}
       />
       <Pager page={data.page} pageSize={data.pageSize} total={data.total} onPage={setPage} />
     </>

@@ -100,7 +100,9 @@ ordersRouter.get('/bundles', async (req, res) => {
   const region = typeof req.query.region === 'string' ? req.query.region : 'tr';
   const locale = localeFor(region);
   res.json(
-    COMBO_BUNDLES.map((b) => {
+    // 'Elit Otonom Pentest (Kurumsal)' vitrin kartı KALDIRILDI — artık ayrı "Otonom AI Red Team"
+    // sayfası var (bundle_elite_autonomous tanımı korunur; yalnız pakketler listesinde gösterilmez).
+    COMBO_BUNDLES.filter((b) => b.key !== 'bundle_elite_autonomous').map((b) => {
       const price = bundlePrice(b, region);
       const memberInfo = (keys: string[]) =>
         keys.map((k) => {
