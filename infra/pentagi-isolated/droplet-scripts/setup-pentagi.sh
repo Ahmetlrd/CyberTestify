@@ -11,6 +11,19 @@ set -euo pipefail
 PENTAGI_REF="${PENTAGI_REF:-v2.1.0}"
 mkdir -p /opt/pentagi-run
 
+# 0) APT ÇAKIŞMASINI ÖNLE (taze Ubuntu ilk-boot): (a) cloud-init/unattended-upgrades bitene kadar
+# bekle, (b) TÜM apt çağrıları (get.docker.com dâhil) lock'u 180s beklesin — hemen fail etmesin.
+echo "== ilk-boot otomasyonu (cloud-init/apt) bekleniyor =="
+cloud-init status --wait >/dev/null 2>&1 || true
+mkdir -p /etc/apt/apt.conf.d
+echo 'DPkg::Lock::Timeout "180";' > /etc/apt/apt.conf.d/99lock-timeout
+# Emniyet: hâlâ apt kilidi tutuluyorsa kısa bir süre daha bekle (unattended-upgrades geç bitebilir).
+for i in $(seq 1 18); do
+  if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || fuser /var/lib/apt/lists/lock >/dev/null 2>&1; then
+    echo "  apt kilidi tutuluyor, bekleniyor… ($i/18)"; sleep 10
+  else break; fi
+done
+
 # 1) Docker + compose (provision cloud-init'te kurulmadıysa)
 command -v docker >/dev/null || { curl -fsSL https://get.docker.com | sh; }
 
