@@ -39,6 +39,7 @@ export type BinderOutput = {
   artifactCount: number;
   claimCount: number;
   summary: { kanitli: number; belirsiz: number; hayalet: number };
+  eliminatedReasons?: Record<string, number>; // {off-target,no-evidence,weak-signature} — panel kırılımı
   overallRisk: 'kritik' | 'yüksek' | 'orta' | 'düşük' | 'temiz';
   findings: BinderFinding[];
 };
@@ -59,6 +60,7 @@ export type RedTeamReport = {
   proven: BinderFinding[];      // KANITLI
   needsReview: BinderFinding[]; // BELİRSİZ
   eliminated: number;           // HAYALET (yalnız sayı)
+  eliminatedReasons?: Record<string, number>; // panel kırılımı (rapora değil): off-target/no-evidence/weak-signature
   disclaimer: string;
 };
 
@@ -85,6 +87,7 @@ export function buildRedTeamReport(binder: BinderOutput, meta: RedTeamReportMeta
     proven,
     needsReview,
     eliminated,
+    eliminatedReasons: binder.eliminatedReasons ?? {},
     disclaimer: DISCLAIMER,
   };
 }

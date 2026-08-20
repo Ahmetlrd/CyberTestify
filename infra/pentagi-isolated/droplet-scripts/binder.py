@@ -89,6 +89,25 @@ def behavioral_sqli(cat, related, all_artifacts):
     return None
 
 
+def reflected_xss(cat, related):
+    """Reflected XSS: request'te gönderilen payload/marker, RESPONSE gövdesinde ENCODE EDİLMEDEN yansıyor.
+    Deterministik: aynı dize yanıtta birebir (&lt; değil <) → KANITLI. demo.testfire /search.jsp?query= vakası."""
+    if cat != 'xss':
+        return None
+    for a in related:
+        cmd = a.get('command', '') + ' ' + a.get('rawText', '')
+        raw = a.get('rawText', '')
+        for m in re.finditer(r'(zqx[a-z0-9]*marker[a-z0-9]*|<script\b[^>]*>|<img\b[^>]*>|["\'>]<[a-z]{1,10}[ >/])', cmd, re.I):
+            marker = m.group(0)
+            if marker in raw:
+                idx = raw.find(marker)
+                around = raw[max(0, idx - 4):idx + len(marker) + 4]
+                if '&lt;' not in around and '&gt;' not in around and '%3c' not in around.lower():
+                    return {'artifactRef': a.get('id', '?'), 'signature': 'reflected-unencoded',
+                            'detail': f"payload {marker[:34]!r} yanıt gövdesinde ENCODE EDİLMEDEN yansıdı → reflected XSS"}
+    return None
+
+
 # ————————————————————— REDAKSİYON (ham kanıtta secret/PII gösterme) —————————————————————
 def redact(text):
     t = str(text or '')
@@ -103,12 +122,17 @@ def redact(text):
 # ————————————————————— PROVENANCE (hedef-dışı host referansı = elenir) —————————————————————
 _FILE_EXT = {'php','json','html','htm','js','css','xml','txt','png','jpg','jpeg','svg','ico','gif',
              'asp','aspx','jsp','do','action','map','woff','woff2','pdf','mp4','webp'}
-# Ajanın eğitim-verisinden sızabilen bilinen izole/eğitim hedef adları (hedef değilse YABANCI).
-_KNOWN_FOREIGN = ('juiceshop','juice-shop','juice_shop','localhost','127.0.0.1','testfire','vulnweb','example.com')
+# Ajanın eğitim-verisinden sızabilen İÇSEL/eğitim adları (gerçek müşteri hedefi ASLA olamaz → yabancı).
+# NOT: testfire/vulnweb burada DEĞİL — onlar gerçek doğrulanmış test hedefleri (demo.testfire.net vb.).
+_KNOWN_FOREIGN = ('juiceshop', 'juice-shop', 'juice_shop', 'localhost', '127.0.0.1')
 
 def foreign_hosts(text, target_host, target_ip):
     text = (text or '').lower(); th = (target_host or '').lower(); ti = (target_ip or '')
-    allow = {h for h in {th, 'www.' + th if th else '', ti} if h}
+    base = '.'.join(th.split('.')[-2:]) if th.count('.') >= 1 else th  # kayıtlı taban (demo.testfire.net→testfire.net)
+
+    def is_target(h):
+        return bool(h) and (h == th or h == ti or h == 'www.' + th or (base and (h == base or h.endswith('.' + base))))
+
     hosts = set()
     for m in re.finditer(r'https?://([a-z0-9.\-_]+)', text): hosts.add(m.group(1))
     for m in re.finditer(r'\b([a-z0-9\-]{2,}(?:\.[a-z0-9\-]{2,})+)\b', text):
@@ -117,7 +141,7 @@ def foreign_hosts(text, target_host, target_ip):
         hosts.add(h)
     for name in _KNOWN_FOREIGN:
         if name in text: hosts.add(name)
-    return {h for h in hosts if h and h not in allow}
+    return {h for h in hosts if not is_target(h)}       # hedefin alt-alanları YABANCI değil
 
 
 def classify(claims, artifacts, target_host='', target_ip=''):
@@ -136,11 +160,15 @@ def classify(claims, artifacts, target_host='', target_ip=''):
                                'detail': f"ham artefaktta deterministik imza: {m.group(0)[:60]!r}"}
                     bound = a; break
         beh = behavioral_sqli(cat, related, artifacts)
+        rxss = reflected_xss(cat, related)
         if sig_hit:
             tier, ev, reason = 'KANITLI', sig_hit, 'ham artefakta bağlı deterministik imza'
         elif beh:
             tier, ev, reason = 'KANITLI', beh, 'ham artefakta bağlı davranışsal anomali'
             bound = next((a for a in related if a.get('id') == beh.get('artifactRef')), (related[0] if related else None))
+        elif rxss:
+            tier, ev, reason = 'KANITLI', rxss, 'reflected XSS — payload yanıtta ENCODE EDİLMEDEN yansıdı'
+            bound = next((a for a in related if a.get('id') == rxss.get('artifactRef')), (related[0] if related else None))
         elif related:
             tier, ev, reason = 'BELIRSIZ', {'artifactRef': related[0].get('id', '?'), 'signature': '', 'detail': 'artefakt var, kesin imza yok'}, 'artefakt var ama deterministik imza yok -> insan-inceleme'
             bound = related[0]
@@ -210,6 +238,31 @@ def load_from_pg(flow_id):
             items = len(re.findall(r'"id":\d+', text))
             artifacts.append({'id': f"termlog#{tid}", 'kind': 'terminal', 'command': last_cmd, 'rawText': text, 'items': items})
             last_cmd = ''
+    # TOOLCALLS = pentester/HTTP/terminal ARAÇ sonuçları — request/response BURADA olabilir (termlog DEĞİL).
+    # 18→0 kök-nedeninin bir parçası: binder yalnız termlogs okuyordu; ajan HTTP'yi araç-çağrısıyla yaptıysa
+    # kanıt toolcalls.result'ta kalıyordu → binder kör → her iddia HAYALET.
+    raw = _psql(f"SELECT id||'\t'||coalesce(name,'')||'\t'||replace(replace(coalesce(args::text,''),E'\\r',''),E'\\n','{NL}')||'\t'||replace(replace(coalesce(result,''),E'\\r',''),E'\\n','{NL}') "
+                f"FROM toolcalls WHERE flow_id={flow_id} ORDER BY id;")
+    for line in raw.strip("\n").split("\n"):
+        if not line.strip():
+            continue
+        tid, name, args, result = (line.split("\t", 3) + ['', '', ''])[:4]
+        args = args.replace(NL, "\n"); result = result.replace(NL, "\n")
+        blob = (args + "\n" + result).strip()
+        if not blob:
+            continue
+        artifacts.append({'id': f"toolcall#{tid}", 'kind': (name or 'toolcall'), 'command': args[:300],
+                          'rawText': blob, 'items': len(re.findall(r'"id":\d+', blob))})
+    # AGENTLOGS = ajanın bulgu anlatısı (ek CLAIM kaynağı — subtask'ta olmayan bulgular burada olabilir).
+    raw = _psql(f"SELECT id||'\t'||replace(replace(coalesce(result,''),E'\\r',''),E'\\n','{NL}') "
+                f"FROM agentlogs WHERE flow_id={flow_id} ORDER BY id;")
+    for line in raw.strip("\n").split("\n"):
+        if not line.strip():
+            continue
+        aid, res = (line.split("\t", 1) + [''])[:2]
+        res = res.replace(NL, ' ').strip()
+        if res:
+            claims.append({'id': f"agentlog#{aid}", 'title': res[:60], 'text': res})
     return claims, artifacts, {'flowId': flow_id}
 
 
@@ -220,6 +273,7 @@ def main():
     ap.add_argument('--target', default='')       # PINNED hedef host (provenance kuralı)
     ap.add_argument('--target-ip', dest='target_ip', default='')
     ap.add_argument('--json', action='store_true')
+    ap.add_argument('--trace', action='store_true')   # her artefaktın/iddianın kararını satır satır dök (teşhis)
     a = ap.parse_args()
     if a.input:
         claims, artifacts, meta = load_from_json(a.input)
@@ -231,15 +285,49 @@ def main():
 
     thost = a.target or str(meta.get('target', '') or '')
     tip = a.target_ip or str(meta.get('targetIp', '') or '')
+
+    # ——— TEŞHİS: --trace → her artefakt + her iddia kararı satır satır (bir daha kör kalma) ———
+    if a.trace:
+        def cat_of(c): return detect_category(c.get('text', '') + ' ' + c.get('title', ''))
+        used = set()
+        fnd = classify(claims, artifacts, thost, tip)
+        for f in fnd:
+            if f.get('evidence'): used.add(f['evidence'].get('artifactRef'))
+        print(json.dumps({'phase': 'artifacts', 'count': len(artifacts)}, ensure_ascii=False))
+        for art in artifacts:
+            print(json.dumps({'artifact_id': art['id'], 'kaynak': art.get('kind'),
+                              'ham_ozet': (art.get('command', '')[:60] + ' | ' + art.get('rawText', '')[:140]),
+                              'kanit_olarak_kullanildi': art['id'] in used}, ensure_ascii=False))
+        print(json.dumps({'phase': 'claims', 'count': len(claims)}, ensure_ascii=False))
+        for c, f in zip(claims, fnd):
+            cat = cat_of(c)
+            rel = [x['id'] for x in artifacts if relates(x, c, cat)]
+            print(json.dumps({'claim_id': c.get('id'), 'kategori': cat, 'iliskili_artefakt': rel[:6],
+                              'iliskili_sayi': len(rel), 'sinif': f['tier'], 'neden': f['reason'][:100]}, ensure_ascii=False))
+        return
+
     findings = classify(claims, artifacts, thost, tip)
     kan = [f for f in findings if f['tier'] == 'KANITLI']
     bel = [f for f in findings if f['tier'] == 'BELIRSIZ']
     hay = [f for f in findings if f['tier'] == 'HAYALET']
     overall = max((SEV_ORDER[f['severity']] for f in kan), default=0)
     overall_label = next((k for k, v in SEV_ORDER.items() if v == overall), 'temiz')
+
+    # HAYALET reason-code kırılımı (panelde "hayalet nedenleri" — bir daha kör kalmayalım).
+    def reason_code(f):
+        r = f.get('reason', '').lower()
+        if 'provenance' in r: return 'off-target'
+        if 'sıfır iz' in r or 'artefakt yok' in r: return 'no-evidence'
+        if 'imza yok' in r or 'imza bulun' in r: return 'weak-signature'
+        return 'other'
+    elim_reasons = {}
+    for f in hay:
+        rc = reason_code(f); elim_reasons[rc] = elim_reasons.get(rc, 0) + 1
+
     out = {
         'meta': meta, 'artifactCount': len(artifacts), 'claimCount': len(claims),
         'summary': {'kanitli': len(kan), 'belirsiz': len(bel), 'hayalet': len(hay)},
+        'eliminatedReasons': elim_reasons,   # {off-target: n, no-evidence: n, weak-signature: n}
         'overallRisk': overall_label,   # YALNIZ kanıtlı bulgulardan; asla şişirilmez
         'findings': findings,
     }

@@ -53,9 +53,11 @@ export type OrchestratorCtx = {
 
 // Seviyeye göre SAĞLAM cap (ilk gelen HARD STOP) + droplet boyutu + saldırganlık profili.
 export const LEVEL_CFG: Record<Level, { capSec: number; capCalls: number; capCostUsd: number; size: string; profile: string }> = {
-  S1: { capSec: 180, capCalls: 8, capCostUsd: 0.5, size: 's-2vcpu-4gb', profile: 'pasif + hafif aktif göstergeler (düşük risk)' },
-  S2: { capSec: 300, capCalls: 15, capCostUsd: 1.0, size: 's-4vcpu-8gb', profile: 'aktif doğrulama + sınırlı sömürü denemesi (dengeli)' },
-  S3: { capSec: 420, capCalls: 25, capCostUsd: 1.5, size: 's-4vcpu-8gb', profile: 'geniş sömürü yüzeyi, zincirleme denemeler (agresif)' },
+  // (KALİBRASYON) cap GERÇEK msgchains harcamasına bağlı; S1 $0.5/180s çok sıkıydı (ajan kanıt saklamadan
+  // kesiliyordu). Gerçekçi: S1 ~10dk/30çağrı/$2. Kalıcı fiyat değil — test-kalibrasyon.
+  S1: { capSec: 600, capCalls: 30, capCostUsd: 2.0, size: 's-2vcpu-4gb', profile: 'pasif + hafif aktif göstergeler (düşük risk)' },
+  S2: { capSec: 720, capCalls: 40, capCostUsd: 3.0, size: 's-4vcpu-8gb', profile: 'aktif doğrulama + sınırlı sömürü denemesi (dengeli)' },
+  S3: { capSec: 900, capCalls: 55, capCostUsd: 4.0, size: 's-4vcpu-8gb', profile: 'geniş sömürü yüzeyi, zincirleme denemeler (agresif)' },
 };
 
 // Hedef IP yasak-aralık kontrolü artık targetGuard.ts'te (IPv4+IPv6, çok-IP, çöz+pinle).
@@ -63,10 +65,17 @@ export const LEVEL_CFG: Record<Level, { capSec: number; capCalls: number; capCos
 function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
   const p = LEVEL_CFG[job.level].profile;
   return (
-    `You are testing an AUTHORIZED target the operator owns: ${job.domain} (PINNED IP ${pinnedIp}). ` +
-    `Attack ONLY the pinned IP ${pinnedIp} (do NOT re-resolve the domain). ` +
-    `Aggressiveness profile (${job.level}): ${p}. Bind every finding to concrete evidence. ` +
-    `Do NOT touch any other host. Stop after confirming findings.`
+    `You are an authorized penetration tester. Target application: https://${job.domain}/ (the operator owns it). ` +
+    // Pinlenen IP'ye bağlan AMA Host/SNI = domain gönder → doğru vhost GERÇEK uygulamayı sunar (ham IP
+    // default sayfa döndürür; testfire gibi vhost'larda bu 18→0'ın bir nedeniydi). Anti-rebinding korunur.
+    `Connect ONLY to the pinned IP ${pinnedIp}, but ALWAYS send Host: ${job.domain} and use SNI ${job.domain} ` +
+    `(e.g. curl --resolve ${job.domain}:443:${pinnedIp} --resolve ${job.domain}:80:${pinnedIp} "https://${job.domain}/..."). ` +
+    `Do NOT re-resolve the domain and do NOT touch any other host. Aggressiveness (${job.level}): ${p}. ` +
+    `EVIDENCE RULES (mandatory): for EVERY request, print the FULL request line AND the FULL response body to the terminal — ` +
+    `the report is built ONLY from these captured request/response pairs, not from your prose. ` +
+    `Test reflected input on at least one injection point (e.g. a search/query parameter) with a UNIQUE marker string ` +
+    `(e.g. zqxmarker9173) and check whether it appears UNENCODED in the response body (reflected XSS). ` +
+    `Every finding you claim MUST reference a concrete captured request/response. Keep testing until the budget cap — do NOT stop early.`
   );
 }
 

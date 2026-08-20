@@ -103,6 +103,13 @@ export async function pullOnce(exec: RemoteExec, opts: { targetIp?: string | nul
     }).filter((r) => r.model);
     if (rows.length) {
       live.modelUsage = rows;
+      // (ÖLÇÜM DÜZELTME) llmCalls/costUsd bazen REMOTE.progress'ten null geliyordu (sorgu başarısız),
+      // ama per-model GROUP BY çalışıyor → sayaçları per-model TOPLAMINDAN türet (panel "model dağılımı"
+      // ile TUTARLI + gerçek harcamayı gösterir, 0 değil).
+      const sc = rows.reduce((a, m) => a + m.calls, 0);
+      const su = rows.reduce((a, m) => a + m.costUsd, 0);
+      if (live.llmCalls == null || sc > live.llmCalls) live.llmCalls = sc;
+      if (live.costUsd == null || su > (live.costUsd ?? 0)) live.costUsd = su;
       logs.push({ source: 'pentagi', level: 'info', message: 'model dağılımı: ' + rows.map((r) => `${r.model}×${r.calls} ($${r.costUsd})`).join(' · ') });
     }
   }

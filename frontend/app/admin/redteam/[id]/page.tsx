@@ -166,6 +166,11 @@ export default function AdminRedTeamDetail({ params }: { params: { id: string } 
               <p style={{ fontSize: 13, color: '#cbd5e1' }}>
                 Genel risk: <b>{report.overallRisk}</b> · kanıtlı {report.counts?.kanitli ?? 0} · belirsiz {report.counts?.belirsiz ?? 0} · elenen {report.eliminated ?? 0}
               </p>
+              {report.eliminatedReasons && Object.keys(report.eliminatedReasons).length > 0 && (
+                <p style={{ fontSize: 11, color: '#64748b', margin: '2px 0 0' }}>
+                  elenen nedenleri: {Object.entries(report.eliminatedReasons).map(([k, v]) => `${k}=${v}`).join(' · ')}
+                </p>
+              )}
               <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {[...(report.proven || []).map((f: any) => ({ ...f, tier: 'KANITLI' })), ...(report.needsReview || []).map((f: any) => ({ ...f, tier: 'BELIRSIZ' }))].map((f: any, i: number) => (
                   <div key={i} style={{ fontSize: 12, color: '#cbd5e1' }}>
