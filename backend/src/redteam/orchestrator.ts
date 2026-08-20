@@ -141,9 +141,22 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
     }
 
     // ——— 5) VERIFY isolation (AMPİRİK): PİNLENEN hedef erişilir + CyberTestify BLOCKED. Geçmezse ABORT ———
+    // İki koşulu AYRI değerlendir + logla (muğlak "erişilemez YA DA açık" yerine hangisi tuttu).
     const v = await run('verify', `${ctx.scriptsDir}/droplet-scripts/verify-egress.sh`, [primaryIp]);
-    if (!ctx.dryRun && !/TARGET_OK[\s\S]*CYBERTESTIFY_BLOCKED/.test(v.stdout)) {
-      throw new Error('izolasyon doğrulaması BAŞARISIZ — kampanya iptal (hedef erişilemez ya da CyberTestify açık)');
+    if (!ctx.dryRun) {
+      const targetOk = /TARGET_OK/.test(v.stdout);
+      const ctBlocked = /CYBERTESTIFY_BLOCKED/.test(v.stdout);
+      await record({
+        phase: 'verify',
+        ok: targetOk && ctBlocked,
+        detail: `izolasyon: hedef-erişilir=${targetOk ? '✓' : '✗'} · CyberTestify-BLOCKED=${ctBlocked ? '✓' : '✗'}`,
+      });
+      if (!(targetOk && ctBlocked)) {
+        const why = !ctBlocked
+          ? 'CyberTestify AÇIK — CİDDİ izolasyon hatası (egress-harden bozuk); kampanya İPTAL'
+          : 'yetkili hedefe egress/erişim yok; kampanya İPTAL';
+        throw new Error(`izolasyon BAŞARISIZ: hedef-erişilir=${targetOk ? '✓' : '✗'}, CyberTestify-BLOCKED=${ctBlocked ? '✓' : '✗'} → ${why}`);
+      }
     }
 
     // ——— 6) CAMPAIGN (cap'li; seviyeye göre profil/prompt; saldırı YALNIZ pinlenen IP'ye) ———

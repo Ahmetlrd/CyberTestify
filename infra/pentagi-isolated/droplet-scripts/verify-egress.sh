@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# (3b-ii) Kampanya ÖNCESİ AMPİRİK izolasyon doğrulaması — pentagi-network üstünde throwaway
-# konteynerden: yetkili HEDEF erişilir mi + CyberTestify prod BLOCKED mı. Orchestrator çıktıda
-# "TARGET_OK" ve "CYBERTESTIFY_BLOCKED" ikisini de görmezse kampanyayı İPTAL eder.
-set -euo pipefail
+# (3b-ii) Kampanya ÖNCESİ AMPİRİK izolasyon gate — pentagi-network throwaway konteynerden.
+# İki koşul AYRI raporlanır: yetkili HEDEF erişilir mi + CyberTestify/metadata BLOCKED mı.
+# reachability = TCP + (TLS/HTTP) HERHANGİ yanıt (HTTP kodu önemli DEĞİL; amaç egress hedefe İZİN
+# veriyor mu). -k: sertifika IP ile SNI uyuşmayabilir → doğrulamayı atla (yoksa yanlış 'erişilemez').
+set -uo pipefail
 TARGET_IP="${1:?kullanım: verify-egress.sh <yetkili-hedef-ip>}"
 CT_PUBLIC="164.92.223.208"
 IMG="vxcontrol/kali-linux"
 
-probe() { docker run --rm --network pentagi-network "$IMG" sh -lc "$1" 2>/dev/null; }
+# curl EXIT 0 = bağlantı kuruldu + yanıt geldi (kod ne olursa olsun) → ulaşılabilir.
+can_reach() {
+  docker run --rm --network pentagi-network "$IMG" sh -lc "
+    curl -sS -o /dev/null --connect-timeout 6 --max-time 10 -k https://$1/ 2>/dev/null \
+    || curl -sS -o /dev/null --connect-timeout 6 --max-time 10 http://$1/ 2>/dev/null" >/dev/null 2>&1
+}
 
-T=$(probe "curl -s -o /dev/null -w '%{http_code}' --max-time 8 http://$TARGET_IP/ || curl -s -o /dev/null -w '%{http_code}' --max-time 8 https://$TARGET_IP/ || echo 000")
-C=$(probe "curl -s -o /dev/null -w '%{http_code}' --max-time 8 https://$CT_PUBLIC/ || echo 000")
-M=$(probe "curl -s -o /dev/null -w '%{http_code}' --max-time 6 http://169.254.169.254/ || echo 000")
-
-echo "target($TARGET_IP)=$T  cybertestify=$C  metadata=$M"
-[ -n "$T" ] && [ "$T" != "000" ] && echo "TARGET_OK" || { echo "TARGET_FAIL"; }
-[ "$C" = "000" ] && echo "CYBERTESTIFY_BLOCKED" || echo "CYBERTESTIFY_LEAK"
-[ "$M" = "000" ] && echo "METADATA_BLOCKED" || echo "METADATA_LEAK"
+if can_reach "$TARGET_IP"; then echo "target-reachable: yes"; echo "TARGET_OK"; else echo "target-reachable: no"; echo "TARGET_FAIL"; fi
+if can_reach "$CT_PUBLIC"; then echo "cybertestify-blocked: no";  echo "CYBERTESTIFY_OPEN"; else echo "cybertestify-blocked: yes"; echo "CYBERTESTIFY_BLOCKED"; fi
+if can_reach "169.254.169.254"; then echo "metadata-blocked: no"; echo "METADATA_OPEN"; else echo "metadata-blocked: yes"; echo "METADATA_BLOCKED"; fi
