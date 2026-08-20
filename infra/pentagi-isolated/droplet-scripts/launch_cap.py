@@ -89,26 +89,33 @@ def main():
     if "errors" in r: print("createFlow ERROR:",json.dumps(r["errors"])[:300]); sys.exit(1)
     fl=r["data"]["createFlow"]; FID=str(fl["id"]); open("/opt/pentagi-run/flow_id","w").write(FID)
     print(f"  flow_id={FID} status={fl['status']} title={fl.get('title')!r}",flush=True)
-    t0=time.time(); reason=None
+    # GERÇEK ajan harcaması: bu TAZE instance'ta tek flow var → TÜM msgchains = bu koşunun LLM harcaması.
+    # (flow_id={FID} filtresi bu PentAGI sürümünde 0 dönebiliyordu → cap gerçek harcamayı GÖRMÜYORDU.)
+    def spend():
+        c=int(psql("SELECT count(*) FROM msgchains;") or 0)
+        u=float(psql("SELECT COALESCE(SUM(usage_cost_in+usage_cost_out),0)::numeric(12,4) FROM msgchains;") or 0)
+        return c,u
+    t0=time.time(); reason=None; last_calls=-1; stable_t=time.time()
     while True:
         el=int(time.time()-t0)
-        calls=int(psql(f"SELECT count(*) FROM msgchains WHERE flow_id={FID};") or 0)
-        cost=float(psql(f"SELECT COALESCE(SUM(usage_cost_in+usage_cost_out),0)::numeric(12,4) FROM msgchains WHERE flow_id={FID};") or 0)
+        calls,cost=spend()
         tcs=int(psql(f"SELECT count(*) FROM toolcalls WHERE flow_id={FID};") or 0)
         print(f"  [t={el}s] llm_calls={calls} tool_calls={tcs} cost=${cost:.4f}",flush=True)
-        if el>=CAP_SEC: reason=f"SÜRE cap ({CAP_SEC}s)"; break
-        if calls>=CAP_CALLS: reason=f"ÇAĞRI cap ({CAP_CALLS})"; break
+        # SERT CAP — GERÇEK harcamaya bağlı; aşınca hard_stop (Anthropic-egress-kes + finishFlow + kill)
         if cost>=CAP_COST: reason=f"MALİYET cap (${CAP_COST})"; break
+        if calls>=CAP_CALLS: reason=f"ÇAĞRI cap ({CAP_CALLS})"; break
+        if el>=CAP_SEC: reason=f"SÜRE cap ({CAP_SEC}s)"; break
+        # BİTİŞ: flow terminal AMA yalnız harcama STABİL ise (yeni çağrı yok ~25s). 3a dersi: 'finished'
+        # tek başına yetmez — backend async harcamaya devam edebilir; stabil olmadan bitirme.
+        if calls!=last_calls: last_calls=calls; stable_t=time.time()
         stt=psql(f"SELECT status FROM flows WHERE id={FID};")
-        # Ajanlar ASYNC başlar: flow 'finished/failed' görünse bile calls==0 ise HENÜZ iş yapmamış
-        # olabilir → BEKLE (cap SÜRE sınırı yakalar). Yalnız gerçekten aktivite olduysa (calls>0) bitir.
-        if stt in ("finished","failed") and calls>0: reason=f"flow {stt}"; break
-        time.sleep(10)
+        if stt in ("finished","failed") and calls>0 and (time.time()-stable_t)>=25:
+            reason=f"flow {stt} (harcama stabil)"; break
+        time.sleep(5)
     hard_stop(FID,reason)
-    # cap sonrası harcama DONMUŞ mu (sert-durdurma ispatı)
-    c1=int(psql(f"SELECT count(*) FROM msgchains WHERE flow_id={FID};") or 0); time.sleep(20)
-    c2=int(psql(f"SELECT count(*) FROM msgchains WHERE flow_id={FID};") or 0)
-    fcost=psql(f"SELECT COALESCE(SUM(usage_cost_in+usage_cost_out),0)::numeric(10,4) FROM msgchains WHERE flow_id={FID};")
+    # cap sonrası harcama DONMUŞ mu (sert-durdurma ispatı) — GERÇEK harcama (tüm msgchains)
+    c1,_=spend(); time.sleep(20); c2,fc=spend()
+    fcost=f"{fc:.4f}"
     fst=psql(f"SELECT status FROM flows WHERE id={FID};")
     frozen = "✓ DONDU" if c1==c2 else f"⚠ HÂLÂ ARTIYOR ({c1}->{c2})"
     print(f"== SON: calls={c2} cost=${fcost} flow.status={fst} | cap-sonrası-harcama: {frozen} (neden={reason}) ==",flush=True)
