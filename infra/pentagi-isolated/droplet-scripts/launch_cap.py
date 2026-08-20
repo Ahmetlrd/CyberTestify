@@ -100,7 +100,9 @@ def main():
         if calls>=CAP_CALLS: reason=f"ÇAĞRI cap ({CAP_CALLS})"; break
         if cost>=CAP_COST: reason=f"MALİYET cap (${CAP_COST})"; break
         stt=psql(f"SELECT status FROM flows WHERE id={FID};")
-        if stt in ("finished","failed"): reason=f"flow {stt}"; break
+        # Ajanlar ASYNC başlar: flow 'finished/failed' görünse bile calls==0 ise HENÜZ iş yapmamış
+        # olabilir → BEKLE (cap SÜRE sınırı yakalar). Yalnız gerçekten aktivite olduysa (calls>0) bitir.
+        if stt in ("finished","failed") and calls>0: reason=f"flow {stt}"; break
         time.sleep(10)
     hard_stop(FID,reason)
     # cap sonrası harcama DONMUŞ mu (sert-durdurma ispatı)

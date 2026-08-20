@@ -195,11 +195,20 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
     await prisma.redTeamJob.update({ where: { id: jobId }, data: { status: statusByPhase[s.phase] ?? undefined, phase: s.phase } }).catch(() => {});
     await persistStep(jobId, s);
 
-    // campaign başında puller döngüsünü başlat (canlı ilerleme/maliyet/per-model)
-    if (s.phase === 'campaign' && s.ok && !opts.dryRun && dropletIp && !pullTimer) {
+    // verify verdikt'ini job'a yaz (panel egress kartı) — 'izolasyon: hedef-erişilir=✓ · CyberTestify-BLOCKED=✓'
+    if (s.phase === 'verify' && !opts.dryRun && /izolasyon:/.test(s.detail)) {
+      await prisma.redTeamJob.update({
+        where: { id: jobId },
+        data: { egressTargetOk: /hedef-erişilir=✓/.test(s.detail), egressCyberBlocked: /CyberTestify-BLOCKED=✓/.test(s.detail) },
+      }).catch(() => {});
+    }
+
+    // Puller döngüsünü VERIFY sonrası başlat → campaign (senkron/blocking) sürerken CANLI pull (ilerleme/
+    // maliyet/per-model panele akar). Egress zaten verify'da doğrulandı → pull'da tekrar probe ETME (yük).
+    if (s.phase === 'verify' && s.ok && !opts.dryRun && dropletIp && !pullTimer) {
       const ip = dropletIp;
       pullTimer = setInterval(async () => {
-        try { await persistPull(jobId, await pullOnce(makeSshExec(ip), { targetIp: job.targetIp }), 'campaign'); } catch { /* yoksay */ }
+        try { await persistPull(jobId, await pullOnce(makeSshExec(ip), {}), 'campaign'); } catch { /* yoksay */ }
       }, 5000);
     }
   };
