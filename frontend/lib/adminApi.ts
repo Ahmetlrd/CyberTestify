@@ -104,4 +104,10 @@ export const adminApi = {
       `/admin/redteam-jobs/${id}/logs?after=${after}`,
     ),
   redteamKill: (id: string) => areq<{ ok: boolean; output: string }>(`/admin/redteam-jobs/${id}/kill`, { method: 'POST' }),
+
+  // (HESAP VEREBİLİRLİK) Admin rapor-erişim audit'i (değiştirilemez; secret içermez).
+  reportAccessLogs: (page = 1, opts: { reportId?: string; customerId?: string } = {}) =>
+    areq<Page<{ id: string; at: string; adminId: string; reportId: string; orderId: string; customerId: string; customerEmail: string; action: string; ip: string | null }>>(
+      `/admin/report-access-logs?page=${page}${opts.reportId ? `&reportId=${opts.reportId}` : ''}${opts.customerId ? `&customerId=${opts.customerId}` : ''}`,
+    ),
 };

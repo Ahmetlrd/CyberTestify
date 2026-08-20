@@ -580,3 +580,22 @@ model RedTeamJobLog {
   @@unique([jobId, seq])
   @@index([jobId, seq])
 }
+
+// (ADMIN OKUMA — HESAP VEREBİLİRLİK) Her admin rapor-erişimi buraya yazılır: kim, ne zaman, hangi
+// rapor, hangi müşteri. DEĞİŞTİRİLEMEZ (append-only; mutasyon endpoint'i YOK; Report'a FK YOK →
+// rapor silinse/purge edilse bile kayıt kalır). SECRET/ANAHTAR ASLA yazılmaz.
+model ReportAccessLog {
+  id            String   @id @default(cuid())
+  at            DateTime @default(now())
+  adminId       String
+  reportId      String
+  orderId       String
+  customerId    String
+  customerEmail String
+  action        String   @default("view_pdf") // view_pdf | approve_release
+  ip            String?
+
+  @@index([reportId])
+  @@index([adminId])
+  @@index([at])
+}

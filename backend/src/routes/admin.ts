@@ -15,6 +15,7 @@ import { LEVEL_CFG } from '../redteam/orchestrator.js';
 import { triggerKillSwitch } from '../redteam/puller.js';
 import { makeSshExec } from '../redteam/controlChannel.js';
 import { appendLogs } from '../redteam/observability.js';
+import { logReportAccess } from '../services/reportAudit.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -226,7 +227,11 @@ adminRouter.post('/orders/:id/refund', async (req, res) => {
 adminRouter.post('/orders/:id/approve-report', async (req, res) => {
   const order = await prisma.order.findUnique({
     where: { id: req.params.id },
-    select: { id: true, status: true, report: { select: { devAccessSecret: true } } },
+    select: {
+      id: true, status: true,
+      customer: { select: { id: true, email: true } },
+      report: { select: { id: true, devAccessSecret: true } },
+    },
   });
   if (!order) return res.status(404).json({ error: 'Siparis bulunamadi.' });
   if (order.status !== 'awaiting_admin_review') {
@@ -239,6 +244,14 @@ adminRouter.post('/orders/:id/approve-report', async (req, res) => {
   }
   await prisma.order.update({ where: { id: order.id }, data: { status: 'scan_completed' } });
   await prisma.report.update({ where: { orderId: order.id }, data: { adminReleasedAt: new Date() } });
+  // (HESAP VEREBİLİRLİK) Admin erişim kodunu çözüp raporu açtı → audit (secret YAZILMAZ).
+  if (order.report?.id) {
+    await logReportAccess({
+      adminId: req.adminId!, reportId: order.report.id, orderId: order.id,
+      customerId: order.customer.id, customerEmail: order.customer.email,
+      action: 'approve_release', ip: req.ip ?? null,
+    });
+  }
   const mailed = accessSecret ? await sendReportReady(order.id, accessSecret) : false;
   console.log(`[admin] Rapor ONAYLANDI + musteriye acildi: ${order.id} (mail=${mailed}).`);
   res.json({ ok: true, released: true, mailed });
@@ -273,10 +286,21 @@ adminRouter.post('/orders/:id/retry-scan', async (req, res) => {
 adminRouter.get('/orders/:id/report.pdf', async (req, res) => {
   const report = await prisma.report.findFirst({
     where: { orderId: req.params.id },
-    include: { order: { include: { domain: { select: { hostname: true } }, package: { select: { displayName: true, key: true } } } } },
+    include: {
+      order: {
+        include: {
+          domain: { select: { hostname: true } },
+          package: { select: { displayName: true, key: true } },
+          customer: { select: { id: true, email: true } },
+        },
+      },
+    },
   });
   if (!report) return res.status(404).json({ error: 'Rapor bulunamadi.' });
-  if (!report.devAccessSecret) return res.status(409).json({ error: 'Erisim kodu saklanmamis; rapor cozulemiyor.' });
+  // Eski (legacy) raporlarda erişim kodu hiç saklanmamış olabilir (yalnız e-posta ile gitmişti) →
+  // anahtar geri getirilemez, çözülemez. Yeni raporlarda kod pepper'lı saklanır (worker.ts).
+  if (!report.devAccessSecret)
+    return res.status(409).json({ error: 'Bu rapor için erişim kodu saklanmamış (eski kayıt); içerik çözülemiyor.' });
   let accessSecret: string;
   try { accessSecret = decryptSecret(report.devAccessSecret); } catch { return res.status(500).json({ error: 'Erisim kodu cozulemedi (pepper?).' }); }
 
@@ -313,6 +337,13 @@ adminRouter.get('/orders/:id/report.pdf', async (req, res) => {
     },
     { fixMarkdown, extrasMarkdown },
   );
+  // (HESAP VEREBİLİRLİK) Admin rapor-içeriğine erişti → DEĞİŞTİRİLEMEZ audit (secret YAZILMAZ).
+  await logReportAccess({
+    adminId: req.adminId!, reportId: report.id, orderId: report.orderId,
+    customerId: report.order.customer.id, customerEmail: report.order.customer.email,
+    action: 'view_pdf', ip: req.ip ?? null,
+  });
+
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="admin-onceizleme-${report.orderId}.pdf"`);
   res.setHeader('Cache-Control', 'no-store');
@@ -602,4 +633,21 @@ adminRouter.post('/redteam-jobs/:id/kill', async (req, res) => {
     { source: 'killswitch', level: 'warn', message: `admin KILL-SWITCH: ${result.ok ? 'OK' : 'HATA'} — ${result.output.slice(0, 400)}` },
   ]);
   res.json({ ok: result.ok, output: result.output });
+});
+
+// --- Rapor erişim AUDIT (hesap verebilirlik; değiştirilemez append-only kayıtlar) --------------
+// Her admin rapor-erişimini gösterir: admin id + zaman + rapor + müşteri + eylem. Secret İÇERMEZ.
+adminRouter.get('/report-access-logs', async (req, res) => {
+  const { skip, take, page, pageSize } = paginate(req.query);
+  const reportId = typeof req.query.reportId === 'string' ? req.query.reportId : undefined;
+  const customerId = typeof req.query.customerId === 'string' ? req.query.customerId : undefined;
+  const where = { ...(reportId ? { reportId } : {}), ...(customerId ? { customerId } : {}) };
+  const [total, rows] = await Promise.all([
+    prisma.reportAccessLog.count({ where }),
+    prisma.reportAccessLog.findMany({
+      where, skip, take, orderBy: { at: 'desc' },
+      select: { id: true, at: true, adminId: true, reportId: true, orderId: true, customerId: true, customerEmail: true, action: true, ip: true },
+    }),
+  ]);
+  res.json({ page, pageSize, total, items: rows });
 });
