@@ -20,8 +20,10 @@ export function makeSshExec(ip: string, keyPath = redteamKeyPath()): RemoteExec 
     try {
       const { stdout, stderr } = await execFileAsync(
         'ssh',
-        ['-i', keyPath, '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes', `root@${ip}`, remoteCmd],
-        { timeout: 30_000, maxBuffer: 4 * 1024 * 1024 },
+        ['-i', keyPath, '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes',
+          // Keepalive: uzun süren komut (setup: cloud-init/apt/docker-pull) sırasında oturum düşmesin.
+          '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=8', `root@${ip}`, remoteCmd],
+        { timeout: 900_000, maxBuffer: 8 * 1024 * 1024 }, // setup uzun sürebilir (docker pull kali)
       );
       return { code: 0, stdout, stderr };
     } catch (e: any) {

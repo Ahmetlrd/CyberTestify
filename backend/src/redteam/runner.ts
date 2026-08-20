@@ -66,8 +66,25 @@ async function deliverLlmKeyToDroplet(ip: string): Promise<void> {
   });
 }
 
-const SSH_OPTS = ['-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10'];
+const SSH_OPTS = ['-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
+  '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=8']; // keepalive: uzun komutta oturum düşmesin
 const DROPLET_DIR = '/opt/pentagi-run';
+
+/**
+ * cloud-init'i KISA-RECONNECT poll ile bekle (her SSH kısa → kopma birikmez). "running" bittiğinde döner.
+ * Uzun tek-SSH `cloud-init status --wait` yerine bu — bağlantı düşse de wait ilerler.
+ */
+async function waitCloudInit(ip: string, maxMs = 240_000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    try {
+      const { stdout } = await execFileAsync('ssh', ['-i', redteamKeyPath(), ...SSH_OPTS, `root@${ip}`,
+        'cloud-init status 2>/dev/null || echo "status: done"'], { timeout: 15_000 });
+      if (!/status:\s*running/i.test(stdout)) return; // done/disabled/error/notrun → devam
+    } catch { /* kopma normal — kısa bekle, tekrar dene */ }
+    await new Promise((r) => setTimeout(r, 8000));
+  }
+}
 
 /**
  * Droplet SSH-HAZIR olana kadar bekle (boot + sshd). Tek-seferde deneme yerine poll+backoff.
@@ -131,7 +148,18 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
     const realArgs = args.filter((a) => !a.startsWith('#'));
     // container path (${scriptsDir}/droplet-scripts/X) → droplet path (/opt/pentagi-run/X)
     const dropletCmd = cmd.replace(/.*\/droplet-scripts\//, `${DROPLET_DIR}/`);
-    return makeSshExec(dropletIp)([dropletCmd, ...realArgs].join(' '));
+    const full = [dropletCmd, ...realArgs].join(' ');
+    let r = await makeSshExec(dropletIp)(full);
+    // exit 255 = SSH bağlantı kopması (komut hatası değil). setup-pentagi.sh İDEMPOTENT → reconnect+retry.
+    // campaign/bind RETRY EDİLMEZ (createFlow tekrarı = ikinci flow). Yalnız setup.
+    const isSetup = /setup-pentagi\.sh/.test(cmd);
+    let tries = 0;
+    while (r.code === 255 && isSetup && tries < 2) {
+      tries++;
+      await new Promise((res) => setTimeout(res, 8000));
+      r = await makeSshExec(dropletIp)(full);
+    }
+    return r;
   };
 
   const onStep = async (s: Parameters<NonNullable<Parameters<typeof runPipeline>[0]['onStep']>>[0]) => {
@@ -147,7 +175,9 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
           await persistStep(jobId, { phase: 'setup', ok: false, detail: 'SSH ~3 dk içinde hazır olmadı (droplet boot/firewall?) — teardown edilecek' });
           throw new Error('SSH hazır olmadı');
         }
-        await persistStep(jobId, { phase: 'setup', ok: true, detail: 'SSH hazır — scriptler ve LLM anahtarı aktarılıyor' });
+        await persistStep(jobId, { phase: 'setup', ok: true, detail: 'SSH hazır — cloud-init (ilk-boot) bekleniyor (kısa-reconnect poll)…' });
+        await waitCloudInit(dropletIp); // uzun tek-SSH yerine kısa poll → oturum düşse de ilerler
+        await persistStep(jobId, { phase: 'setup', ok: true, detail: 'cloud-init tamam — scriptler ve LLM anahtarı aktarılıyor' });
         try {
           await pushDropletScripts(dropletIp); // droplet-scripts'i droplet'e kopyala + chmod
           await deliverLlmKeyToDroplet(dropletIp); // LLM anahtarı SSH-stdin ile (log'da değil)
