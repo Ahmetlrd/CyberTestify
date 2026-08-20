@@ -168,7 +168,10 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
     // ——— 7) BIND (PentAGI Postgres → 3-katman JSON; ham artefakta bağlı) ———
     // GERÇEK flow id: launch_cap.py onu /opt/pentagi-run/flow_id'e yazdı → droplet'te $(cat ...) ile oku
     // (placeholder <flowId> DEĞİL; bash onu redirect sanıyordu).
-    const b = await run('bind', `${ctx.scriptsDir}/droplet-scripts/binder.py`, ['--flow', '$(cat /opt/pentagi-run/flow_id)', '--json']);
+    // --target/--target-ip: PROVENANCE kuralı (hedef-dışı host referanslayan bulgu elenir).
+    const b = await run('bind', `${ctx.scriptsDir}/droplet-scripts/binder.py`, [
+      '--flow', '$(cat /opt/pentagi-run/flow_id)', '--target', job.domain, '--target-ip', primaryIp, '--json',
+    ]);
     const binderOutput: BinderOutput = ctx.dryRun
       ? { artifactCount: 0, claimCount: 0, summary: { kanitli: 0, belirsiz: 0, hayalet: 0 }, overallRisk: 'temiz', findings: [] }
       : (JSON.parse(b.stdout) as BinderOutput);

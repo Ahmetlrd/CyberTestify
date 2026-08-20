@@ -227,6 +227,13 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
 
     if (pullTimer) { clearInterval(pullTimer); pullTimer = null; }
 
+    // Raporun meta'sına GERÇEK maliyet/çağrı (puller'ın DB'ye yazdığı canlı değerler) enjekte et.
+    const live = await prisma.redTeamJob.findUnique({ where: { id: jobId }, select: { costUsd: true, llmCalls: true } });
+    let reportJson: any = result.report ?? null;
+    if (reportJson) {
+      reportJson = { ...reportJson, meta: { ...reportJson.meta, costUsd: live?.costUsd ?? null, llmCalls: live?.llmCalls ?? null } };
+    }
+
     await prisma.redTeamJob.update({
       where: { id: jobId },
       data: {
@@ -234,7 +241,7 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
         phase: result.ok ? 'teardown' : job.phase,
         finishedAt: new Date(),
         error: result.error ?? null,
-        ...(result.report ? { reportJson: result.report as any, costUsd: (result.report.meta as any).costUsd ?? job.costUsd } : {}),
+        ...(reportJson ? { reportJson } : {}),
       },
     });
   } catch (e) {
