@@ -45,35 +45,50 @@ def psql(sql):
     except Exception:
         return ""
 
+# (D-hardening) HER subprocess çağrısı KESİN timeout'lu — bu dosyadaki ÖNCEKİ timeout'suz
+# subprocess.run çağrıları, docker/iptables donduğunda (ör. docker run bir imajı ÇEKMEYE çalışıp
+# takılırsa) hard_stop()'u SONSUZA kadar bloke ediyordu -> koşu subtask bitse bile 30+ dk asılı kaldı
+# (kanıtlanmış kök-neden). run_safe: timeout'ta TimeoutExpired'i YUT, boş sonuç dön — asla asılma.
+def run_safe(cmd, timeout=10):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        print(f"  [UYARI] komut {timeout}s'de takıldı, ATLANDI (asılmayı önlemek için): {' '.join(cmd)[:80]}", flush=True)
+        class _Empty: stdout=''; returncode=-1
+        return _Empty()
+
 def cut_anthropic_egress():
     """Anthropic'i KESİN kes: IP için EN ÜSTE DROP ekle (ESTABLISHED kuralının ÜSTÜNDE -> mevcut
-    keep-alive akışları da anında ölür) + 443-ACCEPT izinlerini temizle."""
+    keep-alive akışları da anında ölür) + 443-ACCEPT izinlerini temizle. HER adım timeout'lu (asılmaz)."""
     ips=set()
-    out=subprocess.run(["getent","ahostsv4","api.anthropic.com"],capture_output=True,text=True).stdout
+    out=run_safe(["getent","ahostsv4","api.anthropic.com"], timeout=8).stdout
     ips |= {l.split()[0] for l in out.splitlines() if l.split()}
-    rules=subprocess.run(["iptables","-S","DOCKER-USER"],capture_output=True,text=True).stdout.splitlines()
+    rules=run_safe(["iptables","-S","DOCKER-USER"], timeout=8).stdout.splitlines()
     for r in rules:
         if "--dport 443" in r and "-j ACCEPT" in r:
             m=re.search(r"-d (\d+\.\d+\.\d+\.\d+)",r)
             if m: ips.add(m.group(1))
     for ip in ips:  # top-priority DROP: ESTABLISHED-allow'un ÜSTÜNE
-        subprocess.run(["iptables","-I","DOCKER-USER","1","-d",ip,"-j","DROP"],capture_output=True,text=True)
+        run_safe(["iptables","-I","DOCKER-USER","1","-d",ip,"-j","DROP"], timeout=8)
     n=0
     for r in rules:  # eski ACCEPT izinlerini temizle
         if "--dport 443" in r and "-j ACCEPT" in r:
-            subprocess.run(("iptables "+r.replace("-A ","-D ",1)).split(),capture_output=True,text=True); n+=1
+            run_safe(("iptables "+r.replace("-A ","-D ",1)).split(), timeout=8); n+=1
     return len(ips)
 def anthropic_reachable():
-    # curl'ü DOĞRUDAN CMD olarak çalıştır (login-shell banner'ı stdout'u kirletmesin -> yanlış-pozitif olmasın)
-    r=subprocess.run(["docker","run","--rm","--network","pentagi-network","vxcontrol/kali-linux",
-        "curl","-s","-o","/dev/null","-w","%{http_code}","--max-time","8","https://api.anthropic.com/"],
-        capture_output=True,text=True)
-    code=r.stdout.strip()
-    return r.returncode==0 and code.isdigit() and code!="000"
+    # (KANITLANMIŞ KÖK-NEDEN) Bu satır ÖNCEDEN timeout'suzdu: `docker run` imajı ÇEKMEYE çalışıp
+    # (ör. egress az önce kesildiği için) SONSUZA kadar takılabiliyordu -> hard_stop() hiç dönmüyordu ->
+    # koşu subtask bitse bile 30+ dk asılı kalıyordu. run_safe ile KESİN üst sınır (image zaten
+    # setup'ta önceden çekilmişti — normalde hızlı; anormal durumda 20s'de vazgeçer, asılmaz).
+    r=run_safe(["docker","run","--rm","--network","pentagi-network","vxcontrol/kali-linux",
+        "curl","-s","-o","/dev/null","-w","%{http_code}","--max-time","8","https://api.anthropic.com/"], timeout=20)
+    code=(r.stdout or '').strip()
+    return getattr(r, 'returncode', -1)==0 and code.isdigit() and code!="000"
 def kill_workers():
-    for n in subprocess.run(["docker","ps","--format","{{.Names}}"],capture_output=True,text=True).stdout.split():
+    names = run_safe(["docker","ps","--format","{{.Names}}"], timeout=10).stdout.split()
+    for n in names:
         if n not in CORE:
-            subprocess.run(["docker","kill",n],capture_output=True,text=True); print(f"  kill-switch: {n} durduruldu",flush=True)
+            run_safe(["docker","kill",n], timeout=10); print(f"  kill-switch: {n} durduruldu",flush=True)
 
 def hard_stop(fid,reason):
     print(f"== HARD STOP: {reason} ==",flush=True)
@@ -146,6 +161,7 @@ def main():
         u=float(psql("SELECT COALESCE(SUM(usage_cost_in+usage_cost_out),0)::numeric(12,4) FROM msgchains;") or 0)
         return c,u
     t0=time.time(); reason=None; last_calls=-1; stable_t=time.time()
+    last_activity=-1; idle_t=time.time()  # (D4 stall-detector) toolcall+subtask toplamı — flows.status'a BAĞIMLI DEĞİL
     while True:
         el=int(time.time()-t0)
         # SÜRE CAP EN BAŞTA — psql yavaş/asılı olsa BİLE 600s'de kesin keser (bu koşu 1402s'ye çıkmıştı:
@@ -153,7 +169,8 @@ def main():
         if el>=CAP_SEC: reason=f"SÜRE cap ({CAP_SEC}s)"; break
         calls,cost=spend()
         tcs=int(psql(f"SELECT count(*) FROM toolcalls WHERE flow_id={FID};") or 0)
-        print(f"  [t={el}s] llm_calls={calls} tool_calls={tcs} cost=${cost:.4f}",flush=True)
+        stc=int(psql(f"SELECT count(*) FROM subtasks WHERE task_id IN (SELECT id FROM tasks WHERE flow_id={FID});") or 0)
+        print(f"  [t={el}s] llm_calls={calls} tool_calls={tcs} subtasks={stc} cost=${cost:.4f}",flush=True)
         # SERT CAP — GERÇEK harcamaya bağlı; aşınca hard_stop (Anthropic-egress-kes + finishFlow + kill)
         if cost>=CAP_COST: reason=f"MALİYET cap (${CAP_COST})"; break
         if calls>=CAP_CALLS: reason=f"ÇAĞRI cap ({CAP_CALLS})"; break
@@ -163,6 +180,15 @@ def main():
         stt=psql(f"SELECT status FROM flows WHERE id={FID};")
         if stt in ("finished","failed") and calls>0 and (time.time()-stable_t)>=25:
             reason=f"flow {stt} (harcama stabil)"; break
+        # (D4 STALL-DETECTOR — kanıtlanmış olay) Bu koşuda son subtask 'done' oldu AMA flows.status HİÇ
+        # 'finished'e dönmedi -> yukarıdaki koşul asla tetiklenmedi, pipeline 30+ dk asılı kaldı. flows.
+        # status'a BAKMADAN: toolcall+subtask toplamında 30s hiç değişiklik yoksa (ajan görünüşe göre
+        # durdu/bekliyor) ZORLA bitir — cap_sec'i (dakikalarca) beklemeden. Watchdog (D2) yine de nihai
+        # backstop'tur; bu yalnız NORMAL bitişi hızlandırır (30+ dk yerine ~30sn).
+        activity = calls + tcs + stc
+        if activity != last_activity: last_activity = activity; idle_t = time.time()
+        elif calls > 0 and (time.time()-idle_t) >= 30:
+            reason = "ajan durdu (30s hareketsizlik; flows.status güncellenmemiş olabilir) — zorla bitiriliyor"; break
         time.sleep(5)
     hard_stop(FID,reason)
     # cap sonrası harcama DONMUŞ mu (sert-durdurma ispatı) — GERÇEK harcama (tüm msgchains)

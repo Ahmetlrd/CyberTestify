@@ -9,6 +9,7 @@ const RT_COLOR: Record<string, string> = {
   completed: '#22c55e', running: '#38bdf8', binding: '#38bdf8', reporting: '#38bdf8',
   provisioning: '#eab308', hardening: '#eab308', queued: '#94a3b8',
   failed: '#ef4444', torn_down: '#64748b',
+  aborted: '#f97316', // (bağımsız watchdog hardkill) — hata DEĞİL, cap/watchdog ZORLA durdurdu
 };
 function RtBadge({ status }: { status: string | null }) {
   if (!status) return <span style={{ color: '#64748b' }}>—</span>;

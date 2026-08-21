@@ -159,7 +159,9 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
     await run('provision', `${ctx.scriptsDir}/provision.sh`, [`# SIZE=${cfg.size}`]);
 
     // ——— 3) SETUP (PentAGI + hedef-erişimi + API-token bootstrap) ———
-    await run('setup', `${ctx.scriptsDir}/droplet-scripts/setup-pentagi.sh`, []);
+    // cap.capSec argüman olarak geçer: setup EN BAŞINDA droplet-içi BAĞIMSIZ self-destruct kurar
+    // (D1 — orchestrator/Node'dan TAMAMEN AYRI; ana döngü asılı kalsa BİLE droplet kendi kendini yok eder).
+    await run('setup', `${ctx.scriptsDir}/droplet-scripts/setup-pentagi.sh`, [String(cfg.capSec)]);
 
     // ——— 4) HARDEN egress: Anthropic AÇ + YALNIZ pinlenen hedef IP('ler) ———
     await run('harden', `${ctx.scriptsDir}/droplet-scripts/egress-harden-docker.sh`, []);

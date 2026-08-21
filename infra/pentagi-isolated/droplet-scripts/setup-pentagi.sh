@@ -4,6 +4,35 @@
 # (compose override ile konteyner env'ine enjekte). Sonuç: /opt/pentagi-run/api_token + graphql_path.
 # NOT: İlk CANLI koşuda uçtan uca doğrulanacak; DO/secret basılmaz.
 set -euo pipefail
+
+# ————————————————————————————————————————————————————————————————————————————————————
+# (D1 — BAĞIMSIZ ALTYAPI WATCHDOG) DROPLET-İÇİ SELF-DESTRUCT — orchestrator'ın Node sürecinden
+# TAMAMEN AYRI. 3 kez aynı hata tekrarlandı: cap/süre kontrolü hep ORCHESTRATOR'ın kendi döngüsü
+# içindeydi; o döngü tıkanınca (network gecikmesi, SSH asılması, docker run'ın sonsuz beklemesi)
+# kontrol de onunla birlikte tıkandı — bir koşu 945s+/30dk+ asılı kaldı, kullanıcı elle kill-switch'e
+# basmak zorunda kaldı. Bu EN BAŞTA (docker/PentAGI kurulmadan ÖNCE) kurulur ki setup/harden/verify/
+# campaign HANGİ AŞAMADA asılırsa asılsın, droplet KENDİ KENDİNE (systemd, orchestrator'a muhtaç
+# olmadan) belirlenen sürede kapanır. Bu, watchdog'ların watchdog'udur — son çare.
+CAP_SEC="${1:-1200}"                 # orchestrator cfg.capSec geçirir; argüman yoksa güvenli varsayılan
+SELFDESTRUCT_SEC=$((CAP_SEC + 90))   # cap + 90sn tampon (yumuşak+sert watchdog'a zaman tanır)
+mkdir -p /opt/pentagi-run/audit
+cat > /opt/pentagi-run/self-destruct.sh <<'SD'
+#!/bin/bash
+echo "$(date -u +%FT%TZ) SELF-DESTRUCT (droplet-içi bağımsız zamanlayıcı — orchestrator'dan TAMAMEN AYRI) tetiklendi" >> /opt/pentagi-run/audit/audit.log 2>/dev/null
+docker ps -q 2>/dev/null | xargs -r docker kill 2>/dev/null
+iptables -P OUTPUT DROP 2>/dev/null || true
+iptables -F DOCKER-USER 2>/dev/null || true
+iptables -A DOCKER-USER -j DROP 2>/dev/null || true
+sync
+shutdown -h now
+SD
+chmod +x /opt/pentagi-run/self-destruct.sh
+systemctl reset-failed redteam-selfdestruct >/dev/null 2>&1 || true
+systemd-run --unit=redteam-selfdestruct --on-active="${SELFDESTRUCT_SEC}s" /opt/pentagi-run/self-destruct.sh
+echo "== D1: droplet-içi BAĞIMSIZ self-destruct kuruldu — cap=${CAP_SEC}s (+90s tampon) = ${SELFDESTRUCT_SEC}s sonra tetiklenecek =="
+systemctl list-timers 'redteam-selfdestruct*' --all 2>/dev/null || true
+# ————————————————————————————————————————————————————————————————————————————————————
+
 # ————————————————————————————————————————————————————————————————————————————————————
 # LLM ANAHTARI — GÜVENLİK KRİTİK (iki-leak vektörü). Anahtar runner tarafından SSH-STDIN ile
 # /opt/pentagi-run/llmkey'e (chmod 600) akıtıldı (izole, tek-kullanımlık droplet; teardown'da imha).

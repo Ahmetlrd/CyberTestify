@@ -62,6 +62,9 @@ export type RedTeamReport = {
   eliminated: number;           // HAYALET (yalnız sayı)
   eliminatedReasons?: Record<string, number>; // panel kırılımı (rapora değil): off-target/no-evidence/weak-signature
   disclaimer: string;
+  // (BAĞIMSIZ WATCHDOG — D5) Koşu cap/watchdog tarafından ZORLA durdurulduysa dürüst not (yarım kalan
+  // istek/yanıt çiftleri zaten P0-2 kuralı gereği kanıt sayılmaz — rapor bozulmaz, yalnız şeffaf bir not eklenir).
+  stoppedReason?: string;
 };
 
 const RISK_LABEL: Record<string, string> = {
@@ -221,6 +224,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
   <h1>Otonom AI Red Team — Bulgu Raporu</h1>
   <div class="meta"><b>Hedef:</b> ${esc(r.meta.target)} · <b>Seviye:</b> ${esc(r.meta.level)} · <b>Ortam:</b> ${esc(r.meta.environment)} · <b>Tarih:</b> ${esc(r.meta.generatedAt)}${r.meta.costUsd != null ? ` · <b>Maliyet:</b> ~$${Number(r.meta.costUsd).toFixed(4)}` : ''}${r.meta.llmCalls != null ? ` · ${r.meta.llmCalls} LLM çağrısı` : ''}</div>
   <div class="disc">⚠ DENEYSEL · DETERMİNİSTİK DEĞİL · resmi denetim/sertifikasyon DEĞİL. ${esc(r.disclaimer)}</div>
+  ${r.stoppedReason ? `<div class="disc" style="background:#fef2f2;border-color:#f87171;border-left-color:#dc2626;color:#7f1d1d">⏱ KOŞU ZORLA DURDURULDU: ${esc(r.stoppedReason)}</div>` : ''}
 
   <h2>Yönetici Özeti</h2>
   <div class="exec">

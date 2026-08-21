@@ -126,6 +126,30 @@ async function readDropletIp(): Promise<string | null> {
 }
 
 /**
+ * (D2 — BAĞIMSIZ ALTYAPI WATCHDOG) watchdog.ts'i AYRI, DETACHED bir OS süreci olarak başlatır —
+ * bu Node sürecinin event-loop'undan/kendisinden TAMAMEN kopuktur (unref edilir; parent hang/crash
+ * olsa da watchdog kendi başına çalışmaya devam eder). Kanıtlanmış 3-kez-tekrarlanan hatanın
+ * (cap/süre kontrolü ana döngü içinde yaşayıp o döngüyle birlikte tıkanması) YAPISAL çözümüdür.
+ * DO token/DB bağlantısı yalnız ENV'den (process.env inherit) — argv'ye YAZILMAZ.
+ */
+function spawnWatchdog(params: {
+  jobId: string; dropletIp: string; capSec: number; capCostUsd: number;
+  target: string; targetIp: string; level: string; environment: string;
+}): void {
+  const child = spawn(
+    'npx',
+    ['tsx', 'src/redteam/watchdog.ts',
+      '--job-id', params.jobId, '--droplet-ip', params.dropletIp,
+      '--cap-sec', String(params.capSec), '--cap-cost', String(params.capCostUsd),
+      '--target', params.target, '--target-ip', params.targetIp,
+      '--level', params.level, '--environment', params.environment,
+      '--scripts-dir', scriptsDir(), '--key-path', redteamKeyPath()],
+    { detached: true, stdio: 'ignore', env: process.env },
+  );
+  child.unref(); // parent'ın exit'i/hang'i watchdog'u ETKİLEMEZ — bağımsız yaşar
+}
+
+/**
  * Bir RedTeamJob'u uçtan uca çalıştırır. Admin trigger'dan (arka planda) çağrılır.
  */
 export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<void> {
@@ -141,6 +165,8 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
 
   let dropletIp: string | null = job.dropletIp ?? null;
   let pullTimer: NodeJS.Timeout | null = null;
+  let capturedTargetIp: string | null = job.targetIp ?? null; // guard fazından yakalanır (watchdog için gerekli)
+  let watchdogSpawned = false;
 
   // Faz-farkında exec: provision/teardown LOKAL (prod host); droplet fazları SSH (droplet path'e rewrite).
   const exec: ExecFn = async (cmd, args) => {
@@ -164,11 +190,31 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
   };
 
   const onStep = async (s: Parameters<NonNullable<Parameters<typeof runPipeline>[0]['onStep']>>[0]) => {
+    // guard fazının detail metninden pinlenen hedef IP'sini yakala (watchdog'un binder çağrısı için gerekli).
+    if (s.phase === 'guard' && s.ok && !opts.dryRun && !capturedTargetIp) {
+      const m = /\(birincil ([^)]+)\)/.exec(s.detail);
+      if (m) {
+        capturedTargetIp = m[1];
+        await prisma.redTeamJob.update({ where: { id: jobId }, data: { targetIp: capturedTargetIp } }).catch(() => {});
+      }
+    }
     // provision bittiğinde droplet IP'yi yakala + kaydet + LLM anahtarını akıt
     if (s.phase === 'provision' && s.ok && !opts.dryRun && !dropletIp) {
       dropletIp = await readDropletIp();
       if (dropletIp) {
         await prisma.redTeamJob.update({ where: { id: jobId }, data: { dropletIp } });
+        // (D2 — BAĞIMSIZ WATCHDOG) Droplet var olur olmaz, EN BAŞTA, orchestrator'ın kendi döngüsünden
+        // TAMAMEN AYRI bir OS süreci başlat. Kanıtlanmış 3-kez-tekrarlanan hatanın (cap kontrolü ana
+        // döngüyle birlikte tıkanması) yapısal çözümü — ana döngü setup/harden/campaign'de HERHANGİ
+        // bir noktada asılsa BİLE bu süreç bağımsız çalışır ve cap+60sn'de droplet'i zorla imha eder.
+        if (!watchdogSpawned && capturedTargetIp) {
+          watchdogSpawned = true;
+          spawnWatchdog({
+            jobId, dropletIp, capSec: cap.capSec, capCostUsd: cap.capCostUsd,
+            target: job.domain, targetIp: capturedTargetIp, level: job.level, environment: job.environment,
+          });
+          await persistStep(jobId, { phase: 'setup', ok: true, detail: `bağımsız watchdog başlatıldı (cap ${cap.capSec}s +60s sert sınır; ana döngüden AYRI süreç)` });
+        }
         // Droplet YENİ boot etti — sshd hazır olana kadar BEKLE (tek-seferde deneme yok).
         await persistStep(jobId, { phase: 'setup', ok: true, detail: `droplet ${dropletIp} açıldı — SSH (sshd) hazır bekleniyor…` });
         const sshReady = await waitForSsh(dropletIp);
@@ -193,7 +239,10 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
       provision: 'provisioning', setup: 'provisioning', harden: 'hardening', verify: 'hardening',
       campaign: 'running', bind: 'binding', report: 'reporting', teardown: 'torn_down',
     };
-    await prisma.redTeamJob.update({ where: { id: jobId }, data: { status: statusByPhase[s.phase] ?? undefined, phase: s.phase } }).catch(() => {});
+    // (D2 GÜVENCESİ) status='aborted' İSE bu ana döngü onStep'i ARTIK ÜZERİNE YAZMASIN — watchdog
+    // zaten hardkill uyguladıysa (rapor + status), ana döngü SONRADAN uyanırsa (SSH timeout'tan) o
+    // sonucu EZMESİN. Atomik where-guard (ekstra okuma gerekmez; koşul tutmazsa no-op).
+    await prisma.redTeamJob.updateMany({ where: { id: jobId, status: { not: 'aborted' } }, data: { status: statusByPhase[s.phase] ?? undefined, phase: s.phase } }).catch(() => {});
     await persistStep(jobId, s);
 
     // verify verdikt'ini job'a yaz (panel egress kartı) — 'izolasyon: hedef-erişilir=✓ · CyberTestify-BLOCKED=✓'
@@ -246,8 +295,10 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
       : null;
     const transcript = rawFlow ? renderTranscript(rawFlow) : null;
 
-    await prisma.redTeamJob.update({
-      where: { id: jobId },
+    // (D2 GÜVENCESİ) watchdog zaten 'aborted' yazdıysa (hardkill + rapor), ana döngünün GEÇ gelen
+    // sonucu bunu EZMESİN — atomik where-guard.
+    await prisma.redTeamJob.updateMany({
+      where: { id: jobId, status: { not: 'aborted' } },
       data: {
         status: result.ok ? 'completed' : 'failed',
         phase: result.ok ? 'teardown' : job.phase,
@@ -262,8 +313,8 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
     });
   } catch (e) {
     if (pullTimer) clearInterval(pullTimer);
-    await prisma.redTeamJob.update({
-      where: { id: jobId },
+    await prisma.redTeamJob.updateMany({
+      where: { id: jobId, status: { not: 'aborted' } },
       data: { status: 'failed', finishedAt: new Date(), error: maskSecrets((e as Error).message).slice(0, 500) },
     }).catch(() => {});
   }
