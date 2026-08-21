@@ -21,6 +21,7 @@ import { readFile } from 'node:fs/promises';
 import { buildRedTeamReport, type BinderOutput, type RedTeamReport } from './report.js';
 import { renderTranscript } from './transcript.js';
 import { maskSecrets } from './puller.js';
+import { EPHEMERAL_SSH_HOSTKEY_OPTS } from './controlChannel.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -50,7 +51,7 @@ async function sshTry(ip: string, keyPath: string, cmd: string, timeoutMs: numbe
   try {
     const { stdout } = await execFileAsync(
       'ssh',
-      ['-i', keyPath, '-o', 'ConnectTimeout=6', '-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes',
+      ['-i', keyPath, '-o', 'ConnectTimeout=6', ...EPHEMERAL_SSH_HOSTKEY_OPTS, '-o', 'BatchMode=yes',
         `root@${ip}`, cmd],
       { timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 },
     );

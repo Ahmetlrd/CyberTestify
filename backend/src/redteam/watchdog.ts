@@ -22,6 +22,7 @@ import { promisify } from 'node:util';
 import { prisma } from '../db.js';
 import { hardkill } from './hardkill.js';
 import { maskSecrets } from './puller.js';
+import { EPHEMERAL_SSH_HOSTKEY_OPTS } from './controlChannel.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -55,7 +56,7 @@ async function readRealCost(): Promise<number | null> {
   try {
     const { stdout } = await execFileAsync(
       'ssh',
-      ['-i', KEY_PATH, '-o', 'ConnectTimeout=8', '-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes',
+      ['-i', KEY_PATH, '-o', 'ConnectTimeout=8', ...EPHEMERAL_SSH_HOSTKEY_OPTS, '-o', 'BatchMode=yes',
         `root@${DROPLET_IP}`, 'docker exec pgvector psql -U postgres -d pentagidb -tAc "SELECT COALESCE(SUM(usage_cost_in+usage_cost_out),0)::numeric(12,4) FROM msgchains;" 2>/dev/null'],
       { timeout: 10_000 },
     );

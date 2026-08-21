@@ -14,7 +14,7 @@ import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { prisma } from '../db.js';
 import { runPipeline, LEVEL_CFG, type ExecFn, type Level, type Env } from './orchestrator.js';
-import { makeSshExec, redteamKeyPath } from './controlChannel.js';
+import { makeSshExec, redteamKeyPath, EPHEMERAL_SSH_HOSTKEY_OPTS } from './controlChannel.js';
 import { persistStep, persistPull } from './observability.js';
 import { pullOnce, maskSecrets } from './puller.js';
 import { renderTranscript } from './transcript.js';
@@ -54,7 +54,7 @@ async function deliverLlmKeyToDroplet(ip: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const p = spawn(
       'ssh',
-      ['-i', redteamKeyPath(), '-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes', `root@${ip}`,
+      ['-i', redteamKeyPath(), ...EPHEMERAL_SSH_HOSTKEY_OPTS, '-o', 'BatchMode=yes', `root@${ip}`,
         'mkdir -p /opt/pentagi-run && cat > /opt/pentagi-run/llmkey && chmod 600 /opt/pentagi-run/llmkey'],
       { stdio: ['pipe', 'ignore', 'pipe'] },
     );
@@ -67,7 +67,7 @@ async function deliverLlmKeyToDroplet(ip: string): Promise<void> {
   });
 }
 
-const SSH_OPTS = ['-o', 'StrictHostKeyChecking=no', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
+const SSH_OPTS = [...EPHEMERAL_SSH_HOSTKEY_OPTS, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
   '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=8']; // keepalive: uzun komutta oturum düşmesin
 const DROPLET_DIR = '/opt/pentagi-run';
 
