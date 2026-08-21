@@ -9,6 +9,10 @@ import { api } from '../../lib/api';
  */
 function failureMessage(reason?: string | null): string {
   if (!reason) return 'Tarama tamamlanamadı. Tekrar deneyebilirsiniz.';
+  // (MANTIK TUTARLILIĞI) target_unreachable = hedef o an erişilemezdi (5xx/hata); giriş HİÇ denenmedi.
+  // Bunu kimlik-bilgisi sorunuymuş gibi göstermek yanıltıcı — mesaj gerçek nedeni net söylemeli.
+  if (reason.startsWith('auth_login_failed:target_unreachable'))
+    return 'Taramanız sırasında sitenize erişilemedi (sunucu hata/erişilemez durum döndürdü) — bu kullanıcı adı/şifre sorunu DEĞİLDİR, giriş denemesi bile yapılmadı. Sitenizin şu an yayında olduğundan emin olup tekrar deneyin (test hesabı bilgileriniz hâlâ kayıtlı).';
   if (reason.startsWith('auth_login_failed:two_factor'))
     return 'Verdiğiniz test hesabında iki-adımlı doğrulama (2FA) açık göründüğü için giriş yapılamadı. 2FA’sız, sınırlı yetkili bir TEST hesabıyla tekrar deneyin.';
   if (reason.startsWith('auth_login_failed'))
@@ -64,7 +68,10 @@ export function ScanFailedActions({
     } finally { setBusy(false); }
   }
   // Login kaynaklı başarısızlık mı (auth başarısız / giriş formu yok)? Öyleyse loginsiz-devam sun.
-  const isLoginFailure = needCreds || !!(failureReason && (failureReason.startsWith('auth_login_failed') || failureReason === 'no_login_endpoint'));
+  // target_unreachable HARİÇ: o durumda hedefin TAMAMI erişilemezdi (giriş hiç denenmedi) — loginsiz
+  // devam da aynı şekilde başarısız olur; doğru aksiyon "Tekrar Dene" (hedef ayağa kalkınca).
+  const isTargetUnreachable = !!failureReason?.startsWith('auth_login_failed:target_unreachable');
+  const isLoginFailure = !isTargetUnreachable && (needCreds || !!(failureReason && (failureReason.startsWith('auth_login_failed') || failureReason === 'no_login_endpoint')));
 
   async function requestRefund() {
     setBusy(true); setErr(null);

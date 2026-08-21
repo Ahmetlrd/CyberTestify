@@ -172,13 +172,25 @@ export async function sendOrderConfirmation(orderIds: string[]): Promise<boolean
 }
 
 // --- (Tam Kapsamlı Pentest — FAZ B) Login başarısız bildirimi (kredi YOK — İŞ 2) ------
-export async function sendAuthLoginFailed(orderId: string, twoFactor: boolean): Promise<boolean> {
+export async function sendAuthLoginFailed(orderId: string, twoFactor: boolean, reason?: string): Promise<boolean> {
   try {
     const o = await prisma.order.findUnique({
       where: { id: orderId },
       include: { customer: { select: { email: true } }, domain: { select: { hostname: true } } },
     });
     if (!o) return false;
+    // (MANTIK TUTARLILIĞI) target_unreachable = HEDEF O AN 5xx/erişilemez döndü; giriş HİÇ denenmedi.
+    // Bunu kimlik-bilgisi hatasıymış gibi anlatmak ("kullanıcı adı/şifre kontrol edin") yanıltıcı ve
+    // müşteriyi haksız yere suçlar — mesaj gerçek nedeni (hedef erişilemez) net söylemeli.
+    if (reason === 'target_unreachable') {
+      const body = `<p>Taramanız sırasında <strong>${esc(o.domain.hostname)}</strong> adresine <strong>erişilemedi</strong> (sunucu hata/erişilemez durum döndürdü) — bu, kullanıcı adı/şifre ile ilgili bir sorun DEĞİLDİR; giriş denemesi bile yapılmadı.</p>
+        <p>Lütfen sitenizin şu an <strong>yayında ve erişilebilir</strong> olduğundan emin olup taramayı tekrar deneyin. Verdiğiniz test hesabı bilgileri hâlâ kayıtlı — tekrar girmenize gerek yok.</p>
+        <p style="margin-top:12px;padding:10px 14px;background:#f3f7f6;border-left:3px solid #123F3A;border-radius:6px;color:#3a4a47;font-size:13px">
+          Sorun devam ederse ya da iade isterseniz <a href="mailto:support@cybertestify.com" style="color:#123F3A;font-weight:600">support@cybertestify.com</a> adresinden bize ulaşın — talebinizi elden inceleyip yardımcı olalım.
+        </p>`;
+      const html = layout({ heading: 'Hedefinize erişilemedi', bodyHtml: body, cta: { label: 'Siparişimi görüntüle', url: `${config.frontendUrl}/dashboard/${o.id}` } });
+      return await sendMail(o.customer.email, 'Tarama tamamlanamadı — hedefinize erişilemedi', html);
+    }
     const twoFa = twoFactor
       ? '<p style="color:#7a2018"><strong>2FA’sı olmayan</strong> bir test hesabı gerekir; hesabınızda iki-adımlı doğrulama açık görünüyor.</p>'
       : '';

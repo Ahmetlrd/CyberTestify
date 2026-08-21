@@ -15,7 +15,7 @@
 import puppeteer from 'puppeteer-core';
 import { discoverSurface, type Surface } from './activeVerifyEvidence.js';
 import { resolveOrigin, cachedOriginUrl } from './surfaceEvidence.js';
-import { consumeTestCredential, type TestCredentialInput } from './testCredentials.js';
+import { consumeTestCredential, hasTestCredential, type TestCredentialInput } from './testCredentials.js';
 import { sendAuthLoginFailed } from './mailer.js';
 import { type AuthSession, type CookieFlag, applyAuthHeaders, parseSetCookie } from './authSession.js';
 import { isAnalyticsCookie } from './cookieClassify.js';
@@ -39,7 +39,7 @@ const WELL_KNOWN_LOGIN = ['/rest/user/login', '/api/auth/login', '/api/login', '
 
 export type AuthResult =
   | { ok: true; session: AuthSession; attempts: number }
-  | { ok: false; reason: 'bad_credentials' | 'two_factor' | 'no_login_endpoint' | 'error'; attempts: number };
+  | { ok: false; reason: 'bad_credentials' | 'two_factor' | 'no_login_endpoint' | 'target_unreachable' | 'error'; attempts: number };
 
 function sameHostAbs(pathOrUrl: string, host: string): string | null {
   try {
@@ -60,6 +60,38 @@ function isInternalHostname(h: string): boolean {
 const loginAttemptsByHost = new Map<string, number>();
 function bump(host: string) { loginAttemptsByHost.set(host, (loginAttemptsByHost.get(host) ?? 0) + 1); }
 export function __loginAttemptsForHost(host: string): number { return loginAttemptsByHost.get(host) ?? 0; }
+
+// (MANTIK TUTARLILIĞI) HEDEF-SAĞLIĞI ÖN-KONTROLÜ: resolveOrigin.reachable yalnız TCP/TLS bağlantısını
+// doğrular — bir Heroku app'i 5xx dönse BİLE "reachable=true" görünür (bu ticket'ın kök nedeni: hedef
+// art arda 503 dönerken sistem yine de ~3 dk login denedi ve "no_login_endpoint" gibi login-özel bir
+// sebep verdi — müşteri için anlamsız). Login denemeden ÖNCE UYGULAMA-katmanı sağlığını (gerçek HTTP
+// status) kontrol et; hedef 5xx/erişilemezse login'i HİÇ deneme — dürüst 'target_unreachable' sonucu
+// dön (kimlik bilgisi TÜKETİLMEZ — hedef ayağa kalkınca "Tekrar Dene" yeniden kimlik istemez).
+async function checkTargetHealthy(host: string): Promise<boolean> {
+  const origin = await resolveOrigin(host);
+  if (!origin.reachable) return false;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(`${origin.origin}/`, {
+      signal: ctrl.signal, redirect: 'follow',
+      headers: { 'user-agent': 'CyberTestify-HealthCheck/1.0', accept: 'text/html,*/*' },
+    });
+    const healthy = res.status < 500;
+    logScanStep({
+      step: 'Giriş öncesi hedef-sağlığı kontrolü', method: 'GET', url: `${origin.origin}/`, status: res.status,
+      level: healthy ? 'info' : 'warn',
+      summary: healthy ? 'hedef sağlıklı — girişe devam' : `hedef ${res.status} döndürdü — giriş DENENMEYECEK (kimlik bilgisi tüketilmedi)`,
+    });
+    return healthy;
+  } catch (err) {
+    logScanStep({
+      step: 'Giriş öncesi hedef-sağlığı kontrolü', method: 'GET', url: `${origin.origin}/`, status: 0, level: 'warn',
+      summary: `İstek hatası (${String((err as Error)?.name ?? 'err')}) — giriş DENENMEYECEK (kimlik bilgisi tüketilmedi)`,
+    });
+    return false;
+  } finally { clearTimeout(timer); }
+}
 
 // Keşiften login uç adaylarını çıkar (ağ-trafiği apiWrites + iyi-bilinen yollar). En olası önce.
 function loginCandidates(host: string, surf: Surface): string[] {
@@ -304,6 +336,8 @@ async function tryFormLogin(host: string, creds: TestCredentialInput): Promise<F
 // login yollarına doğrudan JSON POST dener. Böylece saniyeler içinde GERÇEK sonuç döner (uzun sürüp hep
 // "timeout" dememesi için). Form-only sitelerde API bulunamaz → 'no_login_endpoint' (yine devam edilebilir).
 export async function quickLoginPrecheck(host: string, creds: TestCredentialInput): Promise<AuthResult> {
+  // Hedef şu an 5xx/erişilemez ise login denemeden dürüst sonuç dön (bkz checkTargetHealthy).
+  if (!(await checkTargetHealthy(host))) return { ok: false, reason: 'target_unreachable', attempts: 0 };
   let attempts = 0; let sawEndpoint = false; let sawTwoFactor = false;
   // (1) API-login (JSON) — anında; başarı/başarısızlık kesin.
   const candidates = WELL_KNOWN_LOGIN.map((p) => sameHostAbs(p, host)).filter(Boolean) as string[];
@@ -349,6 +383,9 @@ export async function login(host: string, creds: TestCredentialInput): Promise<A
     });
     return res;
   };
+  // Hedef şu an 5xx/erişilemez ise (bkz checkTargetHealthy) login'i HİÇ deneme — discoverSurface'in tam
+  // crawl'ı + API/form-login denemeleri dakikalarca sürer ve sonunda yanıltıcı 'no_login_endpoint' verirdi.
+  if (!(await checkTargetHealthy(host))) return done({ ok: false, reason: 'target_unreachable', attempts: 0 });
   const surf = await discoverSurface(host).catch(() => null);
   const candidates = surf ? loginCandidates(host, surf) : WELL_KNOWN_LOGIN.map((p) => sameHostAbs(p, host)).filter(Boolean) as string[];
 
@@ -405,9 +442,20 @@ export async function authenticateOrder(orderId: string): Promise<AuthResult> {
     where: { id: orderId },
     include: { domain: { select: { hostname: true } } },
   });
+  const hasCreds = await hasTestCredential(orderId, 'primary');
+  if (!hasCreds) {
+    // Kimlik bilgisi yok (tüketilmiş/purge edilmiş/hiç saklanmamış) — 'credentials-missing' ayrı sebep.
+    await failOrder(order.id, order.customerId, order.amountMinorUnit, false, 'no_login_endpoint');
+    return { ok: false, reason: 'no_login_endpoint', attempts: 0 };
+  }
+  // (MANTIK TUTARLILIĞI) Hedef 5xx/erişilemezse kimlik bilgisini TÜKETMEDEN (silmeden) dur — login hiç
+  // denenmedi, "Tekrar Dene" hedef ayağa kalkınca kimlik yeniden istemeden çalışsın. bkz checkTargetHealthy.
+  if (!(await checkTargetHealthy(order.domain.hostname))) {
+    await failOrder(order.id, order.customerId, order.amountMinorUnit, false, 'target_unreachable');
+    return { ok: false, reason: 'target_unreachable', attempts: 0 };
+  }
   const creds = await consumeTestCredential(orderId, 'primary');
   if (!creds) {
-    // Kimlik bilgisi yok (tüketilmiş/purge edilmiş/hiç saklanmamış) — 'credentials-missing' ayrı sebep.
     await failOrder(order.id, order.customerId, order.amountMinorUnit, false, 'no_login_endpoint');
     return { ok: false, reason: 'no_login_endpoint', attempts: 0 };
   }
@@ -423,6 +471,6 @@ async function failOrder(orderId: string, customerId: string, amountMinorUnit: n
   // (İŞ 2) Kredi YOK. Sipariş scan_failed + sebep (admin görünürlüğü) + net müşteri e-postası.
   // İade gerekiyorsa Vedat admin panelinden görüp iyzico'dan MANUEL yapar.
   await prisma.order.update({ where: { id: orderId }, data: { status: 'scan_failed', failureReason: `auth_login_failed:${reason}` } });
-  await sendAuthLoginFailed(orderId, twoFactor).catch(() => {});
+  await sendAuthLoginFailed(orderId, twoFactor, reason).catch(() => {});
   console.log(`[authLogin] Sipariş ${orderId} login başarısız (reason=${reason}) → scan_failed (kredi yok; gerekirse manuel iade).`);
 }
