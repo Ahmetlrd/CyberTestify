@@ -80,16 +80,24 @@ function phasesFor(key?: string | null): string[] {
   return (key && PHASE_SETS[key]) || DEFAULT_PHASES;
 }
 
+// (MANTIK TUTARLILIĞI) Test hesabıyla giriş İÇEREN paketlerde, "oturum açılıyor" fazı SAHTE zamanlayıcıyla
+// GEÇİLMEZ — yanlış kimlik bilgisiyle her şey ✓ görünüp sonra "giriş yapılamadı" demek müşteri için
+// mantıksızdı (bkz support isyanı). Bu index'e ULAŞTIKTAN sonra backend'in GERÇEK authConfirmedAt
+// damgası gelene kadar burada BEKLENİR (spinner, ✓ verilmez). Giriş başarısız olursa zaten order.status
+// scan_failed'e döner ve bu bileşenin tamamı ekrandan kalkar (bkz dashboard/[orderId] sayfası).
+const AUTH_GATE_IDX: Record<string, number> = { bundle_full_pentest: 0 };
+
 const SECONDS_PER_PHASE = 9; // her faz ~9 sn; son "çalışan" fazda durur (bitiş gerçek durumdan gelir)
 
 export function LiveScanPhases({
-  hostname, feed, startedAt, packageKey, queued,
+  hostname, feed, startedAt, packageKey, queued, authConfirmedAt,
 }: {
   hostname: string;
   feed: Array<{ seq: number; text: string }>;
   startedAt?: string | null;
   packageKey?: string | null;
   queued?: boolean;
+  authConfirmedAt?: string | null; // backend'den: login GERÇEKTEN ne zaman doğrulandı (bkz AUTH_GATE_IDX)
 }) {
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
@@ -116,7 +124,20 @@ export function LiveScanPhases({
   const PHASES = phasesFor(packageKey);
   const startMs = startedAt ? new Date(startedAt).getTime() : now;
   const elapsed = Math.max(0, (now - startMs) / 1000); // sn — YENİLEMEDEN bağımsız (gerçek başlangıçtan)
-  const idx = Math.min(Math.floor(elapsed / SECONDS_PER_PHASE), PHASES.length - 1);
+  const rawIdx = Math.min(Math.floor(elapsed / SECONDS_PER_PHASE), PHASES.length - 1);
+  // (MANTIK TUTARLILIĞI) Login-fazlı paket: gate index'ine ULAŞINCA, backend'in GERÇEK authConfirmedAt
+  // damgası gelmeden ÖTESİNE SAHTE zamanlayıcıyla GEÇİLMEZ — orada bekler (spinner). Damga gelince
+  // KALAN fazlar o GERÇEK andan itibaren ilerler (hâlâ tahmini süre ama artık gerçek bir olaya bağlı).
+  const gateIdx = packageKey ? AUTH_GATE_IDX[packageKey] : undefined;
+  let idx = rawIdx;
+  if (gateIdx != null) {
+    if (!authConfirmedAt) {
+      idx = Math.min(rawIdx, gateIdx);
+    } else {
+      const sinceConfirm = Math.max(0, (now - new Date(authConfirmedAt).getTime()) / 1000);
+      idx = Math.min(gateIdx + 1 + Math.floor(sinceConfirm / SECONDS_PER_PHASE), PHASES.length - 1);
+    }
+  }
   const pct = Math.min(92, Math.max(6, Math.round(100 * (1 - Math.exp(-elapsed / 55))))); // ~%92'ye yumuşak yaklaşır
 
   return (

@@ -285,7 +285,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               <span className="h-3 w-3 rounded-full bg-emerald-400/70" />
               <span className="ml-3 text-xs font-medium text-white/40">cybertestify — live scan</span>
             </div>
-            <LiveScanPhases hostname={hostname} feed={notStarted ? [] : feed} startedAt={order?.flow?.startedAt} packageKey={order?.packageKey} queued={notStarted} />
+            <LiveScanPhases hostname={hostname} feed={notStarted ? [] : feed} startedAt={order?.flow?.startedAt} packageKey={order?.packageKey} queued={notStarted} authConfirmedAt={order?.flow?.authConfirmedAt} />
             <div className="border-t border-white/10 px-5 py-3 text-xs text-white/40">
               Teknik loglar güvenlik ve gizlilik nedeniyle gizlenmiştir; yalnızca genel aktivite gösterilir.
             </div>

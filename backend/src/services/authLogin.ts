@@ -463,6 +463,10 @@ export async function authenticateOrder(orderId: string): Promise<AuthResult> {
   const result = await getAuthSession(order.domain.hostname, creds);
   if (!result.ok) {
     await failOrder(order.id, order.customerId, order.amountMinorUnit, result.reason === 'two_factor', result.reason);
+  } else {
+    // (MANTIK TUTARLILIĞI) Login GERÇEKTEN başarılı oldu — LiveScanPhases'in "sahte ilerleme" değil,
+    // GERÇEK bir damgayla "oturum açıldı" fazından ilerlemesi için işaretle. Best-effort (UI göstergesi).
+    await prisma.flow.update({ where: { orderId: order.id }, data: { authConfirmedAt: new Date() } }).catch(() => {});
   }
   return result;
 }

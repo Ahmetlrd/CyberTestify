@@ -355,6 +355,11 @@ model Flow {
   // Musteriye gosterilen DOSTANE aktivite akisi (JSON ActivityItem[]) — ham log
   // DEGIL; redakte + kategorilenmis. worker her tick guncelller (bkz activityFeed.ts).
   activityFeed         String?
+  // (MANTIK TUTARLILIĞI) Test hesabıyla GERÇEKTEN oturum açıldığı AN damgalanır (authenticateOrder
+  // başarı dönünce). LiveScanPhases (full_pentest) bu damga gelene kadar "Test hesabıyla oturum
+  // açılıyor" fazında SAHTE ilerlemeyen bekler — yanlış kimlik bilgisiyle her şey ✓ gösterip sonra
+  // "giriş yapılamadı" demesin diye (giriş başarısız olursa zaten order.status scan_failed'e döner).
+  authConfirmedAt      DateTime?
 
   // Rapor olusturulduktan sonra PentAGI tarafindaki ham veri temizlenince damgalanir.
   rawDataPurgedAt DateTime?
