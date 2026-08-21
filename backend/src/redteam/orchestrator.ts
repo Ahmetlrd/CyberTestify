@@ -78,10 +78,12 @@ function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
     `report ONLY what you directly observe in real request/response pairs you capture with curl. ` +
     // (P1) XSS-ÖNCE: keşiften ÖNCE, ilk 2 dakikada canlı marker testi + TAM yanıt kaydı.
     `FIRST ACTIONS (do these BEFORE any recon, within the first 2 minutes) — send a reflected-XSS probe with the ` +
-    `UNIQUE marker zqxmarker9173 to the real search endpoints and SAVE THE FULL RESPONSE BODY:\n` +
-    `  curl -sk --resolve ${d}:443:${pinnedIp} "https://${d}/bank/searchpage.jsp?searchStr=zqxmarker9173<script>alert(1)</script>"\n` +
-    `  curl -sk --resolve ${d}:443:${pinnedIp} "https://${d}/search.jsp?query=zqxmarker9173<script>alert(1)</script>"\n` +
-    `Then verify whether zqxmarker9173 appears UNENCODED (literal <script>, NOT &lt;script&gt;) in the response body. ` +
+    `UNIQUE marker zqxmarker9173 to the real search endpoints. ALWAYS use "curl -sk -i" (the -i flag INCLUDES ` +
+    `the HTTP status line + headers) and SAVE THE FULL RESPONSE (status line, headers, AND body):\n` +
+    `  curl -sk -i --resolve ${d}:443:${pinnedIp} "https://${d}/bank/searchpage.jsp?searchStr=zqxmarker9173<script>alert(1)</script>"\n` +
+    `  curl -sk -i --resolve ${d}:443:${pinnedIp} "https://${d}/search.jsp?query=zqxmarker9173<script>alert(1)</script>"\n` +
+    `Then verify whether zqxmarker9173 appears UNENCODED (literal <script>, NOT &lt;script&gt;) in the response BODY ` +
+    `(the part AFTER the headers). A 4xx/5xx status means the request was REJECTED — that is NOT a finding. ` +
     // (P1) minimum canlı checklist — hepsi curl ile, gerçek hedefte.
     `Then a MINIMAL LIVE checklist via curl only: homepage, login page, at least one parameterized form, one more ` +
     `marker-XSS reflection point, and one light SQLi probe (a single quote ' or ' OR 1=1) observing the response body. ` +

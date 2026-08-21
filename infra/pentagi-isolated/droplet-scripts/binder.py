@@ -60,13 +60,54 @@ META_CLAIM_RE = re.compile(
     r'doğrulanması|research|reconnaissance|preparation|plan\b|planla)', re.I)
 # İstek (curl) o kategoriye ait bir payload GÖNDERDİ mi — imza yalnız gerçekten prob atılmış istekte sayılır.
 PROBE_RE = {
-    'sqli': r"%27|'|--|\bunion\b|\bor\b\s+1=1|sleep\(|;--",
+    # sqli: bare `'`/`--` KALDIRILDI — shell tırnaklarını (echo '...') ve curl bayraklarını (--resolve)
+    # yanlış eşleştiriyordu → XSS probu "SQLi probladı" sanılıyordu. Yalnız gerçek SQLi jetonları.
+    'sqli': r"%27|\bunion\b\s+\bselect\b|\bor\b\s+1\s*=\s*1|\band\b\s+1\s*=\s*1|sleep\s*\(|benchmark\s*\(|waitfor\s+delay|'\s*or\s*'|'\s*--|'\s*#",
     'lfi': r"\.\./|/etc/passwd|boot\.ini|%2e%2e",
     'path_traversal': r"\.\./|%2e%2e",
     'rce': r";\s*id\b|\|\s*id\b|`id`|\bwhoami\b|\bcat\b\s+/etc|%3bid",
     'xxe': r"<!DOCTYPE|SYSTEM\s",
     'ssrf': r"169\.254\.169\.254|metadata|localhost|127\.0\.0\.1|file://",
 }
+
+# (D2) ALTYAPI/ARAÇ HATASI — bir güvenlik bulgusu DEĞİL; kategoriye (SQLi/XSS) ZORLA eşlenmesin, ELENSİN.
+# Kanıt: rapor konteyner-çalıştırma hatasını ("OCI runtime exec failed ... chdir to cwd") "SQL Enjeksiyonu"
+# diye etiketlemişti. İÇERİK-tabanlı filtre (tür değil): çıktı bir araç/altyapı hata imzasıysa aday olmaz.
+_TOOL_ERROR_RE = re.compile(
+    r'OCI runtime exec failed|unable to start container process|chdir to cwd|set in config\.json|'
+    r'docker:\s*Error response from daemon|exec failed:|cannot exec|containerd|runc:', re.I)
+
+def is_tool_error(a):
+    """rawText bir konteyner/araç çalıştırma hatası mı (gerçek HTTP yanıtı DEĞİL)? Öyleyse kanıt sayılmaz."""
+    raw = a.get('rawText', '') or ''
+    return bool(_TOOL_ERROR_RE.search(raw)) and 'HTTP/' not in raw
+
+# (D1) HTTP yanıt ayrıştırma: terminal blob'unda İSTEK-YANKISI (echo'lanan curl komutu) HTTP satırından
+# ÖNCEdir; GERÇEK yanıt = "HTTP/1.x <status>" satırından sonra, başlıkların ARDINDAKİ boş satırdan sonraki
+# GÖVDE. reflected-XSS "kanıtlı" için: (a) durum kodu 2xx olmalı (4xx/5xx = istek reddedildi → kanıt değil),
+# (b) marker YALNIZ gövdede aranmalı (echo'lanan istek satırındaki marker "ne göndereceğiz"tir, kanıt değil).
+_HTTP_STATUS_RE = re.compile(r'HTTP/\d(?:\.\d)?\s+(\d{3})')
+
+def parse_http(raw):
+    """Terminal blob'undan SON HTTP yanıtını ayrıştır → (status:int|None, body:str)."""
+    if not raw:
+        return None, ''
+    matches = list(_HTTP_STATUS_RE.finditer(raw))
+    if not matches:
+        return None, ''
+    m = matches[-1]                      # yönlendirme zinciri olursa SON yanıt
+    status = int(m.group(1))
+    after = raw[m.end():]
+    sep = re.search(r'\r?\n\r?\n', after)  # başlık bloğu ↔ gövde ayıracı (ilk boş satır)
+    body = after[sep.end():] if sep else ''
+    return status, body
+
+def is_http_artifact(a):
+    """Artefakt GERÇEK bir HTTP istek/yanıtı mı içeriyor? (recon shell çıktısı — ls/mkdir/dizin listesi —
+    bir zafiyet kanıtı olamaz). HTTP durum satırı VEYA curl komutu VEYA HTML gövdesi varsa evet."""
+    raw = a.get('rawText', '') or ''
+    cmd = a.get('command', '') or ''
+    return bool(_HTTP_STATUS_RE.search(raw)) or 'curl' in cmd.lower() or bool(re.search(r'<html|<!doctype|<body', raw, re.I))
 
 def artifact_is_evidence(a):
     """KANIT = gerçek istek/yanıt taşıyan terminal artefaktı (kind='terminal'). Plan/arama/meta DEĞİL."""
@@ -151,21 +192,22 @@ def reflected_xss(cat, related):
     if cat != 'xss':
         return None
     for a in related:
-        # NEEDLE YALNIZ İSTEKTEN (command): reflected XSS payload'ı ajanın GÖNDERDİĞİ şeydir. rawText'ten
-        # needle almak normal HTML işaretlemesini (>​<a ) payload sanar → yanlış-pozitif (artefakt-temelli tarama).
+        # NEEDLE YALNIZ İSTEKTEN (command): reflected XSS payload'ı ajanın GÖNDERDİĞİ şeydir.
         cmd = a.get('command', '')
         raw = a.get('rawText', '')
-        # (P0-2) Yanıt GERÇEK bir HTTP/HTML yanıtı olmalı — plan/JSON meta blob'unda marker görülmesi KANIT DEĞİL.
-        if not re.search(r'HTTP/\d|<html|<!doctype|<body|Content-Type:\s*text/html', raw, re.I):
+        # (D1) GERÇEK HTTP yanıtı ayrıştır: durum kodu 2xx OLMALI (4xx/5xx = istek reddedildi → kanıt DEĞİL);
+        # marker YALNIZ GÖVDEde aranır — echo'lanan istek satırındaki (HTTP satırından ÖNCE) marker SAYILMAZ.
+        status, body = parse_http(raw)
+        if status is None or not (200 <= status < 300):
             continue
         for m in re.finditer(r'(zqx[a-z0-9]*marker[a-z0-9]*|<script\b[^>]*>|<img\b[^>]*>|["\'>]<[a-z]{1,10}[ >/])', cmd, re.I):
             marker = m.group(0)
-            if marker in raw:
-                idx = raw.find(marker)
-                around = raw[max(0, idx - 4):idx + len(marker) + 4]
+            if marker in body:
+                idx = body.find(marker)
+                around = body[max(0, idx - 4):idx + len(marker) + 4]
                 if '&lt;' not in around and '&gt;' not in around and '%3c' not in around.lower():
                     return {'artifactRef': a.get('id', '?'), 'signature': 'reflected-unencoded',
-                            'detail': f"payload {marker[:34]!r} yanıt gövdesinde ENCODE EDİLMEDEN yansıdı → reflected XSS"}
+                            'detail': f"payload {marker[:34]!r} HTTP {status} yanıt GÖVDESİNDE ENCODE EDİLMEDEN yansıdı → reflected XSS"}
     return None
 
 
@@ -217,7 +259,9 @@ def classify(claims, artifacts, target_host='', target_ip=''):
     findings = []
     seen = set()      # dedup (kategori, endpoint-yolu)
     filtered = 0      # bulgu-DEĞİL (plan/meta) sayısı
-    ev_arts = [a for a in artifacts if artifact_is_evidence(a)]
+    # (D2) Kanıt havuzu: terminal artefaktları AMA altyapı/araç hatası olanlar (OCI/konteyner) HARİÇ —
+    # bunlar bir güvenlik bulgusuna kategorize edilemez, elenmeli (SQLi/XSS diye etiketlenmesin).
+    ev_arts = [a for a in artifacts if artifact_is_evidence(a) and not is_tool_error(a)]
 
     def add(cat, endpoint, tier, ev, reason, sev=None):
         key = (cat, (endpoint or '').split('?')[0])
@@ -262,7 +306,10 @@ def classify(claims, artifacts, target_host='', target_ip=''):
             filtered += 1                                  # plan/meta/araştırma/tamamlama → rapora GİRMEZ
             continue
         cat = detect_category(f"{c.get('title', '')} {c.get('text', '')}")
-        related = [a for a in ev_arts if relates(a, c, cat)]   # yalnız gerçek istek/yanıt artefaktları
+        # yalnız GERÇEK HTTP istek/yanıtı taşıyan artefaktlar bir bulguyu destekleyebilir — shell keşif
+        # çıktısı (ls/mkdir/"total 8 drwxr-xr-x", cwd=/work) bir zafiyet kanıtı DEĞİLdir (P0-2). Aksi halde
+        # "Light SQLi probing" gibi bir PLAN maddesi bir dizin-listelemesine bağlanıp sahte BELİRSİZ üretiyordu.
+        related = [a for a in ev_arts if relates(a, c, cat) and is_http_artifact(a)]
         if not related:
             add(cat, extract_endpoint(c.get('text', '')), 'HAYALET', None,
                 'iddiayı destekleyen gerçek istek/yanıt kanıtı yok (sıfır iz) -> elenir')
@@ -271,15 +318,21 @@ def classify(claims, artifacts, target_host='', target_ip=''):
         if off_target_request(bound, c, target_host, target_ip):
             continue
         sig_re = SIG.get(cat)
-        hit = sig_re and re.search(sig_re, bound.get('rawText', ''), re.I) and request_probes(cat, bound.get('command', ''))
+        m = re.search(sig_re, bound.get('rawText', ''), re.I) if sig_re else None
+        hit = m if (m and request_probes(cat, bound.get('command', ''))) else None  # imza + istek o kategoriyi probladı
         endp = request_endpoint(bound.get('command', '')) or extract_endpoint(c.get('text', ''))
         if hit:
             ev = {'artifactRef': bound['id'], 'signature': hit.group(0)[:60],
                   'detail': f"gerçek YANITTA deterministik imza: {hit.group(0)[:60]!r}", **_mk_evidence(bound)}
             add(cat, endp, 'KANITLI', ev, 'gerçek istek/yanıtta deterministik imza')
+        elif request_probes(cat, bound.get('command', '')):
+            # İstek GERÇEKTEN bu kategoriyi probladı (ör. SQLi payload'ı gönderildi) ama kesin imza yok → insan-inceleme.
+            ev = {'artifactRef': bound['id'], 'signature': '', 'detail': 'istek bu kategoriyi probladı, kesin imza yok', **_mk_evidence(bound)}
+            add(cat, endp, 'BELIRSIZ', ev, 'istek bu kategoriyi probladı, kanıt var ama deterministik imza yok -> insan-inceleme')
         else:
-            ev = {'artifactRef': bound['id'], 'signature': '', 'detail': 'gerçek istek/yanıt kanıtı var ama kesin imza yok', **_mk_evidence(bound)}
-            add(cat, endp, 'BELIRSIZ', ev, 'kanıt var ama deterministik imza yok -> insan-inceleme')
+            # HTTP artefaktı var AMA istek bu kategoriye ait bir payload GÖNDERMEMİŞ (yalnız plan/alakasız istek)
+            # → gerçek kanıt yok, elenir. "Light SQLi probing" planının XSS-probuna bağlanıp BELİRSİZ üretmesini keser.
+            add(cat, endp, 'HAYALET', None, 'iddia edilen kategoriye ait gerçek prob/istek yok (yalnız plan) -> elenir')
 
     return findings, filtered
 
