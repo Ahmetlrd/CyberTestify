@@ -95,7 +95,9 @@ def reflected_xss(cat, related):
     if cat != 'xss':
         return None
     for a in related:
-        cmd = a.get('command', '') + ' ' + a.get('rawText', '')
+        # NEEDLE YALNIZ İSTEKTEN (command): reflected XSS payload'ı ajanın GÖNDERDİĞİ şeydir. rawText'ten
+        # needle almak normal HTML işaretlemesini (>​<a ) payload sanar → yanlış-pozitif (artefakt-temelli tarama).
+        cmd = a.get('command', '')
         raw = a.get('rawText', '')
         for m in re.finditer(r'(zqx[a-z0-9]*marker[a-z0-9]*|<script\b[^>]*>|<img\b[^>]*>|["\'>]<[a-z]{1,10}[ >/])', cmd, re.I):
             marker = m.group(0)
@@ -198,6 +200,31 @@ def classify(claims, artifacts, target_host='', target_ip=''):
             'severity': SEVERITY.get(cat, 'düşük'),
             'tier': tier, 'evidence': ev, 'reason': reason,
         })
+
+    # ——— ARTEFAKT-TEMELLİ reflected XSS (claim-bağlanması GEREKMEZ) ———
+    # Kök-neden: classify claim-FIRST; ajan 39 artefakt üretse de prose-iddiası ilgili artefakta bağlanmazsa
+    # (relates() ıskalar) reflected marker KAYBOLUR → no-evidence. Oysa üç-katman ilkesi: KANIT = ham yanıttaki
+    # deterministik imza (ajanın sözü DEĞİL). Kör-eşik DEĞİL: marker yanıtta ENCODE-EDİLMEDEN yansıdıysa KANITLI;
+    # encode edilmişse (&lt;) reflected_xss zaten None döner (yanlış-pozitif yok). Provenance yine uygulanır.
+    proven_arts = {f['evidence']['artifactRef'] for f in findings if f['tier'] == 'KANITLI' and f.get('evidence')}
+    for a in artifacts:
+        rx = reflected_xss('xss', [a])
+        if not rx or a.get('id') in proven_arts:
+            continue
+        if off_target_request(a, {'text': a.get('command', '')}, target_host, target_ip):
+            continue  # istek hedef-dışı bir host'a atılmışsa artefakt-temelli de eleme
+        endp = extract_endpoint(a.get('command', '')) or extract_endpoint(a.get('rawText', ''))
+        ev = dict(rx)
+        ev['rawExcerpt'] = redact(a.get('rawText', ''))[:1000]
+        ev['command'] = redact(a.get('command', ''))[:200]
+        findings.append({
+            'title': f"Reflected XSS{(' — ' + endp) if endp else ''}",
+            'category': 'xss', 'endpoint': endp,
+            'severity': SEVERITY.get('xss', 'orta'),
+            'tier': 'KANITLI', 'evidence': ev,
+            'reason': 'artefakt-temelli: payload yanıtta ENCODE EDİLMEDEN yansıdı (prose-iddia gerekmez)',
+        })
+        proven_arts.add(a.get('id'))
     return findings
 
 
