@@ -73,13 +73,21 @@ export default function AdminRedTeamDetail({ params }: { params: { id: string } 
   }
 
   async function kill() {
-    if (!confirm('KILL-SWITCH: ajanı durdur + egress kes. Emin misiniz?')) return;
+    if (!confirm('KILL-SWITCH: droplet DOĞRUDAN DigitalOcean API ile imha edilecek. Emin misiniz?')) return;
     setKilling(true);
     try {
       const r = await adminApi.redteamKill(params.id);
-      alert(r.ok ? 'Kill-switch tetiklendi.' : 'Kill-switch HATA: ' + r.output);
+      // D2/D3: sahte-başarı YOK — gerçek imha durumu + doğrulama ayrımı gösterilir.
+      if (!r.ok) {
+        alert(`⛔ DURDURULAMADI — gerçek hata: ${r.error ?? 'bilinmeyen hata'}\n\nTekrar deneyin ya da manuel müdahale gerekebilir (DO panelinden droplet'i elle silin).`);
+      } else if (r.verified === 'destroyed') {
+        alert(`✓ Droplet imha edildi — DOĞRULANDI (DO API'den gerçekten silindiği teyit edildi).${r.reportGenerated ? '\nEldeki veriden rapor üretildi.' : ''}`);
+      } else {
+        alert(`⚠ İmha isteği DigitalOcean'a gönderildi ama sonuç DOĞRULANAMADI (DO API yanıt vermedi). Panelden birkaç dakika sonra tekrar kontrol edin — hâlâ görünüyorsa manuel müdahale gerekebilir.`);
+      }
+      // canlı polling (4sn) zaten job'u yeniler — ekstra çağrıya gerek yok.
     } catch (e) {
-      alert((e as Error).message);
+      alert('İstek başarısız: ' + (e as Error).message);
     } finally {
       setKilling(false);
     }

@@ -13,9 +13,10 @@ import { renderReportPdf, htmlToPdfBuffer } from '../services/pdf.js';
 import { renderRedTeamFullHtml } from '../redteam/report.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
 import { LEVEL_CFG } from '../redteam/orchestrator.js';
-import { triggerKillSwitch } from '../redteam/puller.js';
-import { makeSshExec } from '../redteam/controlChannel.js';
 import { appendLogs } from '../redteam/observability.js';
+import { hardkill } from '../redteam/hardkill.js';
+import { scriptsDir } from '../redteam/runner.js';
+import { redteamKeyPath } from '../redteam/controlChannel.js';
 import { logReportAccess } from '../services/reportAudit.js';
 import crypto from 'node:crypto';
 import { runJob } from '../redteam/runner.js';
@@ -620,24 +621,51 @@ adminRouter.get('/redteam-jobs/:id/logs', async (req, res) => {
   res.json({ logs });
 });
 
-// KILL-SWITCH — kontrol-kanalından kill-switch.sh (ajan durdur + egress kes). Yalnız admin.
+// KILL-SWITCH (D1-D3 düzeltme) — ORCHESTRATOR'ın kendi (tıkanabilir) sürecine BAĞIMLI DEĞİL.
+// KÖK NEDEN (elle test edilip başarısız bulundu): eski uygulama yalnız SSH ile kill-switch.sh
+// çalıştırıyordu — SSH'ın kendisi 900s timeout'luydu (asılabilirdi) VE script'in konteyner-etiket
+// süzgeci muhtemelen HİÇBİR konteynerle eşleşmiyordu (PentAGI'nin kendi compose'u bu etiketi
+// koymuyor) — yani "ok" dönse bile GERÇEKTE hiçbir şey durmuyordu; DO API'ye HİÇ gidilmiyordu.
+// ARTIK: hardkill.ts (watchdog'un da kullandığı AYNI, test edilmiş çekirdek) — DOĞRUDAN DO API ile
+// droplet imha eder (SSH'a bağımlı değil), imha ÖNCESİ best-effort rapor yakalar, imha SONRASI DO
+// API'den GERÇEKTEN gittiğini doğrular. Hata SESSİZCE YUTULMAZ — gerçek sebep UI'a döner.
 adminRouter.post('/redteam-jobs/:id/kill', async (req, res) => {
   const job = await prisma.redTeamJob.findUnique({
     where: { id: req.params.id },
-    select: { id: true, dropletIp: true, status: true },
+    select: { id: true, dropletIp: true, dropletId: true, targetIp: true, domain: true, level: true, environment: true, status: true },
   });
   if (!job) return res.status(404).json({ error: 'İş bulunamadı.' });
-  if (!job.dropletIp) return res.status(400).json({ error: 'Droplet IP yok (aktif/canlı iş değil).' });
+  if (!job.dropletIp && !job.dropletId) return res.status(400).json({ error: 'Droplet IP/ID yok (aktif/canlı iş değil) — durduracak bir şey yok.' });
 
-  const result = await triggerKillSwitch(makeSshExec(job.dropletIp));
+  const result = await hardkill({
+    dropletIp: job.dropletIp, dropletId: job.dropletId, scriptsDir: scriptsDir(), keyPath: redteamKeyPath(),
+    target: job.domain, targetIp: job.targetIp ?? '', level: job.level as 'S1' | 'S2' | 'S3', environment: job.environment as 'test' | 'staging' | 'prod',
+    reason: 'admin panelden elle KILL-SWITCH',
+  });
+
   await prisma.redTeamJob.update({
     where: { id: job.id },
-    data: { status: 'failed', phase: 'teardown', error: 'admin kill-switch' },
+    data: {
+      status: 'aborted', phase: 'teardown', finishedAt: new Date(),
+      error: `admin kill-switch${result.destroyError ? ` — İMHA HATASI: ${result.destroyError}` : ''}`,
+      ...(result.liveCost != null ? { costUsd: result.liveCost } : {}),
+      ...(result.report ? { reportJson: result.report as any } : {}),
+      ...(result.rawFlow ? { rawFlowJson: result.rawFlow as any } : {}),
+      ...(result.transcript ? { transcriptJson: result.transcript as any } : {}),
+    },
   });
-  await appendLogs(job.id, [
-    { source: 'killswitch', level: 'warn', message: `admin KILL-SWITCH: ${result.ok ? 'OK' : 'HATA'} — ${result.output.slice(0, 400)}` },
-  ]);
-  res.json({ ok: result.ok, output: result.output });
+  await appendLogs(job.id, [{
+    source: 'killswitch', level: result.destroyError ? 'error' : 'warn',
+    message: `admin KILL-SWITCH: imha ${result.destroyRequested ? (result.destroyError ? `İSTENDİ ama HATA — ${result.destroyError}` : 'İSTENDİ ✓') : 'İSTENEMEDİ'} · doğrulama=${result.verified} · rapor ${result.report ? `üretildi (kanıtlı ${result.report.counts.kanitli}/belirsiz ${result.report.counts.belirsiz})` : 'üretilemedi'}`,
+  }]);
+
+  // D2/D3: sahte-başarı YOK — gerçek durum + doğrulanmış/doğrulanamamış ayrımı dönülür.
+  res.json({
+    ok: result.destroyRequested && !result.destroyError,
+    verified: result.verified, // 'destroyed' | 'unverified' | 'skipped'
+    error: result.destroyError,
+    reportGenerated: !!result.report,
+  });
 });
 
 // --- Rapor erişim AUDIT (hesap verebilirlik; değiştirilemez append-only kayıtlar) --------------

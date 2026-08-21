@@ -23,7 +23,7 @@ import { nodeResolver } from './targetGuard.js';
 const execFileAsync = promisify(execFile);
 
 /** Infra scriptleri kökü (prod: /opt/cybertestify/app/infra/pentagi-isolated). */
-function scriptsDir(): string {
+export function scriptsDir(): string {
   return process.env.REDTEAM_SCRIPTS_DIR ?? 'infra/pentagi-isolated';
 }
 
@@ -114,14 +114,14 @@ async function pushDropletScripts(ip: string): Promise<void> {
   await execFileAsync('ssh', ['-i', redteamKeyPath(), ...SSH_OPTS, `root@${ip}`, `chmod +x ${DROPLET_DIR}/*.sh ${DROPLET_DIR}/*.py 2>/dev/null || true`], { timeout: 15_000 });
 }
 
-/** state.json'dan droplet public IP'sini oku (provision sonrası). */
-async function readDropletIp(): Promise<string | null> {
+/** state.json'dan droplet public IP + ID'sini oku (provision sonrası). */
+async function readDropletInfo(): Promise<{ ip: string | null; id: string | null }> {
   try {
     const { stdout } = await execFileAsync('cat', [`${scriptsDir()}/state.json`], { timeout: 8000 });
     const j = JSON.parse(stdout);
-    return j.public_ip ?? j.publicIp ?? j.ip ?? null;
+    return { ip: j.public_ip ?? j.publicIp ?? j.ip ?? null, id: j.droplet_id ?? j.dropletId ?? null };
   } catch {
-    return null;
+    return { ip: null, id: null };
   }
 }
 
@@ -133,19 +133,17 @@ async function readDropletIp(): Promise<string | null> {
  * DO token/DB bağlantısı yalnız ENV'den (process.env inherit) — argv'ye YAZILMAZ.
  */
 function spawnWatchdog(params: {
-  jobId: string; dropletIp: string; capSec: number; capCostUsd: number;
+  jobId: string; dropletIp: string; dropletId: string | null; capSec: number; capCostUsd: number;
   target: string; targetIp: string; level: string; environment: string;
 }): void {
-  const child = spawn(
-    'npx',
-    ['tsx', 'src/redteam/watchdog.ts',
-      '--job-id', params.jobId, '--droplet-ip', params.dropletIp,
-      '--cap-sec', String(params.capSec), '--cap-cost', String(params.capCostUsd),
-      '--target', params.target, '--target-ip', params.targetIp,
-      '--level', params.level, '--environment', params.environment,
-      '--scripts-dir', scriptsDir(), '--key-path', redteamKeyPath()],
-    { detached: true, stdio: 'ignore', env: process.env },
-  );
+  const args = ['tsx', 'src/redteam/watchdog.ts',
+    '--job-id', params.jobId, '--droplet-ip', params.dropletIp,
+    '--cap-sec', String(params.capSec), '--cap-cost', String(params.capCostUsd),
+    '--target', params.target, '--target-ip', params.targetIp,
+    '--level', params.level, '--environment', params.environment,
+    '--scripts-dir', scriptsDir(), '--key-path', redteamKeyPath()];
+  if (params.dropletId) args.push('--droplet-id', params.dropletId);
+  const child = spawn('npx', args, { detached: true, stdio: 'ignore', env: process.env });
   child.unref(); // parent'ın exit'i/hang'i watchdog'u ETKİLEMEZ — bağımsız yaşar
 }
 
@@ -200,9 +198,13 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
     }
     // provision bittiğinde droplet IP'yi yakala + kaydet + LLM anahtarını akıt
     if (s.phase === 'provision' && s.ok && !opts.dryRun && !dropletIp) {
-      dropletIp = await readDropletIp();
+      const info = await readDropletInfo();
+      dropletIp = info.ip;
       if (dropletIp) {
-        await prisma.redTeamJob.update({ where: { id: jobId }, data: { dropletIp } });
+        // (KILL-SWITCH GÜVENLİĞİ) dropletId JOB'A ÖZGÜ kaydedilir — state.json TÜM job'lar arası
+        // PAYLAŞIMLI tek dosyadır; kill-switch/watchdog yanlış (başka bir eşzamanlı job'un) droplet'ine
+        // gitmesin diye bu job'un GERÇEK droplet ID'si DB'ye yazılır (kill-switch olayının bir parçası).
+        await prisma.redTeamJob.update({ where: { id: jobId }, data: { dropletIp, dropletId: info.id } });
         // (D2 — BAĞIMSIZ WATCHDOG) Droplet var olur olmaz, EN BAŞTA, orchestrator'ın kendi döngüsünden
         // TAMAMEN AYRI bir OS süreci başlat. Kanıtlanmış 3-kez-tekrarlanan hatanın (cap kontrolü ana
         // döngüyle birlikte tıkanması) yapısal çözümü — ana döngü setup/harden/campaign'de HERHANGİ
@@ -210,7 +212,7 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
         if (!watchdogSpawned && capturedTargetIp) {
           watchdogSpawned = true;
           spawnWatchdog({
-            jobId, dropletIp, capSec: cap.capSec, capCostUsd: cap.capCostUsd,
+            jobId, dropletIp, dropletId: info.id, capSec: cap.capSec, capCostUsd: cap.capCostUsd,
             target: job.domain, targetIp: capturedTargetIp, level: job.level, environment: job.environment,
           });
           await persistStep(jobId, { phase: 'setup', ok: true, detail: `bağımsız watchdog başlatıldı (cap ${cap.capSec}s +60s sert sınır; ana döngüden AYRI süreç)` });

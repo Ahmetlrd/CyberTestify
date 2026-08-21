@@ -103,7 +103,7 @@ export const adminApi = {
     areq<{ logs: Array<{ seq: number; at: string; source: string; phase: string | null; level: string; message: string }> }>(
       `/admin/redteam-jobs/${id}/logs?after=${after}`,
     ),
-  redteamKill: (id: string) => areq<{ ok: boolean; output: string }>(`/admin/redteam-jobs/${id}/kill`, { method: 'POST' }),
+  redteamKill: (id: string) => areq<{ ok: boolean; verified: 'destroyed' | 'unverified' | 'skipped'; error: string | null; reportGenerated: boolean }>(`/admin/redteam-jobs/${id}/kill`, { method: 'POST' }),
   // (MODEL YÖNETİMİ + MALİYET + CANLI TETİK)
   redteamModelCatalog: () =>
     areq<{ catalog: Array<{ id: string; label: string; tier: string; price: { inM: number; outM: number }; expensive: boolean }>; roles: string[]; defaults: Record<string, string>; levels: Record<string, { capSec: number; capCalls: number; capCostUsd: number; size: string; profile: string }> }>(
