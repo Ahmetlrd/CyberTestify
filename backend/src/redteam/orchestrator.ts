@@ -173,9 +173,14 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
     }
 
     // ——— 6) CAMPAIGN (cap'li; seviyeye göre profil/prompt; saldırı YALNIZ pinlenen IP'ye) ———
+    // KRİTİK: görev launch_cap.py'ye GERÇEK arg olarak geçer (base64 → tek token, shell-güvenli). ÖNCE
+    // `# CAMPAIGN_PROMPT=...` idi ama runner '#'-argümanlarını ATIYORDU → env hiç ulaşmıyordu → launch_cap
+    // gömülü juiceshop:3000 default'una düşüyordu (ajan bir saat juiceshop arıyordu, 0-kanıtlı kök-nedeni).
+    const promptB64 = Buffer.from(levelPrompt(job, primaryIp), 'utf8').toString('base64');
     await run('campaign', `${ctx.scriptsDir}/droplet-scripts/launch_cap.py`, [
-      `# CAP_SEC=${cfg.capSec} CAP_CALLS=${cfg.capCalls} CAP_COST=${cfg.capCostUsd}`,
-      `# CAMPAIGN_PROMPT=${JSON.stringify(levelPrompt(job, primaryIp))}`,
+      '--prompt-b64', promptB64,
+      '--cap-sec', String(cfg.capSec), '--cap-calls', String(cfg.capCalls), '--cap-cost', String(cfg.capCostUsd),
+      '--target', job.domain, // D2/D3 kapısı: flow görevi hedefi içermeli, juiceshop içermemeli
     ]);
 
     // ——— 7) BIND (PentAGI Postgres → 3-katman JSON; ham artefakta bağlı) ———

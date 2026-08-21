@@ -5,18 +5,31 @@
 #   2) finishFlow(flowId) [doğru imza: skaler ResultType]
 #   3) worker konteynerlerini öldür (temizlik)
 # Caps env ile: CAP_SEC / CAP_CALLS / CAP_COST  (ilk gelen HARD STOP)
-import urllib.request, ssl, json, time, subprocess, sys, os, re
+import urllib.request, ssl, json, time, subprocess, sys, os, re, argparse, base64
 TOK=open("/opt/pentagi-run/api_token").read().strip()
 CTX=ssl.create_default_context(); CTX.check_hostname=False; CTX.verify_mode=ssl.CERT_NONE
 URL="https://localhost:8443/api/v1/graphql"
 CORE={"pentagi","pgvector","scraper","juiceshop"}
-CAP_SEC=int(os.environ.get("CAP_SEC","300"))
-CAP_CALLS=int(os.environ.get("CAP_CALLS","15"))
-CAP_COST=float(os.environ.get("CAP_COST","1.00"))
-PROMPT=os.environ.get("CAMPAIGN_PROMPT",
-    "You are testing an AUTHORIZED, isolated test instance. Target: http://juiceshop:3000 . "
-    "Do a MINIMAL, quick check: focus ONLY on /rest/products/search?q= for SQL injection. "
-    "Send at most a few HTTP requests, confirm with concrete evidence, then STOP and report.")
+
+# ——— GÖREV + CAP: ARG'DAN (orchestrator gerçek görevi base64 ile geçirir). ÖNCEDEN CAMPAIGN_PROMPT env
+# olarak geçiriliyordu ama runner '#'-argümanlarını atıyordu → env HİÇ ulaşmıyordu → aşağıdaki juiceshop
+# default'una düşülüyordu → ajan bir saat PentAGI'nin GÖMÜLÜ juiceshop:3000 örneğini arıyordu (0-kanıtlı).
+# ARTIK: görev --prompt-b64 ile REAL arg olarak gelir; juiceshop DEFAULT'U KALDIRILDI (yoksa sesli hata).
+_ap=argparse.ArgumentParser()
+_ap.add_argument("--prompt-b64",default="")
+_ap.add_argument("--cap-sec",type=int,default=int(os.environ.get("CAP_SEC","300")))
+_ap.add_argument("--cap-calls",type=int,default=int(os.environ.get("CAP_CALLS","15")))
+_ap.add_argument("--cap-cost",type=float,default=float(os.environ.get("CAP_COST","1.00")))
+_ap.add_argument("--target",default=os.environ.get("REDTEAM_TARGET",""))
+_A,_=_ap.parse_known_args()
+CAP_SEC=_A.cap_sec; CAP_CALLS=_A.cap_calls; CAP_COST=_A.cap_cost; TARGET=_A.target.strip()
+if _A.prompt_b64:
+    PROMPT=base64.b64decode(_A.prompt_b64).decode("utf-8")
+elif os.environ.get("CAMPAIGN_PROMPT"):
+    PROMPT=os.environ["CAMPAIGN_PROMPT"]
+else:
+    print("FATAL: görev verilmedi (--prompt-b64/CAMPAIGN_PROMPT yok) — juiceshop default'a DÜŞMEYİ REDDEDİYORUM "
+          "(yanlış-hedef koşusu engellendi).",flush=True); sys.exit(3)
 
 def gql(q,v=None):
     b={"query":q}
@@ -66,6 +79,29 @@ def hard_stop(fid,reason):
     except Exception as e: print("  [2] finishFlow ERR",str(e)[:100],flush=True)
     print("  [3] worker temizliği:",flush=True); kill_workers()
 
+def flow_task_text(fid):
+    """Flow'un saklanan görev metnini şema-dayanıklı topla (createFlow input'u burada yankılanır)."""
+    parts=[]
+    for sql in (f"SELECT coalesce(title,'') FROM flows WHERE id={fid}",
+                f"SELECT string_agg(coalesce(title,'')||' '||left(coalesce(result,''),400),' ') "
+                f"FROM subtasks WHERE task_id IN (SELECT id FROM tasks WHERE flow_id={fid})"):
+        try: parts.append(psql(sql) or "")
+        except Exception: pass
+    return " ".join(parts).lower()
+
+def early_target_gate(fid, target, max_s=75):
+    """D2/D3: flow'un görevi GERÇEKTEN hedefi mi hedefliyor? juiceshop görürse ABORT; hedef görürse OK.
+    subtask'lar ~30-60s'de oluşur → poll. Hedef hiç görünmezse (belirsiz) koşuyu durdurmayız (yanlış-teardown yok)."""
+    th=(target or "").lower(); start=time.time()
+    while time.time()-start < max_s:
+        txt=flow_task_text(fid)
+        if "juiceshop" in txt:
+            return False, "ajan juiceshop hedefliyor (createFlow görevi YANLIŞ)"
+        if th and th in txt:
+            return True, f"hedef '{target}' görevde doğrulandı (juiceshop yok)"
+        time.sleep(5)
+    return None, f"görev metni {max_s}s'de okunamadı (belirsiz; koşu devam)"
+
 def wait_api_ready(max_s=180):
     # PentAGI GraphQL DİNLEMEYE + token GEÇERLİ olana kadar bekle (compose up hemen döner; server geç kalkar).
     start=time.time(); last=""
@@ -88,7 +124,17 @@ def main():
           {"p":"anthropic","i":PROMPT})
     if "errors" in r: print("createFlow ERROR:",json.dumps(r["errors"])[:300]); sys.exit(1)
     fl=r["data"]["createFlow"]; FID=str(fl["id"]); open("/opt/pentagi-run/flow_id","w").write(FID)
-    print(f"  flow_id={FID} status={fl['status']} title={fl.get('title')!r}",flush=True)
+    title=(fl.get("title") or "")
+    print(f"  flow_id={FID} status={fl['status']} title={title!r}",flush=True)
+    print(f"  görev (ilk 200): {PROMPT[:200]!r}",flush=True)
+
+    # ——— D2/D3 HARD GATE: flow'un görevi hedefi mi hedefliyor (juiceshop DEĞİL)? Geçmezse HARD-STOP+çık.
+    if "juiceshop" in title.lower():
+        hard_stop(FID,"createFlow title 'juiceshop' içeriyor — yanlış görevle açıldı"); sys.exit(4)
+    ok,msg=early_target_gate(FID,TARGET)
+    print(f"  [gate] {msg}",flush=True)
+    if ok is False:
+        hard_stop(FID,"hedef kapısı: "+msg); sys.exit(4)
     # GERÇEK ajan harcaması: bu TAZE instance'ta tek flow var → TÜM msgchains = bu koşunun LLM harcaması.
     # (flow_id={FID} filtresi bu PentAGI sürümünde 0 dönebiliyordu → cap gerçek harcamayı GÖRMÜYORDU.)
     def spend():
