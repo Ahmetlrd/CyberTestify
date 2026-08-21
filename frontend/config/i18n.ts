@@ -97,7 +97,7 @@ const tr: Dict = {
     titleB: 'içinde başlayın.',
     subtitle:
       'Rakiplerimiz insan pentester ekipleriyle çalışır — bu yüzden pahalı ve yavaştır. Biz yapay zekâ destekli, tamamen otomatik bir platformuz: hem çok daha ucuz, hem çok daha hızlı.',
-    tradTitle: 'Geleneksel Pentest',
+    tradTitle: 'Geleneksel Penetrasyon Testleri',
     trad: ['2–4 hafta bekleme süresi', '$2.000 – $6.000 arası maliyet', 'İnsan ekibiyle randevu / demo', 'Yılda yalnızca 1–2 kez'],
     oursTitle: 'CyberTestify',
     ours: ['Dakikalar içinde başlar', 'Saatler içinde biter', 'Yapay zekâ destekli otomatik kontroller', 'İstediğiniz an, sınırsız tekrar'],
