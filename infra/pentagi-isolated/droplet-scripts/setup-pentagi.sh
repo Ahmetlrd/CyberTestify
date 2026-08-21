@@ -63,6 +63,17 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?anahtar shell env ile verilmeli}
 YML
 
+# 4b) UCUZ KALİBRASYON (S1-test): PentAGI provider/model config'inde opus→sonnet indir.
+# Gerekçe: image'da generator vb. roller Opus'a atanmış; kalibrasyon koşularında maliyeti ~%30 düşürür.
+# Yalnız MODEL-TIER'ı düşürür — güvenlik/izolasyon/teardown/cap DEĞİŞMEZ. REDTEAM_NO_OPUS=0 ile kapatılır.
+# Best-effort: config disk'ten okunuyorsa etkir; binary'e gömülüyse zararsız no-op (koşu model dağılımından teyit).
+if [ "${REDTEAM_NO_OPUS:-1}" = "1" ]; then
+  find /opt/pentagi -maxdepth 5 -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.json' -o -name '.env' \) 2>/dev/null \
+    | xargs -r grep -lE 'claude-[a-z0-9.-]*opus|claude-opus' 2>/dev/null \
+    | while IFS= read -r f; do sed -i -E 's/claude-[a-z0-9._-]*opus[a-z0-9._-]*/claude-sonnet-4-5/g' "$f"; done
+  echo "[setup] ucuz kalibrasyon aktif: opus→sonnet (S1-test; güvenlik/izolasyon değişmez)"
+fi
+
 # 5) Stack'i getir + pentest/terminal imajlarını önceden çek (egress-deny ÖNCESİ)
 docker compose up -d pgvector scraper pentagi
 docker pull vxcontrol/kali-linux >/dev/null 2>&1 &

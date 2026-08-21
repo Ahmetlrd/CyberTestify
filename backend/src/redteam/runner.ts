@@ -228,10 +228,13 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
     if (pullTimer) { clearInterval(pullTimer); pullTimer = null; }
 
     // Raporun meta'sına GERÇEK maliyet/çağrı (puller'ın DB'ye yazdığı canlı değerler) enjekte et.
-    const live = await prisma.redTeamJob.findUnique({ where: { id: jobId }, select: { costUsd: true, llmCalls: true } });
+    const live = await prisma.redTeamJob.findUnique({ where: { id: jobId }, select: { costUsd: true, llmCalls: true, startedAt: true } });
+    // SÜRE: gerçek başlangıç→bitiş (panelde 0s kalmasın; rapor meta'sına da geçir).
+    const finishedAt = new Date();
+    const elapsedSec = live?.startedAt ? Math.max(0, Math.round((finishedAt.getTime() - live.startedAt.getTime()) / 1000)) : null;
     let reportJson: any = result.report ?? null;
     if (reportJson) {
-      reportJson = { ...reportJson, meta: { ...reportJson.meta, costUsd: live?.costUsd ?? null, llmCalls: live?.llmCalls ?? null } };
+      reportJson = { ...reportJson, meta: { ...reportJson.meta, costUsd: live?.costUsd ?? null, llmCalls: live?.llmCalls ?? null, elapsedSec } };
     }
 
     await prisma.redTeamJob.update({
@@ -239,7 +242,8 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
       data: {
         status: result.ok ? 'completed' : 'failed',
         phase: result.ok ? 'teardown' : job.phase,
-        finishedAt: new Date(),
+        finishedAt,
+        ...(elapsedSec != null ? { elapsedSec } : {}),
         error: result.error ?? null,
         ...(reportJson ? { reportJson } : {}),
       },

@@ -119,29 +119,32 @@ def redact(text):
     t = re.sub(r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}', '***@***', t)  # e-posta (PII)
     return t
 
-# ————————————————————— PROVENANCE (hedef-dışı host referansı = elenir) —————————————————————
-_FILE_EXT = {'php','json','html','htm','js','css','xml','txt','png','jpg','jpeg','svg','ico','gif',
-             'asp','aspx','jsp','do','action','map','woff','woff2','pdf','mp4','webp'}
-# Ajanın eğitim-verisinden sızabilen İÇSEL/eğitim adları (gerçek müşteri hedefi ASLA olamaz → yabancı).
-# NOT: testfire/vulnweb burada DEĞİL — onlar gerçek doğrulanmış test hedefleri (demo.testfire.net vb.).
-_KNOWN_FOREIGN = ('juiceshop', 'juice-shop', 'juice_shop', 'localhost', '127.0.0.1')
+# ————————————————————— PROVENANCE (İSTEĞİN ATILDIĞI host'a göre; yanıt gövdesine DEĞİL) —————————————
+# KRİTİK: provenance yalnız isteğin GERÇEKTEN gönderildiği host'a bakar (curl URL host / Host header /
+# --resolve host). Yanıt GÖVDESİNDE geçen başka domain linkleri (ör. altoromutual.com) ya da --resolve'un
+# IP kısmı (65.61.137.117 = hedefin PINLENEN IP'si) provenance'ı ETKİLEMEZ — onlar hedefin kendi içeriği.
+def request_hosts(command):
+    c = command or ''
+    hs = set()
+    for m in re.finditer(r'https?://([a-z0-9.\-]+)', c, re.I): hs.add(m.group(1).lower())          # URL host
+    for m in re.finditer(r'-H\s*["\']?\s*host:\s*([a-z0-9.\-]+)', c, re.I): hs.add(m.group(1).lower())  # Host header
+    for m in re.finditer(r'--resolve\s+([a-z0-9.\-]+):', c, re.I): hs.add(m.group(1).lower())      # --resolve HOST (ip değil)
+    return hs
 
-def foreign_hosts(text, target_host, target_ip):
-    text = (text or '').lower(); th = (target_host or '').lower(); ti = (target_ip or '')
-    base = '.'.join(th.split('.')[-2:]) if th.count('.') >= 1 else th  # kayıtlı taban (demo.testfire.net→testfire.net)
+def is_target_host(h, target_host, target_ip):
+    th = (target_host or '').lower(); base = '.'.join(th.split('.')[-2:]) if th.count('.') >= 1 else th
+    return bool(h) and (h == th or h == 'www.' + th or h == (target_ip or '') or (base and (h == base or h.endswith('.' + base))))
 
-    def is_target(h):
-        return bool(h) and (h == th or h == ti or h == 'www.' + th or (base and (h == base or h.endswith('.' + base))))
-
-    hosts = set()
-    for m in re.finditer(r'https?://([a-z0-9.\-_]+)', text): hosts.add(m.group(1))
-    for m in re.finditer(r'\b([a-z0-9\-]{2,}(?:\.[a-z0-9\-]{2,})+)\b', text):
-        h = m.group(1)
-        if h.split('.')[-1] in _FILE_EXT: continue     # dosya adı (index.php), host değil
-        hosts.add(h)
-    for name in _KNOWN_FOREIGN:
-        if name in text: hosts.add(name)
-    return {h for h in hosts if not is_target(h)}       # hedefin alt-alanları YABANCI değil
+def off_target_request(bound, claim, target_host, target_ip):
+    """İstek hedef/IP/www DIŞI bir domain'e mi atıldı? Öyleyse o host'u döndür (off-target), değilse None."""
+    cmd = (bound or {}).get('command', '') or ''
+    hs = request_hosts(cmd) or request_hosts(claim.get('text', ''))
+    if not hs:
+        return None                                              # host belirlenemedi (saf IP isteği zaten hedef) → tut
+    if any(is_target_host(h, target_host, target_ip) for h in hs):
+        return None                                              # istek host'larından biri hedef → hedefe ait, tut
+    foreign = [h for h in hs if not is_target_host(h, target_host, target_ip)]
+    return foreign[0] if foreign else None                       # hepsi yabancı → off-target (ör. juiceshop)
 
 
 def classify(claims, artifacts, target_host='', target_ip=''):
@@ -180,15 +183,14 @@ def classify(claims, artifacts, target_host='', target_ip=''):
             ev['rawExcerpt'] = redact(bound.get('rawText', ''))[:1000]
             ev['command'] = redact(bound.get('command', ''))[:200]
 
-        # PROVENANCE: KANITLI/BELİRSİZ bulgu hedef-DIŞI host referanslıyorsa (ör. juiceshop) → HAYALET.
-        # Ajanın eğitim-bilgisi (Juice Shop vb.) hedefe sızamaz; provenance-dışı bulgu rapora GİRMEZ.
+        # PROVENANCE: İSTEĞİN ATILDIĞI host hedef-DIŞI ise (ör. istek juiceshop'a atılmış) → HAYALET.
+        # Yalnız isteğin gönderildiği host'a bakar; yanıt GÖVDESİNDEKİ linkler (altoromutual.com) ya da
+        # --resolve'un IP kısmı (hedefin pinlenen IP'si) provenance'ı ETKİLEMEZ — onlar hedefin içeriği.
         if tier in ('KANITLI', 'BELIRSIZ'):
-            probe = ' '.join([c.get('title', ''), c.get('text', ''), (ev or {}).get('detail', ''),
-                              (bound or {}).get('command', ''), (bound or {}).get('rawText', '')])
-            fh = foreign_hosts(probe, target_host, target_ip)
-            if fh:
+            off = off_target_request(bound, c, target_host, target_ip)
+            if off:
                 tier, ev = 'HAYALET', None
-                reason = f"provenance-dışı: hedef ({target_host or '?'}) yerine yabancı host ({', '.join(sorted(fh))[:60]}) → elenir"
+                reason = f"provenance-dışı: istek hedef ({target_host or '?'}) yerine {off}'a atıldı → elenir"
 
         findings.append({
             'title': c.get('title') or (c.get('text', '')[:80]),

@@ -39,10 +39,14 @@ export async function persistStep(jobId: string, step: StepLog): Promise<void> {
 /** Pull sonucunu kalıcılaştır: canlı alanları güncelle + log satırlarını ekle. */
 export async function persistPull(jobId: string, result: PullResult, phase?: string): Promise<void> {
   const { live } = result;
+  // SÜRE METRESİ: gerçek başlangıç→şimdi farkı (0s kalmasın). startedAt runner'da koşu başında set edilir.
+  const job = await prisma.redTeamJob.findUnique({ where: { id: jobId }, select: { startedAt: true } });
+  const elapsedSec = job?.startedAt ? Math.max(0, Math.round((Date.now() - job.startedAt.getTime()) / 1000)) : undefined;
   await prisma.redTeamJob.update({
     where: { id: jobId },
     data: {
       ...(phase ? { phase } : {}),
+      ...(elapsedSec != null ? { elapsedSec } : {}),
       ...(live.llmCalls != null ? { llmCalls: live.llmCalls } : {}),
       ...(live.costUsd != null ? { costUsd: live.costUsd } : {}),
       ...(live.egressTargetOk != null ? { egressTargetOk: live.egressTargetOk } : {}),
