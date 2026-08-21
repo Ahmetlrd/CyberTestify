@@ -306,6 +306,9 @@ model Order {
   // Tarama deneme sayısı (ilk deneme=1; her "tekrar dene" +1). 2'den fazla başarısızlıkta müşteriye
   // tekrar-dene yerine "iade talebi" gösterilir.
   attemptCount        Int       @default(1)
+  // (LOGİNSİZ TEST) Kimlik-doğrulamalı paket LOGİNSİZ (kimlik-doğrulamasız) mı koşacak? Sitede login yoksa
+  // ya da müşteri "loginsiz devam et" dediyse true → authenticateOrder ATLANIR, oturum-içi kontroller kapsam dışı.
+  loginless           Boolean   @default(false)
   // Müşteri iade talebinde bulunduysa (admin panelde görünür; Vedat iyzico'dan manuel iade yapar).
   refundRequestedAt   DateTime?
   refundRequestReason String?

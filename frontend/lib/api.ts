@@ -236,10 +236,14 @@ export const api = {
       body: JSON.stringify(body),
     }),
   // (Başarısız tarama) Tekrar dene — kimlik-doğrulamalı pakette yeni test hesabı bilgisi gerekebilir.
-  retryScan: (orderId: string, authCredentials?: { username: string; password: string }) =>
+  retryScan: (orderId: string, opts?: { username: string; password: string } | { loginless: true }) =>
     request<{ ok: boolean; attempt?: number }>(`/orders/${orderId}/retry`, {
       method: 'POST',
-      body: JSON.stringify(authCredentials ? { authCredentials } : {}),
+      body: JSON.stringify(
+        opts && 'loginless' in opts ? { loginless: true }
+        : opts ? { authCredentials: opts }
+        : {},
+      ),
     }),
   // (Başarısız/iptal) İade talebi — admin panelde görünür, ekip iyzico'dan manuel iade yapar.
   requestRefund: (orderId: string, reason?: string) =>

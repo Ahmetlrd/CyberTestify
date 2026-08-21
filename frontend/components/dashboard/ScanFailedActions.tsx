@@ -52,6 +52,20 @@ export function ScanFailedActions({
     } finally { setBusy(false); }
   }
 
+  // (LOGİNSİZ TEST) Login sağlanamadı → kullanıcı login OLMADAN devam edebilir: tarama unauthenticated
+  // (herkese açık) yüzeyle yeniden koşar; oturum-içi kontroller raporda "kapsam dışı" görünür.
+  async function retryLoginless() {
+    setBusy(true); setErr(null);
+    try {
+      await api.retryScan(orderId, { loginless: true });
+      onRetry();
+    } catch (e: any) {
+      setErr(e?.message ?? 'Loginsiz devam edilemedi.');
+    } finally { setBusy(false); }
+  }
+  // Login kaynaklı başarısızlık mı (auth başarısız / giriş formu yok)? Öyleyse loginsiz-devam sun.
+  const isLoginFailure = needCreds || !!(failureReason && (failureReason.startsWith('auth_login_failed') || failureReason === 'no_login_endpoint'));
+
   async function requestRefund() {
     setBusy(true); setErr(null);
     try {
@@ -94,10 +108,22 @@ export function ScanFailedActions({
             >
               {busy ? 'Deneniyor…' : 'Tekrar Dene'}
             </button>
+            {/* (LOGİNSİZ TEST) Login sağlanamayan pakette: kimlik-doğrulaması olmadan devam et. */}
+            {isLoginFailure && (
+              <button onClick={retryLoginless} disabled={busy} className="btn-dark disabled:opacity-60">
+                {busy ? 'Başlatılıyor…' : 'Loginsiz devam et'}
+              </button>
+            )}
             <button onClick={requestRefund} disabled={busy} className="text-xs font-medium text-red-700 underline">
               Bunun yerine iade talebinde bulun
             </button>
           </div>
+          {isLoginFailure && (
+            <p className="mt-2 text-xs text-red-700/80">
+              Sitenizde giriş (login) yoksa <strong>“Loginsiz devam et”</strong> ile tarama kimlik-doğrulaması olmadan
+              çalışır; oturum-içi kontroller raporda “kapsam dışı” görünür.
+            </p>
+          )}
         </>
       ) : (
         <>

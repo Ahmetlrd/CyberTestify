@@ -572,18 +572,7 @@ export default function OrderPage() {
           <span className="rounded-pill bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800">✓ {loginCheckMsg}</span>
         )}
         {loginCheck === 'fail' && (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <span className="rounded-pill bg-amber-100 px-3 py-1 text-sm font-medium text-amber-900">{loginCheckMsg}</span>
-            {/* (LOGİNSİZ TEST) Giriş doğrulanamadı → tekrar dene YA DA loginsiz devam. Buton bilgileri temizler
-                → sipariş loginsiz (kimlik-doğrulamasız) geçer, ek onaylar da düşer. */}
-            <button
-              type="button"
-              onClick={() => { setAuthUser(''); setAuthPass(''); setLoginCheck('idle'); setLoginCheckMsg(''); }}
-              className="shrink-0 rounded-pill border border-ink-soft/40 px-3 py-1 text-sm font-semibold text-ink-soft hover:bg-ink-soft/5"
-            >
-              Loginsiz devam et →
-            </button>
-          </div>
+          <span className="rounded-pill bg-amber-100 px-3 py-1 text-sm font-medium text-amber-900">{loginCheckMsg}</span>
         )}
       </div>
       {/* (LOGİNSİZ TEST) Bilgi girilmediyse küçük uyarı — tarama loginsiz yapılacak. */}

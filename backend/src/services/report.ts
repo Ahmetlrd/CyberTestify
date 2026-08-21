@@ -332,7 +332,11 @@ export async function generateAndStoreReport(flowId: string) {
   // (Tam Kapsamlı Pentest) AUTHENTICATED bundle: ÖNCE backend deterministik LOGIN (FAZ B), sonra FAZ C/D
   // authenticated rapor. Login başarısız -> authenticateOrder zaten scan_failed + KREDİ + mail yaptı -> çık
   // (rapor üretme, scan_completed'a geçme).
-  if (flow.order.package.key === AUTH_BUNDLE_KEY) {
+  // (LOGİNSİZ TEST) Müşteri loginsiz seçtiyse (sitede login yok / "loginsiz devam et") login ATLANIR;
+  // authenticated rapor üretilmez, tarama unauthenticated yüzey kontrolleriyle TAMAMLANIR (fail DEĞİL).
+  if (flow.order.package.key === AUTH_BUNDLE_KEY && flow.order.loginless) {
+    console.log(`[report][FULL] ${flow.orderId}: LOGİNSİZ mod — login atlandı, unauthenticated yüzey raporu üretilecek.`);
+  } else if (flow.order.package.key === AUTH_BUNDLE_KEY) {
     const authRes = await authenticateOrder(flow.orderId);
     if (!authRes.ok) {
       console.log(`[report][FULL] ${flow.orderId}: login başarısız (${authRes.reason}) -> rapor üretilmedi (kredi tanımlandı, müşteri bilgilendirildi).`);
@@ -384,6 +388,16 @@ export async function generateAndStoreReport(flowId: string) {
     incompleteReason =
       'Tarama, tam anlatısal raporu yazma adımına ulaşamadan sonlandı (hedefe ulaşılamadı veya bütçe/erken duruş). ' +
       'Bu rapor bir "temiz/güvenli" sonucu DEĞİLDİR.';
+  }
+
+  // (LOGİNSİZ TEST) Kimlik-doğrulamalı paket loginsiz koştuysa raporda DÜRÜST not: oturum-içi kontroller
+  // yapılmadı (login sağlanmadı) — bu bir "temiz" sonucu değildir; unauthenticated yüzey kontrolleri geçerlidir.
+  if (flow.order.package.key === AUTH_BUNDLE_KEY && flow.order.loginless) {
+    const note =
+      '> **Not — Loginsiz (kimlik-doğrulamasız) tarama:** Bu tarama test hesabı bilgisi olmadan yapıldı. ' +
+      'Oturum-içi (giriş sonrası) yetkilendirme, IDOR ve iş-mantığı kontrolleri **kapsam dışıdır** — bu bir ' +
+      '"güvenli/temiz" sonucu değildir. Aşağıdaki bulgular sitenin **herkese açık (login gerektirmeyen)** yüzeyine aittir.';
+    findings = findings.trim() ? `${note}\n\n${findings}` : note;
   }
 
   // (KVKK GUVENLIK AGI) yalniz kvkk_hazirlik: uyum-dili / ihlal iddiasi / Subtask sizintisi /

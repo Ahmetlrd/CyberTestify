@@ -6,7 +6,7 @@ import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { SCAN_PACKAGES, getPackageDef, localeFor, localizedPackage, fixSuggestionPrice, fixSuggestionListPrice, securityProfileFor, requiresTestCredentials, usesForeignAi } from '../services/scanPackages.js';
 import { validateConsentInput, activeTestScope, ACTIVE_TEST_CONSENT_VERSION, ACTIVE_TEST_RISK_ACK, hasValidActiveTestConsent } from '../services/activeTestConsent.js';
-import { storeTestCredential, hasTestCredential } from '../services/testCredentials.js';
+import { storeTestCredential, hasTestCredential, consumeTestCredential } from '../services/testCredentials.js';
 import { renderConsentPdf } from '../services/pdf.js';
 import { getPricing, currencyFor, PRICE_OVERRIDE_MINOR } from '../services/pricing.js';
 import { getPaymentProvider } from '../services/payment/index.js';
@@ -347,6 +347,8 @@ ordersRouter.post('/', createLimiter, requireAuth, async (req, res) => {
     crossBorderConsentAt: usesForeignAi(packageKey) ? new Date() : null,
     consentIp: req.ip ?? null,
     consentVersion: config.legalVersion,
+    // (LOGİNSİZ TEST) kimlik-doğrulamalı paket ama test hesabı verilmedi → loginsiz koş (login denenmez).
+    loginless: needsAuthConsents && !hasAuthCreds,
   };
 
   // (Faz 3) active-light: siparise ZORUNLU yetkilendirme beyanini bagla (tarama
@@ -580,6 +582,8 @@ ordersRouter.post('/bundle', createLimiter, requireAuth, async (req, res) => {
     crossBorderConsentAt: bundleForeignAi ? new Date() : null,
     consentIp: req.ip ?? null,
     consentVersion: config.legalVersion,
+    // (LOGİNSİZ TEST) authenticated_scan üyesi var ama test hesabı verilmedi → loginsiz koş.
+    loginless: hasAuthScan && !bundleHasAuthCreds,
   };
   const cust = await prisma.customer.findUniqueOrThrow({ where: { id: req.customerId! }, select: { fullName: true, email: true } });
 
@@ -946,6 +950,7 @@ ordersRouter.post('/:orderId/invoice-request', requireAuth, async (req, res) => 
 // ============================================================================
 const retrySchema = z.object({
   authCredentials: z.object({ username: z.string().min(1), password: z.string().min(1) }).optional(),
+  loginless: z.boolean().optional(), // (LOGİNSİZ TEST) kimlik-doğrulamalı pakette login olmadan yeniden koş
 });
 
 // TEKRAR DENE: başarısız taramayı yeniden kuyruğa alır. Kimlik-doğrulamalı pakette test kimlik
@@ -962,8 +967,13 @@ ordersRouter.post('/:orderId/retry', requireAuth, async (req, res) => {
   const parsed = retrySchema.safeParse(req.body ?? {});
   if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
 
-  // Kimlik-doğrulamalı paket: yeni test hesabı bilgisi gerekir (eski tüketildi).
-  if (requiresTestCredentials(order.package.key)) {
+  // (LOGİNSİZ TEST) "Loginsiz devam et": kimlik-doğrulamalı paketi login OLMADAN yeniden koş.
+  // Saklı kimlik bilgisi (varsa) tüketilerek silinir; order.loginless=true → report authenticateOrder'ı ATLAR.
+  const loginless = parsed.data.loginless === true;
+  if (loginless) {
+    await consumeTestCredential(order.id, 'primary').catch(() => null); // varsa sil (login denenmeyecek)
+  } else if (requiresTestCredentials(order.package.key)) {
+    // Kimlik-doğrulamalı paket: yeni test hesabı bilgisi gerekir (eski tüketildi).
     const has = await hasTestCredential(order.id, 'primary');
     if (!has) {
       if (!parsed.data.authCredentials) return res.status(400).json({ error: 'Bu paket kimlik-doğrulamalı test içerir; tekrar denemek için test hesabı kullanıcı adı ve şifresini girin.', needsCredentials: true });
@@ -975,7 +985,7 @@ ordersRouter.post('/:orderId/retry', requireAuth, async (req, res) => {
   await prisma.flow.deleteMany({ where: { orderId: order.id } });
   await prisma.order.update({
     where: { id: order.id },
-    data: { status: 'paid', failureReason: null, attemptCount: { increment: 1 }, refundRequestedAt: null, refundRequestReason: null },
+    data: { status: 'paid', failureReason: null, attemptCount: { increment: 1 }, refundRequestedAt: null, refundRequestReason: null, ...(loginless ? { loginless: true } : {}) },
   });
   await enqueueUnlessReview(order.id);
   res.json({ ok: true, attempt: order.attemptCount + 1 });
