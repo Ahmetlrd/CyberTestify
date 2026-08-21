@@ -167,18 +167,22 @@ export default function OrderPage() {
   // hukuken AYRI checkbox olarak kalır; kalanlar tek "genel kabul" altında gruplanır.
   const isActiveLightSel = isActiveLight || selectedBundle?.category === 'active-light';
   const needsAuthSel = needsAuthCreds || !!selectedBundle?.members?.some((m: any) => m.key === 'authenticated_scan');
+  // (LOGİNSİZ TEST) Test hesabı bilgileri artık OPSİYONEL — sitede login mekanizması olmayabilir. Bilgi
+  // girilmişse kimlik-doğrulamalı, boşsa loginsiz (kimlik-doğrulamasız) tarama yapılır. hasCreds bunu ayırır:
+  // creds varsa test-hesabı onayları/kimlik gönderimi devreye girer, yoksa hiçbiri zorunlu değildir.
+  const hasCreds = !!(authUser.trim() && authPass);
   // (KVKK m.9) Seçili paket/bundle yurt dışı AI'ya veri gönderiyor mu? Sadece o zaman m.9 açık rıza gerekir.
   const selUsesForeignAi = !!(selectedBundle ? selectedBundle.crossBorderAi : selectedPkg?.crossBorderAi);
   // (BUG FIX) Kimlik-doğrulamalı testte 2 zorunlu beyan: TEST hesabı + yüksek-risk. credShare (kimlik
   // bilgisi YURT DIŞI AI aktarımı rızası) yalnız yurt dışı AI KULLANILIYORSA gerekir — advisory kapalıyken
   // o kutu hiç gösterilmez, dolayısıyla credShare hiç set edilemez; onu zorunlu tutmak butonu kilitliyordu.
   const authConsentsOk = testAcct && elevRisk && (!selUsesForeignAi || credShare);
-  const activeConsentOk = (!isActiveLight || atRisk) && (!needsAuthCreds || (authUser.trim() && authPass && authConsentsOk));
+  const activeConsentOk = (!isActiveLight || atRisk) && (!needsAuthCreds || !hasCreds || authConsentsOk);
   const allConsents =
     authConsent && contractConsent && withdrawalConsent && kvkkConsent && (!selUsesForeignAi || crossBorderConsent);
   // Grup 1 — Genel kabul (ownership + mesafeli/ön-bilgi + KVKK aydınlatma + [aktif-test riski] + [test hesabı beyanı]).
   const groupGeneralChecked =
-    authConsent && contractConsent && kvkkConsent && (!isActiveLightSel || atRisk) && (!needsAuthSel || (testAcct && elevRisk));
+    authConsent && contractConsent && kvkkConsent && (!isActiveLightSel || atRisk) && (!needsAuthSel || !hasCreds || (testAcct && elevRisk));
   const setGroupGeneral = (v: boolean) => {
     setAuthConsent(v); setContractConsent(v); setKvkkConsent(v);
     if (isActiveLightSel) setAtRisk(v);
@@ -186,7 +190,7 @@ export default function OrderPage() {
   };
   // Grup 2 — AYRI: KVKK m.9 yurt dışı açık rıza. YALNIZ yurt dışı AI kullanan pakette gösterilir/
   // zorunludur; deterministik paketlerde veri yurt dışına gitmediği için gerekmez (otomatik geçer).
-  const groupCrossBorderChecked = !selUsesForeignAi || (crossBorderConsent && (!needsAuthSel || credShare));
+  const groupCrossBorderChecked = !selUsesForeignAi || (crossBorderConsent && (!needsAuthSel || !hasCreds || credShare));
   const setGroupCrossBorder = (v: boolean) => { setCrossBorderConsent(v); if (needsAuthSel) setCredShare(v); };
   // Grup 3 — AYRI: mesafeli satış cayma hakkı feragati (withdrawalConsent) — doğrudan.
   // (Aktif Doğrulama Paketi) düşük-kapsam uyarısı gösterilecek mi (ön-kontrol düşük sinyal döndüyse).
@@ -250,8 +254,8 @@ export default function OrderPage() {
           crossBorderTransfer: crossBorderConsent, // KVKK m.9 yurt disi acik riza checkbox'i
         },
         region,
-        isActiveLight ? { riskAccepted: atRisk, ...(needsAuthCreds ? { credentialSharingAccepted: credShare, testAccountDeclared: testAcct, elevatedRiskAccepted: elevRisk } : {}) } : undefined,
-        needsAuthCreds ? { username: authUser.trim(), password: authPass } : undefined,
+        isActiveLight ? { riskAccepted: atRisk, ...(needsAuthCreds && hasCreds ? { credentialSharingAccepted: credShare, testAccountDeclared: testAcct, elevatedRiskAccepted: elevRisk } : {}) } : undefined,
+        needsAuthCreds && hasCreds ? { username: authUser.trim(), password: authPass } : undefined, // loginsizse gönderilmez
         promo?.valid ? promo.code : undefined,
       );
       // %100 promo ile odendiyse odeme sayfasi YOK — dogrudan siparis detayina git.
@@ -277,8 +281,8 @@ export default function OrderPage() {
     const isAL = selectedBundle.category === 'active-light';
     if (isAL && !atRisk) return setError('Aktif test için risk kabul kutusunu işaretlemelisiniz.');
     const needsAuth = selectedBundle.members?.some((m: any) => m.key === 'authenticated_scan');
-    if (needsAuth && (!authUser.trim() || !authPass)) return setError('Bu paket için test hesabı bilgileri gerekli.');
-    if (needsAuth && !authConsentsOk) return setError('Kimlik-doğrulamalı test için gerekli ek onayları (test hesabı beyanı ve yüksek-risk kabulü) işaretlemelisiniz.');
+    // (LOGİNSİZ TEST) creds opsiyonel: boşsa loginsiz devam. Girildiyse ek onaylar gerekir.
+    if (needsAuth && hasCreds && !authConsentsOk) return setError('Test hesabı bilgisi girdiniz — kimlik-doğrulamalı test için ek onayları (test hesabı beyanı ve yüksek-risk kabulü) işaretleyin. (Ya da bilgileri boş bırakıp loginsiz devam edin.)');
     if (selectedBundle.selectable && bundleModules.length === 0) return setError('En az bir modül seçin.');
     if (showLowScopeWarning && !lowScopeAck) return setError('Devam etmek için ön kontrol uyarısını onaylamalısınız.');
     if (showUnreachableWarning && !unreachableAck) return setError('Hedefe erişilemiyor — devam etmek için uyarıyı onaylamalısınız.');
@@ -294,8 +298,8 @@ export default function OrderPage() {
         withdrawalWaived: withdrawalConsent, // AYRI cayma feragati
         crossBorderTransfer: crossBorderConsent, // KVKK m.9 yurt disi acik riza
         region,
-        activeTestConsent: isAL ? { riskAccepted: atRisk, ...(needsAuth ? { credentialSharingAccepted: credShare, testAccountDeclared: testAcct, elevatedRiskAccepted: elevRisk } : {}) } : undefined,
-        authCredentials: needsAuth ? { username: authUser.trim(), password: authPass } : undefined,
+        activeTestConsent: isAL ? { riskAccepted: atRisk, ...(needsAuth && hasCreds ? { credentialSharingAccepted: credShare, testAccountDeclared: testAcct, elevatedRiskAccepted: elevRisk } : {}) } : undefined,
+        authCredentials: needsAuth && hasCreds ? { username: authUser.trim(), password: authPass } : undefined, // loginsizse gönderilmez
         promoCode: promo?.valid ? promo.code : undefined,
         lowScopeAcknowledged: showLowScopeWarning ? lowScopeAck : undefined,
       });
@@ -398,8 +402,8 @@ export default function OrderPage() {
   const ctaDisabled = selectedBundle
     ? !domainId || busy || !allConsents || intlComingSoon || needsDomainVerify ||
       (selectedBundle.category === 'active-light' && !atRisk) ||
-      // (FAZ A) kimlik-doğrulamalı üye varsa: 3 ek onay + kimlik bilgisi girişleri zorunlu.
-      (selectedBundle.members?.some((m: any) => m.key === 'authenticated_scan') && (!authConsentsOk || !authUser.trim() || !authPass)) ||
+      // (LOGİNSİZ TEST) kimlik-doğrulamalı üye: creds OPSİYONEL. Girildiyse ek onaylar gerekir; boşsa loginsiz geçer.
+      (selectedBundle.members?.some((m: any) => m.key === 'authenticated_scan') && hasCreds && !authConsentsOk) ||
       (selectedBundle.selectable && bundleModules.length === 0) ||
       (showLowScopeWarning && !lowScopeAck) || // düşük-kapsam uyarısı onaylanmadan ödeme yok
       preCheckGate
@@ -424,7 +428,7 @@ export default function OrderPage() {
     if (!(selected || selectedBundle) || busy) return null;
     if (!domainId) return { text: 'Önce site sahipliğinizi doğrulayın.', scroll: false };
     if (selectedBundle?.selectable && bundleModules.length === 0) return { text: 'Paket içeriğini seçin.', scroll: false };
-    if (needsAuthSel && (!authUser.trim() || !authPass)) return { text: 'Test hesabı kullanıcı adı ve şifresini girin.', scroll: false };
+    // (LOGİNSİZ TEST) test hesabı bilgisi artık zorunlu değil — boş bırakılırsa loginsiz devam edilir (uyarı formda).
     if (!allGroupsChecked) return { text: 'Devam etmek için aşağıdaki onayları işaretleyin →', scroll: true, target: 'onaylar' };
     if (showLowScopeWarning && !lowScopeAck) return { text: 'Ön kontrol uyarısını okuyup onaylayın →', scroll: true, target: 'oncontrol-uyari' };
     if (showUnreachableWarning && !unreachableAck) return { text: 'Erişim uyarısını okuyup onaylayın →', scroll: true, target: 'oncontrol-uyari' };
@@ -513,8 +517,16 @@ export default function OrderPage() {
     <div className="mt-3 space-y-4 rounded-card border-2 border-brand/20 bg-brand-50/50 p-4 sm:p-5">
       <p className="flex items-center gap-2 text-sm font-bold text-brand">
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand text-xs text-white">🔑</span>
-        Test hesabı bilgileri
+        Test hesabı bilgileri <span className="font-normal text-ink-muted">(opsiyonel)</span>
       </p>
+      {/* (LOGİNSİZ TEST) Opsiyonel olduğunu net söyle — sitede login olmayabilir. */}
+      <div className="rounded-card border border-brand-200 bg-white/70 px-4 py-3 text-sm text-ink-soft">
+        <p>
+          Bu alan <strong>opsiyoneldir</strong>. Sitenizde bir <strong>giriş (login) mekanizması yoksa</strong> boş bırakın —
+          tarama <strong>loginsiz (kimlik-doğrulamasız)</strong> yapılır. Giriş varsa, oturum-içi kontroller için bir
+          <strong> TEST hesabı</strong> girebilirsiniz.
+        </p>
+      </div>
       {/* Uyarı — güçlü kontrast: sol accent bar + koyu kırmızı başlık + koyu metin */}
       <div className="rounded-card border border-red-300 border-l-4 border-l-red-600 bg-red-50 px-4 py-3 text-red-900">
         <p className="text-sm font-bold text-red-700">⚠️ Yalnız TEST hesabı girin — ana/üretim hesabınızı DEĞİL</p>
@@ -560,9 +572,26 @@ export default function OrderPage() {
           <span className="rounded-pill bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800">✓ {loginCheckMsg}</span>
         )}
         {loginCheck === 'fail' && (
-          <span className="rounded-pill bg-amber-100 px-3 py-1 text-sm font-medium text-amber-900">{loginCheckMsg}</span>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <span className="rounded-pill bg-amber-100 px-3 py-1 text-sm font-medium text-amber-900">{loginCheckMsg}</span>
+            {/* (LOGİNSİZ TEST) Giriş doğrulanamadı → tekrar dene YA DA loginsiz devam. Buton bilgileri temizler
+                → sipariş loginsiz (kimlik-doğrulamasız) geçer, ek onaylar da düşer. */}
+            <button
+              type="button"
+              onClick={() => { setAuthUser(''); setAuthPass(''); setLoginCheck('idle'); setLoginCheckMsg(''); }}
+              className="shrink-0 rounded-pill border border-ink-soft/40 px-3 py-1 text-sm font-semibold text-ink-soft hover:bg-ink-soft/5"
+            >
+              Loginsiz devam et →
+            </button>
+          </div>
         )}
       </div>
+      {/* (LOGİNSİZ TEST) Bilgi girilmediyse küçük uyarı — tarama loginsiz yapılacak. */}
+      {!hasCreds && (
+        <p className="text-xs font-medium text-ink-muted">
+          ℹ️ Test hesabı bilgisi girmediniz — tarama <strong>loginsiz (kimlik-doğrulamasız)</strong> yapılacak. Sitenizde giriş yoksa bu normaldir.
+        </p>
+      )}
       {/* (İŞ 3) Test-hesabı beyanı + kimlik-bilgisi yurt dışı açık rıza + yüksek-risk kabulü aşağıdaki
           "2 · Onaylar" bölümündeki gruplu checkbox'larda (sunucu-tarafı alanlar AYNEN korunur). */}
     </div>
