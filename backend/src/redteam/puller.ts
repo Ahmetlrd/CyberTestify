@@ -42,6 +42,17 @@ export const REMOTE = {
     `docker exec pgvector psql -U postgres -d pentagidb -tAc ` +
     `"SELECT COALESCE(model,'?')||':'||count(*)||':'||COALESCE(SUM(usage_cost_in+usage_cost_out),0)::numeric(12,4) ` +
     `FROM msgchains GROUP BY model;" 2>/dev/null`,
+  // CANLI TRANSKRİPT: ajanın son araç-çağrıları (ad + istek/args + yanıt/result kesiti). İç newline'lar
+  // translate ile boşluğa çevrilir → her DB satırı tek log satırı. maskSecrets pullOnce'ta uygulanır.
+  transcriptTail:
+    `docker exec pgvector psql -U postgres -d pentagidb -tAc ` +
+    `"SELECT 'T'||id||'|'||coalesce(name,'')||'|'||left(translate(coalesce(args::text,''),E'\\n\\r\\t','   '),140)` +
+    `||'|'||left(translate(coalesce(result,''),E'\\n\\r\\t','   '),240) FROM toolcalls ORDER BY id DESC LIMIT 5;" 2>/dev/null`,
+  // Ajanın son adım-sonuçları/iddiaları (subtasks) — "ne düşündü/buldu".
+  subtaskTail:
+    `docker exec pgvector psql -U postgres -d pentagidb -tAc ` +
+    `"SELECT 'S'||id||'|'||left(translate(coalesce(title,''),E'\\n\\r\\t','   '),80)||'|'||left(translate(coalesce(result,''),E'\\n\\r\\t','   '),220) ` +
+    `FROM subtasks ORDER BY id DESC LIMIT 3;" 2>/dev/null`,
   campaignTail: `tail -n 3 /opt/pentagi-run/campaign.log 2>/dev/null`,
   auditTail: `tail -n 8 /opt/pentagi-run/audit/*.log 2>/dev/null`,
   // egress ampirik gate (throwaway konteyner): TARGET_OK / CYBERTESTIFY_BLOCKED / METADATA_BLOCKED
@@ -110,7 +121,31 @@ export async function pullOnce(exec: RemoteExec, opts: { targetIp?: string | nul
       const su = rows.reduce((a, m) => a + m.costUsd, 0);
       if (live.llmCalls == null || sc > live.llmCalls) live.llmCalls = sc;
       if (live.costUsd == null || su > (live.costUsd ?? 0)) live.costUsd = su;
-      logs.push({ source: 'pentagi', level: 'info', message: 'model dağılımı: ' + rows.map((r) => `${r.model}×${r.calls} ($${r.costUsd})`).join(' · ') });
+      // (ŞEFFAFLIK) model dağılımı artık canlı-log'u KAPLAMAZ — modelUsage panelde "model dağılımı"
+      // kartında zaten görünür. Ana akışı GERÇEK ajan transkripti kaplasın (aşağıda).
+    }
+  }
+
+  // 1c) CANLI AJAN TRANSKRİPTİ — model-spam yerine gerçek araç akışı (rol/komut/istek/yanıt-kesiti).
+  const tx = await safe('transcript', REMOTE.transcriptTail);
+  if (tx && tx.trim()) {
+    for (const line of tx.trim().split('\n').reverse()) { // eskiden→yeniye
+      const p = line.split('|');
+      if (p.length < 2) continue;
+      const name = (p[1] || 'araç').trim();
+      const req = (p[2] || '').trim();
+      const res = p.slice(3).join('|').trim();
+      const marker = /zqx[a-z0-9]*marker/i.test(req + res) ? ' ⟨marker⟩' : '';
+      logs.push({ source: 'ajan', level: 'info', message: `[${name}]${marker} ${req}${res ? '  →  ' + res.slice(0, 220) : ''}`.trim() });
+    }
+  }
+  const stx = await safe('subtask', REMOTE.subtaskTail);
+  if (stx && stx.trim()) {
+    for (const line of stx.trim().split('\n').reverse()) {
+      const p = line.split('|');
+      const title = (p[1] || '').trim();
+      const res = p.slice(2).join('|').trim();
+      if (title || res) logs.push({ source: 'ajan-sonuç', level: 'info', message: `${title ? title + ': ' : ''}${res.slice(0, 220)}`.trim() });
     }
   }
 

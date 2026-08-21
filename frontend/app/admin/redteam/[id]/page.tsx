@@ -202,6 +202,59 @@ export default function AdminRedTeamDetail({ params }: { params: { id: string } 
         </div>
       </section>
 
+      {/* Ajan Transkripti — gerçek istek/yanıt akışı (retention'dan; teardown sonrası da okunur) */}
+      {Array.isArray(job.transcriptJson) && job.transcriptJson.length > 0 && (
+        <section style={{ marginTop: 18 }}>
+          <h3 style={{ fontSize: 14, color: '#e2e8f0', margin: '0 0 8px' }}>
+            Ajan Transkripti <span style={{ fontSize: 11, color: '#64748b' }}>({job.transcriptJson.length} adım — ajanın GERÇEKTE ne yaptığı)</span>
+          </h3>
+          <div style={{ ...card, fontSize: 12, maxHeight: 460, overflowY: 'auto', background: '#0b1120' }}>
+            {job.transcriptJson.map((e: any, i: number) => e.kind === 'arac' ? (
+              <div key={i} style={{ borderBottom: '1px solid #16233a', padding: '6px 0' }}>
+                <div>
+                  <span style={{ color: '#7dd3fc', fontWeight: 600 }}>[{e.role}]</span>{' '}
+                  {e.requestHost && <span style={{ color: '#64748b' }}>→ {e.requestHost}</span>}{' '}
+                  {e.markerReflected && <span style={{ color: '#4ade80', fontWeight: 700 }}>⟨marker ENCODE-EDİLMEDEN yansıdı⟩</span>}
+                </div>
+                {e.request && <div style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 11, color: '#cbd5e1', wordBreak: 'break-all' }}>{e.request}</div>}
+                {e.status && <div style={{ fontSize: 11, color: '#94a3b8' }}>{e.status}</div>}
+                {e.responseExcerpt && <div style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 11, color: e.markerReflected ? '#4ade80' : '#64748b', paddingLeft: 8, wordBreak: 'break-all' }}>↳ {e.responseExcerpt}</div>}
+              </div>
+            ) : (
+              <div key={i} style={{ padding: '4px 0', color: '#a5b4fc', fontSize: 12 }}>🧠 {e.text}</div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Binder Karar İzi — her iddia/artefakt: karar + neden (34 artefaktın hangisi neden elendi) */}
+      {Array.isArray(job.binderTraceJson) && job.binderTraceJson.length > 0 && (
+        <section style={{ marginTop: 18 }}>
+          <h3 style={{ fontSize: 14, color: '#e2e8f0', margin: '0 0 8px' }}>Binder Karar İzi <span style={{ fontSize: 11, color: '#64748b' }}>(artefakt-bazlı; kör kalma)</span></h3>
+          <div style={{ ...card, fontSize: 12 }}>
+            {job.binderTraceJson.filter((r: any) => r.claim_id).map((r: any, i: number) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '3px 0', borderBottom: '1px solid #16233a', flexWrap: 'wrap' }}>
+                <TierPill tier={r.sinif} />
+                <span style={{ color: '#cbd5e1' }}>{r.kategori}</span>
+                <span style={{ color: '#64748b', flex: 1 }}>{r.neden}</span>
+                <span style={{ color: '#475569', fontSize: 11 }}>[{(r.iliskili_artefakt || []).join(', ') || 'iz yok'}]</span>
+              </div>
+            ))}
+            <details style={{ marginTop: 8 }}>
+              <summary style={{ cursor: 'pointer', color: '#7dd3fc', fontSize: 12 }}>Ham artefaktlar ({job.binderTraceJson.filter((r: any) => r.artifact_id).length})</summary>
+              <div style={{ marginTop: 6, maxHeight: 260, overflowY: 'auto' }}>
+                {job.binderTraceJson.filter((r: any) => r.artifact_id).map((r: any, i: number) => (
+                  <div key={i} style={{ fontSize: 11, color: '#94a3b8', padding: '2px 0', wordBreak: 'break-all' }}>
+                    <span style={{ color: r.kanit_olarak_kullanildi ? '#4ade80' : '#475569', fontWeight: 600 }}>{r.kanit_olarak_kullanildi ? '✓kanıt' : '—'}</span>{' '}
+                    <span style={{ color: '#7dd3fc' }}>{r.artifact_id}</span> ({r.kaynak}): {r.ham_ozet}
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>
+        </section>
+      )}
+
       <p style={{ fontSize: 12, color: '#64748b', marginTop: 14 }}>
         Oluşturma {fmtDate(job.createdAt)} · başlangıç {fmtDate(job.startedAt)} · bitiş {fmtDate(job.finishedAt)}
         {job.costUsd != null && ` · maliyet ~$${Number(job.costUsd).toFixed(4)}`}

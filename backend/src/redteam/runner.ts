@@ -17,6 +17,7 @@ import { runPipeline, LEVEL_CFG, type ExecFn, type Level, type Env } from './orc
 import { makeSshExec, redteamKeyPath } from './controlChannel.js';
 import { persistStep, persistPull } from './observability.js';
 import { pullOnce, maskSecrets } from './puller.js';
+import { renderTranscript } from './transcript.js';
 import { nodeResolver } from './targetGuard.js';
 
 const execFileAsync = promisify(execFile);
@@ -237,6 +238,14 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
       reportJson = { ...reportJson, meta: { ...reportJson.meta, costUsd: live?.costUsd ?? null, llmCalls: live?.llmCalls ?? null, elapsedSec } };
     }
 
+    // ŞEFFAFLIK + RETENTION: teardown droplet'i imha etmeden ÖNCE çekilen ham veri + karar-izi + transkript.
+    // rawFlow binder --dump-raw'da redact()'li; binderTrace ham → maskSecrets (savunma). transcript rawFlow'dan türer.
+    const rawFlow: any = result.rawFlow ?? null;
+    const binderTrace = result.binderTrace
+      ? maskSecrets(result.binderTrace).trim().split('\n').map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)
+      : null;
+    const transcript = rawFlow ? renderTranscript(rawFlow) : null;
+
     await prisma.redTeamJob.update({
       where: { id: jobId },
       data: {
@@ -246,6 +255,9 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
         ...(elapsedSec != null ? { elapsedSec } : {}),
         error: result.error ?? null,
         ...(reportJson ? { reportJson } : {}),
+        ...(rawFlow ? { rawFlowJson: rawFlow } : {}),
+        ...(binderTrace ? { binderTraceJson: binderTrace as any } : {}),
+        ...(transcript ? { transcriptJson: transcript as any } : {}),
       },
     });
   } catch (e) {

@@ -600,7 +600,8 @@ adminRouter.get('/redteam-jobs/:id', async (req, res) => {
       createdAt: true, startedAt: true, finishedAt: true, ownershipConfirmed: true, riskAccepted: true,
       prodElevatedAccepted: true, consentIp: true, dropletId: true, dropletIp: true, targetIp: true,
       llmCalls: true, costUsd: true, elapsedSec: true, egressTargetOk: true, egressCyberBlocked: true,
-      lastPulledAt: true, reportJson: true, error: true,
+      lastPulledAt: true, reportJson: true, error: true, modelUsage: true,
+      transcriptJson: true, binderTraceJson: true,
     },
   });
   if (!job) return res.status(404).json({ error: 'İş bulunamadı.' });

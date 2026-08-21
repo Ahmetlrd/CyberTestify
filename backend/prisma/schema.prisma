@@ -558,6 +558,11 @@ model RedTeamJob {
   egressCyberBlocked Boolean?
   lastPulledAt       DateTime?
 
+  // ŞEFFAFLIK + RETENTION (teardown sonrası kör kalmayalım): droplet DURURKEN çekilip saklanır.
+  rawFlowJson     Json? // binder --dump-raw: redakteli ham claims+artifacts → transkript render + offline re-bind
+  binderTraceJson Json? // binder --trace: artefakt-bazlı karar izi (karar+neden+kanıt-kesiti) — UI'da tıklanabilir
+  transcriptJson  Json? // canlı ajan transkripti (msgchain/toolcall akışı, redakteli) — puller günceller
+
   // Model yönetimi + bütçe (admin panelden koşu-öncesi ayarlanır)
   modelConfig      Json? // { role: modelId } — PentAGI ajan-rolleri model seçimi
   capCallsOverride Int? // panelden cap ayarı (yoksa seviye varsayılanı)

@@ -87,6 +87,8 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
   ok: boolean;
   steps: StepLog[];
   report?: RedTeamReport;
+  rawFlow?: unknown;      // RETENTION: binder --dump-raw (transkript + offline re-bind kaynağı)
+  binderTrace?: string;   // binder --trace (artefakt-bazlı karar izi, JSONL)
   error?: string;
 }> {
   const steps: StepLog[] = [];
@@ -94,6 +96,8 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
   const cfg = { ...LEVEL_CFG[job.level], ...(ctx.cap ?? {}) };
   let provisioned = false;
   let report: RedTeamReport | undefined;
+  let rawFlow: unknown;
+  let binderTrace: string | undefined;
 
   const record = async (s: StepLog) => {
     steps.push(s);
@@ -185,6 +189,23 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
       ? { artifactCount: 0, claimCount: 0, summary: { kanitli: 0, belirsiz: 0, hayalet: 0 }, overallRisk: 'temiz', findings: [] }
       : (JSON.parse(b.stdout) as BinderOutput);
 
+    // ——— 7b) ŞEFFAFLIK + RETENTION: droplet DURURKEN ham veri + karar-izini çek (best-effort; teardown
+    // sonrası transkript/re-bind için). run() DEĞİL ctx.exec: retention başarısızlığı raporu bloklamasın.
+    if (!ctx.dryRun) {
+      const binderArgs = ['--flow', '$(cat /opt/pentagi-run/flow_id)', '--target', job.domain, '--target-ip', primaryIp];
+      const binderBin = `${ctx.scriptsDir}/droplet-scripts/binder.py`;
+      try {
+        const dr = await ctx.exec(binderBin, [...binderArgs, '--dump-raw']);
+        if (dr.code === 0 && dr.stdout.trim()) rawFlow = JSON.parse(dr.stdout);
+      } catch { /* retention best-effort */ }
+      try {
+        const tr = await ctx.exec(binderBin, [...binderArgs, '--trace']);
+        if (tr.code === 0 && tr.stdout.trim()) binderTrace = tr.stdout;
+      } catch { /* best-effort */ }
+      const art = (rawFlow as { artifacts?: unknown[] } | undefined)?.artifacts?.length ?? 0;
+      await record({ phase: 'bind', ok: true, detail: `retention: ham-veri ${rawFlow ? `✓ (${art} artefakt)` : '—'} · karar-izi ${binderTrace ? '✓' : '—'}` });
+    }
+
     // ——— 8) REPORT (deterministik render; şişirme yok) ———
     report = buildRedTeamReport(binderOutput, {
       target: job.domain,
@@ -194,10 +215,10 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
     });
     await record({ phase: 'report', ok: true, detail: `rapor: kanıtlı ${report.counts.kanitli} · belirsiz ${report.counts.belirsiz} · elenen ${report.eliminated} · risk ${report.overallRisk}` });
 
-    return { ok: true, steps, report };
+    return { ok: true, steps, report, rawFlow, binderTrace };
   } catch (e) {
     await record({ phase: 'guard', ok: false, detail: (e as Error).message });
-    return { ok: false, steps, error: (e as Error).message, report };
+    return { ok: false, steps, error: (e as Error).message, report, rawFlow, binderTrace };
   } finally {
     // ——— 9) TEARDOWN — HER durumda (provision olduysa). Boşta maliyet sıfır. ———
     if (provisioned) {

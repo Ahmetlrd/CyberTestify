@@ -276,6 +276,7 @@ def main():
     ap.add_argument('--target-ip', dest='target_ip', default='')
     ap.add_argument('--json', action='store_true')
     ap.add_argument('--trace', action='store_true')   # her artefaktın/iddianın kararını satır satır dök (teşhis)
+    ap.add_argument('--dump-raw', dest='dump_raw', action='store_true')  # RETENTION: ham claims+artifacts (redakteli)
     a = ap.parse_args()
     if a.input:
         claims, artifacts, meta = load_from_json(a.input)
@@ -287,6 +288,21 @@ def main():
 
     thost = a.target or str(meta.get('target', '') or '')
     tip = a.target_ip or str(meta.get('targetIp', '') or '')
+
+    # ——— RETENTION: --dump-raw → binder'ın okuduğu HAM claims+artifacts (redakteli) JSON ———
+    # Teardown droplet'i imha ETMEDEN ÖNCE bu job'a saklanır → (1) canlı/sonrası TRANSKRİPT render,
+    # (2) offline RE-BIND (yeni koşu olmadan binder mantığını tekrar uygula). Secret'lar redact() ile maskeli.
+    if a.dump_raw:
+        meta2 = dict(meta); meta2['target'] = thost; meta2['targetIp'] = tip
+        def _r(s, n): return redact(str(s or ''))[:n]
+        dumped = {
+            'meta': meta2,
+            'claims': [{'id': c.get('id'), 'title': _r(c.get('title'), 200), 'text': _r(c.get('text'), 4000)} for c in claims],
+            'artifacts': [{'id': art['id'], 'kind': art.get('kind'), 'command': _r(art.get('command'), 800),
+                           'rawText': _r(art.get('rawText'), 6000)} for art in artifacts],
+        }
+        print(json.dumps(dumped, ensure_ascii=False))
+        return
 
     # ——— TEŞHİS: --trace → her artefakt + her iddia kararı satır satır (bir daha kör kalma) ———
     if a.trace:
