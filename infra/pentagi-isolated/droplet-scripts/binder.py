@@ -43,6 +43,62 @@ CAT_KEYWORDS = {
 SEVERITY = {'rce': 'kritik', 'sqli': 'yüksek', 'lfi': 'yüksek', 'path_traversal': 'yüksek', 'xxe': 'yüksek',
             'ssrf': 'orta', 'info_disclosure': 'orta', 'xss': 'orta', 'open_redirect': 'düşük', 'bilinmeyen': 'düşük'}
 SEV_ORDER = {'kritik': 4, 'yüksek': 3, 'orta': 2, 'düşük': 1, 'temiz': 0}
+CAT_LABEL = {'xss': 'Reflected XSS', 'sqli': 'SQL Enjeksiyonu', 'lfi': 'Yerel Dosya Dahil Etme',
+             'path_traversal': 'Dizin Geçişi', 'rce': 'Uzaktan Kod Çalıştırma', 'ssrf': 'SSRF',
+             'xxe': 'XML Dış Varlık', 'info_disclosure': 'Bilgi İfşası', 'open_redirect': 'Açık Yönlendirme',
+             'bilinmeyen': 'Genel Bulgu'}
+
+# ————————————————————— "BULGU MU?" FİLTRESİ (P0-1) — ajan plan/araştırma/meta'sı KANIT/BULGU DEĞİL —————
+# KANIT yalnız GERÇEK istek/yanıt taşıyan 'terminal' artefaktıdır (curl + HTTP). Plan/arama/hafıza/tamamlama
+# mesajları (memorist/search/subtask_list/hack_result/done...) rapora GİRMEZ — ne kanıtlı, ne belirsiz, ne
+# hayalet; filtrelenir. Bu, "her ajan cümlesini bulgu sanma" + "plan metnini kanıt bağlama" deliğini kapatır.
+EVIDENCE_KINDS = {'terminal'}
+META_CLAIM_RE = re.compile(
+    r'(ortam hazırlığı|pasif keşif|uygulama haritalama|endpoint keşf|nihai rapor|vector database|'
+    r'known endpoints|no historical|subtask\s*\d*\s*(complete|tamamlan|başar)|connection discipline|'
+    r'evidence log|keşif|haritalama|araştırma|hazırlık|test edilmesi|göstergeler|analizi|eşleştir|'
+    r'doğrulanması|research|reconnaissance|preparation|plan\b|planla)', re.I)
+# İstek (curl) o kategoriye ait bir payload GÖNDERDİ mi — imza yalnız gerçekten prob atılmış istekte sayılır.
+PROBE_RE = {
+    'sqli': r"%27|'|--|\bunion\b|\bor\b\s+1=1|sleep\(|;--",
+    'lfi': r"\.\./|/etc/passwd|boot\.ini|%2e%2e",
+    'path_traversal': r"\.\./|%2e%2e",
+    'rce': r";\s*id\b|\|\s*id\b|`id`|\bwhoami\b|\bcat\b\s+/etc|%3bid",
+    'xxe': r"<!DOCTYPE|SYSTEM\s",
+    'ssrf': r"169\.254\.169\.254|metadata|localhost|127\.0\.0\.1|file://",
+}
+
+def artifact_is_evidence(a):
+    """KANIT = gerçek istek/yanıt taşıyan terminal artefaktı (kind='terminal'). Plan/arama/meta DEĞİL."""
+    return (a.get('kind') or '') in EVIDENCE_KINDS
+
+def request_endpoint(cmd):
+    """curl/komuttan İSTENEN path?query (host'tan sonra). Uydurma değil; gerçek istek satırından."""
+    m = re.search(r'https?://[a-z0-9.\-]+(/[^\s"\'\\]*)', cmd or '', re.I)
+    if m:
+        return m.group(1)[:120]
+    m = re.search(r'(/[\w./?=%&\-]{2,120})', cmd or '')
+    return (m.group(1) if m else '')
+
+def is_finding_claim(c):
+    """P0-1: iddia bir GÜVENLİK BULGUSU adayı mı? subtask/agentlog plan/narrative → HAYIR. Yalnız net
+    zafiyet iddiası (kategori tespit edildi) + GERÇEK path/param + plan-başlığı DEĞİL ise aday olur."""
+    title = c.get('title') or ''; text = c.get('text') or ''
+    if META_CLAIM_RE.search(title) or META_CLAIM_RE.search(text[:120]):
+        return False
+    if detect_category(f"{title} {text}") == 'bilinmeyen':
+        return False
+    ep = extract_endpoint(text)
+    if not ep or ep.startswith('/root') or ep.split('?')[0] in ('/yanıt', '/hata', '/cookie', '/san', '/hcl', '/'):
+        return False
+    return True
+
+def request_probes(cat, cmd):
+    """İstek o kategoriye ait bir payload taşıyor mu (info_disclosure isteğe özel payload gerektirmez)."""
+    if cat == 'info_disclosure':
+        return True
+    p = PROBE_RE.get(cat)
+    return bool(p and re.search(p, cmd or '', re.I))
 
 
 def detect_category(text):
@@ -99,6 +155,9 @@ def reflected_xss(cat, related):
         # needle almak normal HTML işaretlemesini (>​<a ) payload sanar → yanlış-pozitif (artefakt-temelli tarama).
         cmd = a.get('command', '')
         raw = a.get('rawText', '')
+        # (P0-2) Yanıt GERÇEK bir HTTP/HTML yanıtı olmalı — plan/JSON meta blob'unda marker görülmesi KANIT DEĞİL.
+        if not re.search(r'HTTP/\d|<html|<!doctype|<body|Content-Type:\s*text/html', raw, re.I):
+            continue
         for m in re.finditer(r'(zqx[a-z0-9]*marker[a-z0-9]*|<script\b[^>]*>|<img\b[^>]*>|["\'>]<[a-z]{1,10}[ >/])', cmd, re.I):
             marker = m.group(0)
             if marker in raw:
@@ -149,83 +208,80 @@ def off_target_request(bound, claim, target_host, target_ip):
     return foreign[0] if foreign else None                       # hepsi yabancı → off-target (ör. juiceshop)
 
 
+def _mk_evidence(a):
+    return {'rawExcerpt': redact(a.get('rawText', ''))[:1000], 'command': redact(a.get('command', ''))[:200]}
+
 def classify(claims, artifacts, target_host='', target_ip=''):
+    """KANIT-TEMELLİ üç-katman. KANIT yalnız gerçek istek/yanıt (terminal) artefaktından gelir; plan/meta
+    iddialar FİLTRELENİR (rapora girmez). Dönüş: (findings, filtered_meta_count)."""
     findings = []
-    for c in claims:
-        cat = detect_category(c.get('text', '') + ' ' + c.get('title', ''))
-        related = [a for a in artifacts if relates(a, c, cat)]
-        sig_re = SIG.get(cat)
-        sig_hit = None; bound = None
-        if sig_re:
-            # İMZA yalnız İLİŞKİLİ ham artefaktta aranır — ilişkisiz artefaktın imzasına bağlamak sahte-KANITLI.
-            for a in related:
-                m = re.search(sig_re, a.get('rawText', ''), re.I)
-                if m:
-                    sig_hit = {'artifactRef': a.get('id', '?'), 'signature': m.group(0)[:60],
-                               'detail': f"ham artefaktta deterministik imza: {m.group(0)[:60]!r}"}
-                    bound = a; break
-        beh = behavioral_sqli(cat, related, artifacts)
-        rxss = reflected_xss(cat, related)
-        if sig_hit:
-            tier, ev, reason = 'KANITLI', sig_hit, 'ham artefakta bağlı deterministik imza'
-        elif beh:
-            tier, ev, reason = 'KANITLI', beh, 'ham artefakta bağlı davranışsal anomali'
-            bound = next((a for a in related if a.get('id') == beh.get('artifactRef')), (related[0] if related else None))
-        elif rxss:
-            tier, ev, reason = 'KANITLI', rxss, 'reflected XSS — payload yanıtta ENCODE EDİLMEDEN yansıdı'
-            bound = next((a for a in related if a.get('id') == rxss.get('artifactRef')), (related[0] if related else None))
-        elif related:
-            tier, ev, reason = 'BELIRSIZ', {'artifactRef': related[0].get('id', '?'), 'signature': '', 'detail': 'artefakt var, kesin imza yok'}, 'artefakt var ama deterministik imza yok -> insan-inceleme'
-            bound = related[0]
-        else:
-            tier, ev, reason = 'HAYALET', None, 'iddiayı destekleyen ham artefakt yok (sıfır iz) -> elenir'
+    seen = set()      # dedup (kategori, endpoint-yolu)
+    filtered = 0      # bulgu-DEĞİL (plan/meta) sayısı
+    ev_arts = [a for a in artifacts if artifact_is_evidence(a)]
 
-        # HAM KANIT İÇERİĞİ (redakte) — rapor gerçek istek/yanıtı gösterebilsin (yalnız referans değil).
-        if ev is not None and bound is not None:
-            ev['rawExcerpt'] = redact(bound.get('rawText', ''))[:1000]
-            ev['command'] = redact(bound.get('command', ''))[:200]
+    def add(cat, endpoint, tier, ev, reason, sev=None):
+        key = (cat, (endpoint or '').split('?')[0])
+        if key in seen:          # aynı zafiyet (kategori+endpoint) tek kayda indir (dedup)
+            return
+        seen.add(key)
+        findings.append({'title': f"{CAT_LABEL.get(cat, cat)}{(' — ' + endpoint) if endpoint else ''}",
+                         'category': cat, 'endpoint': endpoint, 'severity': sev or SEVERITY.get(cat, 'düşük'),
+                         'tier': tier, 'evidence': ev, 'reason': reason})
 
-        # PROVENANCE: İSTEĞİN ATILDIĞI host hedef-DIŞI ise (ör. istek juiceshop'a atılmış) → HAYALET.
-        # Yalnız isteğin gönderildiği host'a bakar; yanıt GÖVDESİNDEKİ linkler (altoromutual.com) ya da
-        # --resolve'un IP kısmı (hedefin pinlenen IP'si) provenance'ı ETKİLEMEZ — onlar hedefin içeriği.
-        if tier in ('KANITLI', 'BELIRSIZ'):
-            off = off_target_request(bound, c, target_host, target_ip)
-            if off:
-                tier, ev = 'HAYALET', None
-                reason = f"provenance-dışı: istek hedef ({target_host or '?'}) yerine {off}'a atıldı → elenir"
-
-        findings.append({
-            'title': c.get('title') or (c.get('text', '')[:80]),
-            'category': cat, 'endpoint': extract_endpoint(c.get('text', '')),
-            'severity': SEVERITY.get(cat, 'düşük'),
-            'tier': tier, 'evidence': ev, 'reason': reason,
-        })
-
-    # ——— ARTEFAKT-TEMELLİ reflected XSS (claim-bağlanması GEREKMEZ) ———
-    # Kök-neden: classify claim-FIRST; ajan 39 artefakt üretse de prose-iddiası ilgili artefakta bağlanmazsa
-    # (relates() ıskalar) reflected marker KAYBOLUR → no-evidence. Oysa üç-katman ilkesi: KANIT = ham yanıttaki
-    # deterministik imza (ajanın sözü DEĞİL). Kör-eşik DEĞİL: marker yanıtta ENCODE-EDİLMEDEN yansıdıysa KANITLI;
-    # encode edilmişse (&lt;) reflected_xss zaten None döner (yanlış-pozitif yok). Provenance yine uygulanır.
-    proven_arts = {f['evidence']['artifactRef'] for f in findings if f['tier'] == 'KANITLI' and f.get('evidence')}
-    for a in artifacts:
-        rx = reflected_xss('xss', [a])
-        if not rx or a.get('id') in proven_arts:
+    # ——— (1) KANIT-TEMELLİ: yalnız gerçek istek/yanıt (terminal) artefaktlarında deterministik imza ———
+    for a in ev_arts:
+        cmd = a.get('command', '') or ''
+        if off_target_request(a, {'text': cmd}, target_host, target_ip):
             continue
-        if off_target_request(a, {'text': a.get('command', '')}, target_host, target_ip):
-            continue  # istek hedef-dışı bir host'a atılmışsa artefakt-temelli de eleme
-        endp = extract_endpoint(a.get('command', '')) or extract_endpoint(a.get('rawText', ''))
-        ev = dict(rx)
-        ev['rawExcerpt'] = redact(a.get('rawText', ''))[:1000]
-        ev['command'] = redact(a.get('command', ''))[:200]
-        findings.append({
-            'title': f"Reflected XSS{(' — ' + endp) if endp else ''}",
-            'category': 'xss', 'endpoint': endp,
-            'severity': SEVERITY.get('xss', 'orta'),
-            'tier': 'KANITLI', 'evidence': ev,
-            'reason': 'artefakt-temelli: payload yanıtta ENCODE EDİLMEDEN yansıdı (prose-iddia gerekmez)',
-        })
-        proven_arts.add(a.get('id'))
-    return findings
+        endp = request_endpoint(cmd)
+        rx = reflected_xss('xss', [a])                     # marker istek + yanıtta ENCODE-EDİLMEDEN (gerçek HTTP)
+        if rx:
+            ev = dict(rx); ev.update(_mk_evidence(a))
+            add('xss', endp, 'KANITLI', ev, 'reflected XSS — payload GERÇEK yanıt gövdesinde ENCODE EDİLMEDEN yansıdı')
+            continue
+        raw = a.get('rawText', '') or ''
+        for cat, sig_re in SIG.items():                    # yanıt gövdesinde imza — İSTEK o kategoriyi PROBLADIYSA
+            if not request_probes(cat, cmd):
+                continue
+            m = re.search(sig_re, raw, re.I)
+            if m:
+                ev = {'artifactRef': a.get('id', '?'), 'signature': m.group(0)[:60],
+                      'detail': f"gerçek YANITTA deterministik imza: {m.group(0)[:60]!r}", **_mk_evidence(a)}
+                add(cat, endp, 'KANITLI', ev, 'gerçek istek/yanıtta deterministik imza (istek o kategoriyi probladı)')
+                break
+    beh = behavioral_sqli('sqli', ev_arts, ev_arts)        # davranışsal SQLi (satır şişmesi) — yalnız kanıt artefaktları
+    if beh:
+        ba = next((a for a in ev_arts if a.get('id') == beh.get('artifactRef')), None)
+        if ba and not off_target_request(ba, {'text': ba.get('command', '')}, target_host, target_ip):
+            beh.update(_mk_evidence(ba))
+            add('sqli', request_endpoint(ba.get('command', '')), 'KANITLI', beh, 'davranışsal SQLi (baseline üstü satır şişmesi)')
+
+    # ——— (2) İDDİA-TEMELLİ: yalnız GERÇEK güvenlik iddiası (plan/meta filtrelenir) + KANIT artefaktı ———
+    for c in claims:
+        if not is_finding_claim(c):
+            filtered += 1                                  # plan/meta/araştırma/tamamlama → rapora GİRMEZ
+            continue
+        cat = detect_category(f"{c.get('title', '')} {c.get('text', '')}")
+        related = [a for a in ev_arts if relates(a, c, cat)]   # yalnız gerçek istek/yanıt artefaktları
+        if not related:
+            add(cat, extract_endpoint(c.get('text', '')), 'HAYALET', None,
+                'iddiayı destekleyen gerçek istek/yanıt kanıtı yok (sıfır iz) -> elenir')
+            continue
+        bound = related[0]
+        if off_target_request(bound, c, target_host, target_ip):
+            continue
+        sig_re = SIG.get(cat)
+        hit = sig_re and re.search(sig_re, bound.get('rawText', ''), re.I) and request_probes(cat, bound.get('command', ''))
+        endp = request_endpoint(bound.get('command', '')) or extract_endpoint(c.get('text', ''))
+        if hit:
+            ev = {'artifactRef': bound['id'], 'signature': hit.group(0)[:60],
+                  'detail': f"gerçek YANITTA deterministik imza: {hit.group(0)[:60]!r}", **_mk_evidence(bound)}
+            add(cat, endp, 'KANITLI', ev, 'gerçek istek/yanıtta deterministik imza')
+        else:
+            ev = {'artifactRef': bound['id'], 'signature': '', 'detail': 'gerçek istek/yanıt kanıtı var ama kesin imza yok', **_mk_evidence(bound)}
+            add(cat, endp, 'BELIRSIZ', ev, 'kanıt var ama deterministik imza yok -> insan-inceleme')
+
+    return findings, filtered
 
 
 # ————————————————————— GİRDİ KAYNAKLARI —————————————————————
@@ -334,24 +390,27 @@ def main():
     # ——— TEŞHİS: --trace → her artefakt + her iddia kararı satır satır (bir daha kör kalma) ———
     if a.trace:
         def cat_of(c): return detect_category(c.get('text', '') + ' ' + c.get('title', ''))
-        used = set()
-        fnd = classify(claims, artifacts, thost, tip)
-        for f in fnd:
-            if f.get('evidence'): used.add(f['evidence'].get('artifactRef'))
+        fnd, filtered = classify(claims, artifacts, thost, tip)
+        used = {f['evidence'].get('artifactRef') for f in fnd if f.get('evidence')}
         print(json.dumps({'phase': 'artifacts', 'count': len(artifacts)}, ensure_ascii=False))
         for art in artifacts:
             print(json.dumps({'artifact_id': art['id'], 'kaynak': art.get('kind'),
+                              'kanit_mi': artifact_is_evidence(art),   # yalnız terminal=gerçek istek/yanıt
                               'ham_ozet': (art.get('command', '')[:60] + ' | ' + art.get('rawText', '')[:140]),
                               'kanit_olarak_kullanildi': art['id'] in used}, ensure_ascii=False))
-        print(json.dumps({'phase': 'claims', 'count': len(claims)}, ensure_ascii=False))
-        for c, f in zip(claims, fnd):
-            cat = cat_of(c)
-            rel = [x['id'] for x in artifacts if relates(x, c, cat)]
-            print(json.dumps({'claim_id': c.get('id'), 'kategori': cat, 'iliskili_artefakt': rel[:6],
-                              'iliskili_sayi': len(rel), 'sinif': f['tier'], 'neden': f['reason'][:100]}, ensure_ascii=False))
+        print(json.dumps({'phase': 'claims', 'count': len(claims), 'filtered_meta': filtered}, ensure_ascii=False))
+        for c in claims:
+            fc = is_finding_claim(c)
+            print(json.dumps({'claim_id': c.get('id'), 'kategori': cat_of(c),
+                              'bulgu_adayi': fc, 'neden': ('gerçek güvenlik iddiası' if fc else 'plan/meta → filtrelendi (rapora girmez)')},
+                             ensure_ascii=False))
+        print(json.dumps({'phase': 'findings', 'count': len(fnd),
+                          'kanitli': sum(f['tier'] == 'KANITLI' for f in fnd),
+                          'belirsiz': sum(f['tier'] == 'BELIRSIZ' for f in fnd),
+                          'hayalet': sum(f['tier'] == 'HAYALET' for f in fnd)}, ensure_ascii=False))
         return
 
-    findings = classify(claims, artifacts, thost, tip)
+    findings, filtered = classify(claims, artifacts, thost, tip)
     kan = [f for f in findings if f['tier'] == 'KANITLI']
     bel = [f for f in findings if f['tier'] == 'BELIRSIZ']
     hay = [f for f in findings if f['tier'] == 'HAYALET']
@@ -368,11 +427,14 @@ def main():
     elim_reasons = {}
     for f in hay:
         rc = reason_code(f); elim_reasons[rc] = elim_reasons.get(rc, 0) + 1
+    if filtered:
+        elim_reasons['filtered-meta'] = filtered   # plan/araştırma/tamamlama gürültüsü (bulgu değil, rapora girmedi)
 
     out = {
         'meta': meta, 'artifactCount': len(artifacts), 'claimCount': len(claims),
         'summary': {'kanitli': len(kan), 'belirsiz': len(bel), 'hayalet': len(hay)},
-        'eliminatedReasons': elim_reasons,   # {off-target: n, no-evidence: n, weak-signature: n}
+        'filteredMeta': filtered,            # "bulgu mu?" filtresiyle elenen plan/meta iddia sayısı
+        'eliminatedReasons': elim_reasons,   # {off-target, no-evidence, weak-signature, filtered-meta}
         'overallRisk': overall_label,   # YALNIZ kanıtlı bulgulardan; asla şişirilmez
         'findings': findings,
     }

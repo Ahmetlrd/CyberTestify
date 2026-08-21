@@ -64,18 +64,32 @@ export const LEVEL_CFG: Record<Level, { capSec: number; capCalls: number; capCos
 
 function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
   const p = LEVEL_CFG[job.level].profile;
+  const d = job.domain;
   return (
-    `You are an authorized penetration tester. Target application: https://${job.domain}/ (the operator owns it). ` +
-    // Pinlenen IP'ye bağlan AMA Host/SNI = domain gönder → doğru vhost GERÇEK uygulamayı sunar (ham IP
-    // default sayfa döndürür; testfire gibi vhost'larda bu 18→0'ın bir nedeniydi). Anti-rebinding korunur.
-    `Connect ONLY to the pinned IP ${pinnedIp}, but ALWAYS send Host: ${job.domain} and use SNI ${job.domain} ` +
-    `(e.g. curl --resolve ${job.domain}:443:${pinnedIp} --resolve ${job.domain}:80:${pinnedIp} "https://${job.domain}/..."). ` +
-    `Do NOT re-resolve the domain and do NOT touch any other host. Aggressiveness (${job.level}): ${p}. ` +
-    `EVIDENCE RULES (mandatory): for EVERY request, print the FULL request line AND the FULL response body to the terminal — ` +
-    `the report is built ONLY from these captured request/response pairs, not from your prose. ` +
-    `Test reflected input on at least one injection point (e.g. a search/query parameter) with a UNIQUE marker string ` +
-    `(e.g. zqxmarker9173) and check whether it appears UNENCODED in the response body (reflected XSS). ` +
-    `Every finding you claim MUST reference a concrete captured request/response. Keep testing until the budget cap — do NOT stop early.`
+    `You are an authorized penetration tester. Target application: https://${d}/ (the operator owns it). ` +
+    // Pinlenen IP'ye bağlan AMA Host/SNI = domain gönder → doğru vhost GERÇEK uygulamayı sunar.
+    `Connect ONLY to the pinned IP ${pinnedIp}, but ALWAYS send Host: ${d} and SNI ${d} ` +
+    `(e.g. curl -sk --resolve ${d}:443:${pinnedIp} --resolve ${d}:80:${pinnedIp} "https://${d}/..."). ` +
+    `Do NOT re-resolve the domain and do NOT touch any other host. ` +
+    // (P1) İzole ortamda erişilemeyen araçlar — bunlara zaman/bütçe HARCAMA (bu koşuda ajan 11 dk'yı
+    // web_search/browser/memorist'te yaktı, asıl XSS payload'ını hiç göndermedi).
+    `ENVIRONMENT LIMITS — web_search, browser, and memorist/vector-DB are NOT reachable here; DO NOT use them ` +
+    `(they only waste budget and return nothing). Do NOT rely on any remembered "known vulnerabilities" list — ` +
+    `report ONLY what you directly observe in real request/response pairs you capture with curl. ` +
+    // (P1) XSS-ÖNCE: keşiften ÖNCE, ilk 2 dakikada canlı marker testi + TAM yanıt kaydı.
+    `FIRST ACTIONS (do these BEFORE any recon, within the first 2 minutes) — send a reflected-XSS probe with the ` +
+    `UNIQUE marker zqxmarker9173 to the real search endpoints and SAVE THE FULL RESPONSE BODY:\n` +
+    `  curl -sk --resolve ${d}:443:${pinnedIp} "https://${d}/bank/searchpage.jsp?searchStr=zqxmarker9173<script>alert(1)</script>"\n` +
+    `  curl -sk --resolve ${d}:443:${pinnedIp} "https://${d}/search.jsp?query=zqxmarker9173<script>alert(1)</script>"\n` +
+    `Then verify whether zqxmarker9173 appears UNENCODED (literal <script>, NOT &lt;script&gt;) in the response body. ` +
+    // (P1) minimum canlı checklist — hepsi curl ile, gerçek hedefte.
+    `Then a MINIMAL LIVE checklist via curl only: homepage, login page, at least one parameterized form, one more ` +
+    `marker-XSS reflection point, and one light SQLi probe (a single quote ' or ' OR 1=1) observing the response body. ` +
+    `Aggressiveness (${job.level}): ${p}. ` +
+    `EVIDENCE RULES (mandatory) — for EVERY request print the FULL curl command AND the FULL response (status line + body) ` +
+    `to the terminal; the report is built ONLY from these captured request/response pairs, NOT from your prose, plans, or ` +
+    `subtask lists. Every finding MUST reference a concrete captured request/response. Keep testing REAL endpoints until ` +
+    `the budget cap — do NOT stop early, and do NOT spend time on web_search/browser/memorist.`
   );
 }
 

@@ -38,8 +38,12 @@ def gql(q,v=None):
         headers={"Authorization":"Bearer "+TOK,"content-type":"application/json"},method="POST")
     return json.loads(urllib.request.urlopen(req,context=CTX,timeout=25).read().decode())
 def psql(sql):
-    return subprocess.run(["docker","exec","pgvector","psql","-U","postgres","-d","pentagidb","-tAc",sql],
-                          capture_output=True,text=True).stdout.strip()
+    # TIMEOUT: sorgu asılırsa (DB yük/lock) cap döngüsünü BLOKLAMASIN → süre hard-stop'u geciktirmesin.
+    try:
+        return subprocess.run(["docker","exec","pgvector","psql","-U","postgres","-d","pentagidb","-tAc",sql],
+                              capture_output=True,text=True,timeout=15).stdout.strip()
+    except Exception:
+        return ""
 
 def cut_anthropic_egress():
     """Anthropic'i KESİN kes: IP için EN ÜSTE DROP ekle (ESTABLISHED kuralının ÜSTÜNDE -> mevcut
@@ -144,13 +148,15 @@ def main():
     t0=time.time(); reason=None; last_calls=-1; stable_t=time.time()
     while True:
         el=int(time.time()-t0)
+        # SÜRE CAP EN BAŞTA — psql yavaş/asılı olsa BİLE 600s'de kesin keser (bu koşu 1402s'ye çıkmıştı:
+        # spend() sorguları döngüyü geciktiriyordu; artık süre önce + psql timeout'lu).
+        if el>=CAP_SEC: reason=f"SÜRE cap ({CAP_SEC}s)"; break
         calls,cost=spend()
         tcs=int(psql(f"SELECT count(*) FROM toolcalls WHERE flow_id={FID};") or 0)
         print(f"  [t={el}s] llm_calls={calls} tool_calls={tcs} cost=${cost:.4f}",flush=True)
         # SERT CAP — GERÇEK harcamaya bağlı; aşınca hard_stop (Anthropic-egress-kes + finishFlow + kill)
         if cost>=CAP_COST: reason=f"MALİYET cap (${CAP_COST})"; break
         if calls>=CAP_CALLS: reason=f"ÇAĞRI cap ({CAP_CALLS})"; break
-        if el>=CAP_SEC: reason=f"SÜRE cap ({CAP_SEC}s)"; break
         # BİTİŞ: flow terminal AMA yalnız harcama STABİL ise (yeni çağrı yok ~25s). 3a dersi: 'finished'
         # tek başına yetmez — backend async harcamaya devam edebilir; stabil olmadan bitirme.
         if calls!=last_calls: last_calls=calls; stable_t=time.time()
