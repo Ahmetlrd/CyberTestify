@@ -61,6 +61,8 @@ export const LEVEL_CFG: Record<Level, { capSec: number; capCalls: number; capCos
 };
 
 // Hedef IP yasak-aralık kontrolü artık targetGuard.ts'te (IPv4+IPv6, çok-IP, çöz+pinle).
+const DROPLET_RUN = '/opt/pentagi-run';  // droplet'te script/veri dizini (runner ile aynı sabit)
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
   const p = LEVEL_CFG[job.level].profile;
@@ -105,6 +107,7 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
   report?: RedTeamReport;
   rawFlow?: unknown;      // RETENTION: binder --dump-raw (transkript + offline re-bind kaynağı)
   binderTrace?: string;   // binder --trace (artefakt-bazlı karar izi, JSONL)
+  liveCostUsd?: number | null; // GERÇEK Anthropic harcaması (msgchains) — TEK kaynak (puller sayacı değil)
   error?: string;
 }> {
   const steps: StepLog[] = [];
@@ -114,6 +117,7 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
   let report: RedTeamReport | undefined;
   let rawFlow: unknown;
   let binderTrace: string | undefined;
+  let liveCostUsd: number | null = null;
 
   const record = async (s: StepLog) => {
     steps.push(s);
@@ -206,30 +210,62 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
       await record({ phase: 'verify', command: 'verify-egress.sh', ok: true, detail: '[dry-run] çalıştırılmadı' });
     }
 
-    // ——— 6) CAMPAIGN (cap'li; seviyeye göre profil/prompt; saldırı YALNIZ pinlenen IP'ye) ———
-    // KRİTİK: görev launch_cap.py'ye GERÇEK arg olarak geçer (base64 → tek token, shell-güvenli). ÖNCE
-    // `# CAMPAIGN_PROMPT=...` idi ama runner '#'-argümanlarını ATIYORDU → env hiç ulaşmıyordu → launch_cap
-    // gömülü juiceshop:3000 default'una düşüyordu (ajan bir saat juiceshop arıyordu, 0-kanıtlı kök-nedeni).
+    // ——— 6) CAMPAIGN (DETACHED + poll) — uzun-ömürlü TEK SSH KIRILGAN'dı ———
+    // KÖK NEDEN (kanıtlanmış): campaign, launch_cap.py'yi ~600s süren TEK bir SSH komutu olarak çalıştırıyordu.
+    // Ajan başlayınca docker konteyner/iptables churn'ü bu uzun-ömürlü SSH oturumunu düşürüp exit 255
+    // veriyordu → launch_cap SIGHUP ile ölüyor → 0 artefakt. (Puller'ın KISA per-poll SSH'ları aynı anda
+    // ÇALIŞIYORDU — llmCalls=1 yakalandı.) ÇÖZÜM: launch_cap'i droplet'te setsid ile DETACHED başlat (SSH
+    // oturumundan KOP), çıktıyı campaign.log'a yaz, bitince exit kodunu campaign.done'a yaz; orchestrator
+    // KISA SSH'larla poll'lar. SSH düşse bile bir sonraki poll yeniden bağlanır; launch_cap ölmez.
     const promptB64 = Buffer.from(levelPrompt(job, primaryIp), 'utf8').toString('base64');
-    await run('campaign', `${ctx.scriptsDir}/droplet-scripts/launch_cap.py`, [
-      '--prompt-b64', promptB64,
-      '--cap-sec', String(cfg.capSec), '--cap-calls', String(cfg.capCalls), '--cap-cost', String(cfg.capCostUsd),
-      '--target', job.domain, // D2/D3 kapısı: flow görevi hedefi içermeli, juiceshop içermemeli
-    ]);
+    const capArgs = `--prompt-b64 ${promptB64} --cap-sec ${cfg.capSec} --cap-calls ${cfg.capCalls} --cap-cost ${cfg.capCostUsd} --target ${job.domain}`;
+    if (!ctx.dryRun) {
+      const startCmd =
+        `rm -f ${DROPLET_RUN}/campaign.done ${DROPLET_RUN}/campaign.log 2>/dev/null; ` +
+        `setsid sh -c 'python3 ${DROPLET_RUN}/launch_cap.py ${capArgs} > ${DROPLET_RUN}/campaign.log 2>&1; echo $? > ${DROPLET_RUN}/campaign.done' </dev/null >/dev/null 2>&1 & echo CAMPAIGN_STARTED`;
+      const started = await ctx.exec(startCmd, []);
+      if (!/CAMPAIGN_STARTED/.test(started.stdout)) {
+        throw new Error(`campaign başlatılamadı: ${(started.stderr || started.stdout || '(çıktı yok)').slice(-300)}`);
+      }
+      await record({ phase: 'campaign', command: `launch_cap.py (detached, cap ${cfg.capSec}s)`, ok: true, detail: 'ajan arka planda başlatıldı — tamamlanması KISA-SSH poll ile bekleniyor (uzun-SSH kırılganlığı giderildi)' });
+
+      // Poll: campaign.done belirene kadar KISA SSH ile bekle. Süre tavanı capSec+150 (launch_cap kendi
+      // cap'inde biter; watchdog cap+60'ta nihai backstop). Poll'daki SSH düşmeleri ölümcül DEĞİL — atla.
+      const pollDeadline = Date.now() + (cfg.capSec + 150) * 1000;
+      let campExit: string | null = null;
+      while (Date.now() < pollDeadline) {
+        await sleep(8000);
+        const d = await ctx.exec(`cat ${DROPLET_RUN}/campaign.done 2>/dev/null`, []);
+        if (d.code === 0 && d.stdout.trim() !== '') { campExit = d.stdout.trim(); break; }
+      }
+      const tail = await ctx.exec(`tail -n 6 ${DROPLET_RUN}/campaign.log 2>/dev/null`, []);
+      await record({
+        phase: 'campaign', ok: campExit === '0' || campExit === null,
+        detail: `launch_cap ${campExit === null ? 'poll zaman aşımı (watchdog devrede)' : `bitti (exit ${campExit})`} — ${(tail.stdout || '').trim().replace(/\n+/g, ' · ').slice(-800)}`,
+      });
+      // NOT: campaign non-zero exit'te BILE bind'e devam edilir — o ana kadar üretilmiş artefaktlar
+      // (varsa) rapora bağlansın; boşsa dürüst boş rapor. (Eski davranış: abort → hiç rapor yok.)
+    } else {
+      await record({ phase: 'campaign', command: 'launch_cap.py', ok: true, detail: '[dry-run] çalıştırılmadı' });
+    }
 
     // ——— 7) BIND (PentAGI Postgres → 3-katman JSON; ham artefakta bağlı) ———
     // GERÇEK flow id: launch_cap.py onu /opt/pentagi-run/flow_id'e yazdı → droplet'te $(cat ...) ile oku
     // (placeholder <flowId> DEĞİL; bash onu redirect sanıyordu).
     // --target/--target-ip: PROVENANCE kuralı (hedef-dışı host referanslayan bulgu elenir).
-    const b = await run('bind', `${ctx.scriptsDir}/droplet-scripts/binder.py`, [
-      '--flow', '$(cat /opt/pentagi-run/flow_id)', '--target', job.domain, '--target-ip', primaryIp, '--json',
-    ]);
-    const binderOutput: BinderOutput = ctx.dryRun
-      ? { artifactCount: 0, claimCount: 0, summary: { kanitli: 0, belirsiz: 0, hayalet: 0 }, overallRisk: 'temiz', findings: [] }
-      : (JSON.parse(b.stdout) as BinderOutput);
+    // bind RESİLİENT: run() değil ctx.exec — binder hata verse/flow boş olsa BİLE abort ETME, dürüst boş
+    // rapor üret (campaign kısmen çalışmış olabilir; eldeki artefaktlar bağlansın).
+    let binderOutput: BinderOutput = { artifactCount: 0, claimCount: 0, summary: { kanitli: 0, belirsiz: 0, hayalet: 0 }, overallRisk: 'temiz', findings: [] };
+    if (!ctx.dryRun) {
+      const b = await ctx.exec(`${ctx.scriptsDir}/droplet-scripts/binder.py`,
+        ['--flow', '$(cat /opt/pentagi-run/flow_id)', '--target', job.domain, '--target-ip', primaryIp, '--json']);
+      try { if (b.stdout.trim()) binderOutput = JSON.parse(b.stdout) as BinderOutput; }
+      catch { await record({ phase: 'bind', ok: false, detail: `binder çıktısı ayrıştırılamadı (boş rapor): ${(b.stderr || b.stdout || '').slice(-300)}` }); }
+    }
 
-    // ——— 7b) ŞEFFAFLIK + RETENTION: droplet DURURKEN ham veri + karar-izini çek (best-effort; teardown
-    // sonrası transkript/re-bind için). run() DEĞİL ctx.exec: retention başarısızlığı raporu bloklamasın.
+    // ——— 7b) ŞEFFAFLIK + RETENTION + GERÇEK MALİYET: droplet DURURKEN ham veri + karar-izi + GERÇEK
+    // Anthropic harcaması (msgchains) çekilir. Maliyet TEK GERÇEK KAYNAKtan (msgchains) okunur — puller'ın
+    // canlı sayacı (cost async yazıldığı için) 0 kalsa BİLE, burada koşu-sonu gerçek harcama yakalanır.
     if (!ctx.dryRun) {
       const binderArgs = ['--flow', '$(cat /opt/pentagi-run/flow_id)', '--target', job.domain, '--target-ip', primaryIp];
       const binderBin = `${ctx.scriptsDir}/droplet-scripts/binder.py`;
@@ -241,8 +277,13 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
         const tr = await ctx.exec(binderBin, [...binderArgs, '--trace']);
         if (tr.code === 0 && tr.stdout.trim()) binderTrace = tr.stdout;
       } catch { /* best-effort */ }
+      try {
+        const c = await ctx.exec(`docker exec pgvector psql -U postgres -d pentagidb -tAc "SELECT COALESCE(SUM(usage_cost_in+usage_cost_out),0)::numeric(12,4) FROM msgchains;" 2>/dev/null`, []);
+        const n = Number((c.stdout || '').trim());
+        if (Number.isFinite(n) && n >= 0) liveCostUsd = n;
+      } catch { /* best-effort */ }
       const art = (rawFlow as { artifacts?: unknown[] } | undefined)?.artifacts?.length ?? 0;
-      await record({ phase: 'bind', ok: true, detail: `retention: ham-veri ${rawFlow ? `✓ (${art} artefakt)` : '—'} · karar-izi ${binderTrace ? '✓' : '—'}` });
+      await record({ phase: 'bind', ok: true, detail: `retention: ham-veri ${rawFlow ? `✓ (${art} artefakt)` : '—'} · karar-izi ${binderTrace ? '✓' : '—'} · gerçek maliyet ${liveCostUsd != null ? `$${liveCostUsd.toFixed(4)}` : '—'}` });
     }
 
     // ——— 8) REPORT (deterministik render; şişirme yok) ———
@@ -251,13 +292,14 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
       level: job.level,
       environment: job.environment,
       generatedAt: ctx.dryRun ? '<dry-run>' : new Date().toISOString(),
+      costUsd: liveCostUsd, // GERÇEK msgchains harcaması → rapor/panel TEK kaynaktan
     });
     await record({ phase: 'report', ok: true, detail: `rapor: kanıtlı ${report.counts.kanitli} · belirsiz ${report.counts.belirsiz} · elenen ${report.eliminated} · risk ${report.overallRisk}` });
 
-    return { ok: true, steps, report, rawFlow, binderTrace };
+    return { ok: true, steps, report, rawFlow, binderTrace, liveCostUsd };
   } catch (e) {
     await record({ phase: 'guard', ok: false, detail: (e as Error).message });
-    return { ok: false, steps, error: (e as Error).message, report, rawFlow, binderTrace };
+    return { ok: false, steps, error: (e as Error).message, report, rawFlow, binderTrace, liveCostUsd };
   } finally {
     // ——— 9) TEARDOWN — HER durumda (provision olduysa). Boşta maliyet sıfır. ———
     if (provisioned) {

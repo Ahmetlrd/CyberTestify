@@ -284,9 +284,13 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
     // SÜRE: gerçek başlangıç→bitiş (panelde 0s kalmasın; rapor meta'sına da geçir).
     const finishedAt = new Date();
     const elapsedSec = live?.startedAt ? Math.max(0, Math.round((finishedAt.getTime() - live.startedAt.getTime()) / 1000)) : null;
+    // (MALİYET TEK KAYNAK) GERÇEK harcama = orchestrator'ın koşu-sonu msgchains okuması (result.liveCostUsd).
+    // puller'ın canlı sayacı cost'u async yazıldığı için 0 kalabiliyordu ($0 gösterip arkada para yakma
+    // güven sorununun köküydü). Öncelik: msgchains gerçek harcaması → yoksa puller değeri.
+    const realCost = result.liveCostUsd != null ? result.liveCostUsd : (live?.costUsd ?? null);
     let reportJson: any = result.report ?? null;
     if (reportJson) {
-      reportJson = { ...reportJson, meta: { ...reportJson.meta, costUsd: live?.costUsd ?? null, llmCalls: live?.llmCalls ?? null, elapsedSec } };
+      reportJson = { ...reportJson, meta: { ...reportJson.meta, costUsd: realCost, llmCalls: live?.llmCalls ?? null, elapsedSec } };
     }
 
     // ŞEFFAFLIK + RETENTION: teardown droplet'i imha etmeden ÖNCE çekilen ham veri + karar-izi + transkript.
@@ -306,6 +310,7 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
         phase: result.ok ? 'teardown' : job.phase,
         finishedAt,
         ...(elapsedSec != null ? { elapsedSec } : {}),
+        ...(realCost != null ? { costUsd: realCost } : {}), // GERÇEK harcama panele de yazılır (TEK kaynak)
         error: result.error ?? null,
         ...(reportJson ? { reportJson } : {}),
         ...(rawFlow ? { rawFlowJson: rawFlow } : {}),
