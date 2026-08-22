@@ -179,22 +179,31 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
     }
 
     // ——— 5) VERIFY isolation (AMPİRİK): PİNLENEN hedef erişilir + CyberTestify BLOCKED. Geçmezse ABORT ———
-    // İki koşulu AYRI değerlendir + logla (muğlak "erişilemez YA DA açık" yerine hangisi tuttu).
-    const v = await run('verify', `${ctx.scriptsDir}/droplet-scripts/verify-egress.sh`, [primaryIp]);
+    // KARARI ÇIKIŞ KODUNDAN DEĞİL, BASILAN SONUÇTAN VER: verify-egress.sh iki GEREKLİ kontrolü (TARGET_OK
+    // + CYBERTESTIFY_BLOCKED) stdout'a basar; ama SON (bilgi-amaçlı metadata) docker-run'ı zaman zaman SSH
+    // oturumunu düşürüp exit 255 döndürüyordu → run() bunu "verify başarısız" sanıp gerekli kontroller GEÇMİŞ
+    // olsa BİLE koşuyu iptal ediyordu. Artık ctx.exec ile çağırıp (throw YOK) çıktının TAMAMINI logla, kararı
+    // parse edilen sonuçtan ver. Betik de artık deterministik exit veriyor; bu, transport 255'e karşı emniyet.
     if (!ctx.dryRun) {
-      const targetOk = /TARGET_OK/.test(v.stdout);
-      const ctBlocked = /CYBERTESTIFY_BLOCKED/.test(v.stdout);
+      const v = await ctx.exec(`${ctx.scriptsDir}/droplet-scripts/verify-egress.sh`, [primaryIp]);
+      const out = `${v.stdout || ''}\n${v.stderr || ''}`;
+      const targetOk = /TARGET_OK/.test(out);
+      const ctBlocked = /CYBERTESTIFY_BLOCKED/.test(out);
+      // (D2) verify-egress'in TÜM çıktısı log'a — bir daha "exit N ama neden" körlüğü olmasın.
+      await record({ phase: 'verify', command: `verify-egress.sh ${primaryIp} (exit ${v.code})`, ok: v.code === 0,
+        detail: out.trim().replace(/\n+/g, ' · ').slice(0, 1500) || '(çıktı yok)' });
       await record({
-        phase: 'verify',
-        ok: targetOk && ctBlocked,
-        detail: `izolasyon: hedef-erişilir=${targetOk ? '✓' : '✗'} · CyberTestify-BLOCKED=${ctBlocked ? '✓' : '✗'}`,
+        phase: 'verify', ok: targetOk && ctBlocked,
+        detail: `izolasyon: hedef-erişilir=${targetOk ? '✓' : '✗'} · CyberTestify-BLOCKED=${ctBlocked ? '✓' : '✗'}${v.code !== 0 ? ` (betik exit ${v.code} — karar çıktıdan verildi)` : ''}`,
       });
       if (!(targetOk && ctBlocked)) {
         const why = !ctBlocked
           ? 'CyberTestify AÇIK — CİDDİ izolasyon hatası (egress-harden bozuk); kampanya İPTAL'
-          : 'yetkili hedefe egress/erişim yok; kampanya İPTAL';
+          : 'yetkili hedefe egress/erişim yok (çıktı: ' + out.trim().slice(-200) + '); kampanya İPTAL';
         throw new Error(`izolasyon BAŞARISIZ: hedef-erişilir=${targetOk ? '✓' : '✗'}, CyberTestify-BLOCKED=${ctBlocked ? '✓' : '✗'} → ${why}`);
       }
+    } else {
+      await record({ phase: 'verify', command: 'verify-egress.sh', ok: true, detail: '[dry-run] çalıştırılmadı' });
     }
 
     // ——— 6) CAMPAIGN (cap'li; seviyeye göre profil/prompt; saldırı YALNIZ pinlenen IP'ye) ———
