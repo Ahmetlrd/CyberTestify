@@ -134,13 +134,16 @@ def passive_config_findings(artifacts, target_host, target_ip):
     """GERÇEK yanıt başlıklarından deterministik KANITLI config bulguları (düşük şiddet): Server sürüm
     ifşası, cookie güvenlik bayrağı eksiği, güvenlik-başlığı eksiği. Yalnız hedefe atılmış 2xx/3xx yanıtlar."""
     out = []
-    def emit(cat, endp, detail, a, sev, marker=''):
+    def emit(cat, endp, detail, a, sev, marker='', title=None):
+        # (P0-2b) Başlık HAM KANIT'te GÖRÜLEN veriyle birebir: jenerik "biri/birkaçı eksik" YERİNE gerçekten
+        # eksik olan bayrak/başlık isimle yazılır. title verilmezse CAT_LABEL+endpoint'e düşer.
         ev = {'artifactRef': a.get('id', '?'), 'signature': 'response-header', 'detail': detail, **_mk_evidence(a)}
         if marker:
             ev['marker'] = marker                              # P0-3: raporun vurgulayacağı ham satır anahtarı
-        out.append({'title': f"{CAT_LABEL.get(cat, cat)}{(' — ' + endp) if endp else ''}", 'category': cat,
+        ttl = title or f"{CAT_LABEL.get(cat, cat)}{(' — ' + endp) if endp else ''}"
+        out.append({'title': ttl, 'category': cat,
                     'endpoint': endp, 'severity': sev, 'tier': 'KANITLI', 'evidence': ev,
-                    'reason': 'gerçek yanıt başlığından deterministik gözlem (LLM yorumu değil)'})
+                    'reason': detail})   # (P0-2b) reason = spesifik gözlem (jenerik değil)
     # Her config türü SUNUCU-GENELİ olduğundan bir KEZ raporlanır (uç başına tekrar = gürültü).
     srv_done = cookie_done = hdr_done = False
     for a in artifacts:
@@ -160,20 +163,28 @@ def passive_config_findings(artifacts, target_host, target_ip):
             srv = hdrs.get('server', '')
             if re.search(r'\d', srv):
                 srv_done = True
-                emit('info_disclosure', '', f"Server başlığı sürüm/teknoloji ifşa ediyor: {srv[:70]!r} (sunucu geneli)", a, 'düşük', marker='Server:')
+                emit('info_disclosure', '', f"Server başlığı sürüm/teknoloji ifşa ediyor: {srv[:70]!r} (sunucu geneli)", a, 'düşük',
+                     marker='Server:', title=f"Bilgi İfşası — Server başlığı sürüm/teknoloji açığa çıkarıyor ({srv[:40]})")
         if not cookie_done:
             sc = hdrs.get('set-cookie', '')
             if sc:
+                present = [f.title() for f in ('httponly', 'secure', 'samesite') if f in sc.lower()]
                 miss = [f.title() for f in ('httponly', 'secure', 'samesite') if f not in sc.lower()]
                 if miss:
                     cookie_done = True
-                    emit('cookie_config', endp, f"Set-Cookie eksik güvenlik bayrağı: {', '.join(miss)} (oturum çerezi)", a, 'düşük', marker='Set-Cookie')
+                    # (P0-2b) Yalnız GERÇEKTEN eksik bayrağı isimle yaz + mevcut olanları da belirt (kanıtla birebir).
+                    det = f"Set-Cookie eksik güvenlik bayrağı: {', '.join(miss)}" + (f" — {', '.join(present)} zaten mevcut" if present else "") + " (oturum çerezi)"
+                    emit('cookie_config', endp, det, a, 'düşük', marker='Set-Cookie',
+                         title=f"Çerez Güvenlik Bayrağı Eksik: {', '.join(miss)}")
         if not hdr_done and 200 <= st < 300:
             hdr_done = True
             miss = [d for h, d in _SECURITY_HEADERS.items()
                     if h not in hdrs and (h != 'strict-transport-security' or 'https' in cmd.lower())]
             if miss:
-                emit('security_header', endp, 'Eksik güvenlik başlıkları — ' + '; '.join(miss), a, 'düşük', marker='HTTP/')
+                # (P0-2b) Yalnız gerçekten eksik başlık(lar) isimlendirilir (miss zaten sadece eksikleri içerir).
+                _hnames = [h.split('(')[-1].rstrip(')') if '(' in h else h for h in miss]
+                emit('security_header', endp, 'Eksik güvenlik başlıkları — ' + '; '.join(miss), a, 'düşük', marker='HTTP/',
+                     title='Eksik Güvenlik Başlığı: ' + ', '.join(_hnames))
     return out
 
 def tried_summary(artifacts):
@@ -525,6 +536,7 @@ def main():
     ap.add_argument('--json', action='store_true')
     ap.add_argument('--trace', action='store_true')   # her artefaktın/iddianın kararını satır satır dök (teşhis)
     ap.add_argument('--dump-raw', dest='dump_raw', action='store_true')  # RETENTION: ham claims+artifacts (redakteli)
+    ap.add_argument('--extra')  # (P0-1b) orkestratör DETERMİNİSTİK prob artefaktları (JSON {artifacts:[...]}) → merge
     a = ap.parse_args()
     if a.input:
         claims, artifacts, meta = load_from_json(a.input)
@@ -533,6 +545,21 @@ def main():
     else:
         print("hata: --flow <id> ya da --input <json> gerekli", file=sys.stderr)
         sys.exit(2)
+
+    # (P0-1b HARD-GATE) Orkestratörün kampanya SONRASI çalıştırdığı deterministik checklist probları
+    # (STEP2 SQLi, STEP3 2. yansıma) gerçek istek/yanıt olarak buraya eklenir — ajanın erken durması
+    # checklist kapsamını DÜŞÜREMEZ. Bunlar da normal terminal artefaktı gibi sınıflanır (aynı kanıt barı).
+    if a.extra:
+        try:
+            with open(a.extra) as fh:
+                ex = json.load(fh)
+            for art in (ex.get('artifacts') or []):
+                art.setdefault('kind', 'terminal')
+                if 'id' not in art:
+                    art['id'] = f"probe#{len(artifacts) + 1}"
+                artifacts.append(art)
+        except Exception as e:  # best-effort — merge başarısızsa koşuyu bozma
+            print(f"uyarı: --extra okunamadı ({e})", file=sys.stderr)
 
     thost = a.target or str(meta.get('target', '') or '')
     tip = a.target_ip or str(meta.get('targetIp', '') or '')

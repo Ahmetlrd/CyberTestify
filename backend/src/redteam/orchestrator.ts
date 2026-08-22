@@ -113,6 +113,44 @@ function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
   );
 }
 
+// ————————————————————— (P0-1b) DETERMİNİSTİK CHECKLIST HARD-GATE ————————————————————————
+// Ajanın erken durması (STEP1 XSS bulunca STEP2 SQLi/STEP3 2. yansımayı atlaması) checklist kapsamını
+// DÜŞÜREMESİN. Ajanın GERÇEKTEN dokunduğu parametreli uç-noktaları rawFlow'dan keşfedip, kampanya
+// SONRASI orkestratör bu uç-noktalara SQLi + 2. XSS probunu DETERMİNİSTİK atar ($0 LLM). Sonuçlar
+// binder'a --extra ile verilir → aynı kanıt barıyla sınıflanır (imza varsa kanıtlı, yoksa "denendi").
+export type ProbeTarget = { path: string; param?: string };
+export function discoverProbeTargets(rawFlow: unknown): ProbeTarget[] {
+  const arts = ((rawFlow as { artifacts?: Array<{ command?: string }> } | undefined)?.artifacts) ?? [];
+  const seen = new Map<string, ProbeTarget>();
+  for (const a of arts) {
+    const cmd = a?.command ?? '';
+    const um = /https?:\/\/[^/\s"']+(\/[^\s"'?\\]*)(?:\?([^\s"'\\]*))?/.exec(cmd);
+    if (!um) continue;
+    const path = um[1];
+    // statik varlık / kök / dosya-sistemi yolu → prob hedefi değil.
+    if (!path || path === '/' || /\.(png|jpe?g|gif|svg|ico|css|js|woff2?|map)$/i.test(path) || /^\/(root|work|tmp|etc|var|opt)\b/.test(path)) continue;
+    let param: string | undefined;
+    const dm = /--data-urlencode\s+["']?([A-Za-z0-9_.\-]+)=/.exec(cmd);
+    if (dm) param = dm[1];
+    else if (um[2]) { const q = /^([A-Za-z0-9_.\-]+)=/.exec(um[2]); if (q) param = q[1]; }
+    const key = `${path}|${param ?? ''}`;
+    if (!seen.has(key)) seen.set(key, { path, param });
+  }
+  // Parametreli uç-noktaları öne al (SQLi/XSS probu için param gerekli); en çok 3 hedef.
+  return [...seen.values()].sort((x, y) => (y.param ? 1 : 0) - (x.param ? 1 : 0)).slice(0, 3);
+}
+
+export type ProbePlan = { probes: Array<{ path: string; param?: string; payload: string; family: 'sqli' | 'xss' }> };
+export function buildProbePlan(targets: ProbeTarget[]): ProbePlan {
+  const probes: ProbePlan['probes'] = [];
+  for (const t of targets) {
+    if (!t.param) continue;                       // SQLi/XSS probu parametre ister
+    probes.push({ path: t.path, param: t.param, payload: `' OR '1'='1`, family: 'sqli' });         // STEP2
+    probes.push({ path: t.path, param: t.param, payload: `zqxprobemarker7788<script>alert(1)</script>`, family: 'xss' }); // STEP3 (2. yansıma)
+  }
+  return { probes };
+}
+
 /**
  * Pipeline'ı çalıştırır. dryRun'da exec ÇAĞRILMAZ (plan + guard doğrulanır). Gerçekte her faz
  * exec ile ilgili infra script'ini çalıştırır; teardown finally'de garanti.
@@ -275,32 +313,53 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
       await record({ phase: 'campaign', command: 'launch_cap.py', ok: true, detail: '[dry-run] çalıştırılmadı' });
     }
 
-    // ——— 7) BIND (PentAGI Postgres → 3-katman JSON; ham artefakta bağlı) ———
-    // GERÇEK flow id: launch_cap.py onu /opt/pentagi-run/flow_id'e yazdı → droplet'te $(cat ...) ile oku
-    // (placeholder <flowId> DEĞİL; bash onu redirect sanıyordu).
+    // ——— 7) POST-CAMPAIGN: retention(dump-raw) → (P0-1b) deterministik checklist prob geçişi → bind ———
+    // Sıra ÖNEMLİ: önce ham veri çekilir (hem retention hem prob-keşfi kaynağı), sonra ajanın atladığı
+    // checklist adımları ($0 LLM) deterministik olarak koşturulur, EN SON binder bunları --extra ile birleştirir.
+    // GERÇEK flow id: launch_cap.py onu /opt/pentagi-run/flow_id'e yazdı → droplet'te $(cat ...) ile oku.
     // --target/--target-ip: PROVENANCE kuralı (hedef-dışı host referanslayan bulgu elenir).
-    // bind RESİLİENT: run() değil ctx.exec — binder hata verse/flow boş olsa BİLE abort ETME, dürüst boş
-    // rapor üret (campaign kısmen çalışmış olabilir; eldeki artefaktlar bağlansın).
     let binderOutput: BinderOutput = { artifactCount: 0, claimCount: 0, summary: { kanitli: 0, belirsiz: 0, hayalet: 0 }, overallRisk: 'temiz', findings: [] };
+    const binderArgs = ['--flow', '$(cat /opt/pentagi-run/flow_id)', '--target', job.domain, '--target-ip', primaryIp];
+    const binderBin = `${ctx.scriptsDir}/droplet-scripts/binder.py`;
+    let extraFlag: string[] = [];
     if (!ctx.dryRun) {
-      const b = await ctx.exec(`${ctx.scriptsDir}/droplet-scripts/binder.py`,
-        ['--flow', '$(cat /opt/pentagi-run/flow_id)', '--target', job.domain, '--target-ip', primaryIp, '--json']);
-      try { if (b.stdout.trim()) binderOutput = JSON.parse(b.stdout) as BinderOutput; }
-      catch { await record({ phase: 'bind', ok: false, detail: `binder çıktısı ayrıştırılamadı (boş rapor): ${(b.stderr || b.stdout || '').slice(-300)}` }); }
-    }
-
-    // ——— 7b) ŞEFFAFLIK + RETENTION + GERÇEK MALİYET: droplet DURURKEN ham veri + karar-izi + GERÇEK
-    // Anthropic harcaması (msgchains) çekilir. Maliyet TEK GERÇEK KAYNAKtan (msgchains) okunur — puller'ın
-    // canlı sayacı (cost async yazıldığı için) 0 kalsa BİLE, burada koşu-sonu gerçek harcama yakalanır.
-    if (!ctx.dryRun) {
-      const binderArgs = ['--flow', '$(cat /opt/pentagi-run/flow_id)', '--target', job.domain, '--target-ip', primaryIp];
-      const binderBin = `${ctx.scriptsDir}/droplet-scripts/binder.py`;
+      // (7a) RETENTION dump-raw — ham claims+artifacts (redakteli). Prob keşfi de bundan beslenir.
       try {
         const dr = await ctx.exec(binderBin, [...binderArgs, '--dump-raw']);
         if (dr.code === 0 && dr.stdout.trim()) rawFlow = JSON.parse(dr.stdout);
       } catch { /* retention best-effort */ }
+
+      // (7b) P0-1b HARD-GATE: ajanın dokunduğu parametreli uç-noktalara SQLi(STEP2) + 2. XSS(STEP3)
+      // probunu DETERMİNİSTİK at. Ajan erken durmuş olsa bile checklist ailesi ≥2 garanti (imza yoksa
+      // "denendi, imza yok" olarak Pozitif Güvence'ye sayılır). Best-effort: hata koşuyu BOZMAZ.
       try {
-        const tr = await ctx.exec(binderBin, [...binderArgs, '--trace']);
+        const targets = discoverProbeTargets(rawFlow);
+        const plan = buildProbePlan(targets);
+        if (plan.probes.length > 0) {
+          const planB64 = Buffer.from(JSON.stringify(plan), 'utf8').toString('base64');
+          await ctx.exec(`bash -lc 'echo ${planB64} | base64 -d > ${DROPLET_RUN}/probe_plan.json'`, []);
+          const pr = await ctx.exec(`${ctx.scriptsDir}/droplet-scripts/run_probes.py`,
+            ['--plan', `${DROPLET_RUN}/probe_plan.json`, '--target', job.domain, '--target-ip', primaryIp, '--out', `${DROPLET_RUN}/extra_probes.json`]);
+          if (/PROBES_DONE/.test(pr.stdout)) {
+            extraFlag = ['--extra', `${DROPLET_RUN}/extra_probes.json`];
+            const fams = [...new Set(plan.probes.map((p) => p.family))].join('+');
+            await record({ phase: 'campaign', ok: true, detail: `checklist HARD-GATE: ${plan.probes.length} deterministik prob çalıştı (${fams}) — ${targets.filter((t) => t.param).map((t) => t.path).join(', ')} · ajan erken dursa bile STEP2/STEP3 kapsandı` });
+          } else {
+            await record({ phase: 'campaign', ok: true, detail: `checklist HARD-GATE: prob motoru çıktı vermedi (${(pr.stderr || pr.stdout || '').slice(-200)}) — yalnız ajan artefaktlarıyla devam` });
+          }
+        } else {
+          await record({ phase: 'campaign', ok: true, detail: 'checklist HARD-GATE: parametreli uç-nokta keşfedilemedi (ajan hiç parametre denemedi) — STEP2/STEP3 için deterministik prob atlanamadı, dürüstçe not edildi' });
+        }
+      } catch { /* prob geçişi best-effort — asla koşuyu bozma */ }
+
+      // (7c) BIND — ajan artefaktları + deterministik problar (--extra) birlikte sınıflanır. RESİLİENT.
+      const b = await ctx.exec(binderBin, [...binderArgs, ...extraFlag, '--json']);
+      try { if (b.stdout.trim()) binderOutput = JSON.parse(b.stdout) as BinderOutput; }
+      catch { await record({ phase: 'bind', ok: false, detail: `binder çıktısı ayrıştırılamadı (boş rapor): ${(b.stderr || b.stdout || '').slice(-300)}` }); }
+
+      // (7d) karar-izi (--extra dahil, trace bind ile tutarlı olsun) + GERÇEK maliyet (msgchains).
+      try {
+        const tr = await ctx.exec(binderBin, [...binderArgs, ...extraFlag, '--trace']);
         if (tr.code === 0 && tr.stdout.trim()) binderTrace = tr.stdout;
       } catch { /* best-effort */ }
       try {
@@ -309,7 +368,8 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
         if (Number.isFinite(n) && n >= 0) liveCostUsd = n;
       } catch { /* best-effort */ }
       const art = (rawFlow as { artifacts?: unknown[] } | undefined)?.artifacts?.length ?? 0;
-      await record({ phase: 'bind', ok: true, detail: `retention: ham-veri ${rawFlow ? `✓ (${art} artefakt)` : '—'} · karar-izi ${binderTrace ? '✓' : '—'} · gerçek maliyet ${liveCostUsd != null ? `$${liveCostUsd.toFixed(4)}` : '—'}` });
+      const fam = binderOutput.tried?.families?.length ?? 0;
+      await record({ phase: 'bind', ok: true, detail: `retention: ham-veri ${rawFlow ? `✓ (${art} artefakt)` : '—'} · karar-izi ${binderTrace ? '✓' : '—'} · teknik ailesi ${fam} · gerçek maliyet ${liveCostUsd != null ? `$${liveCostUsd.toFixed(4)}` : '—'}` });
 
       // (TEŞHİS) Ajan hiç subtask üretmediyse PentAGI'nin KENDİ container log'unu yakala — agent-loop neden
       // başlamadı görünür olsun (maskSecrets persistStep'te uygulanır). Yalnız 0 artefaktta çek (gürültü yok).

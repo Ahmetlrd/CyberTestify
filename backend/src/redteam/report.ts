@@ -235,10 +235,14 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
     return `${truncatedTop ? '<span class="elide">  ⋮ (önceki satırlar kısaltıldı)</span>\n' : ''}${body}${truncatedBot ? '\n<span class="elide">  ⋮ (sonraki satırlar kısaltıldı)</span>' : ''}`;
   };
 
+  const CONFIG_CATS = new Set(['cookie_config', 'security_header', 'info_disclosure']);
   const card = (f: BinderFinding, needsHuman: boolean) => {
     const rem = REMEDIATION[f.category] ?? REMEDIATION.bilinmeyen;
     const sc = SEVC[f.severity] ?? '#334155';
     const ev = f.evidence;
+    // (P0-2b) Config bulgularında Açıklama = HAM KANIT'ten okunan SPESİFİK gözlem (hangi bayrak/başlık
+    // gerçekten eksik), jenerik "biri/birkaçı eksik" şablonu DEĞİL. Diğer bulgularda kategori açıklaması.
+    const specific = CONFIG_CATS.has(f.category) && ev?.detail ? ev.detail : null;
     return `<div class="fcard">
       <div class="fhead">
         <span class="sev" style="background:${sc}">${esc((RISK_LABEL[f.severity] ?? f.severity)).toUpperCase()}</span>
@@ -248,7 +252,8 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
       <table class="fmeta"><tbody>
         <tr><th>Etkilenen uç-nokta</th><td>${f.endpoint ? `<code>${esc(f.endpoint)}</code>` : '—'}</td></tr>
         <tr><th>Kategori</th><td>${esc(rem.label)} <span class="ref">${esc(rem.cwe)} · ${esc(rem.owasp)}</span></td></tr>
-        <tr><th>Açıklama</th><td>${esc(rem.desc)}</td></tr>
+        <tr><th>Açıklama</th><td>${esc(specific ?? rem.desc)}</td></tr>
+        ${specific ? `<tr><th>Kategori bilgisi</th><td>${esc(rem.desc)}</td></tr>` : ''}
         <tr><th>İş etkisi</th><td>${esc(rem.impact)}</td></tr>
         <tr><th>Doğrulama</th><td>${esc(f.reason)}${ev?.signature ? ` · imza: <code>${esc(ev.signature)}</code>` : ''}</td></tr>
       </tbody></table>
