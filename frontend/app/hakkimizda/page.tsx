@@ -27,6 +27,38 @@ export default function Page() {
         <li>Her tarama sonunda şifreli, tek kullanımlık erişim koduyla açılan profesyonel bir PDF rapor.</li>
       </ul>
 
+      <h2 className="mt-8 text-lg font-bold text-brand">Metodolojimiz — Üç Katmanlı Doğrulama</h2>
+      <p className="mt-3 text-ink-soft">
+        CyberTestify, <strong>Otonom AI Red-Team + Deterministik Güvenlik Doğrulama</strong> yaklaşımını birleştirir.
+        Kişiye değil <strong>sürece ve kanıta</strong> güvenilir: her bulgu, motorun sözüne değil, saklanan
+        <strong> ham istek/yanıt kanıtına</strong> bağlanır. Bulgular üç katmanda şeffaf sınıflanır:
+      </p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-card border border-emerald-300/50 bg-emerald-50/40 p-4 text-sm text-ink-soft">
+          <div className="font-semibold text-emerald-700">Kanıtlı</div>
+          <p className="mt-1.5">Ham istek/yanıtta deterministik imzayla teyit edilmiş bulgu. Genel risk yalnız bunlardan türetilir.</p>
+        </div>
+        <div className="rounded-card border border-amber-300/50 bg-amber-50/40 p-4 text-sm text-ink-soft">
+          <div className="font-semibold text-amber-700">Belirsiz</div>
+          <p className="mt-1.5">Kanıt var ama kesin imza yok — gizlenmez; açıkça insan doğrulamasına bırakılır.</p>
+        </div>
+        <div className="rounded-card border border-line bg-brand-50/40 p-4 text-sm text-ink-soft">
+          <div className="font-semibold text-ink">Hayalet</div>
+          <p className="mt-1.5">Hiçbir ham izi olmayan (ya da hedef-dışı) iddialar elenir — yanlış-pozitif ve gürültü rapora girmez.</p>
+        </div>
+      </div>
+      <p className="mt-3 text-ink-soft">
+        <strong>Deterministik istek/yanıt kanıt kaydı:</strong> yalnızca teyit edilen bulgular raporlanır; teyit
+        edilemeyen iddialar dürüstçe elenir. Böylece rapor gürültüden arınır, güvenilir kalır.
+      </p>
+
+      <h2 className="mt-8 text-lg font-bold text-brand">İzolasyon &amp; Güvenlik</h2>
+      <ul className="mt-3 list-disc space-y-2 pl-5 text-ink-soft">
+        <li><strong>İzole sandbox / efemer altyapı:</strong> etkin testler, dışarı-çıkışı (egress) varsayılan-red olan, her koşuda tek-kullanımlık izole bir ortamda yürütülür.</li>
+        <li><strong>256-bit şifreli raporlar:</strong> her rapor uçtan uca şifrelidir ve size özel tek-kullanımlık erişim koduyla açılır.</li>
+        <li><strong>KVKK/GDPR odaklı işleme:</strong> yapısal PII maskeleme ve alan adı sahipliği doğrulaması ön koşuldur.</li>
+      </ul>
+
       <h2 className="mt-8 text-lg font-bold text-brand">Sınırlarımız</h2>
       <p className="mt-3 text-ink-soft">
         Hizmetimiz resmi bir denetim veya sertifikasyon (ör. ASV/QSA) yerine geçmez; farkındalık ve erken tespit

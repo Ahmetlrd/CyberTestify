@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { AutonomousSection } from '../../components/landing/AutonomousSection';
 import { InstantScan } from '../../components/landing/InstantScan';
+import { TrustSection } from '../../components/landing/TrustSection';
 import { JsonLd } from '../../components/JsonLd';
 import { VISIBLE_REGION_CODES, isRegionCode, getRegion, type RegionConfig } from '../../config/regions';
 import { getDict, type Dict } from '../../config/i18n';
@@ -359,6 +360,7 @@ export default function RegionHome({ params }: { params: { region: string } }) {
       <HowItWorks d={d} />
       <SolutionSection region={region} />
       <WhyUs d={d} />
+      <TrustSection region={region} />
       <Faq region={region} />
       <FinalCTA d={d} region={region} />
     </>
