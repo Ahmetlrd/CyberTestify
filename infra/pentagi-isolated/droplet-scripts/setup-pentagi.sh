@@ -103,8 +103,10 @@ YML
 if [ "${REDTEAM_NO_OPUS:-1}" = "1" ]; then
   # (P0-4) opus geçen HER config dosyasını yakala: yml/yaml/json/.env + uzantısız .env türevleri.
   # 1) model-ID biçimindeki opus referansları → sonnet. 2) *_MODEL=... opus içeren env satırları → sonnet.
+  # NOT: grep no-match'te 1, xargs 123 döndürür; set -euo pipefail altında bu script'i ÖLDÜRÜR
+  # (kalibrasyon başarılı olup 0 opus kaldığında bile) → her iki pipeline da `|| true` ile korunur.
   find /opt/pentagi -maxdepth 5 -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.json' -o -name '*.env' -o -name '.env' -o -name '.env.*' -o -name 'env' \) 2>/dev/null \
-    | xargs -r grep -liE 'opus' 2>/dev/null \
+    | { xargs -r grep -liE 'opus' 2>/dev/null || true; } \
     | while IFS= read -r f; do
         sed -i -E 's/claude-[a-z0-9._-]*opus[a-z0-9._-]*/claude-sonnet-4-5/g' "$f"
         sed -i -E 's/^([A-Z0-9_]*MODEL[A-Z0-9_]*=).*[Oo]pus.*/\1claude-sonnet-4-5/' "$f"
@@ -112,7 +114,7 @@ if [ "${REDTEAM_NO_OPUS:-1}" = "1" ]; then
   echo "[setup] ucuz kalibrasyon aktif: opus→sonnet (S1-test; güvenlik/izolasyon değişmez)"
   # (P0-4/P0-5 dürüstlük) Kalibrasyon SONRASI kalan opus referanslarını DÜRÜSTÇE say ve raporla — sıfır
   # değilse koşu opus sızdırabilir (config binary'e gömülü olabilir); sessizce "her şey sonnet" DEME.
-  _opus_left="$(find /opt/pentagi -maxdepth 5 -type f 2>/dev/null | xargs -r grep -liE 'opus' 2>/dev/null | wc -l | tr -d ' ')"
+  _opus_left="$(find /opt/pentagi -maxdepth 5 -type f 2>/dev/null | { xargs -r grep -liE 'opus' 2>/dev/null || true; } | wc -l | tr -d ' ')"
   echo "[setup] KALİBRASYON-TEYİT: kalan 'opus' geçen config dosyası = ${_opus_left} (0 hedeflenir; >0 ise koşu model dağılımından teyit edilmeli)"
 fi
 
