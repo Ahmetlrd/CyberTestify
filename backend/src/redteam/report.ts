@@ -10,7 +10,7 @@
  * 6 paketin deterministik rapor motoruna DOKUNMAZ (ayrı modül).
  */
 
-export type BinderEvidence = { artifactRef: string; signature: string; detail: string; rawExcerpt?: string; command?: string };
+export type BinderEvidence = { artifactRef: string; signature: string; detail: string; rawExcerpt?: string; command?: string; marker?: string };
 
 /** Kategori → iş-etkisi + önerilen düzeltme + referans (deterministik; LLM YOK). */
 export const REMEDIATION: Record<string, { label: string; desc: string; impact: string; fix: string; cwe: string; owasp: string }> = {
@@ -23,6 +23,8 @@ export const REMEDIATION: Record<string, { label: string; desc: string; impact: 
   info_disclosure: { label: 'Bilgi İfşası', desc: 'Ayrıntılı hata/yığın izi ya da iç bilgi dışarı sızıyor.', impact: 'İç yapı/teknoloji ifşası; sonraki saldırılara zemin.', fix: 'Üretimde ayrıntılı hataları kapatın; genel hata mesajı; teknoloji başlıklarını gizleyin.', cwe: 'CWE-200', owasp: 'A05:2021 Security Misconfiguration' },
   xxe: { label: 'XML Dış Varlık', desc: 'XML ayrıştırıcı dış varlıkları çözüyor.', impact: 'Dosya okuma, SSRF, hizmet reddi.', fix: 'XML ayrıştırıcıda dış varlıkları/DTD’yi kapatın.', cwe: 'CWE-611', owasp: 'A05:2021 Security Misconfiguration' },
   open_redirect: { label: 'Açık Yönlendirme', desc: 'Yönlendirme hedefi doğrulanmadan kullanıcı girdisinden alınıyor.', impact: 'Kimlik avı, güven kötüye kullanımı.', fix: 'Yönlendirme hedefini allowlist ile doğrulayın; göreli yol kullanın.', cwe: 'CWE-601', owasp: 'A01:2021 Broken Access Control' },
+  security_header: { label: 'Eksik Güvenlik Başlığı', desc: 'Yanıt, tarayıcı-tarafı korumaları sağlayan güvenlik başlıklarını içermiyor.', impact: 'Clickjacking, MIME-sniffing, karışık-içerik ve XSS etkisinin artması.', fix: 'X-Frame-Options/CSP frame-ancestors, X-Content-Type-Options: nosniff, HTTPS’te Strict-Transport-Security ve uygun bir Content-Security-Policy ekleyin.', cwe: 'CWE-693', owasp: 'A05:2021 Security Misconfiguration' },
+  cookie_config: { label: 'Çerez Güvenlik Bayrağı Eksik', desc: 'Oturum/kimlik çerezi HttpOnly/Secure/SameSite bayraklarından biri veya birkaçı olmadan ayarlanıyor.', impact: 'JS ile çerez okunması (XSS), şifresiz kanalda sızma, CSRF yüzeyi.', fix: 'Oturum çerezlerini HttpOnly + Secure + SameSite=Lax/Strict ile ayarlayın.', cwe: 'CWE-1004', owasp: 'A05:2021 Security Misconfiguration' },
   bilinmeyen: { label: 'Genel Bulgu', desc: 'Kategori kesin sınıflandırılamadı; ham kanıta göre değerlendirilmeli.', impact: 'Bağlama göre değişir.', fix: 'İlgili güvenlik kontrolünü uygulayın; ham kanıtı inceleyin.', cwe: '-', owasp: '-' },
 };
 export type BinderFinding = {
@@ -40,9 +42,13 @@ export type BinderOutput = {
   claimCount: number;
   summary: { kanitli: number; belirsiz: number; hayalet: number };
   eliminatedReasons?: Record<string, number>; // {off-target,no-evidence,weak-signature} — panel kırılımı
+  filteredMeta?: number;
+  tried?: { httpRequests?: number; terminalArtifacts?: number; endpointCount?: number; endpoints?: string[]; families?: string[] };
   overallRisk: 'kritik' | 'yüksek' | 'orta' | 'düşük' | 'temiz';
   findings: BinderFinding[];
 };
+
+export type TriedSummary = NonNullable<BinderOutput['tried']>;
 
 export type RedTeamReportMeta = {
   target: string;
@@ -51,6 +57,8 @@ export type RedTeamReportMeta = {
   generatedAt: string; // ISO — çağıran verir (deterministik render; modül saat okumaz)
   costUsd?: number | null;
   llmCalls?: number | null;
+  agentSec?: number | null;   // (P0-5) yalnız ajan (campaign) süresi
+  elapsedSec?: number | null; // (P0-5) toplam wall-clock süre (infra dahil)
 };
 
 export type RedTeamReport = {
@@ -61,6 +69,8 @@ export type RedTeamReport = {
   needsReview: BinderFinding[]; // BELİRSİZ
   eliminated: number;           // HAYALET (yalnız sayı)
   eliminatedReasons?: Record<string, number>; // panel kırılımı (rapora değil): off-target/no-evidence/weak-signature
+  tried?: BinderOutput['tried']; // P0-2 'Pozitif güvence' + P1 exec (gerçek sayaçlar)
+  filteredMeta?: number;
   disclaimer: string;
   // (BAĞIMSIZ WATCHDOG — D5) Koşu cap/watchdog tarafından ZORLA durdurulduysa dürüst not (yarım kalan
   // istek/yanıt çiftleri zaten P0-2 kuralı gereği kanıt sayılmaz — rapor bozulmaz, yalnız şeffaf bir not eklenir).
@@ -91,6 +101,8 @@ export function buildRedTeamReport(binder: BinderOutput, meta: RedTeamReportMeta
     needsReview,
     eliminated,
     eliminatedReasons: binder.eliminatedReasons ?? {},
+    tried: binder.tried,
+    filteredMeta: binder.filteredMeta,
     disclaimer: DISCLAIMER,
   };
 }
@@ -161,13 +173,67 @@ export function renderRedTeamHtml(r: RedTeamReport): string {
 /** Yapısal rapor → TAM, kendi-kendine yeten PROFESYONEL HTML dokümanı (panelde "Raporu Gör" + PDF).
  *  Deterministik paket görsel diliyle uyumlu (şiddet renkleri, düzeltme kutuları) — AMA "deneysel/
  *  deterministik-değil" disclaimer'ı prominent korunur; risk yalnız kanıtlıdan; üç-katman dürüstlüğü. */
+const NEXT_STEP: Record<string, string> = {
+  xss: 'Etkilenen parametrede çıktı-kodlaması (context-aware output encoding) uygulayın ve bir Content-Security-Policy ekleyin; ardından aynı uç-noktayı manuel/otomatik yeniden test edin.',
+  sqli: 'Etkilenen sorguyu parametreli (prepared statement) hale getirin ve girdiyi doğrulayın; ardından SQLi’ye özel derin bir test (ör. sqlmap ile yetkili kapsamda) planlayın.',
+  idor: 'Nesne erişiminde sunucu-tarafı yetki kontrolü (ownership check) ekleyin; benzer tüm uç-noktaları yetki matrisine göre gözden geçirin.',
+  info_disclosure: 'Sürüm/teknoloji bilgisini yanıt başlıklarından ve hata sayfalarından kaldırın; üretim ortamında ayrıntılı hata/izleme çıktısını kapatın.',
+  security_header: 'Eksik güvenlik başlıklarını (CSP, X-Frame-Options, X-Content-Type-Options, HSTS) ekleyin ve bir tarama ile teyit edin.',
+  cookie_config: 'Oturum çerezlerine HttpOnly + Secure + SameSite bayraklarını ekleyin ve tüm kimlik/oturum çerezlerini gözden geçirin.',
+  bilinmeyen: 'İlgili ham kanıtı bir güvenlik uzmanına doğrulatın ve uygun güvenlik kontrolünü uygulayın.',
+};
+
 export function renderRedTeamFullHtml(r: RedTeamReport): string {
   const esc = (s: string) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
   const SEVC: Record<string, string> = { kritik: '#b91c1c', yüksek: '#c2410c', orta: '#a16207', düşük: '#15803d', temiz: '#15803d' };
   const rc = SEVC[r.overallRisk] ?? '#334155';
+  const t = r.tried ?? {};
   const posture = r.proven.length === 0
     ? 'Bu koşuda kanıtlı bulgu üretilmedi — hedef, otonom ajanın denediği tekniklere karşı gözlemlenen kanıt üretmedi.'
     : `${r.proven.length} kanıtlı bulgu ham kanıta bağlandı. Genel risk yalnız bu kanıtlı bulgulardan türetildi (belirsiz/elenen şişirmez).`;
+
+  // P1 — "ne denendi (sayılarla)" cümlesi, orkestratörün gerçek sayaçlarından (uydurma yok).
+  const triedSentence = (() => {
+    const parts: string[] = [];
+    if (t.httpRequests != null) parts.push(`${t.httpRequests} HTTP isteği`);
+    if (t.endpointCount != null) parts.push(`${t.endpointCount} uç-nokta`);
+    if (t.families?.length) parts.push(`${t.families.length} teknik ailesi (${t.families.map(esc).join(', ')})`);
+    return parts.length ? parts.join(' · ') : 'ölçülebilir HTTP etkileşimi kaydedilmedi';
+  })();
+
+  // P1 — önerilen sonraki adım (ŞABLON, LLM değil): en yüksek şiddetli kanıtlı bulgudan türetilir.
+  const nextStep = (() => {
+    if (r.proven.length) {
+      const order = ['kritik', 'yüksek', 'orta', 'düşük'];
+      const top = [...r.proven].sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity))[0];
+      return NEXT_STEP[top.category] ?? NEXT_STEP.bilinmeyen;
+    }
+    if (r.needsReview.length) return 'İnceleme gerektiren bulguları bir güvenlik uzmanına doğrulatın; teyit edilenler için ilgili düzeltmeyi uygulayın.';
+    return 'Bu koşuda kanıtlı bulgu çıkmadı; kapsamı genişletmek için daha derin bir profil (S2/S3) veya kimlikli/yetkili bir tarama değerlendirilebilir.';
+  })();
+
+  // P0-3 — Kanıt kutusu: marker (imza) satırını ve çevresindeki 5-15 satırı vurgulu göster (dump değil).
+  const evSnippet = (raw: string, signature?: string): string => {
+    const lines = raw.replace(/\r/g, '').split('\n');
+    let hit = -1;
+    if (signature) {
+      const needle = signature.toLowerCase();
+      hit = lines.findIndex((ln) => ln.toLowerCase().includes(needle));
+    }
+    let start: number, end: number;
+    if (hit >= 0) { start = Math.max(0, hit - 6); end = Math.min(lines.length, hit + 7); }
+    else { start = 0; end = Math.min(lines.length, 14); }
+    const truncatedTop = start > 0;
+    const truncatedBot = end < lines.length;
+    const body = lines.slice(start, end).map((ln, i) => {
+      const isHit = start + i === hit;
+      const shown = ln.length > 400 ? ln.slice(0, 400) + ' …' : ln;
+      return isHit
+        ? `<span class="hit">${esc(shown) || ' '}</span>`
+        : esc(shown);
+    }).join('\n');
+    return `${truncatedTop ? '<span class="elide">  ⋮ (önceki satırlar kısaltıldı)</span>\n' : ''}${body}${truncatedBot ? '\n<span class="elide">  ⋮ (sonraki satırlar kısaltıldı)</span>' : ''}`;
+  };
 
   const card = (f: BinderFinding, needsHuman: boolean) => {
     const rem = REMEDIATION[f.category] ?? REMEDIATION.bilinmeyen;
@@ -187,9 +253,9 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
         <tr><th>Doğrulama</th><td>${esc(f.reason)}${ev?.signature ? ` · imza: <code>${esc(ev.signature)}</code>` : ''}</td></tr>
       </tbody></table>
       ${ev && (ev.rawExcerpt || ev.command) ? `<div class="evbox">
-        <div class="evlabel">HAM KANIT ${ev.artifactRef ? `<span class="ref">${esc(ev.artifactRef)}</span>` : ''} <span class="reddot">hassas veri redakte</span></div>
+        <div class="evlabel">HAM KANIT ${ev.artifactRef ? `<span class="ref">${esc(ev.artifactRef)}</span>` : ''}${ev.marker ? ` <span class="mk">marker: ${esc(ev.marker)}</span>` : (ev.signature ? ` <span class="mk">imza: ${esc(ev.signature)}</span>` : '')} <span class="reddot">hassas veri redakte</span></div>
         ${ev.command ? `<pre class="cmd">$ ${esc(ev.command)}</pre>` : ''}
-        ${ev.rawExcerpt ? `<pre class="raw">${esc(ev.rawExcerpt)}</pre>` : ''}
+        ${ev.rawExcerpt ? `<pre class="raw">${evSnippet(ev.rawExcerpt, ev.marker || ev.signature)}</pre>` : ''}
       </div>` : ''}
       <div class="fix"><b>Önerilen Düzeltme</b><br>${esc(rem.fix)}</div>
     </div>`;
@@ -216,7 +282,15 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
   .evlabel{color:#7dd3fc;font-size:11px;font-weight:700;margin-bottom:5px;letter-spacing:.3px}
   .reddot{color:#fca5a5;font-weight:600;font-size:10px;margin-left:6px}
   pre.cmd{color:#a3e635;margin:0 0 4px;font-size:11px;white-space:pre-wrap;word-break:break-all}
-  pre.raw{color:#cbd5e1;margin:0;font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto}
+  pre.raw{color:#cbd5e1;margin:0;font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:300px;overflow:auto;line-height:1.55}
+  pre.raw .hit{display:inline-block;width:100%;background:#facc15;color:#0b1120;font-weight:700;padding:1px 4px;border-radius:3px}
+  pre.raw .elide{color:#64748b;font-style:italic}
+  .mk{color:#fde68a;font-size:10px;font-weight:700;margin-left:6px}
+  .assur{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:8px 0 4px}
+  .assur .ac{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;text-align:center}
+  .assur .ac b{display:block;font-size:20px;color:#123f3a} .assur .ac span{font-size:11px;color:#64748b}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0} .chips code{background:#eef2f7;padding:2px 7px;border-radius:5px;font-size:11px}
+  ul.lim{margin:6px 0 0;padding-left:18px;font-size:12px;color:#475569} ul.lim li{margin:3px 0}
   .fix{margin:0 14px 12px;background:#ecfdf5;border:1px solid #a7f3d0;border-left:5px solid #059669;border-radius:6px;padding:9px 12px;font-size:12px;color:#065f46}
   .empty{color:#64748b;font-style:italic;padding:8px 0}
   table.scope{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px} .scope th,.scope td{border:1px solid #e2e8f0;padding:6px 10px;text-align:left} .scope th{background:#f1f5f9;color:#475569;width:180px}
@@ -229,8 +303,10 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
   <h2>Yönetici Özeti</h2>
   <div class="exec">
     <p style="margin:0 0 8px"><b>Ne test edildi:</b> Otonom bir yapay-zekâ ajanı (PentAGI), <b>${esc(r.meta.target)}</b> hedefini <b>${esc(r.meta.level)}</b> profilinde, izole ve cap-sınırlı bir ortamda gerçek saldırı teknikleriyle sınadı.</p>
-    <p style="margin:0 0 8px"><b>Nasıl çalışır (kanıt-bağlama):</b> Her iddia, ajanın SÖZÜNE değil saklanan HAM kanıta (gerçek istek/yanıt, terminal çıktısı) bağlanır. Deterministik imza varsa <b>kanıtlı</b>; kanıt var ama imza yoksa <b>inceleme gerektiren</b>; hiç izi yoksa (ya da hedef-dışı) <b>elenir</b>.</p>
-    <p style="margin:0"><b>Genel duruş:</b> ${esc(posture)}</p>
+    <p style="margin:0 0 8px"><b>Ne denendi (sayılarla):</b> ${esc(triedSentence)}. Kanıt-bağlama modeli: her iddia ajanın SÖZÜNE değil saklanan HAM kanıta (gerçek istek/yanıt, terminal çıktısı) bağlanır — deterministik imza varsa <b>kanıtlı</b>, kanıt var imza yoksa <b>inceleme gerektiren</b>, hiç izi yoksa (ya da hedef-dışı) <b>elenir</b>.</p>
+    <p style="margin:0 0 8px"><b>Ne bulunamadı / kapsam:</b> Bu koşu ${esc(r.meta.level)} profili ve cap-sınırlı süre/bütçeyle yürütüldü; kapsam yalnızca pinlenen hedeftir (${esc(r.meta.target)}). Kimlikli/derin testler ve S1 dışı teknik aileleri bu koşunun dışındadır — "kanıtlı bulgu yok", "zafiyet yok" anlamına gelmez.</p>
+    <p style="margin:0 0 8px"><b>Genel duruş:</b> ${esc(posture)}</p>
+    <p style="margin:0;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:8px 12px"><b>Önerilen sonraki adım:</b> ${esc(nextStep)}</p>
     <div class="sum">
       <div><span class="risk">Genel risk: ${esc(RISK_LABEL[r.overallRisk] ?? r.overallRisk)}</span></div>
       <div><b style="color:#15803d">${r.counts.kanitli}</b>Kanıtlı</div>
@@ -258,6 +334,40 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
     <tr><th>Provenance</th><td>Yalnız pinlenen hedefe (${esc(r.meta.target)}) ait bulgular; hedef-dışı host referansları elenir</td></tr>
     <tr><th>Bütçe</th><td>Sert cap (token/süre/maliyet); aşımda ağ-katmanı hard-stop${r.meta.costUsd != null ? ` — bu koşu ~$${Number(r.meta.costUsd).toFixed(4)}` : ''}</td></tr>
     <tr><th>Yetki</th><td>Sahiplik/yetki beyanı + risk onayı ile; ${esc(r.meta.environment)} ortamı</td></tr>
+  </tbody></table>
+
+  <h2>Pozitif Güvence — Denenen ve Kanıt Üretmeyen Kontroller</h2>
+  <p style="font-size:12px;color:#64748b;margin:0 0 8px">Aşağıdaki sayılar, ajanın hedefe karşı gerçekten yürüttüğü ve saklanan ham artefaktlarla ölçülen etkileşimlerdir (uydurma değil). Bir uç-noktanın burada yer alması, denendiği ama <b>bu koşuda</b> kanıtlı bir zafiyet imzası üretmediği anlamına gelir.</p>
+  <div class="assur">
+    <div class="ac"><b>${t.httpRequests ?? 0}</b><span>HTTP isteği</span></div>
+    <div class="ac"><b>${t.endpointCount ?? (t.endpoints?.length ?? 0)}</b><span>Denenen uç-nokta</span></div>
+    <div class="ac"><b>${t.terminalArtifacts ?? r.counts.artifacts}</b><span>Terminal artefaktı</span></div>
+    <div class="ac"><b>${t.families?.length ?? 0}</b><span>Teknik ailesi</span></div>
+  </div>
+  ${t.endpoints?.length ? `<div style="font-size:12px;color:#475569;margin-top:6px"><b>Denenen uç-noktalar:</b></div><div class="chips">${t.endpoints.map((e) => `<code>${esc(e)}</code>`).join('')}</div>` : ''}
+  ${t.families?.length ? `<div style="font-size:12px;color:#475569;margin-top:2px"><b>Denenen teknik aileleri:</b></div><div class="chips">${t.families.map((f) => `<code>${esc(f)}</code>`).join('')}</div>` : ''}
+
+  <h2>Sınırlılıklar</h2>
+  <ul class="lim">
+    <li><b>Deneyseldir ve deterministik değildir:</b> aynı hedefte tekrar çalıştırıldığında farklı sonuç verebilir; resmi bir denetim/sertifikasyon (ASV/QSA) yerine geçmez.</li>
+    <li><b>Cap-sınırlı kapsam:</b> koşu; süre, token ve maliyet capleriyle sınırlıdır. Cap dolduğunda tarama, kapsamı tam bitirmeden durabilir.</li>
+    <li><b>Yalnız gözlemlenen kanıt:</b> "kanıtlı bulgu yok" ifadesi "hedef güvenli" anlamına gelmez — yalnız bu koşuda ham kanıta bağlanan bir zafiyet üretilmediğini belirtir.</li>
+    <li><b>${esc(r.meta.level)} profili:</b> yalnızca bu profilin teknik aileleri denenmiştir; kimlikli/oturumlu derin testler ve S1 dışı vektörler kapsam dışıdır.</li>
+    <li><b>İnsan doğrulaması:</b> "inceleme gerektiren" bulgular otomatik teyit edilmemiştir; üretim kararları öncesi bir uzmana doğrulatılmalıdır.</li>
+  </ul>
+
+  <h2>Ek: Artefakt Özeti</h2>
+  <table class="scope"><tbody>
+    <tr><th>Ham artefakt (toplam)</th><td>${r.counts.artifacts}</td></tr>
+    <tr><th>HTTP isteği</th><td>${t.httpRequests ?? '—'}</td></tr>
+    <tr><th>Terminal artefaktı</th><td>${t.terminalArtifacts ?? '—'}</td></tr>
+    <tr><th>Kanıtlı / Belirsiz / Elenen</th><td>${r.counts.kanitli} / ${r.counts.belirsiz} / ${r.eliminated}</td></tr>
+    ${r.filteredMeta != null ? `<tr><th>Filtrelenen plan/meta iddia</th><td>${r.filteredMeta} <span class="ref">(subtask/plan/arama — kanıt değil, elendi)</span></td></tr>` : ''}
+    ${r.eliminatedReasons && Object.keys(r.eliminatedReasons).length ? `<tr><th>Eleme kırılımı</th><td>${Object.entries(r.eliminatedReasons).map(([k, v]) => `${esc(k)}: ${v}`).join(' · ')}</td></tr>` : ''}
+    ${r.meta.costUsd != null ? `<tr><th>Gerçek maliyet</th><td>~$${Number(r.meta.costUsd).toFixed(4)} <span class="ref">(msgchains token muhasebesinden)</span></td></tr>` : ''}
+    ${r.meta.llmCalls != null ? `<tr><th>LLM çağrısı</th><td>${r.meta.llmCalls}</td></tr>` : ''}
+    ${r.meta.agentSec != null ? `<tr><th>Ajan süresi</th><td>${r.meta.agentSec}s <span class="ref">(yalnız otonom ajanın çalıştığı süre — cap bu süreyi sınırlar)</span></td></tr>` : ''}
+    ${r.meta.elapsedSec != null ? `<tr><th>Toplam süre</th><td>${r.meta.elapsedSec}s <span class="ref">(uçtan uca: hazırlık + kurulum + ajan + bağlama + yıkım${r.meta.agentSec != null ? ` — fark ~${Math.max(0, r.meta.elapsedSec - r.meta.agentSec)}s altyapı fazlarıdır, ajan cap’i değil` : ''})</span></td></tr>` : ''}
   </tbody></table>
 
   <p style="margin-top:20px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:10px">Bu rapor deneysel otonom red-team katmanı tarafından üretilmiştir ve deterministik değildir; resmi bir güvenlik denetimi ya da uygunluk belgesi yerine geçmez. Kanıtlı bulgular ham kanıta bağlıdır; belirsiz bulgular insan doğrulaması bekler.</p>

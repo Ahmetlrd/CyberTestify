@@ -34,7 +34,7 @@ export type RedTeamJobInput = {
 export type Phase =
   | 'guard' | 'provision' | 'setup' | 'harden' | 'verify' | 'campaign' | 'bind' | 'report' | 'teardown';
 
-export type StepLog = { phase: Phase; command?: string; ok: boolean; detail: string };
+export type StepLog = { phase: Phase; command?: string; ok: boolean; detail: string; atMs?: number; sinceStartSec?: number };
 
 export type ExecResult = { code: number; stdout: string; stderr: string };
 export type ExecFn = (cmd: string, args: string[]) => Promise<ExecResult>;
@@ -95,9 +95,16 @@ function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
     `(literal <script>, NOT &lt;script&gt;) in the response BODY (the part AFTER the headers) of a 2xx response ` +
     `(that is a KANITLI reflected XSS). Only if BOTH the raw AND the encoded attempt return 4xx/5xx for an ` +
     `endpoint may you conclude "no finding" there. ` +
-    // (P1) minimum canlı checklist — hepsi curl ile, gerçek hedefte.
-    `Then a MINIMAL LIVE checklist via curl only: homepage, login page, at least one parameterized form, one more ` +
-    `marker-XSS reflection point, and one light SQLi probe (a single quote ' or ' OR 1=1) observing the response body. ` +
+    // (P0-1) ZORUNLU canlı checklist — numaralı adımlar; TEK bulgu bulmak koşuyu BİTİRMEZ.
+    `MANDATORY LIVE CHECKLIST (curl only, real target) — you MUST complete ALL of steps 1-3 for BOTH endpoints ` +
+    `even if you already confirmed one reflected XSS; finding ONE issue does NOT complete the run:\n` +
+    `  STEP 1 — reflected-XSS marker probe WITH encode-retry (the two endpoints above, each its own raw→encoded loop).\n` +
+    `  STEP 2 — light SQLi probe on at least one parameterized endpoint: append a single quote ' then ' OR 1=1 and ` +
+    `capture the FULL response body; look for a SQL error string OR a clear behavioral difference vs the baseline.\n` +
+    `  STEP 3 — a SECOND distinct reflected-XSS reflection point (a different parameter/page than STEP 1), same marker method.\n` +
+    `(Cookie security flags and Server/version information-disclosure are extracted DETERMINISTICALLY by the platform from ` +
+    `the responses you already captured — you do NOT need to assess them yourself; just make sure your STEP 1-3 requests ` +
+    `use "curl -sk -i" so the full headers, including Set-Cookie and Server, are captured.) ` +
     `Aggressiveness (${job.level}): ${p}. ` +
     `EVIDENCE RULES (mandatory) — for EVERY request print the FULL curl command AND the FULL response (status line + body) ` +
     `to the terminal; the report is built ONLY from these captured request/response pairs, NOT from your prose, plans, or ` +
@@ -117,6 +124,7 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
   rawFlow?: unknown;      // RETENTION: binder --dump-raw (transkript + offline re-bind kaynağı)
   binderTrace?: string;   // binder --trace (artefakt-bazlı karar izi, JSONL)
   liveCostUsd?: number | null; // GERÇEK Anthropic harcaması (msgchains) — TEK kaynak (puller sayacı değil)
+  agentSec?: number | null;    // (P0-5) yalnız ajan (campaign) süresi — infra hariç
   error?: string;
 }> {
   const steps: StepLog[] = [];
@@ -127,10 +135,17 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
   let rawFlow: unknown;
   let binderTrace: string | undefined;
   let liveCostUsd: number | null = null;
+  let agentSec: number | null = null;   // (P0-5) YALNIZ campaign (ajan) süresi — infra süresinden AYRI
 
+  // (P0-5) Faz-geçiş zaman damgaları: her adıma mutlak ms + koşu-başından geçen saniye ekle. dryRun'da
+  // Date sabit değil ama orchestrator Node'da çalışır (binder/report saf; onlar saat okumaz). Böylece
+  // "1120s > 600s" gibi süre farkı, self-report'a GÜVENMEDEN gerçek faz damgalarından açıklanır.
+  const runStartMs = Date.now();
   const record = async (s: StepLog) => {
-    steps.push(s);
-    if (ctx.onStep) await ctx.onStep(s);
+    const now = Date.now();
+    const stamped: StepLog = { ...s, atMs: now, sinceStartSec: Math.round((now - runStartMs) / 1000) };
+    steps.push(stamped);
+    if (ctx.onStep) await ctx.onStep(stamped);
   };
   // (D2 — GERÇEK HATAYI GİZLEME) Log satırı 2000 karakterde kırpılıyor; campaign komutu ~1.6KB base64
   // --prompt-b64 taşıdığı için GERÇEK hata (exit kodu + stderr) kırpılıp KAYBOLUYORDU. Uzun argümanları
@@ -236,6 +251,7 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
       if (!/CAMPAIGN_STARTED/.test(started.stdout)) {
         throw new Error(`campaign başlatılamadı: ${(started.stderr || started.stdout || '(çıktı yok)').slice(-300)}`);
       }
+      const campaignStartMs = Date.now();   // (P0-5) ajan-süresi ölçümü BURADA başlar (infra hariç)
       await record({ phase: 'campaign', command: `launch_cap.py (detached, cap ${cfg.capSec}s)`, ok: true, detail: 'ajan arka planda başlatıldı — tamamlanması KISA-SSH poll ile bekleniyor (uzun-SSH kırılganlığı giderildi)' });
 
       // Poll: campaign.done belirene kadar KISA SSH ile bekle. Süre tavanı capSec+150 (launch_cap kendi
@@ -247,10 +263,11 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
         const d = await ctx.exec(`cat ${DROPLET_RUN}/campaign.done 2>/dev/null`, []);
         if (d.code === 0 && d.stdout.trim() !== '') { campExit = d.stdout.trim(); break; }
       }
+      agentSec = Math.round((Date.now() - campaignStartMs) / 1000);   // (P0-5) GERÇEK ajan süresi
       const tail = await ctx.exec(`tail -n 6 ${DROPLET_RUN}/campaign.log 2>/dev/null`, []);
       await record({
         phase: 'campaign', ok: campExit === '0' || campExit === null,
-        detail: `launch_cap ${campExit === null ? 'poll zaman aşımı (watchdog devrede)' : `bitti (exit ${campExit})`} — ${(tail.stdout || '').trim().replace(/\n+/g, ' · ').slice(-800)}`,
+        detail: `launch_cap ${campExit === null ? 'poll zaman aşımı (watchdog devrede)' : `bitti (exit ${campExit})`} · ajan-süresi ${agentSec}s (cap ${cfg.capSec}s) — ${(tail.stdout || '').trim().replace(/\n+/g, ' · ').slice(-760)}`,
       });
       // NOT: campaign non-zero exit'te BILE bind'e devam edilir — o ana kadar üretilmiş artefaktlar
       // (varsa) rapora bağlansın; boşsa dürüst boş rapor. (Eski davranış: abort → hiç rapor yok.)
@@ -306,19 +323,23 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
     }
 
     // ——— 8) REPORT (deterministik render; şişirme yok) ———
+    const totalSec = Math.round((Date.now() - runStartMs) / 1000);   // (P0-5) toplam wall-clock (infra dahil)
     report = buildRedTeamReport(binderOutput, {
       target: job.domain,
       level: job.level,
       environment: job.environment,
       generatedAt: ctx.dryRun ? '<dry-run>' : new Date().toISOString(),
       costUsd: liveCostUsd, // GERÇEK msgchains harcaması → rapor/panel TEK kaynaktan
+      agentSec,             // (P0-5) yalnız ajan süresi
+      elapsedSec: totalSec, // (P0-5) toplam süre (provision+setup+campaign+bind+report) — runner override edebilir
     });
-    await record({ phase: 'report', ok: true, detail: `rapor: kanıtlı ${report.counts.kanitli} · belirsiz ${report.counts.belirsiz} · elenen ${report.eliminated} · risk ${report.overallRisk}` });
+    // (P0-5) Süre farkını DÜRÜSTÇE açıkla: ajan-süresi cap'i aşamaz; toplam süre infra fazlarını da içerir.
+    await record({ phase: 'report', ok: true, detail: `rapor: kanıtlı ${report.counts.kanitli} · belirsiz ${report.counts.belirsiz} · elenen ${report.eliminated} · risk ${report.overallRisk} · süre: ajan ${agentSec ?? '?'}s / toplam ${totalSec}s (fark = infra: provision+setup+bind+teardown)` });
 
-    return { ok: true, steps, report, rawFlow, binderTrace, liveCostUsd };
+    return { ok: true, steps, report, rawFlow, binderTrace, liveCostUsd, agentSec };
   } catch (e) {
     await record({ phase: 'guard', ok: false, detail: (e as Error).message });
-    return { ok: false, steps, error: (e as Error).message, report, rawFlow, binderTrace, liveCostUsd };
+    return { ok: false, steps, error: (e as Error).message, report, rawFlow, binderTrace, liveCostUsd, agentSec };
   } finally {
     // ——— 9) TEARDOWN — HER durumda (provision olduysa). Boşta maliyet sıfır. ———
     if (provisioned) {

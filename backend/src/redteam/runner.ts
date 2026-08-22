@@ -295,7 +295,9 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
     const realCost = result.liveCostUsd != null ? result.liveCostUsd : (live?.costUsd ?? null);
     let reportJson: any = result.report ?? null;
     if (reportJson) {
-      reportJson = { ...reportJson, meta: { ...reportJson.meta, costUsd: realCost, llmCalls: live?.llmCalls ?? null, elapsedSec } };
+      // (P0-5) elapsedSec = GERÇEK toplam wall-clock (startedAt→finishedAt, TEK kaynak); agentSec =
+      // orchestrator'ın ölçtüğü yalnız-ajan süresi. İkisi rapora AYRI yazılır ("1120s>600s" dürüstçe açıklanır).
+      reportJson = { ...reportJson, meta: { ...reportJson.meta, costUsd: realCost, llmCalls: live?.llmCalls ?? null, elapsedSec, agentSec: result.agentSec ?? reportJson.meta?.agentSec ?? null } };
     }
 
     // ŞEFFAFLIK + RETENTION: teardown droplet'i imha etmeden ÖNCE çekilen ham veri + karar-izi + transkript.

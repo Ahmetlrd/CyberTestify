@@ -41,11 +41,13 @@ CAT_KEYWORDS = {
 }
 # Kabaca şiddet (yalnız KANITLI bulgularda genel-risk için; asla şişirilmez).
 SEVERITY = {'rce': 'kritik', 'sqli': 'yüksek', 'lfi': 'yüksek', 'path_traversal': 'yüksek', 'xxe': 'yüksek',
-            'ssrf': 'orta', 'info_disclosure': 'orta', 'xss': 'orta', 'open_redirect': 'düşük', 'bilinmeyen': 'düşük'}
+            'ssrf': 'orta', 'info_disclosure': 'orta', 'xss': 'orta', 'open_redirect': 'düşük', 'bilinmeyen': 'düşük',
+            'security_header': 'düşük', 'cookie_config': 'düşük'}
 SEV_ORDER = {'kritik': 4, 'yüksek': 3, 'orta': 2, 'düşük': 1, 'temiz': 0}
 CAT_LABEL = {'xss': 'Reflected XSS', 'sqli': 'SQL Enjeksiyonu', 'lfi': 'Yerel Dosya Dahil Etme',
              'path_traversal': 'Dizin Geçişi', 'rce': 'Uzaktan Kod Çalıştırma', 'ssrf': 'SSRF',
              'xxe': 'XML Dış Varlık', 'info_disclosure': 'Bilgi İfşası', 'open_redirect': 'Açık Yönlendirme',
+             'security_header': 'Eksik Güvenlik Başlığı', 'cookie_config': 'Çerez Güvenlik Bayrağı',
              'bilinmeyen': 'Genel Bulgu'}
 
 # ————————————————————— "BULGU MU?" FİLTRESİ (P0-1) — ajan plan/araştırma/meta'sı KANIT/BULGU DEĞİL —————
@@ -102,6 +104,99 @@ def parse_http(raw):
     body = after[sep.end():] if sep else ''
     return status, body
 
+def http_header_block(raw):
+    """HTTP durum satırından sonraki başlık bloğunu {küçük-harf: değer} olarak döndür (ilk boş satıra kadar)."""
+    if not raw:
+        return {}
+    m = _HTTP_STATUS_RE.search(raw)
+    if not m:
+        return {}
+    after = raw[m.end():]
+    sep = re.search(r'\r?\n\r?\n', after)
+    block = after[:sep.start()] if sep else after
+    hdrs = {}
+    for line in block.split('\n'):
+        if ':' in line:
+            k, v = line.split(':', 1)
+            key = k.strip().lower()
+            hdrs[key] = (hdrs[key] + ' ' + v.strip()) if key in hdrs else v.strip()
+    return hdrs
+
+# (P0-1 madde 4-5) Deterministik pasif config gözlemleri — GERÇEK response başlıklarından, LLM YOK.
+_SECURITY_HEADERS = {
+    'x-frame-options': 'Clickjacking koruması yok (X-Frame-Options)',
+    'content-security-policy': 'İçerik Güvenlik Politikası yok (Content-Security-Policy)',
+    'x-content-type-options': 'MIME-sniffing koruması yok (X-Content-Type-Options: nosniff)',
+    'strict-transport-security': 'HSTS yok (Strict-Transport-Security)',
+}
+
+def passive_config_findings(artifacts, target_host, target_ip):
+    """GERÇEK yanıt başlıklarından deterministik KANITLI config bulguları (düşük şiddet): Server sürüm
+    ifşası, cookie güvenlik bayrağı eksiği, güvenlik-başlığı eksiği. Yalnız hedefe atılmış 2xx/3xx yanıtlar."""
+    out = []
+    def emit(cat, endp, detail, a, sev, marker=''):
+        ev = {'artifactRef': a.get('id', '?'), 'signature': 'response-header', 'detail': detail, **_mk_evidence(a)}
+        if marker:
+            ev['marker'] = marker                              # P0-3: raporun vurgulayacağı ham satır anahtarı
+        out.append({'title': f"{CAT_LABEL.get(cat, cat)}{(' — ' + endp) if endp else ''}", 'category': cat,
+                    'endpoint': endp, 'severity': sev, 'tier': 'KANITLI', 'evidence': ev,
+                    'reason': 'gerçek yanıt başlığından deterministik gözlem (LLM yorumu değil)'})
+    # Her config türü SUNUCU-GENELİ olduğundan bir KEZ raporlanır (uç başına tekrar = gürültü).
+    srv_done = cookie_done = hdr_done = False
+    for a in artifacts:
+        if not (artifact_is_evidence(a) and is_http_artifact(a)):
+            continue
+        cmd = a.get('command', '') or ''; raw = a.get('rawText', '') or ''
+        if off_target_request(a, {'text': cmd}, target_host, target_ip):
+            continue
+        st, _ = parse_http(raw)
+        # Yalnız BAŞARILI/YÖNLENDİRME (2xx/3xx) yanıtları — uygulamaya GERÇEKTEN ulaşıldığında. 4xx/5xx
+        # reddedilen prob yanıtıdır; onun başlıklarından config bulgusu çıkarmak gürültü olur.
+        if st is None or not (200 <= st < 400):
+            continue
+        hdrs = http_header_block(raw)
+        endp = (request_endpoint(cmd) or '/').split('?')[0]         # temiz PATH (payload'suz)
+        if not srv_done:
+            srv = hdrs.get('server', '')
+            if re.search(r'\d', srv):
+                srv_done = True
+                emit('info_disclosure', '', f"Server başlığı sürüm/teknoloji ifşa ediyor: {srv[:70]!r} (sunucu geneli)", a, 'düşük', marker='Server:')
+        if not cookie_done:
+            sc = hdrs.get('set-cookie', '')
+            if sc:
+                miss = [f.title() for f in ('httponly', 'secure', 'samesite') if f not in sc.lower()]
+                if miss:
+                    cookie_done = True
+                    emit('cookie_config', endp, f"Set-Cookie eksik güvenlik bayrağı: {', '.join(miss)} (oturum çerezi)", a, 'düşük', marker='Set-Cookie')
+        if not hdr_done and 200 <= st < 300:
+            hdr_done = True
+            miss = [d for h, d in _SECURITY_HEADERS.items()
+                    if h not in hdrs and (h != 'strict-transport-security' or 'https' in cmd.lower())]
+            if miss:
+                emit('security_header', endp, 'Eksik güvenlik başlıkları — ' + '; '.join(miss), a, 'düşük', marker='HTTP/')
+    return out
+
+def tried_summary(artifacts):
+    """P0-2 'Pozitif güvence' + P1 exec: gerçek artefakt sayaçlarından denenen kapsam (LLM YOK)."""
+    ev = [a for a in artifacts if artifact_is_evidence(a)]
+    http = [a for a in ev if is_http_artifact(a)]
+    endpoints = set()
+    for a in http:
+        e = request_endpoint(a.get('command', '')).split('?')[0]
+        # HTML-etiket parçalarını (</script> → /script gibi) ele — bunlar endpoint değil.
+        if e and e != '/' and not re.fullmatch(r'/(script|style|body|html|div|span|br|img|a|p|head)', e):
+            endpoints.add(e)
+    fams = set()
+    for a in http:
+        cmd = (a.get('command', '') or '').lower()
+        if 'zqxmarker' in cmd or '<script' in cmd or '%3cscript' in cmd:
+            fams.add('XSS')
+        for cat in ('sqli', 'lfi', 'rce', 'path_traversal', 'ssrf'):
+            if request_probes(cat, cmd):
+                fams.add(CAT_LABEL.get(cat, cat))
+    return {'httpRequests': len(http), 'terminalArtifacts': len(ev), 'endpointCount': len(endpoints),
+            'endpoints': sorted(endpoints)[:25], 'families': sorted(fams)}
+
 def is_http_artifact(a):
     """Artefakt GERÇEK bir HTTP istek/yanıtı mı içeriyor? (recon shell çıktısı — ls/mkdir/dizin listesi —
     bir zafiyet kanıtı olamaz). HTTP durum satırı VEYA curl komutu VEYA HTML gövdesi varsa evet."""
@@ -118,8 +213,13 @@ def request_endpoint(cmd):
     m = re.search(r'https?://[a-z0-9.\-]+(/[^\s"\'\\]*)', cmd or '', re.I)
     if m:
         return m.group(1)[:120]
-    m = re.search(r'(/[\w./?=%&\-]{2,120})', cmd or '')
-    return (m.group(1) if m else '')
+    # URL yoksa: dosya-sistemi yollarını (cwd/mkdir: /root /work /tmp ...) ATLA — bunlar endpoint değil.
+    for mm in re.finditer(r'(/[\w./?=%&\-]{2,120})', cmd or ''):
+        p = mm.group(1)
+        if re.match(r'/(root|work|tmp|opt|var|home|etc|usr|bin|dev|proc|sys|mnt|run)\b', p):
+            continue
+        return p
+    return ''
 
 def is_finding_claim(c):
     """P0-1: iddia bir GÜVENLİK BULGUSU adayı mı? subtask/agentlog plan/narrative → HAYIR. Yalnız net
@@ -206,7 +306,13 @@ def reflected_xss(cat, related):
                 idx = body.find(marker)
                 around = body[max(0, idx - 4):idx + len(marker) + 4]
                 if '&lt;' not in around and '&gt;' not in around and '%3c' not in around.lower():
-                    return {'artifactRef': a.get('id', '?'), 'signature': 'reflected-unencoded',
+                    # (P0-3) Kanıt kutusu için REFLECTION noktasına ODAKLI ham kesit — gövdenin başı 1000-char
+                    # cap'ine takılıp reflection'ı kaçırmasın diye burada üretilir (dump değil, satır penceresi).
+                    fs = max(0, idx - 180); fe = min(len(body), idx + len(marker) + 180)
+                    focus = redact(body[fs:fe])
+                    excerpt = f"HTTP/1.1 {status} (gerçek yanıt · gövde kısaltıldı, reflection çevresi)\n…\n{focus}"
+                    return {'artifactRef': a.get('id', '?'), 'signature': 'reflected-unencoded', 'marker': marker,
+                            'rawExcerpt': excerpt[:1200],
                             'detail': f"payload {marker[:34]!r} HTTP {status} yanıt GÖVDESİNDE ENCODE EDİLMEDEN yansıdı → reflected XSS"}
     return None
 
@@ -280,7 +386,7 @@ def classify(claims, artifacts, target_host='', target_ip=''):
         endp = request_endpoint(cmd)
         rx = reflected_xss('xss', [a])                     # marker istek + yanıtta ENCODE-EDİLMEDEN (gerçek HTTP)
         if rx:
-            ev = dict(rx); ev.update(_mk_evidence(a))
+            ev = _mk_evidence(a); ev.update(rx)            # rx ODAKLI rawExcerpt'i (P0-3) generic 1000-char'ı EZER
             add('xss', endp, 'KANITLI', ev, 'reflected XSS — payload GERÇEK yanıt gövdesinde ENCODE EDİLMEDEN yansıdı')
             continue
         raw = a.get('rawText', '') or ''
@@ -333,6 +439,12 @@ def classify(claims, artifacts, target_host='', target_ip=''):
             # HTTP artefaktı var AMA istek bu kategoriye ait bir payload GÖNDERMEMİŞ (yalnız plan/alakasız istek)
             # → gerçek kanıt yok, elenir. "Light SQLi probing" planının XSS-probuna bağlanıp BELİRSİZ üretmesini keser.
             add(cat, endp, 'HAYALET', None, 'iddia edilen kategoriye ait gerçek prob/istek yok (yalnız plan) -> elenir')
+
+    # ——— (3) DETERMİNİSTİK PASİF CONFIG (P0-1 madde 4-5): gerçek yanıt başlıklarından, LLM YOK ———
+    for pf in passive_config_findings(artifacts, target_host, target_ip):
+        if (pf['category'], (pf['endpoint'] or '').split('?')[0]) not in seen:
+            seen.add((pf['category'], (pf['endpoint'] or '').split('?')[0]))
+            findings.append(pf)
 
     return findings, filtered
 
@@ -488,6 +600,7 @@ def main():
         'summary': {'kanitli': len(kan), 'belirsiz': len(bel), 'hayalet': len(hay)},
         'filteredMeta': filtered,            # "bulgu mu?" filtresiyle elenen plan/meta iddia sayısı
         'eliminatedReasons': elim_reasons,   # {off-target, no-evidence, weak-signature, filtered-meta}
+        'tried': tried_summary(artifacts),   # P0-2 'Pozitif güvence' + P1 exec (gerçek sayaçlar)
         'overallRisk': overall_label,   # YALNIZ kanıtlı bulgulardan; asla şişirilmez
         'findings': findings,
     }
