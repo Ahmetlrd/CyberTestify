@@ -55,7 +55,10 @@ export type OrchestratorCtx = {
 export const LEVEL_CFG: Record<Level, { capSec: number; capCalls: number; capCostUsd: number; size: string; profile: string }> = {
   // (KALİBRASYON) cap GERÇEK msgchains harcamasına bağlı; S1 $0.5/180s çok sıkıydı (ajan kanıt saklamadan
   // kesiliyordu). Gerçekçi: S1 ~10dk/30çağrı/$2. Kalıcı fiyat değil — test-kalibrasyon.
-  S1: { capSec: 600, capCalls: 30, capCostUsd: 2.0, size: 's-2vcpu-4gb', profile: 'pasif + hafif aktif göstergeler (düşük risk)' },
+  // (P0-7 ÖLÇÜLÜ ARTIŞ) 600→900s (15dk, alt sınır — agresif sıçrama YOK), $2→$2.50 küçük kontrollü artış;
+  // çağrı tavanı 30 aynen (13 çağrı kullanıldı, darboğaz değildi). Watchdog(cap+60)/self-destruct(cap+1200)
+  // formülleri capSec'e GÖRECELİ olduğundan otomatik orantılı ölçeklenir — mimari değişmez, sadece taban.
+  S1: { capSec: 900, capCalls: 30, capCostUsd: 2.5, size: 's-2vcpu-4gb', profile: 'pasif + hafif aktif göstergeler (düşük risk)' },
   S2: { capSec: 720, capCalls: 40, capCostUsd: 3.0, size: 's-4vcpu-8gb', profile: 'aktif doğrulama + sınırlı sömürü denemesi (dengeli)' },
   S3: { capSec: 900, capCalls: 55, capCostUsd: 4.0, size: 's-4vcpu-8gb', profile: 'geniş sömürü yüzeyi, zincirleme denemeler (agresif)' },
 };

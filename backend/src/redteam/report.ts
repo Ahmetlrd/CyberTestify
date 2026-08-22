@@ -299,13 +299,72 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
   .fix{margin:0 14px 12px;background:#ecfdf5;border:1px solid #a7f3d0;border-left:5px solid #059669;border-radius:6px;padding:9px 12px;font-size:12px;color:#065f46}
   .empty{color:#64748b;font-style:italic;padding:8px 0}
   table.scope{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px} .scope th,.scope td{border:1px solid #e2e8f0;padding:6px 10px;text-align:left} .scope th{background:#f1f5f9;color:#475569;width:180px}
+  /* (P0-6) KAPAK + İÇİNDEKİLER — 6-paket ürün görsel diliyle hizalı (teal #123F3A + amber #F5A623). */
+  .cover{page-break-after:always;padding:0 0 20px}
+  .cover-band{background:linear-gradient(135deg,#123F3A 0%,#0A2E2A 100%);color:#EEF5F3;padding:30px 34px;display:flex;align-items:center;gap:16px;border-radius:0 0 10px 10px}
+  .cover-band .logo{width:44px;height:44px;flex:0 0 44px}
+  .cover-band .brand{font-size:24px;font-weight:800;letter-spacing:.3px;color:#fff;line-height:1.1}
+  .cover-band .brand span{color:#F5A623}
+  .cover-band .rtype{font-size:12px;color:#9Fc4bc;margin-top:3px;letter-spacing:.4px;text-transform:uppercase}
+  .cover-meta{display:flex;flex-wrap:wrap;gap:26px;padding:16px 34px;background:#EEF5F3;border-bottom:3px solid #F5A623;margin-bottom:26px}
+  .cover-meta .k{color:#5FA396;text-transform:uppercase;letter-spacing:.5px;font-size:9px;font-weight:700}
+  .cover-meta .v{color:#123F3A;font-weight:700;font-size:13px}
+  .cover-risk{margin:0 34px 22px;border:1px solid #DCEAE6;background:#F6FAF8;border-radius:10px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .cover-risk .rl{font-size:12px;color:#5FA396;text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:6px}
+  .cover-risk .rk{font-size:15px;color:#123F3A;font-weight:700}
+  .cover-risk .rbadge{color:#fff;font-weight:800;font-size:15px;padding:8px 20px;border-radius:14px;white-space:nowrap}
+  .cover-counts{display:flex;gap:14px;margin:0 34px 20px;flex-wrap:wrap}
+  .cover-counts .cc{flex:1;min-width:96px;border:1px solid #DCEAE6;border-radius:8px;padding:12px;text-align:center;background:#fff}
+  .cover-counts .cc b{display:block;font-size:22px;color:#123F3A} .cover-counts .cc span{font-size:10.5px;color:#5FA396;text-transform:uppercase;letter-spacing:.4px}
+  .cover-warn{margin:0 34px;background:#FDF5E6;border:1px solid #F5C77A;border-left:4px solid #E8912B;border-radius:8px;padding:10px 14px;font-size:11px;color:#7A4B12}
+  .toc-page{page-break-after:always;padding:8px 34px 20px}
+  .toc-page h2{color:#123F3A;border-bottom:2px solid #F5A623;font-size:18px}
+  .toc-row{margin:9px 0;font-size:13px;border-bottom:1px dotted #E1ECE8;padding-bottom:6px;display:flex;justify-content:space-between}
+  .toc-row a{color:#14514A;text-decoration:none;font-weight:600} .toc-row .tnum{color:#5FA396;font-weight:700;margin-right:8px}
 </style></head><body>
-  <h1>Otonom AI Red Team — Bulgu Raporu</h1>
-  <div class="meta"><b>Hedef:</b> ${esc(r.meta.target)} · <b>Seviye:</b> ${esc(r.meta.level)} · <b>Ortam:</b> ${esc(r.meta.environment)} · <b>Tarih:</b> ${esc(r.meta.generatedAt)}${r.meta.costUsd != null ? ` · <b>Maliyet:</b> ~$${Number(r.meta.costUsd).toFixed(4)}` : ''}${r.meta.llmCalls != null ? ` · ${r.meta.llmCalls} LLM çağrısı` : ''}</div>
-  <div class="disc">⚠ DENEYSEL · DETERMİNİSTİK DEĞİL · resmi denetim/sertifikasyon DEĞİL. ${esc(r.disclaimer)}</div>
+  <!-- (P0-6) KAPAK — 6-paket ürün görsel diliyle hizalı; ana ağırlık kurumsal/sade, uyarı ikincil. -->
+  <section class="cover">
+    <div class="cover-band">
+      <svg class="logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z" fill="#F5A623"/><path d="M9 12l2 2 4-4" stroke="#0A2E2A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div><div class="brand">Cyber<span>Testify</span></div><div class="rtype">Otonom AI Red Team — Bulgu Raporu</div></div>
+    </div>
+    <div class="cover-meta">
+      <div><div class="k">Hedef</div><div class="v">${esc(r.meta.target)}</div></div>
+      <div><div class="k">Seviye</div><div class="v">${esc(r.meta.level)}</div></div>
+      <div><div class="k">Ortam</div><div class="v">${esc(r.meta.environment)}</div></div>
+      <div><div class="k">Tarih</div><div class="v">${esc(String(r.meta.generatedAt).slice(0, 10))}</div></div>
+      ${r.meta.costUsd != null ? `<div><div class="k">Maliyet</div><div class="v">~$${Number(r.meta.costUsd).toFixed(4)}</div></div>` : ''}
+    </div>
+    <div class="cover-risk">
+      <div><div class="rl">Genel Risk</div><div class="rk">Yalnız kanıtlı bulgulardan türetildi (belirsiz/elenen şişirmez)</div></div>
+      <div class="rbadge" style="background:${rc}">${esc(RISK_LABEL[r.overallRisk] ?? r.overallRisk)}</div>
+    </div>
+    <div class="cover-counts">
+      <div class="cc"><b style="color:#15803d">${r.counts.kanitli}</b><span>Kanıtlı</span></div>
+      <div class="cc"><b style="color:#a16207">${r.counts.belirsiz}</b><span>İnceleme</span></div>
+      <div class="cc"><b style="color:#64748b">${r.eliminated}</b><span>Elenen</span></div>
+      <div class="cc"><b style="color:#334155">${r.counts.artifacts}</b><span>Ham artefakt</span></div>
+    </div>
+    <div class="cover-warn">⚠ <b>DENEYSEL · DETERMİNİSTİK DEĞİL · resmi denetim/sertifikasyon DEĞİL.</b> ${esc(r.disclaimer)}</div>
+  </section>
+
+  <!-- (P0-6) İÇİNDEKİLER — statik şablon, 8 bölümün sırasını birebir yansıtır; tıklanır bağlantı (PDF içi).
+       Sayfa no YAZILMAZ: Chromium target-counter'ı desteklemez, YANLIŞ sayfa no "uydurma sayı yasağı"na aykırı olur. -->
+  <section class="toc-page">
+    <h2>İçindekiler</h2>
+    <div class="toc-row"><a href="#s-ozet"><span class="tnum">1</span>Yönetici Özeti</a></div>
+    <div class="toc-row"><a href="#s-kanitli"><span class="tnum">2</span>Kanıtlı Bulgular</a></div>
+    <div class="toc-row"><a href="#s-belirsiz"><span class="tnum">3</span>İnceleme Gerektiren — Belirsiz</a></div>
+    <div class="toc-row"><a href="#s-elenen"><span class="tnum">4</span>Elenen — Hayalet</a></div>
+    <div class="toc-row"><a href="#s-metodoloji"><span class="tnum">5</span>Metodoloji ve Kapsam</a></div>
+    <div class="toc-row"><a href="#s-poz"><span class="tnum">6</span>Pozitif Güvence — Denenen Kontroller</a></div>
+    <div class="toc-row"><a href="#s-sinir"><span class="tnum">7</span>Sınırlılıklar</a></div>
+    <div class="toc-row"><a href="#s-ek"><span class="tnum">8</span>Ek: Artefakt Özeti</a></div>
+  </section>
+
   ${r.stoppedReason ? `<div class="disc" style="background:#fef2f2;border-color:#f87171;border-left-color:#dc2626;color:#7f1d1d">⏱ KOŞU ZORLA DURDURULDU: ${esc(r.stoppedReason)}</div>` : ''}
 
-  <h2>Yönetici Özeti</h2>
+  <h2 id="s-ozet">Yönetici Özeti</h2>
   <div class="exec">
     <p style="margin:0 0 8px"><b>Ne test edildi:</b> Otonom bir yapay-zekâ ajanı (PentAGI), <b>${esc(r.meta.target)}</b> hedefini <b>${esc(r.meta.level)}</b> profilinde, izole ve cap-sınırlı bir ortamda gerçek saldırı teknikleriyle sınadı.</p>
     <p style="margin:0 0 8px"><b>Ne denendi (sayılarla):</b> ${esc(triedSentence)}. Kanıt-bağlama modeli: her iddia ajanın SÖZÜNE değil saklanan HAM kanıta (gerçek istek/yanıt, terminal çıktısı) bağlanır — deterministik imza varsa <b>kanıtlı</b>, kanıt var imza yoksa <b>inceleme gerektiren</b>, hiç izi yoksa (ya da hedef-dışı) <b>elenir</b>.</p>
@@ -321,17 +380,17 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
     </div>
   </div>
 
-  <h2>Kanıtlı Bulgular (${r.proven.length})</h2>
+  <h2 id="s-kanitli">Kanıtlı Bulgular (${r.proven.length})</h2>
   ${r.proven.length ? r.proven.map((f) => card(f, false)).join('') : '<p class="empty">Kanıtlı bulgu yok — bu koşuda ham kanıta bağlanan doğrulanmış bir zafiyet üretilmedi.</p>'}
 
-  <h2>İnceleme Gerektiren — Belirsiz (${r.needsReview.length})</h2>
+  <h2 id="s-belirsiz">İnceleme Gerektiren — Belirsiz (${r.needsReview.length})</h2>
   <p style="font-size:12px;color:#64748b;margin:0 0 10px">Ham artefaktı olan ama kesin deterministik imzası olmayan iddialar. Silinmemiştir; <b>insan doğrulaması</b> önerilir. Genel riski ETKİLEMEZ.</p>
   ${r.needsReview.length ? r.needsReview.map((f) => card(f, true)).join('') : '<p class="empty">İnceleme gerektiren bulgu yok.</p>'}
 
-  <h2>Elenen — Hayalet (${r.eliminated})</h2>
+  <h2 id="s-elenen">Elenen — Hayalet (${r.eliminated})</h2>
   <p style="font-size:12px;color:#64748b;margin:0">Ajanın iddia ettiği ama <b>hiçbir ham kanıtı bulunmayan</b> ya da <b>hedef-dışı host</b> referanslayan bulgular elendi ve rapora ALINMADI (detay verilmez — kanıtı yoktur). Bu, yanlış-pozitifi ve ajanın eğitim-bilgisi sızıntısını önleyen kasıtlı bir dürüstlük kuralıdır.</p>
 
-  <h2>Metodoloji ve Kapsam</h2>
+  <h2 id="s-metodoloji">Metodoloji ve Kapsam</h2>
   <table class="scope"><tbody>
     <tr><th>Motor</th><td>Otonom PentAGI ajanı — gerçek saldırı teknikleri (simülasyon değil)</td></tr>
     <tr><th>Kanıt-bağlama</th><td>Üç katman: kanıtlı (deterministik imza) / belirsiz (insan-inceleme) / hayalet (elenir)</td></tr>
@@ -341,7 +400,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
     <tr><th>Yetki</th><td>Sahiplik/yetki beyanı + risk onayı ile; ${esc(r.meta.environment)} ortamı</td></tr>
   </tbody></table>
 
-  <h2>Pozitif Güvence — Denenen ve Kanıt Üretmeyen Kontroller</h2>
+  <h2 id="s-poz">Pozitif Güvence — Denenen ve Kanıt Üretmeyen Kontroller</h2>
   <p style="font-size:12px;color:#64748b;margin:0 0 8px">Aşağıdaki sayılar, ajanın hedefe karşı gerçekten yürüttüğü ve saklanan ham artefaktlarla ölçülen etkileşimlerdir (uydurma değil). Bir uç-noktanın burada yer alması, denendiği ama <b>bu koşuda</b> kanıtlı bir zafiyet imzası üretmediği anlamına gelir.</p>
   <div class="assur">
     <div class="ac"><b>${t.httpRequests ?? 0}</b><span>HTTP isteği</span></div>
@@ -352,7 +411,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
   ${t.endpoints?.length ? `<div style="font-size:12px;color:#475569;margin-top:6px"><b>Denenen uç-noktalar:</b></div><div class="chips">${t.endpoints.map((e) => `<code>${esc(e)}</code>`).join('')}</div>` : ''}
   ${t.families?.length ? `<div style="font-size:12px;color:#475569;margin-top:2px"><b>Denenen teknik aileleri:</b></div><div class="chips">${t.families.map((f) => `<code>${esc(f)}</code>`).join('')}</div>` : ''}
 
-  <h2>Sınırlılıklar</h2>
+  <h2 id="s-sinir">Sınırlılıklar</h2>
   <ul class="lim">
     <li><b>Deneyseldir ve deterministik değildir:</b> aynı hedefte tekrar çalıştırıldığında farklı sonuç verebilir; resmi bir denetim/sertifikasyon (ASV/QSA) yerine geçmez.</li>
     <li><b>Cap-sınırlı kapsam:</b> koşu; süre, token ve maliyet capleriyle sınırlıdır. Cap dolduğunda tarama, kapsamı tam bitirmeden durabilir.</li>
@@ -361,7 +420,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
     <li><b>İnsan doğrulaması:</b> "inceleme gerektiren" bulgular otomatik teyit edilmemiştir; üretim kararları öncesi bir uzmana doğrulatılmalıdır.</li>
   </ul>
 
-  <h2>Ek: Artefakt Özeti</h2>
+  <h2 id="s-ek">Ek: Artefakt Özeti</h2>
   <table class="scope"><tbody>
     <tr><th>Ham artefakt (toplam)</th><td>${r.counts.artifacts}</td></tr>
     <tr><th>HTTP isteği</th><td>${t.httpRequests ?? '—'}</td></tr>
