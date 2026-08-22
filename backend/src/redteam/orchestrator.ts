@@ -119,16 +119,23 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
     steps.push(s);
     if (ctx.onStep) await ctx.onStep(s);
   };
+  // (D2 — GERÇEK HATAYI GİZLEME) Log satırı 2000 karakterde kırpılıyor; campaign komutu ~1.6KB base64
+  // --prompt-b64 taşıdığı için GERÇEK hata (exit kodu + stderr) kırpılıp KAYBOLUYORDU. Uzun argümanları
+  // (özellikle base64 prompt) kısaltarak GÖSTER — böylece exit+stderr her zaman log'a sığar/görünür.
+  const displayCmd = (cmd: string, args: string[]): string =>
+    [cmd, ...args.map((a) => (a.length > 100 ? `${a.slice(0, 24)}…(${a.length}b)` : a))].join(' ');
   const run = async (phase: Phase, cmd: string, args: string[]): Promise<ExecResult> => {
-    const command = [cmd, ...args].join(' ');
+    const command = displayCmd(cmd, args);
     if (ctx.dryRun) {
       await record({ phase, command, ok: true, detail: '[dry-run] çalıştırılmadı' });
       return { code: 0, stdout: '', stderr: '' };
     }
     const r = await ctx.exec(cmd, args);
-    // Hata detayının SONUNU göster (patlama noktası genellikle çıktının sonundadır).
-    await record({ phase, command, ok: r.code === 0, detail: r.code === 0 ? 'ok' : `exit ${r.code}: …${(r.stderr || r.stdout || '').slice(-2000)}` });
-    if (r.code !== 0) throw new Error(`${phase} başarısız: ${command}`);
+    // Hata detayının SONUNU göster (patlama noktası genellikle çıktının sonundadır). Komut kısaltıldığı
+    // için stderr artık 2000-karakter log tavanına RAHAT sığar. stderr boşsa stdout'u göster (launch_cap
+    // "API hazır olmadı"/"FATAL ..." gibi tanısal mesajları stdout'a basar).
+    await record({ phase, command, ok: r.code === 0, detail: r.code === 0 ? 'ok' : `exit ${r.code}: ${(r.stderr || r.stdout || '(çıktı yok)').slice(-1500)}` });
+    if (r.code !== 0) throw new Error(`${phase} başarısız (exit ${r.code}): ${(r.stderr || r.stdout || '').slice(-300)}`);
     return r;
   };
 

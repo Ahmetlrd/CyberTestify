@@ -132,7 +132,9 @@ def wait_api_ready(max_s=180):
         except Exception as e:
             last=str(e)[:120]
         time.sleep(4)
-    print(f"== API hazır olmadı ({max_s}s): {last} ==",flush=True); return False
+    print(f"== API hazır olmadı ({max_s}s): {last} ==",flush=True)
+    print(f"FATAL: PentAGI GraphQL API {max_s}s içinde hazır/yetkili olmadı (son hata: {last})",file=sys.stderr,flush=True)
+    return False
 
 def main():
     print(f"== PentAGI GraphQL API hazırlığı bekleniyor ==",flush=True)
@@ -199,4 +201,14 @@ def main():
     print(f"== SON: calls={c2} cost=${fcost} flow.status={fst} | cap-sonrası-harcama: {frozen} (neden={reason}) ==",flush=True)
     print(f"== NOT: Anthropic egress kapalı; 3b'de yeni koşu için 'egress-harden-docker.sh' (--no-llm'siz) çalıştır ==",flush=True)
 
-if __name__=="__main__": main()
+if __name__=="__main__":
+    # (D2) Herhangi bir beklenmeyen istisna → TAM traceback stderr'e bas (orchestrator yakalayıp panele
+    # yazsın; "campaign başarısız" deyip gerçek nedeni gizlemesin). SystemExit (kasıtlı çıkışlar) korunur.
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
