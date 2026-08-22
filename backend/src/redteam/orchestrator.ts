@@ -78,14 +78,23 @@ function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
     `ENVIRONMENT LIMITS — web_search, browser, and memorist/vector-DB are NOT reachable here; DO NOT use them ` +
     `(they only waste budget and return nothing). Do NOT rely on any remembered "known vulnerabilities" list — ` +
     `report ONLY what you directly observe in real request/response pairs you capture with curl. ` +
-    // (P1) XSS-ÖNCE: keşiften ÖNCE, ilk 2 dakikada canlı marker testi + TAM yanıt kaydı.
-    `FIRST ACTIONS (do these BEFORE any recon, within the first 2 minutes) — send a reflected-XSS probe with the ` +
-    `UNIQUE marker zqxmarker9173 to the real search endpoints. ALWAYS use "curl -sk -i" (the -i flag INCLUDES ` +
-    `the HTTP status line + headers) and SAVE THE FULL RESPONSE (status line, headers, AND body):\n` +
+    // (P1) XSS-ÖNCE + ŞARTLI ENCODE-RETRY: her uç için ham→encode retry döngüsü BAĞIMSIZ, plandan ÖNCE.
+    `FIRST ACTIONS (do these BEFORE any recon/plan, within the first 2 minutes) — for EACH of the two search ` +
+    `endpoints below run an INDEPENDENT reflected-XSS probe. ALWAYS use "curl -sk -i" (-i INCLUDES the HTTP ` +
+    `status line + headers) and SAVE THE FULL RESPONSE (status line, headers, AND body). First the RAW <script>:\n` +
     `  curl -sk -i --resolve ${d}:443:${pinnedIp} "https://${d}/bank/searchpage.jsp?searchStr=zqxmarker9173<script>alert(1)</script>"\n` +
     `  curl -sk -i --resolve ${d}:443:${pinnedIp} "https://${d}/search.jsp?query=zqxmarker9173<script>alert(1)</script>"\n` +
-    `Then verify whether zqxmarker9173 appears UNENCODED (literal <script>, NOT &lt;script&gt;) in the response BODY ` +
-    `(the part AFTER the headers). A 4xx/5xx status means the request was REJECTED — that is NOT a finding. ` +
+    `CONDITIONAL ENCODE-RETRY (CRITICAL): if a RAW-<script> probe returns a TRANSPORT-LEVEL rejection ` +
+    `(400/403/406 — the server/parser refused the request LINE, the app never processed the value), do NOT treat ` +
+    `that as "no finding". IMMEDIATELY, in the SAME minute and BEFORE any plan step, RE-SEND the SAME parameter ` +
+    `with a URL-ENCODED payload (%3Cscript%3E…%3C%2Fscript%3E) using curl -G --data-urlencode:\n` +
+    `  curl -sk -i -G --resolve ${d}:443:${pinnedIp} "https://${d}/bank/searchpage.jsp" --data-urlencode "searchStr=zqxmarker9173<script>alert(1)</script>"\n` +
+    `  curl -sk -i -G --resolve ${d}:443:${pinnedIp} "https://${d}/search.jsp" --data-urlencode "query=zqxmarker9173<script>alert(1)</script>"\n` +
+    `Each endpoint runs its OWN raw→encode-retry loop INDEPENDENTLY — one must NOT block the other, and you must ` +
+    `NOT defer the encode-retry to the end of the plan. Then verify whether zqxmarker9173 appears UNENCODED ` +
+    `(literal <script>, NOT &lt;script&gt;) in the response BODY (the part AFTER the headers) of a 2xx response ` +
+    `(that is a KANITLI reflected XSS). Only if BOTH the raw AND the encoded attempt return 4xx/5xx for an ` +
+    `endpoint may you conclude "no finding" there. ` +
     // (P1) minimum canlı checklist — hepsi curl ile, gerçek hedefte.
     `Then a MINIMAL LIVE checklist via curl only: homepage, login page, at least one parameterized form, one more ` +
     `marker-XSS reflection point, and one light SQLi probe (a single quote ' or ' OR 1=1) observing the response body. ` +
