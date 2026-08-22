@@ -293,6 +293,16 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
       } catch { /* best-effort */ }
       const art = (rawFlow as { artifacts?: unknown[] } | undefined)?.artifacts?.length ?? 0;
       await record({ phase: 'bind', ok: true, detail: `retention: ham-veri ${rawFlow ? `✓ (${art} artefakt)` : '—'} · karar-izi ${binderTrace ? '✓' : '—'} · gerçek maliyet ${liveCostUsd != null ? `$${liveCostUsd.toFixed(4)}` : '—'}` });
+
+      // (TEŞHİS) Ajan hiç subtask üretmediyse PentAGI'nin KENDİ container log'unu yakala — agent-loop neden
+      // başlamadı görünür olsun (maskSecrets persistStep'te uygulanır). Yalnız 0 artefaktta çek (gürültü yok).
+      if (art === 0) {
+        try {
+          const plog = await ctx.exec(`docker logs pentagi --tail 40 2>&1 | grep -iE 'error|panic|fatal|exception|refus|denied|worker|flow|agent' | tail -20`, []);
+          const txt = (plog.stdout || plog.stderr || '').trim();
+          await record({ phase: 'bind', ok: false, detail: `0 artefakt — PentAGI container log (agent-loop tanısı): ${txt ? txt.replace(/\n+/g, ' · ').slice(-1200) : '(ilgili satır yok)'}` });
+        } catch { /* best-effort */ }
+      }
     }
 
     // ——— 8) REPORT (deterministik render; şişirme yok) ———

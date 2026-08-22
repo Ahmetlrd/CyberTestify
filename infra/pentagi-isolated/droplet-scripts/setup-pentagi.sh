@@ -14,7 +14,11 @@ set -euo pipefail
 # campaign HANGİ AŞAMADA asılırsa asılsın, droplet KENDİ KENDİNE (systemd, orchestrator'a muhtaç
 # olmadan) belirlenen sürede kapanır. Bu, watchdog'ların watchdog'udur — son çare.
 CAP_SEC="${1:-1200}"                 # orchestrator cfg.capSec geçirir; argüman yoksa güvenli varsayılan
-SELFDESTRUCT_SEC=$((CAP_SEC + 90))   # cap + 90sn tampon (yumuşak+sert watchdog'a zaman tanır)
+# (ZAMANLAMA DÜZELTMESİ) Bu betik SETUP BAŞINDA çalışır; self-destruct saati BURADAN başlar. Setup ~8dk
+# + kampanya (cap) + teardown sürer. cap+90 ÇOK ERKEN'di → droplet kampanya ~1dk'dayken kendini imha
+# ediyordu (0 artefakt kök-nedenlerinden). Bu droplet-içi zamanlayıcı NİHAİ backstop'tur (her şey ölürse);
+# Node-watchdog (kampanya başında, cap+60) asıl kesin kill'dir. Backstop'a bol setup+kampanya payı ver.
+SELFDESTRUCT_SEC=$((CAP_SEC + 1200)) # cap + 20dk (setup ~8dk + kampanya + tampon) — erken imhayı önler
 mkdir -p /opt/pentagi-run/audit
 cat > /opt/pentagi-run/self-destruct.sh <<'SD'
 #!/bin/bash

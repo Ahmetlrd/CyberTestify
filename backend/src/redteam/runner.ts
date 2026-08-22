@@ -205,18 +205,11 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
         // PAYLAŞIMLI tek dosyadır; kill-switch/watchdog yanlış (başka bir eşzamanlı job'un) droplet'ine
         // gitmesin diye bu job'un GERÇEK droplet ID'si DB'ye yazılır (kill-switch olayının bir parçası).
         await prisma.redTeamJob.update({ where: { id: jobId }, data: { dropletIp, dropletId: info.id } });
-        // (D2 — BAĞIMSIZ WATCHDOG) Droplet var olur olmaz, EN BAŞTA, orchestrator'ın kendi döngüsünden
-        // TAMAMEN AYRI bir OS süreci başlat. Kanıtlanmış 3-kez-tekrarlanan hatanın (cap kontrolü ana
-        // döngüyle birlikte tıkanması) yapısal çözümü — ana döngü setup/harden/campaign'de HERHANGİ
-        // bir noktada asılsa BİLE bu süreç bağımsız çalışır ve cap+60sn'de droplet'i zorla imha eder.
-        if (!watchdogSpawned && capturedTargetIp) {
-          watchdogSpawned = true;
-          spawnWatchdog({
-            jobId, dropletIp, dropletId: info.id, capSec: cap.capSec, capCostUsd: cap.capCostUsd,
-            target: job.domain, targetIp: capturedTargetIp, level: job.level, environment: job.environment,
-          });
-          await persistStep(jobId, { phase: 'setup', ok: true, detail: `bağımsız watchdog başlatıldı (cap ${cap.capSec}s +60s sert sınır; ana döngüden AYRI süreç)` });
-        }
+        // (WATCHDOG ZAMANLAMA DÜZELTMESİ) Watchdog ARTIK provision/setup'ta DEĞİL, CAMPAIGN başında
+        // spawn edilir (aşağıda phase==='campaign'). Kanıtlanmış hata: setup ~8dk sürüyor; watchdog
+        // provision'da spawn edilince 600s cap AJAN çalışmadan setup'ta tükeniyor, ajan ~48sn sonra
+        // öldürülüyordu (0 artefakt). Cap = AJAN süresi olmalı. Setup, SSH-timeout'ları + droplet-içi
+        // D1 self-destruct backstop'u ile zaten korunur — bu aralıkta Node-watchdog'a gerek yok.
         // Droplet YENİ boot etti — sshd hazır olana kadar BEKLE (tek-seferde deneme yok).
         await persistStep(jobId, { phase: 'setup', ok: true, detail: `droplet ${dropletIp} açıldı — SSH (sshd) hazır bekleniyor…` });
         const sshReady = await waitForSsh(dropletIp);
@@ -246,6 +239,18 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
     // sonucu EZMESİN. Atomik where-guard (ekstra okuma gerekmez; koşul tutmazsa no-op).
     await prisma.redTeamJob.updateMany({ where: { id: jobId, status: { not: 'aborted' } }, data: { status: statusByPhase[s.phase] ?? undefined, phase: s.phase } }).catch(() => {});
     await persistStep(jobId, s);
+
+    // (WATCHDOG — CAMPAIGN BAŞINDA) Cap saatini AJAN başladığında başlat (setup ~8dk'yı SAYMA). İlk
+    // campaign onStep'te spawn et — dropletIp + hedef IP bu noktada hazır; cap=capSec artık gerçek ajan bütçesi.
+    if (s.phase === 'campaign' && s.ok && !opts.dryRun && !watchdogSpawned && dropletIp && capturedTargetIp) {
+      watchdogSpawned = true;
+      const dId = (await prisma.redTeamJob.findUnique({ where: { id: jobId }, select: { dropletId: true } }))?.dropletId ?? null;
+      spawnWatchdog({
+        jobId, dropletIp, dropletId: dId, capSec: cap.capSec, capCostUsd: cap.capCostUsd,
+        target: job.domain, targetIp: capturedTargetIp, level: job.level, environment: job.environment,
+      });
+      await persistStep(jobId, { phase: 'campaign', ok: true, detail: `bağımsız watchdog başlatıldı (cap ${cap.capSec}s +60s sert sınır; SAAT ajan başlangıcından — setup süresi sayılmaz)` });
+    }
 
     // verify verdikt'ini job'a yaz (panel egress kartı) — 'izolasyon: hedef-erişilir=✓ · CyberTestify-BLOCKED=✓'
     if (s.phase === 'verify' && !opts.dryRun && /izolasyon:/.test(s.detail)) {
