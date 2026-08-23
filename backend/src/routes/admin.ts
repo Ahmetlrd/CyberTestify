@@ -10,7 +10,7 @@ import { enqueueOrStartScan } from '../services/orchestrator.js';
 import { hasTestCredential } from '../services/testCredentials.js';
 import { decryptReport, decryptSecret } from '../services/crypto.js';
 import { renderReportPdf, htmlToPdfBuffer } from '../services/pdf.js';
-import { renderRedTeamFullHtml } from '../redteam/report.js';
+import { renderRedTeamFullHtml, redteamReportNo } from '../redteam/report.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
 import { LEVEL_CFG } from '../redteam/orchestrator.js';
 import { appendLogs } from '../redteam/observability.js';
@@ -753,18 +753,28 @@ adminRouter.patch('/redteam-jobs/:id', async (req, res) => {
 });
 
 // --- Otonom Red Team: TAM RAPOR (okunur HTML + indirilebilir PDF; geriye-dönük) -----------------
+// (P0-B) mode: admin panel VARSAYILAN 'admin' (tüm iç veri korunur — kriter 4); ?view=customer ile
+// müşteriye gidecek SADELEŞTİRİLMİŞ belge önizlenir/indirilir. jobId meta'ya enjekte → Rapor No stabil.
 adminRouter.get('/redteam-jobs/:id/report.html', async (req, res) => {
   const job = await prisma.redTeamJob.findUnique({ where: { id: req.params.id }, select: { reportJson: true } });
   if (!job?.reportJson) return res.status(404).json({ error: 'Bu koşu için rapor yok (koşu tamamlanmamış olabilir).' });
-  res.type('html').send(renderRedTeamFullHtml(job.reportJson as any));
+  const mode = req.query.view === 'customer' ? 'customer' : 'admin';
+  const report = job.reportJson as any;
+  if (report?.meta) report.meta.jobId = req.params.id;
+  res.type('html').send(renderRedTeamFullHtml(report, mode));
 });
 
 adminRouter.get('/redteam-jobs/:id/report.pdf', async (req, res) => {
   const job = await prisma.redTeamJob.findUnique({ where: { id: req.params.id }, select: { reportJson: true, domain: true } });
   if (!job?.reportJson) return res.status(404).json({ error: 'Bu koşu için rapor yok.' });
-  const pdf = await htmlToPdfBuffer(renderRedTeamFullHtml(job.reportJson as any));
+  const mode = req.query.view === 'customer' ? 'customer' : 'admin';
+  const report = job.reportJson as any;
+  if (report?.meta) report.meta.jobId = req.params.id;
+  const reportNo = redteamReportNo({ ...report.meta, jobId: req.params.id });
+  const footer = `CyberTestify · Otonom AI Red Team (deneysel) · ${reportNo}`;
+  const pdf = await htmlToPdfBuffer(renderRedTeamFullHtml(report, mode), footer);
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="redteam-${(job.domain || 'hedef').replace(/[^a-z0-9.-]/gi, '_')}-${req.params.id.slice(0, 8)}.pdf"`);
+  res.setHeader('Content-Disposition', `inline; filename="redteam-${(job.domain || 'hedef').replace(/[^a-z0-9.-]/gi, '_')}-${reportNo}.pdf"`);
   res.setHeader('Cache-Control', 'no-store');
   res.send(pdf);
 });

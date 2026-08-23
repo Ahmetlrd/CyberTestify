@@ -66,7 +66,21 @@ export type RedTeamReportMeta = {
   llmCalls?: number | null;
   agentSec?: number | null;   // (P0-5) yalnız ajan (campaign) süresi
   elapsedSec?: number | null; // (P0-5) toplam wall-clock süre (infra dahil)
+  reportNo?: string | null;   // (P0-C) CT-RT-YYYYMMDD-XXXX — çağıran verir; yoksa meta'dan türetilir
+  jobId?: string | null;      // (P0-C) rapor no türetiminde stabil sonek kaynağı (müşteriye gösterilmez)
 };
+
+/** (P0-C) Kurumsal rapor numarası: CT-RT-YYYYMMDD-XXXX. Deterministik (saat okumaz) — meta.reportNo
+ *  verilmişse onu, yoksa generatedAt tarihi + (jobId/target) stabil 4-hane sonekinden türetir. */
+export function redteamReportNo(meta: { reportNo?: string | null; generatedAt: string; jobId?: string | null; target: string }): string {
+  if (meta.reportNo) return meta.reportNo;
+  const ymd = String(meta.generatedAt || '').slice(0, 10).replace(/-/g, '') || '00000000';
+  const seed = String(meta.jobId || meta.target || '');
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  const suffix = h.toString(36).toUpperCase().padStart(4, '0').slice(-4);
+  return `CT-RT-${ymd}-${suffix}`;
+}
 
 export type RedTeamReport = {
   meta: RedTeamReportMeta;
@@ -190,11 +204,17 @@ const NEXT_STEP: Record<string, string> = {
   bilinmeyen: 'İlgili ham kanıtı bir güvenlik uzmanına doğrulatın ve uygun güvenlik kontrolünü uygulayın.',
 };
 
-export function renderRedTeamFullHtml(r: RedTeamReport): string {
+// (P0-B) 'customer' = satılabilir müşteri belgesi: iç-operasyon verileri (maliyet, LLM sayısı, süre,
+// artefakt-ID, IP/droplet, eleme kırılımı, model adı) GİZLENİR. 'admin' = tam iç görünüm (hiçbir şey
+// silinmez — reportJson'da hepsi durur; yalnız müşteri render'ında saklanır). Varsayılan: customer.
+export type RedTeamReportMode = 'customer' | 'admin';
+export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode = 'customer'): string {
+  const admin = mode === 'admin';
   const esc = (s: string) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
   const SEVC: Record<string, string> = { kritik: '#b91c1c', yüksek: '#c2410c', orta: '#a16207', düşük: '#15803d', temiz: '#15803d' };
   const rc = SEVC[r.overallRisk] ?? '#334155';
   const t = r.tried ?? {};
+  const reportNo = redteamReportNo(r.meta);
   const posture = r.proven.length === 0
     ? 'Bu koşuda kanıtlı bulgu üretilmedi — hedef, otonom ajanın denediği tekniklere karşı gözlemlenen kanıt üretmedi.'
     : `${r.proven.length} kanıtlı bulgu ham kanıta bağlandı. Genel risk yalnız bu kanıtlı bulgulardan türetildi (belirsiz/elenen şişirmez).`;
@@ -216,7 +236,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
       return NEXT_STEP[top.category] ?? NEXT_STEP.bilinmeyen;
     }
     if (r.needsReview.length) return 'İnceleme gerektiren bulguları bir güvenlik uzmanına doğrulatın; teyit edilenler için ilgili düzeltmeyi uygulayın.';
-    return 'Bu koşuda kanıtlı bulgu çıkmadı; kapsamı genişletmek için daha derin bir profil (S2/S3) veya kimlikli/yetkili bir tarama değerlendirilebilir.';
+    return 'Bu koşuda kanıtlı bulgu çıkmadı; kapsamı genişletmek için kimlikli/yetkili bir tarama ya da manuel bir güvenlik incelemesi değerlendirilebilir.';
   })();
 
   // P0-3 — Kanıt kutusu: marker (imza) satırını ve çevresindeki 5-15 satırı vurgulu göster (dump değil).
@@ -270,7 +290,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
         <tr><th>Doğrulama</th><td>${esc(f.reason)}${ev?.signature ? ` · imza: <code>${esc(ev.signature)}</code>` : ''}</td></tr>
       </tbody></table>
       ${ev && (ev.rawExcerpt || ev.command) ? `<div class="evbox">
-        <div class="evlabel">HAM KANIT ${ev.artifactRef ? `<span class="ref">${esc(ev.artifactRef)}</span>` : ''}${ev.marker ? ` <span class="mk">marker: ${esc(ev.marker)}</span>` : (ev.signature ? ` <span class="mk">imza: ${esc(ev.signature)}</span>` : '')} <span class="reddot">hassas veri redakte</span></div>
+        <div class="evlabel">HAM KANIT ${admin && ev.artifactRef ? `<span class="ref">${esc(ev.artifactRef)}</span>` : ''}${ev.marker ? ` <span class="mk">marker: ${esc(ev.marker)}</span>` : (ev.signature ? ` <span class="mk">imza: ${esc(ev.signature)}</span>` : '')} <span class="reddot">hassas veri redakte</span></div>
         ${ev.command ? `<pre class="cmd">$ ${esc(ev.command)}</pre>` : ''}
         ${ev.rawExcerpt ? `<pre class="raw">${evSnippet(ev.rawExcerpt, ev.marker || ev.signature)}</pre>` : ''}
       </div>` : ''}
@@ -311,53 +331,62 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
   .fix{margin:0 14px 12px;background:#ecfdf5;border:1px solid #a7f3d0;border-left:5px solid #059669;border-radius:6px;padding:9px 12px;font-size:12px;color:#065f46}
   .empty{color:#64748b;font-style:italic;padding:8px 0}
   table.scope{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px} .scope th,.scope td{border:1px solid #e2e8f0;padding:6px 10px;text-align:left} .scope th{background:#f1f5f9;color:#475569;width:180px}
-  /* (P0-6) KAPAK + İÇİNDEKİLER — 6-paket ürün görsel diliyle hizalı (teal #123F3A + amber #F5A623). */
-  .cover{page-break-after:always;padding:0 0 20px}
-  .cover-band{background:linear-gradient(135deg,#123F3A 0%,#0A2E2A 100%);color:#EEF5F3;padding:30px 34px;display:flex;align-items:center;gap:16px;border-radius:0 0 10px 10px}
-  .cover-band .logo{width:44px;height:44px;flex:0 0 44px}
-  .cover-band .brand{font-size:24px;font-weight:800;letter-spacing:.3px;color:#fff;line-height:1.1}
+  /* (P0-C) TAM SAYFA KAPAK — teal #123F3A + amber #F5A623; içerik dikey ortalı, uyarı en altta. */
+  .cover{page-break-after:always;min-height:960px;display:flex;flex-direction:column;padding:0}
+  .cover-band{background:linear-gradient(135deg,#123F3A 0%,#0A2E2A 100%);color:#EEF5F3;padding:34px;display:flex;align-items:center;gap:16px}
+  .cover-band .logo{width:48px;height:48px;flex:0 0 48px}
+  .cover-band .brand{font-size:26px;font-weight:800;letter-spacing:.3px;color:#fff;line-height:1.1}
   .cover-band .brand span{color:#F5A623}
-  .cover-band .rtype{font-size:12px;color:#9Fc4bc;margin-top:3px;letter-spacing:.4px;text-transform:uppercase}
-  .cover-meta{display:flex;flex-wrap:wrap;gap:26px;padding:16px 34px;background:#EEF5F3;border-bottom:3px solid #F5A623;margin-bottom:26px}
-  .cover-meta .k{color:#5FA396;text-transform:uppercase;letter-spacing:.5px;font-size:9px;font-weight:700}
-  .cover-meta .v{color:#123F3A;font-weight:700;font-size:13px}
-  .cover-risk{margin:0 34px 22px;border:1px solid #DCEAE6;background:#F6FAF8;border-radius:10px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:16px}
-  .cover-risk .rl{font-size:12px;color:#5FA396;text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:6px}
-  .cover-risk .rk{font-size:15px;color:#123F3A;font-weight:700}
-  .cover-risk .rbadge{color:#fff;font-weight:800;font-size:15px;padding:8px 20px;border-radius:14px;white-space:nowrap}
-  .cover-counts{display:flex;gap:14px;margin:0 34px 20px;flex-wrap:wrap}
-  .cover-counts .cc{flex:1;min-width:96px;border:1px solid #DCEAE6;border-radius:8px;padding:12px;text-align:center;background:#fff}
-  .cover-counts .cc b{display:block;font-size:22px;color:#123F3A} .cover-counts .cc span{font-size:10.5px;color:#5FA396;text-transform:uppercase;letter-spacing:.4px}
-  .cover-warn{margin:0 34px;background:#FDF5E6;border:1px solid #F5C77A;border-left:4px solid #E8912B;border-radius:8px;padding:10px 14px;font-size:11px;color:#7A4B12}
+  .cover-band .rtype{font-size:12px;color:#9Fc4bc;margin-top:4px;letter-spacing:.5px;text-transform:uppercase}
+  .cover-body{flex:1;display:flex;flex-direction:column;justify-content:center;gap:26px;padding:20px 44px}
+  .cover-target-k{color:#5FA396;text-transform:uppercase;letter-spacing:1px;font-size:11px;font-weight:700}
+  .cover-target{color:#123F3A;font-size:38px;font-weight:800;line-height:1.15;word-break:break-word;margin-top:4px}
+  .cover-badges{display:flex;flex-wrap:wrap;gap:10px}
+  .cbadge{font-size:13px;font-weight:700;padding:7px 16px;border-radius:14px}
+  .cbadge-lvl{background:#123F3A;color:#fff} .cbadge-env{background:#EEF5F3;color:#123F3A;border:1px solid #DCEAE6} .cbadge-risk{color:#fff}
+  .cover-info{display:flex;gap:44px;border-top:1px solid #DCEAE6;border-bottom:1px solid #DCEAE6;padding:16px 0}
+  .cover-info .k{display:block;color:#5FA396;text-transform:uppercase;letter-spacing:.5px;font-size:9px;font-weight:700}
+  .cover-info .v{display:block;color:#123F3A;font-weight:700;font-size:15px;margin-top:3px;font-variant-numeric:tabular-nums}
+  .cover-counts{display:flex;gap:14px;flex-wrap:wrap}
+  .cover-counts .cc{flex:1;min-width:96px;border:1px solid #DCEAE6;border-radius:8px;padding:14px;text-align:center;background:#F6FAF8}
+  .cover-counts .cc b{display:block;font-size:26px;color:#123F3A} .cover-counts .cc span{font-size:10.5px;color:#5FA396;text-transform:uppercase;letter-spacing:.4px}
+  .cover-warn{margin:0 44px 30px;background:#FDF5E6;border:1px solid #F5C77A;border-left:4px solid #E8912B;border-radius:8px;padding:10px 14px;font-size:10.5px;color:#7A4B12}
+  /* (P0-D) "Bu rapor ne değildir?" kutusu — yönetici özetinde beklenti yönetimi. */
+  .notbox{background:#FEF6F2;border:1px solid #F3C6B4;border-left:4px solid #D9663A;border-radius:8px;padding:12px 16px;margin:12px 0 4px}
+  .notbox b{color:#9A3B18;font-size:12.5px} .notbox ul{margin:6px 0 0;padding-left:18px;font-size:11.5px;color:#7A3418} .notbox li{margin:3px 0}
   .toc-page{page-break-after:always;padding:8px 34px 20px}
   .toc-page h2{color:#123F3A;border-bottom:2px solid #F5A623;font-size:18px}
   .toc-row{margin:9px 0;font-size:13px;border-bottom:1px dotted #E1ECE8;padding-bottom:6px;display:flex;justify-content:space-between}
   .toc-row a{color:#14514A;text-decoration:none;font-weight:600} .toc-row .tnum{color:#5FA396;font-weight:700;margin-right:8px}
 </style></head><body>
-  <!-- (P0-6) KAPAK — 6-paket ürün görsel diliyle hizalı; ana ağırlık kurumsal/sade, uyarı ikincil. -->
+  <!-- (P0-C) TAM SAYFA KAPAK — kurumsal; Rapor No mevcut; maliyet YOK; uyarı küçük/ikincil. -->
   <section class="cover">
     <div class="cover-band">
       <svg class="logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z" fill="#F5A623"/><path d="M9 12l2 2 4-4" stroke="#0A2E2A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <div><div class="brand">Cyber<span>Testify</span></div><div class="rtype">Otonom AI Red Team — Bulgu Raporu</div></div>
     </div>
-    <div class="cover-meta">
-      <div><div class="k">Hedef</div><div class="v">${esc(r.meta.target)}</div></div>
-      <div><div class="k">Seviye</div><div class="v">${esc(r.meta.level)}</div></div>
-      <div><div class="k">Ortam</div><div class="v">${esc(r.meta.environment)}</div></div>
-      <div><div class="k">Tarih</div><div class="v">${esc(String(r.meta.generatedAt).slice(0, 10))}</div></div>
-      ${r.meta.costUsd != null ? `<div><div class="k">Maliyet</div><div class="v">~$${Number(r.meta.costUsd).toFixed(4)}</div></div>` : ''}
+    <div class="cover-body">
+      <div class="cover-target-wrap">
+        <div class="cover-target-k">HEDEF ALAN ADI</div>
+        <div class="cover-target">${esc(r.meta.target)}</div>
+      </div>
+      <div class="cover-badges">
+        <span class="cbadge cbadge-lvl">${esc(r.meta.level)} · Deneysel</span>
+        <span class="cbadge cbadge-risk" style="background:${rc}">Genel risk: ${esc(RISK_LABEL[r.overallRisk] ?? r.overallRisk)}</span>
+        <span class="cbadge cbadge-env">Ortam: ${esc(r.meta.environment)}</span>
+      </div>
+      <div class="cover-info">
+        <div><span class="k">Rapor No</span><span class="v">${esc(reportNo)}</span></div>
+        <div><span class="k">Tarih</span><span class="v">${esc(String(r.meta.generatedAt).slice(0, 10))}</span></div>
+      </div>
+      <div class="cover-counts">
+        <div class="cc"><b style="color:#15803d">${r.counts.kanitli}</b><span>Kanıtlı</span></div>
+        <div class="cc"><b style="color:#a16207">${r.counts.belirsiz}</b><span>İnceleme</span></div>
+        <div class="cc"><b style="color:#64748b">${r.eliminated}</b><span>Elenen</span></div>
+        <div class="cc"><b style="color:#334155">${r.counts.artifacts}</b><span>Ham artefakt</span></div>
+      </div>
     </div>
-    <div class="cover-risk">
-      <div><div class="rl">Genel Risk</div><div class="rk">Yalnız kanıtlı bulgulardan türetildi (belirsiz/elenen şişirmez)</div></div>
-      <div class="rbadge" style="background:${rc}">${esc(RISK_LABEL[r.overallRisk] ?? r.overallRisk)}</div>
-    </div>
-    <div class="cover-counts">
-      <div class="cc"><b style="color:#15803d">${r.counts.kanitli}</b><span>Kanıtlı</span></div>
-      <div class="cc"><b style="color:#a16207">${r.counts.belirsiz}</b><span>İnceleme</span></div>
-      <div class="cc"><b style="color:#64748b">${r.eliminated}</b><span>Elenen</span></div>
-      <div class="cc"><b style="color:#334155">${r.counts.artifacts}</b><span>Ham artefakt</span></div>
-    </div>
-    <div class="cover-warn">⚠ <b>DENEYSEL · DETERMİNİSTİK DEĞİL · resmi denetim/sertifikasyon DEĞİL.</b> ${esc(r.disclaimer)}</div>
+    <div class="cover-warn">⚠ <b>DENEYSEL · DETERMİNİSTİK DEĞİL · resmi denetim/sertifikasyon DEĞİL.</b> Her "kanıtlı" bulgu saklanan ham kanıta bağlıdır.</div>
   </section>
 
   <!-- (P0-6) İÇİNDEKİLER — statik şablon, 8 bölümün sırasını birebir yansıtır; tıklanır bağlantı (PDF içi).
@@ -382,7 +411,15 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
     <p style="margin:0 0 8px"><b>Ne denendi (sayılarla):</b> ${esc(triedSentence)}. Kanıt-bağlama modeli: her iddia ajanın SÖZÜNE değil saklanan HAM kanıta (gerçek istek/yanıt, terminal çıktısı) bağlanır — deterministik imza varsa <b>kanıtlı</b>, kanıt var imza yoksa <b>inceleme gerektiren</b>, hiç izi yoksa (ya da hedef-dışı) <b>elenir</b>.</p>
     <p style="margin:0 0 8px"><b>Ne bulunamadı / kapsam:</b> Bu koşu ${esc(r.meta.level)} profili ve cap-sınırlı süre/bütçeyle yürütüldü; kapsam yalnızca pinlenen hedeftir (${esc(r.meta.target)}). Kimlikli/derin testler ve S1 dışı teknik aileleri bu koşunun dışındadır — "kanıtlı bulgu yok", "zafiyet yok" anlamına gelmez.</p>
     <p style="margin:0 0 8px"><b>Genel duruş:</b> ${esc(posture)}</p>
-    <p style="margin:0;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:8px 12px"><b>Önerilen sonraki adım:</b> ${esc(nextStep)}</p>
+    <div class="notbox">
+      <b>Bu rapor ne DEĞİLDİR?</b>
+      <ul>
+        <li>Resmi bir sızma testi (pentest) sertifikası ya da uygunluk denetimi (ör. ASV/QSA) <b>değildir</b>.</li>
+        <li>Kimlikli/oturum-sonrası derin testleri <b>içermez</b> — bu koşu ${esc(r.meta.level)} kapsamıyla sınırlıdır.</li>
+        <li>Deterministik <b>değildir</b>: aynı hedefte tekrar çalıştırıldığında farklı sonuç verebilir.</li>
+      </ul>
+    </div>
+    <p style="margin:8px 0 0;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:8px 12px"><b>Önerilen sonraki adım:</b> ${esc(nextStep)}</p>
     <div class="sum">
       <div><span class="risk">Genel risk: ${esc(RISK_LABEL[r.overallRisk] ?? r.overallRisk)}</span></div>
       <div><b style="color:#15803d">${r.counts.kanitli}</b>Kanıtlı</div>
@@ -406,9 +443,11 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
   <table class="scope"><tbody>
     <tr><th>Motor</th><td>Otonom PentAGI ajanı — gerçek saldırı teknikleri (simülasyon değil)</td></tr>
     <tr><th>Kanıt-bağlama</th><td>Üç katman: kanıtlı (deterministik imza) / belirsiz (insan-inceleme) / hayalet (elenir)</td></tr>
-    <tr><th>İzolasyon</th><td>Efemer izole droplet; egress yalnız yetkili hedef + LLM; CyberTestify/dış/metadata engelli (ampirik doğrulandı)</td></tr>
+    <tr><th>İzolasyon</th><td>${admin
+      ? 'Efemer izole droplet; egress yalnız yetkili hedef + LLM; CyberTestify/dış/metadata engelli (ampirik doğrulandı)'
+      : 'Test, her koşuda tek-kullanımlık ve izole bir ortamda yürütülür; dış erişim yalnızca yetkilendirilmiş hedefe sınırlıdır.'}</td></tr>
     <tr><th>Provenance</th><td>Yalnız pinlenen hedefe (${esc(r.meta.target)}) ait bulgular; hedef-dışı host referansları elenir</td></tr>
-    <tr><th>Bütçe</th><td>Sert cap (token/süre/maliyet); aşımda ağ-katmanı hard-stop${r.meta.costUsd != null ? ` — bu koşu ~$${Number(r.meta.costUsd).toFixed(4)}` : ''}</td></tr>
+    <tr><th>Bütçe</th><td>Sert cap (süre/kapsam); aşımda otomatik güvenli durdurma${admin && r.meta.costUsd != null ? ` — bu koşu ~$${Number(r.meta.costUsd).toFixed(4)}` : ''}</td></tr>
     <tr><th>Yetki</th><td>Sahiplik/yetki beyanı + risk onayı ile; ${esc(r.meta.environment)} ortamı</td></tr>
   </tbody></table>
 
@@ -438,12 +477,12 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
     <tr><th>HTTP isteği</th><td>${t.httpRequests ?? '—'}</td></tr>
     <tr><th>Terminal artefaktı</th><td>${t.terminalArtifacts ?? '—'}</td></tr>
     <tr><th>Kanıtlı / Belirsiz / Elenen</th><td>${r.counts.kanitli} / ${r.counts.belirsiz} / ${r.eliminated}</td></tr>
-    ${r.filteredMeta != null ? `<tr><th>Filtrelenen plan/meta iddia</th><td>${r.filteredMeta} <span class="ref">(subtask/plan/arama — kanıt değil, elendi)</span></td></tr>` : ''}
-    ${r.eliminatedReasons && Object.keys(r.eliminatedReasons).length ? `<tr><th>Eleme kırılımı</th><td>${Object.entries(r.eliminatedReasons).map(([k, v]) => `${esc(k)}: ${v}`).join(' · ')}</td></tr>` : ''}
-    ${r.meta.costUsd != null ? `<tr><th>Gerçek maliyet</th><td>~$${Number(r.meta.costUsd).toFixed(4)} <span class="ref">(msgchains token muhasebesinden)</span></td></tr>` : ''}
-    ${r.meta.llmCalls != null ? `<tr><th>LLM çağrısı</th><td>${r.meta.llmCalls}</td></tr>` : ''}
-    ${r.meta.agentSec != null ? `<tr><th>Ajan süresi</th><td>${r.meta.agentSec}s <span class="ref">(yalnız otonom ajanın çalıştığı süre — cap bu süreyi sınırlar)</span></td></tr>` : ''}
-    ${r.meta.elapsedSec != null ? `<tr><th>Toplam süre</th><td>${r.meta.elapsedSec}s <span class="ref">(uçtan uca: hazırlık + kurulum + ajan + bağlama + yıkım${r.meta.agentSec != null ? ` — fark ~${Math.max(0, r.meta.elapsedSec - r.meta.agentSec)}s altyapı fazlarıdır, ajan cap’i değil` : ''})</span></td></tr>` : ''}
+    ${admin && r.filteredMeta != null ? `<tr><th>Filtrelenen plan/meta iddia</th><td>${r.filteredMeta} <span class="ref">(subtask/plan/arama — kanıt değil, elendi)</span></td></tr>` : ''}
+    ${admin && r.eliminatedReasons && Object.keys(r.eliminatedReasons).length ? `<tr><th>Eleme kırılımı</th><td>${Object.entries(r.eliminatedReasons).map(([k, v]) => `${esc(k)}: ${v}`).join(' · ')}</td></tr>` : ''}
+    ${admin && r.meta.costUsd != null ? `<tr><th>Gerçek maliyet</th><td>~$${Number(r.meta.costUsd).toFixed(4)} <span class="ref">(msgchains token muhasebesinden)</span></td></tr>` : ''}
+    ${admin && r.meta.llmCalls != null ? `<tr><th>LLM çağrısı</th><td>${r.meta.llmCalls}</td></tr>` : ''}
+    ${admin && r.meta.agentSec != null ? `<tr><th>Ajan süresi</th><td>${r.meta.agentSec}s <span class="ref">(yalnız otonom ajanın çalıştığı süre — cap bu süreyi sınırlar)</span></td></tr>` : ''}
+    ${admin && r.meta.elapsedSec != null ? `<tr><th>Toplam süre</th><td>${r.meta.elapsedSec}s <span class="ref">(uçtan uca: hazırlık + kurulum + ajan + bağlama + yıkım${r.meta.agentSec != null ? ` — fark ~${Math.max(0, r.meta.elapsedSec - r.meta.agentSec)}s altyapı fazlarıdır, ajan cap’i değil` : ''})</span></td></tr>` : ''}
   </tbody></table>
 
   <p style="margin-top:20px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:10px">Bu rapor deneysel otonom red-team katmanı tarafından üretilmiştir ve deterministik değildir; resmi bir güvenlik denetimi ya da uygunluk belgesi yerine geçmez. Kanıtlı bulgular ham kanıta bağlıdır; belirsiz bulgular insan doğrulaması bekler.</p>
