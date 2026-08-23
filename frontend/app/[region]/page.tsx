@@ -18,12 +18,14 @@ export function generateStaticParams() {
 export function generateMetadata({ params }: { params: { region: string } }): Metadata {
   const region = isRegionCode(params.region) ? getRegion(params.region) : getRegion('tr');
   const tr = region.lang === 'tr';
+  // (SEO) Başlık 50-60, açıklama 150-160 karakterde tutulur (Google kırpması olmasın) — dürüst
+  // "resmi pentest değil" ibaresi korunur.
   const title = tr
-    ? 'CyberTestify — Dakikalar İçinde Başlayan Otomatik Güvenlik Taraması'
-    : 'CyberTestify — AI-Assisted Automated Website Security Scanning';
+    ? 'CyberTestify — Dakikalar İçinde AI Güvenlik Taraması'
+    : 'CyberTestify — AI-Assisted Website Security Scan';
   const description = tr
-    ? 'Web siteniz için yapay zekâ destekli, hızlı ve uygun fiyatlı otomatik güvenlik ön değerlendirmesi. Resmi pentest/denetim yerine geçmez. Alan adınızı doğrulayın, paketinizi seçin, şifreli raporunuzu alın.'
-    : 'AI-assisted, fast and affordable automated security pre-assessment for your website. Not a substitute for a formal pentest/audit. Verify your domain, pick a package, get your encrypted report.';
+    ? 'Yapay zekâ destekli otomatik web güvenlik ön değerlendirmesi (resmi pentest değil). Alan adınızı doğrulayın, paketinizi seçin, şifreli raporunuzu alın.'
+    : 'AI-assisted automated website security pre-assessment (not a formal pentest). Verify your domain, pick a package, get your encrypted report.';
   const url = `${SITE}/${region.code}`;
   return {
     title,

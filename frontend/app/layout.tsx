@@ -37,9 +37,10 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 const SITE_URL = 'https://cybertestify.com';
-const DEFAULT_TITLE = 'CyberTestify — Dakikalar İçinde Başlayan Otomatik Güvenlik Taraması';
+// (SEO) Varsayılan başlık 50-60, açıklama 150-160 karakter (Google kırpması olmasın).
+const DEFAULT_TITLE = 'CyberTestify — Dakikalar İçinde AI Güvenlik Taraması';
 const DEFAULT_DESC =
-  'Sitenizin güvenliğini yapay zekâ destekli otomatik taramayla dakikalar içinde başlatın; süre pakete/kapsama göre değişir. KVKK’ya uygun veri işleme, şifreli raporlama, yalnızca doğrulanmış alan adları.';
+  'Yapay zekâ destekli otomatik web güvenlik ön değerlendirmesi (resmi pentest değil). Alan adınızı doğrulayın, paketinizi seçin, şifreli raporunuzu alın.';
 
 // metadataBase: OG/canonical göreli URL'leri mutlağa çevirir. openGraph/twitter varsayılanları site-geneli
 // (sayfalar generateMetadata ile başlık/açıklama/canonical'ı EZER). OG görseli app/opengraph-image.tsx'ten
