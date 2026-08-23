@@ -109,6 +109,7 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
   const [withdrawal, setWithdrawal] = useState(false);
   const [cross, setCross] = useState(false);
 
+  const [promo, setPromo] = useState('');
   const [buying, setBuying] = useState(false);
   const [buyErr, setBuyErr] = useState<string | null>(null);
 
@@ -137,6 +138,8 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
         { ownershipConfirmed: true, distanceContractAccepted: true, withdrawalWaived: true, crossBorderTransfer: true },
         'tr',
         { riskAccepted: true },
+        undefined,
+        promo.trim() || undefined,
       );
       // %100 promo → doğrudan panel; aksi halde iyzico ödeme sayfasına yönlen.
       if (order.paymentPageUrl) { window.location.href = order.paymentPageUrl; return; }
@@ -216,9 +219,16 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
         {chk(cross, setCross, 'Tarama verimin, güvenlik analizi için yurt dışındaki (ABD) yapay zekâ sağlayıcısına aktarılmasına açık rıza veriyorum (KVKK m.9).')}
       </div>
 
+      {/* Promosyon kodu (opsiyonel — %100 kod ₺0'a indirir ve taramayı hemen başlatır) */}
+      <div className="mt-5">
+        <label className="label" htmlFor="rt-promo">Promosyon kodu (opsiyonel)</label>
+        <input id="rt-promo" className="field w-full uppercase" value={promo} onChange={(e) => setPromo(e.target.value)} placeholder="CYBER-TEST-2026" autoCapitalize="characters" />
+        <p className="mt-1 text-[11px] text-ink-muted">Geçerli bir kod fiyatı düşürür; %100 kodda ödeme adımı atlanır, tarama doğrudan başlar.</p>
+      </div>
+
       {buyErr && <p className="form-error mt-3">{buyErr}</p>}
       <button type="button" onClick={buy} disabled={buying || !canBuy} className="btn btn-primary mt-4 w-full">
-        {buying ? 'Yönlendiriliyor…' : price ? `₺${price.priceTL.toLocaleString('tr-TR')} — Öde ve Başlat` : 'Önce fiyatı görün'}
+        {buying ? 'Yönlendiriliyor…' : !price ? 'Önce fiyatı görün' : promo.trim() ? 'Kodu Uygula ve Başlat' : `₺${price.priceTL.toLocaleString('tr-TR')} — Öde ve Başlat`}
       </button>
       <p className="mt-2 text-center text-[11px] text-ink-muted">Ödeme başarısız olursa tarama başlamaz. Rapor, ekip onayından sonra size açılır.</p>
     </div>
