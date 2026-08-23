@@ -4,7 +4,8 @@ import { zodError } from '../httpErrors.js';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { decryptReport } from '../services/crypto.js';
-import { renderReportPdf } from '../services/pdf.js';
+import { renderReportPdf, htmlToPdfBuffer } from '../services/pdf.js';
+import { renderRedTeamFullHtml, redteamReportNo } from '../redteam/report.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getPackageDef, fixSuggestionPrice } from '../services/scanPackages.js';
@@ -44,6 +45,22 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
     });
   } catch {
     return res.status(403).json({ error: 'Erisim sifresi hatali.' });
+  }
+
+  // (S1) redteam_s1 raporu: şifreli blob = RedTeamReport JSON (markdown DEĞİL). Müşteri-modunda
+  // (iç-operasyon verisi gizli — maliyet/LLM/süre/ID/IP yok) HTML→PDF render edilir; 6-paket
+  // markdown/fix yolu ATLANIR. Onay kapısı (409) yukarıda zaten uygulandı.
+  if (report.order.package.key === 'redteam_s1') {
+    let rt: any;
+    try { rt = JSON.parse(plaintext.toString('utf-8')); } catch { return res.status(500).json({ error: 'Rapor içeriği çözümlenemedi.' }); }
+    if (rt?.meta) rt.meta.jobId = rt.meta.jobId ?? req.params.orderId;
+    const reportNo = redteamReportNo(rt?.meta ?? { generatedAt: '', target: report.order.domain.hostname });
+    const html = renderRedTeamFullHtml(rt, 'customer');
+    const pdf = await htmlToPdfBuffer(html, `CyberTestify · Otonom AI Red Team (deneysel) · ${reportNo}`);
+    await prisma.report.update({ where: { id: report.id }, data: { deliveredAt: new Date() } });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="cybertestify-redteam-${reportNo}.pdf"`);
+    return res.send(pdf);
   }
 
   // (3) Fix onerileri: unlock edilmisse AYNI accessSecret ile coz + PDF'e bolum olarak

@@ -19,6 +19,8 @@ import { persistStep, persistPull } from './observability.js';
 import { pullOnce, maskSecrets } from './puller.js';
 import { renderTranscript } from './transcript.js';
 import { nodeResolver } from './targetGuard.js';
+import { storeRedTeamCustomerReport } from '../services/redteamOrderReport.js';
+import { sendReportReady } from '../services/mailer.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -340,6 +342,31 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
         ...(transcript ? { transcriptJson: transcript as any } : {}),
       },
     });
+
+    // (S1 TİCARİ ENTEGRASYON — Aşama 2) Ödemeli Order'a bağlı S1 koşusu bitti → raporu mevcut teslim
+    // makinesine köprüle: müşteri-erişim-kodlu ŞİFRELİ Report + Order awaiting_admin_review (onay kapısı).
+    // orderId YOKsa (eski beta/operatör koşusu) atlanır — geriye uyumlu. Best-effort: hata koşuyu bozmaz.
+    if (job.orderId && reportJson) {
+      try {
+        const incomplete = !result.ok;
+        const { accessSecret, gated } = await storeRedTeamCustomerReport(job.orderId, reportJson, {
+          incomplete,
+          incompleteReason: incomplete ? (result.error ?? 'Koşu erken durdu/başarısız — rapor kısmi olabilir.') : null,
+        });
+        // Kapı KAPALIYSA rapor hemen açık → "hazır" e-postası burada. AÇIKSA e-posta admin onayında gider.
+        if (!gated) await sendReportReady(job.orderId, accessSecret).catch((e) => console.error('[redteam-s1] mail hata:', (e as Error).message));
+        console.log(`[redteam-s1] order ${job.orderId} raporu köprülendi → ${gated ? 'awaiting_admin_review (admin onayı bekliyor)' : 'scan_completed (kapı kapalı)'}`);
+      } catch (e) {
+        console.error('[redteam-s1] Order rapor köprüleme hatası:', (e as Error).message);
+      }
+    } else if (job.orderId && !reportJson) {
+      // Rapor HİÇ üretilemedi (total başarısızlık) → sipariş scan_running'de ASILI kalmasın; müşteri
+      // başarısızlığı görsün (iade/yeniden-deneme admin'de). Kısmi rapor varsa yukarıda köprülendi.
+      await prisma.order.updateMany({
+        where: { id: job.orderId, status: { notIn: ['scan_completed', 'awaiting_admin_review'] } },
+        data: { status: 'scan_failed', failureReason: (result.error ?? 'S1 taraması rapor üretemedi.').slice(0, 300) },
+      }).catch((e) => console.error('[redteam-s1] scan_failed işaretleme hatası:', (e as Error).message));
+    }
   } catch (e) {
     if (pullTimer) clearInterval(pullTimer);
     await prisma.redTeamJob.updateMany({

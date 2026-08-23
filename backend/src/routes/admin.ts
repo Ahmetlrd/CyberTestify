@@ -275,6 +275,9 @@ adminRouter.post('/orders/:id/retry-scan', async (req, res) => {
   // Eski rapor + flow'u temizle (Report.orderId ve Flow.orderId unique — yeni tarama yeni flow yaratir).
   await prisma.report.deleteMany({ where: { orderId: order.id } });
   await prisma.flow.deleteMany({ where: { orderId: order.id } });
+  // (S1) Bağlı RedTeamJob'u da temizle → dispatch idempotent olduğundan, silinmezse yeniden KOŞMAZDI.
+  // Silince startScanForOrder S1 dalı taze bir RedTeamJob açıp runner'ı yeniden tetikler.
+  await prisma.redTeamJob.deleteMany({ where: { orderId: order.id } });
   await prisma.order.update({ where: { id: order.id }, data: { status: 'paid' } });
   try {
     const r = await enqueueOrStartScan(order.id);
@@ -316,6 +319,26 @@ adminRouter.get('/orders/:id/report.pdf', async (req, res) => {
       authTag: report.authTag as Buffer, keyDerivationSalt: report.keyDerivationSalt as Buffer, accessSecret,
     });
   } catch { return res.status(500).json({ error: 'Rapor cozulemedi.' }); }
+
+  // (S1) redteam_s1: şifreli blob = RedTeamReport JSON. Admin ÖNİZLEMESİ TAM veriyle (admin modu —
+  // maliyet/LLM/süre/artefakt-ID hepsi görünür); 6-paket markdown/fix yolu ATLANIR. Böylece admin,
+  // orders onay kuyruğundan S1 raporunu tam görüp onaylayabilir.
+  if (report.order.package.key === 'redteam_s1') {
+    let rt: any;
+    try { rt = JSON.parse(plaintext.toString('utf-8')); } catch { return res.status(500).json({ error: 'Rapor içeriği çözümlenemedi.' }); }
+    if (rt?.meta) rt.meta.jobId = rt.meta.jobId ?? report.orderId;
+    const reportNo = redteamReportNo(rt?.meta ?? { generatedAt: '', target: report.order.domain.hostname });
+    const pdf = await htmlToPdfBuffer(renderRedTeamFullHtml(rt, 'admin'), `CyberTestify · Otonom AI Red Team (ADMIN) · ${reportNo}`);
+    await logReportAccess({
+      adminId: req.adminId!, reportId: report.id, orderId: report.orderId,
+      customerId: report.order.customer.id, customerEmail: report.order.customer.email,
+      action: 'view_pdf', ip: req.ip ?? null,
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="redteam-admin-${reportNo}.pdf"`);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(pdf);
+  }
 
   // AI Çözüm Önerileri — admin İNCELEMESİ için HER ZAMAN açık (kampanya/kilit durumundan bağımsız).
   let fixMarkdown: string | null = null;
