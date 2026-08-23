@@ -1,7 +1,7 @@
 import { LegalArticle } from '../../../components/LegalArticle';
 import { COMPANY } from '../../../lib/company';
 
-export const metadata = { title: 'Teslimat, İptal / İade & Cayma Koşulları — CyberTestify' };
+export const metadata = { title: 'Teslimat, İptal / İade & Cayma Koşulları — CyberTestify', alternates: { canonical: '/legal/iptal-iade' } };
 
 export default function Page() {
   return (

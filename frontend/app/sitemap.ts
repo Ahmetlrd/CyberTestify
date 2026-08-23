@@ -27,6 +27,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE}/acik-kaynak`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
   ];
 
+  // (SEO) Hukuki sayfalar — footer'dan linkli, kendi canonical'ıyla indekslenmeli (eskiden /tr'ye
+  // canonical veriyorlardı → GSC "kopya" diyordu). Sitemap'e ekleyerek keşif/indeks sinyali güçlenir.
+  const legalSlugs = ['kullanim-kosullari', 'gizlilik', 'kvkk-aydinlatma', 'cerez', 'mesafeli-satis', 'on-bilgilendirme', 'iptal-iade', 'sorumluluk-reddi'];
+  const legalRoutes: MetadataRoute.Sitemap = legalSlugs.map((slug) => ({
+    url: `${SITE}/legal/${slug}`, lastModified: now, changeFrequency: 'yearly', priority: 0.3,
+  }));
+
   const blogRoutes: MetadataRoute.Sitemap = posts.map((p) => ({
     url: `${SITE}/blog/${p.slug}`,
     lastModified: p.publishedAt ? new Date(p.publishedAt) : now,
@@ -34,5 +41,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...staticRoutes, ...blogRoutes];
+  return [...staticRoutes, ...legalRoutes, ...blogRoutes];
 }

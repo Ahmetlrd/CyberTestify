@@ -1,6 +1,6 @@
 import { LegalArticle } from '../../../components/LegalArticle';
 
-export const metadata = { title: 'Çerez Politikası — CyberTestify' };
+export const metadata = { title: 'Çerez Politikası — CyberTestify', alternates: { canonical: '/legal/cerez' } };
 
 export default function Page() {
   return (

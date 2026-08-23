@@ -50,7 +50,10 @@ export const metadata = {
   title: DEFAULT_TITLE,
   description: DEFAULT_DESC,
   applicationName: 'CyberTestify',
-  alternates: { canonical: '/tr' },
+  // (SEO/canonical) SİTE-GENELİ varsayılan canonical VERİLMEZ. Eskiden '/tr' idi — kendi canonical'ını
+  // set etMEYEN her sayfa (ör. /legal/*) Google'a "ben /tr'nin kopyasıyım" diyordu → GSC'de "kopya,
+  // standart sayfa /tr" ve indexlenmeme. Ana sayfa canonical'ını [region]/page.tsx zaten kendi veriyor;
+  // diğer sayfalar kendi canonical'ını (aşağıda legal/* dahil) verir; verilmezse Google kendine-canonical yapar.
   openGraph: {
     type: 'website',
     siteName: 'CyberTestify',

@@ -1,7 +1,7 @@
 import { LegalArticle } from '../../../components/LegalArticle';
 import { COMPANY } from '../../../lib/company';
 
-export const metadata = { title: 'Kullanım Koşulları — CyberTestify' };
+export const metadata = { title: 'Kullanım Koşulları — CyberTestify', alternates: { canonical: '/legal/kullanim-kosullari' } };
 
 export default function Page() {
   return (
