@@ -222,14 +222,13 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
       {/* Promosyon kodu (opsiyonel) — kod GÖSTERİLMEZ, boş alan (6 paket akışıyla aynı). */}
       <div className="mt-5">
         <label className="label" htmlFor="rt-promo">Promosyon kodu (opsiyonel)</label>
-        <input id="rt-promo" className="field w-full uppercase" value={promo} onChange={(e) => setPromo(e.target.value)} placeholder="Kodunuz varsa girin" autoCapitalize="characters" />
+        <input id="rt-promo" className="field w-full uppercase" value={promo} onChange={(e) => setPromo(e.target.value)} placeholder="KODUNUZ" autoCapitalize="characters" />
       </div>
 
       {buyErr && <p className="form-error mt-3">{buyErr}</p>}
       <button type="button" onClick={buy} disabled={buying || !canBuy} className="btn btn-primary mt-4 w-full">
         {buying ? 'Yönlendiriliyor…' : !price ? 'Önce fiyatı görün' : promo.trim() ? 'Kodu Uygula ve Başlat' : `₺${price.priceTL.toLocaleString('tr-TR')} — Öde ve Başlat`}
       </button>
-      <p className="mt-2 text-center text-[11px] text-ink-muted">Ödeme başarısız olursa tarama başlamaz. Rapor, ekip onayından sonra size açılır.</p>
     </div>
   );
 }
