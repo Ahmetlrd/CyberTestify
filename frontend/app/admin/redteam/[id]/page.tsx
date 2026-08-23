@@ -113,29 +113,57 @@ export default function AdminRedTeamDetail({ params }: { params: { id: string } 
         )}
       </div>
 
-      {/* Faz göstergesi */}
+      {/* Faz göstergesi — (P0-E1) DURUM-FARKINDA: koşu bitince (completed) TÜM fazlar tamamlandı görünür.
+          Eski mantık yalnız job.phase'i "aktif" gösteriyordu; watchdog-abort'ta phase 'campaign'de kalıp
+          bind/report/teardown hiç vurgulanmıyordu. Artık: completed→hepsi yeşil; failed/aborted→durduğu faz
+          kırmızı, öncesi yeşil, sonrası gri; canlı→job.phase mavi (aktif). */}
       <div style={{ ...card, display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-        {PHASES.map((p) => {
-          const cur = job.phase === p;
-          const done = PHASES.indexOf(job.phase) > PHASES.indexOf(p) && job.phase;
-          return (
-            <span key={p} style={{
-              padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: cur ? 700 : 500,
-              background: cur ? '#38bdf8' : done ? '#14532d' : '#0f172a',
-              color: cur ? '#0f172a' : done ? '#86efac' : '#64748b', border: '1px solid #334155',
-            }}>{p}</span>
-          );
-        })}
+        {(() => {
+          const TERMINAL = ['completed', 'failed', 'aborted', 'torn_down'];
+          const isTerminal = TERMINAL.includes(job.status);
+          const succeeded = job.status === 'completed' || job.status === 'torn_down';
+          const stopIdx = PHASES.indexOf(job.phase);
+          const STY: Record<string, { bg: string; fg: string; w: number }> = {
+            done: { bg: '#14532d', fg: '#86efac', w: 500 },
+            cur: { bg: '#38bdf8', fg: '#0f172a', w: 700 },
+            fail: { bg: '#7f1d1d', fg: '#fecaca', w: 700 },
+            todo: { bg: '#0f172a', fg: '#64748b', w: 500 },
+          };
+          return PHASES.map((p, i) => {
+            let state: 'done' | 'cur' | 'fail' | 'todo';
+            if (succeeded) state = 'done';
+            else if (isTerminal) state = i < stopIdx ? 'done' : i === stopIdx ? 'fail' : 'todo';
+            else state = job.phase === p ? 'cur' : (i < stopIdx && stopIdx >= 0 ? 'done' : 'todo');
+            const s = STY[state];
+            return (
+              <span key={p} style={{
+                padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: s.w,
+                background: s.bg, color: s.fg, border: '1px solid #334155',
+              }}>{state === 'done' ? '✓ ' : state === 'fail' ? '✗ ' : ''}{p}</span>
+            );
+          });
+        })()}
         <span style={{ marginLeft: 'auto', fontSize: 13, color: '#e2e8f0' }}>durum: <b>{job.status}</b></span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 14 }}>
-        {/* Cap metresi */}
+        {/* Cap metresi — (P0-E2) cap YALNIZ AJAN süresine uygulanır. Eski çubuk toplam uçtan-uca süreyi
+            (setup+bind+report+teardown DAHİL) ajan cap'ine karşı gösterip altyapıyı "cap aşımı" gibi
+            gösteriyordu. Artık: ajan süresi (report.meta.agentSec) cap'e karşı; toplam süre AYRI/etiketli,
+            cap'siz. Kırmızı yalnız GERÇEK ajan-cap aşımında. */}
         <div style={card}>
           <h3 style={{ fontSize: 14, margin: '0 0 10px', color: '#e2e8f0' }}>Cap metresi (sert tavan)</h3>
           <Bar label="LLM çağrısı" value={job.llmCalls} max={cap?.capCalls} unit="" />
-          <Bar label="Süre" value={job.elapsedSec} max={cap?.capSec} unit="s" />
+          <Bar label="Ajan süresi" value={report?.meta?.agentSec ?? null} max={cap?.capSec} unit="s" />
           <Bar label="Maliyet" value={job.costUsd} max={cap?.capCostUsd} unit="$" />
+          {job.elapsedSec != null && (
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+              Toplam süre (uçtan uca): <b style={{ color: '#cbd5e1' }}>{job.elapsedSec}s</b>
+              {report?.meta?.agentSec != null && <> · altyapı ~{Math.max(0, job.elapsedSec - report.meta.agentSec)}s</>}
+              <br /><span style={{ color: '#64748b' }}>Cap yalnız ajan süresine uygulanır; altyapı fazları (kurulum/bağlama/yıkım) cap dışıdır.</span>
+              {report?.meta?.agentSec == null && <><br /><span style={{ color: '#64748b' }}>Ajan süresi koşu tamamlanınca kesinleşir.</span></>}
+            </div>
+          )}
         </div>
 
         {/* Egress durumu */}
