@@ -22,6 +22,16 @@ const DEFAULT_PHASES = [
 ];
 
 const PHASE_SETS: Record<string, string[]> = {
+  // (S1 Otonom Red Team) MÜŞTERİ-YÜZÜ soyut fazlar — teknik altyapı (droplet/SSH/PentAGI/faz adları)
+  // ASLA gösterilmez. Süre uzun sürebilir; son faz "onay" beklerken de aktif kalır (customerFacingStatus
+  // awaiting_admin_review'i scan_running'e maskeler → burada "rapor hazırlanıyor" görünür).
+  redteam_s1: [
+    'İzole test ortamı hazırlanıyor',
+    'Hedef inceleniyor ve saldırı yüzeyi keşfediliyor',
+    'Otonom ajan güvenlik tekniklerini deniyor',
+    'Bulgular ham kanıta bağlanıyor ve doğrulanıyor',
+    'Rapor hazırlanıyor ve gözden geçiriliyor',
+  ],
   basit_tarama: [
     'Hedef erişilebilirliği kontrol ediliyor',
     'HTTP güvenlik başlıkları taranıyor',

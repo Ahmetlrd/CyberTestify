@@ -187,6 +187,12 @@ export const api = {
       } | null;
       note?: string;
     }>('/beta/estimate', { method: 'POST', headers: betaHeaders(), body: JSON.stringify({ domain }), timeoutMs: 30_000 }),
+  // (S1) Karmaşıklık-bazlı NET fiyat (ödeme öncesi). PentAGI/droplet çalışmaz — ucuz pasif ön-kontrol.
+  betaS1Price: (domain: string) =>
+    request<{
+      host: string; level: 'S1'; currency: string; priceTL: number;
+      tier: { key: string; label: string; desc: string }; reason: string; estEndpoints: number; note: string;
+    }>('/beta/s1-price', { method: 'POST', headers: betaHeaders(), body: JSON.stringify({ domain }), timeoutMs: 30_000 }),
   // 3b-i STUB: gerçek koşu YOK. Sahiplik/onay sunucuda doğrulanır; "Hazırlanıyor" döner.
   betaStart: (payload: {
     domain: string;

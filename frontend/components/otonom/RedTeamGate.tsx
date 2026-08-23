@@ -96,207 +96,131 @@ function Locked({ d, onUnlock }: { d: D; onUnlock: () => void }) {
   );
 }
 
-/* ————————————————— AÇIK PANEL (yine de gerçek koşu YOK — stub) ————————————————— */
+/* ————————————————— AÇIK PANEL — GERÇEK S1 SATIN ALMA (ödeme + admin onay akışı) ————————————————— */
 function Panel({ d, onLock }: { d: D; onLock: () => void }) {
   const [domain, setDomain] = useState('');
-  const [estimating, setEstimating] = useState(false);
-  const [estimate, setEstimate] = useState<Awaited<ReturnType<typeof api.betaEstimate>> | null>(null);
-  const [estError, setEstError] = useState<string | null>(null);
+  const [priceLoading, setPriceLoading] = useState(false);
+  const [price, setPrice] = useState<Awaited<ReturnType<typeof api.betaS1Price>> | null>(null);
+  const [priceErr, setPriceErr] = useState<string | null>(null);
 
-  const [level, setLevel] = useState<Level>('S2');
-  const [env, setEnv] = useState<Env>('test');
   const [own, setOwn] = useState(false);
   const [risk, setRisk] = useState(false);
-  const [prodAck, setProdAck] = useState(false);
+  const [distance, setDistance] = useState(false);
+  const [withdrawal, setWithdrawal] = useState(false);
+  const [cross, setCross] = useState(false);
 
-  const [starting, setStarting] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
-  const [stub, setStub] = useState<{ title: string; body: string } | null>(null);
+  const [buying, setBuying] = useState(false);
+  const [buyErr, setBuyErr] = useState<string | null>(null);
 
-  const s3prod = level === 'S3' && env === 'prod';
-  const canStart = own && risk && (!s3prod || prodAck);
+  const canBuy = !!price && own && risk && distance && withdrawal && cross;
 
-  async function runEstimate(e: React.FormEvent) {
+  // Domain değişince eski fiyatı geçersiz kıl (yanlış fiyatla satın alma olmasın).
+  function onDomainChange(v: string) { setDomain(v); if (price) setPrice(null); }
+
+  async function loadPrice(e: React.FormEvent) {
     e.preventDefault();
-    setEstError(null);
-    setEstimating(true);
-    setEstimate(null);
-    try {
-      setEstimate(await api.betaEstimate(domain.trim()));
-    } catch (err) {
-      setEstError((err as Error).message);
-    } finally {
-      setEstimating(false);
-    }
+    setPriceErr(null); setPrice(null); setPriceLoading(true);
+    try { setPrice(await api.betaS1Price(domain.trim())); }
+    catch (err) { setPriceErr((err as Error).message); }
+    finally { setPriceLoading(false); }
   }
 
-  async function start() {
-    setStartError(null);
-    setStub(null);
-    if (!canStart) {
-      setStartError(d.needConsents);
-      return;
-    }
-    setStarting(true);
+  async function buy() {
+    setBuyErr(null);
+    if (!canBuy) { setBuyErr('Önce fiyatı hesaplayın ve tüm onayları işaretleyin.'); return; }
+    setBuying(true);
     try {
-      const r = await api.betaStart({
-        domain: domain.trim() || 'example.com',
-        level,
-        environment: env,
-        ownershipConfirmed: own,
-        riskAccepted: risk,
-        prodElevatedAccepted: s3prod ? prodAck : undefined,
-      });
-      // 3b-i: started === false her zaman. Gerçek koşu YOK.
-      setStub({ title: d.stubTitle, body: r.message || d.stubBody });
+      const dom = await api.createDomain(domain.trim()); // idempotent — kayıtlıysa mevcut domainId döner
+      const order = await api.createOrder(
+        dom.domainId,
+        'redteam_s1',
+        { ownershipConfirmed: true, distanceContractAccepted: true, withdrawalWaived: true, crossBorderTransfer: true },
+        'tr',
+        { riskAccepted: true },
+      );
+      // %100 promo → doğrudan panel; aksi halde iyzico ödeme sayfasına yönlen.
+      if (order.paymentPageUrl) { window.location.href = order.paymentPageUrl; return; }
+      window.location.href = `/dashboard/${order.orderId}`;
     } catch (err) {
-      setStartError((err as Error).message);
-    } finally {
-      setStarting(false);
-    }
+      const msg = (err as Error).message || 'Satın alma başlatılamadı.';
+      if (/401|oturum|giriş yap|unauthor/i.test(msg)) {
+        window.location.href = `/login?next=${encodeURIComponent('/otonom-red-team')}`;
+        return;
+      }
+      setBuyErr(msg);
+    } finally { setBuying(false); }
   }
 
-  const priceBand = (() => {
-    const sug = estimate?.suggestion;
-    if (!sug) return null;
-    const { priceRange } = sug;
-    return (
-      <div className="mt-3 rounded-card border border-accent/40 bg-accent-soft/40 p-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <span className="font-semibold text-ink">{d.priceTitle}</span>
-          <span className="text-xs text-ink-muted">
-            {d.tierLabel}: <b>{sug.tier.label}</b> · {d.scoreLabel}: <b>{sug.score}</b>
-          </span>
-        </div>
-        <div className="mt-1 text-lg font-extrabold text-brand">
-          {priceRange.placeholder || priceRange.minTL == null || priceRange.maxTL == null
-            ? d.priceUnset
-            : `₺${priceRange.minTL.toLocaleString('tr-TR')} – ₺${priceRange.maxTL.toLocaleString('tr-TR')}`}
-        </div>
-        <p className="mt-1 text-xs text-ink-muted">{d.priceGuarantee}</p>
-      </div>
-    );
-  })();
+  const chk = (v: boolean, set: (b: boolean) => void, label: React.ReactNode) => (
+    <label className="flex items-start gap-2 text-sm text-ink-soft">
+      <input type="checkbox" className="mt-0.5" checked={v} onChange={(e) => set(e.target.checked)} />
+      <span>{label}</span>
+    </label>
+  );
 
   return (
     <div className="card p-6 sm:p-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-xl font-bold text-ink">{d.panelTitle}</h3>
-          <p className="mt-1 text-sm text-ink-soft">{d.panelSubtitle}</p>
+          <h3 className="text-xl font-bold text-ink">Otonom AI Red Team — Satın Al</h3>
+          <p className="mt-1 text-sm text-ink-soft">Hedefinizi girin, karmaşıklık-bazlı fiyatı görün, ödeyin. Tarama bitince raporunuz önce ekibimizce gözden geçirilir, sonra size açılır.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            window.localStorage.removeItem(BETA_TOKEN_KEY);
-            onLock();
-          }}
-          className="btn btn-ghost shrink-0 text-xs"
-        >
-          ✕
-        </button>
+        <button type="button" onClick={() => { window.localStorage.removeItem(BETA_TOKEN_KEY); onLock(); }} className="btn btn-ghost shrink-0 text-xs">✕</button>
       </div>
 
-      {/* Domain → fiyat bandı (pasif) */}
-      <form onSubmit={runEstimate} className="mt-6">
-        <label className="label" htmlFor="rt-domain">
-          {d.domainLabel}
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="rt-domain"
-            className="field flex-1"
-            value={domain}
-            onChange={(e) => setDomain(e.target.value)}
-            placeholder={d.domainPlaceholder}
-          />
-          <button type="submit" disabled={estimating || domain.trim().length < 3} className="btn btn-outline shrink-0">
-            {estimating ? d.estimating : d.estimateCta}
-          </button>
-        </div>
-        {estError && <p className="form-error mt-1">{estError}</p>}
-        {priceBand}
-      </form>
-
-      {/* Risk seviyesi */}
+      {/* Seviye seçimi: S1 beta (aktif), S2/S3 yakında (kapalı) */}
       <fieldset className="mt-6">
-        <legend className="label">{d.levelLabel}</legend>
+        <legend className="label">Seviye</legend>
         <div className="grid gap-2 sm:grid-cols-3">
-          {d.levels.map((lv, i) => {
-            const key = (['S1', 'S2', 'S3'] as Level[])[i];
-            const active = level === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setLevel(key)}
-                className={`rounded-card border p-3 text-left transition ${
-                  active ? 'border-brand bg-brand-50' : 'border-line bg-surface hover:border-brand-300'
-                }`}
-              >
-                <div className="text-sm font-bold text-ink">{lv.name}</div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-accent-600">{lv.tag}</div>
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
-
-      {/* Ortam */}
-      <fieldset className="mt-5">
-        <legend className="label">{d.envLabel}</legend>
-        <div className="flex flex-wrap gap-2">
-          {([['test', d.envTest], ['staging', d.envStaging], ['prod', d.envProd]] as [Env, string][]).map(([key, lbl]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setEnv(key)}
-              className={`rounded-pill border px-4 py-1.5 text-sm font-medium transition ${
-                env === key ? 'border-brand bg-brand text-white' : 'border-line bg-surface text-ink-soft hover:border-brand-300'
-              }`}
-            >
-              {lbl}
-            </button>
+          <div className="rounded-card border-2 border-brand bg-brand-50 p-3">
+            <div className="flex items-center gap-2"><span className="text-sm font-bold text-ink">S1</span><span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold uppercase text-white">Beta</span></div>
+            <div className="text-[11px] text-ink-muted">Pasif + hafif-aktif · deneysel</div>
+          </div>
+          {(['S2', 'S3'] as const).map((lv) => (
+            <div key={lv} className="rounded-card border border-line bg-surface p-3 opacity-60">
+              <div className="flex items-center gap-2"><span className="text-sm font-bold text-ink-muted">{lv}</span><span className="rounded-pill bg-ink-muted/20 px-2 py-0.5 text-[10px] font-bold uppercase text-ink-muted">Yakında</span></div>
+              <div className="text-[11px] text-ink-muted">{lv === 'S2' ? 'Aktif doğrulama (dengeli)' : 'Geniş yüzey (agresif)'}</div>
+            </div>
           ))}
         </div>
-        {env === 'prod' && level !== 'S3' && <p className="mt-2 text-xs text-ink-muted">{d.prodRedirect}</p>}
       </fieldset>
 
-      {/* S3 + prod → ek açık uyarı + onay */}
-      {s3prod && (
-        <div className="mt-4 rounded-card border-2 border-amber-400 bg-amber-50 p-4">
-          <p className="text-sm font-semibold text-amber-900">{d.prodS3Warn}</p>
-          <label className="mt-2 flex items-start gap-2 text-sm text-amber-900">
-            <input type="checkbox" className="mt-0.5" checked={prodAck} onChange={(e) => setProdAck(e.target.checked)} />
-            <span>{d.prodS3Consent}</span>
-          </label>
+      {/* Domain → karmaşıklık-bazlı NET fiyat */}
+      <form onSubmit={loadPrice} className="mt-6">
+        <label className="label" htmlFor="rt-domain">Hedef alan adı</label>
+        <div className="flex gap-2">
+          <input id="rt-domain" className="field flex-1" value={domain} onChange={(e) => onDomainChange(e.target.value)} placeholder="ornek.com" />
+          <button type="submit" disabled={priceLoading || domain.trim().length < 3} className="btn btn-outline shrink-0">
+            {priceLoading ? 'Hesaplanıyor…' : 'Fiyatı gör'}
+          </button>
         </div>
-      )}
+        {priceErr && <p className="form-error mt-1">{priceErr}</p>}
+        {price && (
+          <div className="mt-3 rounded-card border border-accent/40 bg-accent-soft/40 p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="font-semibold text-ink">Fiyat (karmaşıklık-bazlı)</span>
+              <span className="text-xs text-ink-muted">Kademe: <b>{price.tier.label}</b></span>
+            </div>
+            <div className="mt-1 text-2xl font-extrabold text-brand">₺{price.priceTL.toLocaleString('tr-TR')}</div>
+            <p className="mt-1 text-xs text-ink-muted">{price.reason}. Üst sınır ₺2.500 — ödeme öncesi sabittir, sürpriz fatura yoktur.</p>
+          </div>
+        )}
+      </form>
 
-      {/* Sahiplik / risk onayı (zorunlu) */}
-      <div className="mt-5 space-y-2">
-        <label className="flex items-start gap-2 text-sm text-ink-soft">
-          <input type="checkbox" className="mt-0.5" checked={own} onChange={(e) => setOwn(e.target.checked)} />
-          <span>{d.ownConsent}</span>
-        </label>
-        <label className="flex items-start gap-2 text-sm text-ink-soft">
-          <input type="checkbox" className="mt-0.5" checked={risk} onChange={(e) => setRisk(e.target.checked)} />
-          <span>{d.riskConsent}</span>
-        </label>
+      {/* Zorunlu onaylar (siparişle aynı hukuki set) */}
+      <div className="mt-6 space-y-2.5">
+        {chk(own, setOwn, 'Hedef alan adının/altyapının sahibi veya yetkili temsilcisiyim; bu testi yürütmeye yetkim var.')}
+        {chk(risk, setRisk, 'Bunun DENEYSEL, deterministik-olmayan bir tarama olduğunu ve resmi bir sızma testi/denetim yerine geçmediğini kabul ediyorum.')}
+        {chk(distance, setDistance, <>Mesafeli Satış Sözleşmesi ve Ön Bilgilendirme Formu'nu okudum, onaylıyorum.</>)}
+        {chk(withdrawal, setWithdrawal, 'Hizmet ödemeden hemen sonra başladığı için cayma hakkımdan feragat ediyorum.')}
+        {chk(cross, setCross, 'Tarama verimin, güvenlik analizi için yurt dışındaki (ABD) yapay zekâ sağlayıcısına aktarılmasına açık rıza veriyorum (KVKK m.9).')}
       </div>
 
-      {startError && <p className="form-error mt-3">{startError}</p>}
-      <button type="button" onClick={start} disabled={starting || !canStart} className="btn btn-primary mt-4 w-full">
-        {starting ? d.starting : d.startCta}
+      {buyErr && <p className="form-error mt-3">{buyErr}</p>}
+      <button type="button" onClick={buy} disabled={buying || !canBuy} className="btn btn-primary mt-4 w-full">
+        {buying ? 'Yönlendiriliyor…' : price ? `₺${price.priceTL.toLocaleString('tr-TR')} — Öde ve Başlat` : 'Önce fiyatı görün'}
       </button>
-
-      {/* 3b-i STUB — gerçek koşu YOK */}
-      {stub && (
-        <div className="mt-4 rounded-card border border-brand-300 bg-brand-50 p-4 text-center">
-          <div className="text-sm font-bold text-brand">{stub.title}</div>
-          <p className="mt-1 text-sm text-ink-soft">{stub.body}</p>
-        </div>
-      )}
+      <p className="mt-2 text-center text-[11px] text-ink-muted">Ödeme başarısız olursa tarama başlamaz. Rapor, ekip onayından sonra size açılır.</p>
     </div>
   );
 }

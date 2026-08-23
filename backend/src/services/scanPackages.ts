@@ -140,6 +140,10 @@ export function usesForeignAi(key: string | undefined | null): boolean {
     // Elit Otonom (contact-only/yakında) — tümüyle otonom AI; anahtar varsa consent hazır tut.
     case 'bundle_elite_autonomous':
       return !!process.env.ADVISORY_LLM_API_KEY;
+    // (S1) Otonom AI Red Team — hedef verisi izole droplet'ten Anthropic'e (ABD) gider → yurt dışı
+    // AI aktarımı; KVKK m.9 açık rıza ZORUNLU (crossBorderTransfer). Her zaman true.
+    case 'redteam_s1':
+      return true;
     default:
       return false;
   }
