@@ -219,11 +219,10 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
         {chk(cross, setCross, 'Tarama verimin, güvenlik analizi için yurt dışındaki (ABD) yapay zekâ sağlayıcısına aktarılmasına açık rıza veriyorum (KVKK m.9).')}
       </div>
 
-      {/* Promosyon kodu (opsiyonel — %100 kod ₺0'a indirir ve taramayı hemen başlatır) */}
+      {/* Promosyon kodu (opsiyonel) — kod GÖSTERİLMEZ, boş alan (6 paket akışıyla aynı). */}
       <div className="mt-5">
         <label className="label" htmlFor="rt-promo">Promosyon kodu (opsiyonel)</label>
-        <input id="rt-promo" className="field w-full uppercase" value={promo} onChange={(e) => setPromo(e.target.value)} placeholder="CYBER-TEST-2026" autoCapitalize="characters" />
-        <p className="mt-1 text-[11px] text-ink-muted">Geçerli bir kod fiyatı düşürür; %100 kodda ödeme adımı atlanır, tarama doğrudan başlar.</p>
+        <input id="rt-promo" className="field w-full uppercase" value={promo} onChange={(e) => setPromo(e.target.value)} placeholder="Kodunuz varsa girin" autoCapitalize="characters" />
       </div>
 
       {buyErr && <p className="form-error mt-3">{buyErr}</p>}
