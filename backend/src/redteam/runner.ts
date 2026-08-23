@@ -285,7 +285,7 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
     if (pullTimer) { clearInterval(pullTimer); pullTimer = null; }
 
     // Raporun meta'sına GERÇEK maliyet/çağrı (puller'ın DB'ye yazdığı canlı değerler) enjekte et.
-    const live = await prisma.redTeamJob.findUnique({ where: { id: jobId }, select: { costUsd: true, llmCalls: true, startedAt: true } });
+    const live = await prisma.redTeamJob.findUnique({ where: { id: jobId }, select: { costUsd: true, llmCalls: true, startedAt: true, level: true, log: true } });
     // SÜRE: gerçek başlangıç→bitiş (panelde 0s kalmasın; rapor meta'sına da geçir).
     const finishedAt = new Date();
     const elapsedSec = live?.startedAt ? Math.max(0, Math.round((finishedAt.getTime() - live.startedAt.getTime()) / 1000)) : null;
@@ -299,6 +299,21 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
       // orchestrator'ın ölçtüğü yalnız-ajan süresi. İkisi rapora AYRI yazılır ("1120s>600s" dürüstçe açıklanır).
       reportJson = { ...reportJson, meta: { ...reportJson.meta, costUsd: realCost, llmCalls: live?.llmCalls ?? null, elapsedSec, agentSec: result.agentSec ?? reportJson.meta?.agentSec ?? null } };
     }
+
+    // (P0-A/4) DIVERGENCE: fiyat ön-kontrolünün tahmin ettiği kapsam vs S1'in GERÇEK ölçtüğü kapsam.
+    // Büyük sapma (ör. "basit" denen sitede çok daha fazla uç keşfi) admin log'a düşer — GELECEKTE
+    // heuristiği iyileştirmek için, fiyatı geri ödemeyle DEĞİL. Yalnız iç kayıt; müşteri fiyatı sabit kaldı.
+    try {
+      const est = (Array.isArray(live?.log) ? (live!.log as any[]) : []).map((e) => e?.s1Estimate).find(Boolean);
+      const actualEndpoints = reportJson?.tried?.endpointCount ?? reportJson?.tried?.endpoints?.length ?? null;
+      if (est && actualEndpoints != null && Number.isFinite(est.estEndpoints)) {
+        const diff = Math.abs(actualEndpoints - est.estEndpoints);
+        const big = diff >= 8 || (est.estEndpoints > 0 && diff / est.estEndpoints >= 1.5);
+        if (big) {
+          await persistStep(jobId, { phase: 'report', ok: true, detail: `FİYAT DIVERGENCE (iç not, müşteri fiyatı SABİT): ön-kontrol ~${est.estEndpoints} uç (${est.tier}) tahmin etti, gerçek koşu ${actualEndpoints} uç ölçtü — heuristik gözden geçirilebilir` });
+        }
+      }
+    } catch { /* divergence loglama best-effort — koşuyu etkilemez */ }
 
     // ŞEFFAFLIK + RETENTION: teardown droplet'i imha etmeden ÖNCE çekilen ham veri + karar-izi + transkript.
     // rawFlow binder --dump-raw'da redact()'li; binderTrace ham → maskSecrets (savunma). transcript rawFlow'dan türer.

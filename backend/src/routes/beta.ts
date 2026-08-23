@@ -7,7 +7,7 @@ import { config } from '../config.js';
 import { prisma } from '../db.js';
 import { zodError } from '../httpErrors.js';
 import { requireBeta, BETA_TOKEN_SCOPE } from '../middleware/beta.js';
-import { suggestPricingForHost } from '../services/pricingModel.js';
+import { suggestPricingForHost, s1PriceForHost } from '../services/pricingModel.js';
 
 export const betaRouter = Router();
 
@@ -87,6 +87,32 @@ betaRouter.post('/estimate', requireBeta, async (req, res) => {
   }
 });
 
+// (P0-A) POST /beta/s1-price — S1 KARMAŞIKLIK-BAZLI NET FİYAT (ödeme ekranı ÖNCESİ). Ucuz pasif
+// ön-kontrol (cache'li corpus; PentAGI/droplet ÇALIŞMAZ). 750/1500/2500 ₺, tavan 2500 hiç aşılmaz.
+// Fiyat müşteriye ödemeden ÖNCE gösterilir → sürpriz fatura yok.
+betaRouter.post('/s1-price', requireBeta, async (req, res) => {
+  const parsed = estimateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
+  const host = normalizeHost(parsed.data.domain);
+  if (!host) return res.status(400).json({ error: 'Geçerli, herkese açık bir alan adı girin (ör. example.com).' });
+  try {
+    const p = await s1PriceForHost(host);
+    return res.json({
+      host, level: 'S1', currency: p.currency, priceTL: p.priceTL,
+      tier: p.tier, reason: p.reason, estEndpoints: p.estEndpoints,
+      note: 'Fiyat, hedefin ölçülen karmaşıklığına göre belirlenir ve ödeme öncesi sabittir (sürpriz fatura yok). Üst sınır 2.500 ₺.',
+    });
+  } catch {
+    // Ön-kontrol başarısızsa güvenli tarafta kal: en düşük kademe (müşteri lehine), asla tavan.
+    return res.json({
+      host, level: 'S1', currency: 'TL', priceTL: 750,
+      tier: { key: 'basit', label: 'Basit', desc: 'Ön-kontrol yapılamadı — en düşük kademe uygulandı' },
+      reason: 'pasif ön-kontrol sinyali çıkarılamadı; müşteri lehine en düşük kademe', estEndpoints: 0,
+      note: 'Fiyat ödeme öncesi sabittir. Üst sınır 2.500 ₺.',
+    });
+  }
+});
+
 // Ortam + sahiplik/onay şeması. S3 (agresif) + prod → EK açık onay zorunlu.
 const startSchema = z.object({
   domain: z.string().min(3).max(255),
@@ -131,6 +157,16 @@ betaRouter.post('/start', requireBeta, async (req, res) => {
     .update([host, level, environment, consentIp ?? '', customerId ?? '', dateBucket].join('|'))
     .digest('hex');
 
+  // (P0-A) S1'de fiyat ön-kontrolünü iş kaydına GÖM (divergence: ön-kontrol tahmini vs gerçek koşu kapsamı).
+  // Best-effort — fiyatlandırma/ödeme akışına dokunmaz, yalnız ileride heuristik iyileştirmek için iz bırakır.
+  let s1EstimateLog: any = null;
+  if (level === 'S1') {
+    try {
+      const p = await s1PriceForHost(host);
+      s1EstimateLog = { at: now.toISOString(), phase: 'pricing', message: `S1 ön-kontrol: ${p.tier.label} · ${p.priceTL} ₺ (${p.reason})`, s1Estimate: { tier: p.tier.key, priceTL: p.priceTL, estEndpoints: p.estEndpoints, signals: p.signals } };
+    } catch { /* ön-kontrol başarısızsa iş yine kuyruğa girer */ }
+  }
+
   const job = await prisma.redTeamJob.upsert({
     where: { idempotencyKey },
     update: {}, // idempotent: aynı istek yeni iş AÇMAZ
@@ -152,6 +188,7 @@ betaRouter.post('/start', requireBeta, async (req, res) => {
           phase: 'queued',
           message: 'gated tetik: beta-grant + sahiplik + risk onayı doğrulandı; iş kuyruğa alındı',
         },
+        ...(s1EstimateLog ? [s1EstimateLog] : []),
       ],
     },
   });

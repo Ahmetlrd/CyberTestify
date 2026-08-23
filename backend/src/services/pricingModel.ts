@@ -121,3 +121,61 @@ export async function suggestPricingForHost(host: string): Promise<{ signals: Pa
   const signals = await derivePricingSignals(host);
   return { signals, suggestion: suggestPricingFromSignals(signals) };
 }
+
+// ════════════════════ (P0-A) OTONOM AI RED TEAM — S1 KARMAŞIKLIK-BAZLI FİYAT ════════════════════
+// S1 MÜHENDİSLİK CAP'İNE (900s/$2.50/30 çağrı) DOKUNMAZ — yalnız MÜŞTERİDEN alınan fiyat, hedefin
+// ölçülen pasif karmaşıklığına göre üç KESİN kademede esner (öneri bandı değil, net fiyat). Üst sınır
+// 2.500 ₺ hiçbir koşulda aşılmaz. Pasif sinyaller yukarıdaki derivePricingSignals'tan gelir (cache'li
+// corpus; PentAGI/droplet ÇALIŞMAZ — ödeme öncesi ucuz ön-kontrol). Deterministik + şeffaf (reason).
+export const S1_PRICING = {
+  currency: 'TL',
+  capTL: 2500,
+  tiers: [
+    { key: 'basit', label: 'Basit', priceTL: 750, desc: 'Tek/az sayfa, az uç-nokta, login yüzeyi yok' },
+    { key: 'orta', label: 'Orta', priceTL: 1500, desc: 'Birden fazla form/uç-nokta veya login sayfası mevcut' },
+    { key: 'karmasik', label: 'Karmaşık', priceTL: 2500, desc: 'Çok sayıda uç-nokta / çoklu modül / e-ticaret ölçeği' },
+  ],
+};
+
+export type S1PriceResult = {
+  tier: { key: string; label: string; desc: string };
+  priceTL: number;
+  currency: string;
+  reason: string;                 // neden bu kademe (şeffaf — kara-kutu değil)
+  signals: PassivePricingSignals; // ön-kontrol ham sinyalleri (divergence loglama için saklanır)
+  estEndpoints: number;           // ön-kontrolün gördüğü uç-nokta tahmini (gerçek koşuyla karşılaştırma için)
+};
+
+/** Saf/deterministik: pasif sinyaller → S1 kademe + NET fiyat (cap 2500). Eşikler koda gömülü ama şeffaf. */
+export function s1PriceFromSignals(sig: PassivePricingSignals): S1PriceResult {
+  const endpoints = sig.uniqueEndpoints + sig.realApiEndpoints;   // toplam keşfedilen uç yüzeyi
+  const auth = sig.authSurface;                                   // login/parola yüzeyi
+  const rich = sig.subdomains + sig.techDiversity;               // çoklu modül / e-ticaret sinyali
+  let key: 'basit' | 'orta' | 'karmasik';
+  let reason: string;
+  if (endpoints >= 25 || rich >= 12 || (auth && endpoints >= 12)) {
+    key = 'karmasik';
+    reason = `${endpoints} uç-nokta${auth ? ' + login' : ''}${rich >= 12 ? ' + çoklu modül/teknoloji' : ''} → yüksek kapsam`;
+  } else if (endpoints >= 6 || auth) {
+    key = 'orta';
+    reason = `${endpoints} uç-nokta${auth ? ' + login sayfası' : ''} → orta kapsam`;
+  } else {
+    key = 'basit';
+    reason = `${endpoints} uç-nokta, login yüzeyi yok → düşük kapsam`;
+  }
+  const tier = S1_PRICING.tiers.find((t) => t.key === key)!;
+  return {
+    tier: { key: tier.key, label: tier.label, desc: tier.desc },
+    priceTL: Math.min(tier.priceTL, S1_PRICING.capTL),           // (P0-A/5) tavan hiçbir koşulda aşılmaz
+    currency: S1_PRICING.currency,
+    reason,
+    signals: sig,
+    estEndpoints: endpoints,
+  };
+}
+
+/** Uçtan uca: hedef → ucuz pasif ön-kontrol → S1 net fiyat (ödeme ekranı ÖNCESİ). */
+export async function s1PriceForHost(host: string): Promise<S1PriceResult> {
+  const signals = await derivePricingSignals(host);
+  return s1PriceFromSignals(signals);
+}
