@@ -116,6 +116,42 @@ export async function resumeVerifiedDomainOrders(domainId: string): Promise<void
  * bizim servis hesabimizla PentAGI'ye baglaniyor. 'paid' veya 'scan_queued'
  * (kuyruktan promote edilen) siparisler icin cagrilabilir.
  */
+// (S1) Ödeme sonrası Otonom Red Team dispatch: Order'a 1:1 bağlı RedTeamJob oluştur + runner'ı arka
+// planda tetikle. İdempotent (orderId @unique + idempotencyKey). runner import'u DİNAMİK — orchestrator↔
+// redteam/runner döngüsel bağımlılığını önler. Aşama 2'de runner tamamlanınca Order awaiting_admin_review'e alınır.
+async function dispatchRedTeamS1Order(o: { id: string; customerId: string | null; hostname: string; consentIp: string | null }): Promise<void> {
+  const existing = await prisma.redTeamJob.findUnique({ where: { orderId: o.id }, select: { id: true } });
+  if (existing) {
+    console.log(`[redteam-s1] order ${o.id} için RedTeamJob zaten var (${existing.id}) — tekrar tetiklenmedi (idempotent)`);
+    return;
+  }
+  const now = new Date();
+  const job = await prisma.redTeamJob.create({
+    data: {
+      idempotencyKey: `redteam-order-${o.id}`,
+      orderId: o.id,
+      customerId: o.customerId,
+      domain: o.hostname,
+      level: 'S1',
+      environment: 'prod', // müşterinin gerçek sitesi (S1 pasif + hafif-aktif; kendi izolasyon/onay guard'ları)
+      ownershipConfirmed: true, // Order riza damgalarıyla alındı (ownershipConfirmedAt zorunluydu)
+      riskAccepted: true,
+      prodElevatedAccepted: false,
+      consentIp: o.consentIp,
+      status: 'queued',
+      startedAt: now,
+      log: [{ at: now.toISOString(), phase: 'queued', message: `ödeme sonrası tetiklendi — order ${o.id}, S1/prod` }],
+    },
+  });
+  // Müşteri dashboard'unda "taranıyor" görünsün (customerFacingStatus scan_running'i doğal gösterir).
+  await prisma.order.update({ where: { id: o.id }, data: { status: 'scan_running' } });
+  const { runJob } = await import('../redteam/runner.js');
+  setImmediate(() => {
+    runJob(job.id, { dryRun: false }).catch((e) => console.error('[redteam-s1] runJob hata:', (e as Error).message));
+  });
+  console.log(`[redteam-s1] order ${o.id} → RedTeamJob ${job.id} oluşturuldu + runner tetiklendi (S1/prod, ${o.hostname})`);
+}
+
 export async function startScanForOrder(orderId: string) {
   const order = await prisma.order.findUniqueOrThrow({
     where: { id: orderId },
@@ -124,6 +160,16 @@ export async function startScanForOrder(orderId: string) {
 
   if (order.status !== 'paid' && order.status !== 'scan_queued') {
     throw new Error(`Siparis odenmemis/uygun degil, tarama baslatilamaz: ${order.status}`);
+  }
+
+  // (S1 OTONOM RED TEAM) — bu paket PentAGI worker akışını (Flow/createFlow) KULLANMAZ. Ödeme sonrası
+  // AYRI RedTeamJob runner'ına (izole droplet + cap 900s/$2.50/30) yönlendirilir. 6-paket çelik-kapısı/
+  // ActiveTestConsent/PentAGI-concurrency buraya UYGULANMAZ (isActivePackage=false); S1 kendi onayı
+  // (ownershipConfirmed+riskAccepted) + runner guard'larıyla (pin/egress-deny/watchdog D1-D5) korunur.
+  // Koşu tamamlanınca runner Order'ı awaiting_admin_review'e alır (Aşama 2 — mevcut onay kapısı).
+  if (order.package.key === 'redteam_s1') {
+    await dispatchRedTeamS1Order({ id: order.id, customerId: order.customerId, hostname: order.domain.hostname, consentIp: null });
+    return null;
   }
 
   // Concurrency=1 guvencesi: promote sirasinda yaris olmasin diye son bir kontrol.

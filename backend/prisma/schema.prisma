@@ -73,6 +73,7 @@ enum ScanPackageKey {
   bundle_recon // kombine paket (Keşif: subdomain+api+cms/cve, tek-siparis)
   bundle_active_verify // kombine paket (Aktif Doğrulama: injection+idor gerçek, 5 kontrol olgunlaşıyor)
   bundle_full_pentest // kombine paket (Tam Kapsamlı Pentest: login'li + sınırlı-otonom ajan)
+  redteam_s1 // (S1) Otonom AI Red Team — ödemeli, ayrı droplet motoru (RedTeamJob), karmaşıklık-bazlı fiyat
 }
 
 model Customer {
@@ -315,6 +316,7 @@ model Order {
 
   flow              Flow?
   report            Report?
+  redTeamJob        RedTeamJob? // (S1 Otonom Red Team) ödemeli koşu — orderId ile 1:1 bağlı
   invoiceRequest    InvoiceRequest? // (Fatura talebi — MANUEL) ödeme sonrası opsiyonel
   activeTestConsent ActiveTestConsent? // (Faz 3) active-light paketlerde zorunlu
   testCredentials   TestCredential[] // (Tam Kapsamlı Pentest — FAZ A) şifreli test hesabı kimlik bilgileri
@@ -531,6 +533,11 @@ model RedTeamJob {
 
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id])
+
+  // (S1 ticari entegrasyon) Ödemeli koşu bir Order'a 1:1 bağlıdır (ödeme sonrası dispatch, onay kapısı,
+  // müşteri teslimi hep Order üzerinden). orderId YOKsa = eski beta/operatör-tetikli koşu (geriye uyumlu).
+  orderId String? @unique
+  order   Order?  @relation(fields: [orderId], references: [id])
 
   idempotencyKey String @unique
   domain         String // hedef host (sahiplik/yetki beyanıyla)

@@ -41,7 +41,8 @@ export interface ScanPackageDef {
     | 'bundle_compliance' // kombine paket (Uyum: KVKK+PCI+ISO, tek-siparis)
     | 'bundle_recon' // kombine paket (Keşif: subdomain+api+cms/cve, tek-siparis)
     | 'bundle_active_verify' // kombine paket (Aktif Doğrulama: 7 aktif-hafif kontrol, login'siz yüzey; ₺9.999)
-    | 'bundle_full_pentest'; // kombine paket (Tam Kapsamlı Pentest: login'li + sınırlı-otonom ajan; ₺22.999)
+    | 'bundle_full_pentest' // kombine paket (Tam Kapsamlı Pentest: login'li + sınırlı-otonom ajan; ₺22.999)
+    | 'redteam_s1'; // (S1) Otonom AI Red Team — ödemeli, ayrı droplet motoru (RedTeamJob); karmaşıklık-bazlı fiyat
   displayName: string;
   description: string;
   priceMinorUnit: number; // kurus
@@ -190,6 +191,7 @@ const PACKAGE_I18N: Partial<Record<ScanPackageDef['key'], { displayName: string;
   rce_verify: { displayName: 'Vulnerability Verification — RCE / Command Injection', description: 'Strictest active check: proves command injection ONLY via blind time-based or harmless canary evidence. NEVER runs a real command. Requires an authorization declaration.' },
   authenticated_scan: { displayName: 'Authenticated Scan (logged-in)', description: 'Active-light scan performed with a test-account session you provide. Credentials are encrypted, used only against your domain, and deleted after the scan. Requires an authorization declaration.' },
   autonomous_pentest: { displayName: 'AI-Assisted Analysis (Privilege & Business Logic)', description: 'AI-assisted analysis (a single LLM advisory call) over the discovered authenticated surface: privilege-escalation and multi-step business-logic indicators. Observation only; no exploit/exfil/DoS/auth-bypass/data change (active-light limits). Requires an authorization declaration.' },
+  redteam_s1: { displayName: 'Autonomous AI Red Team (S1)', description: 'An experimental S1 assessment where an autonomous AI agent attempts real (passive + light-active) attack techniques against your target in an isolated, cap-limited environment. Every "proven" finding is bound to stored raw request/response evidence. Not a substitute for a formal penetration test/audit.' },
 };
 
 // kvkk_hazirlik EN sozlukte YOK — global menude gosterilmez (bkz orders.ts filtresi).
@@ -1423,6 +1425,29 @@ ${FIX_SUGGESTIONS_STEP_EN}
 Output (Markdown): an executive summary + a findings table "Finding | Type | Evidence | Severity | Recommendation".
 Target: ${host}
 `.trim(),
+  },
+  {
+    // (S1) OTONOM AI RED TEAM — ödemeli. Bu paket PentAGI worker akışını (createFlow/promptTemplate)
+    // KULLANMAZ; ödeme sonrası startScanForOrder onu ayrı RedTeamJob runner'ına (izole droplet + cap)
+    // yönlendirir. Ana /orders/packages listesinden GİZLİ (orders.ts filtresi) — yalnız Otonom Red Team
+    // sayfasından satın alınır. Fiyat SUNUCU-tarafı s1PriceForHost ile order-create'te belirlenir
+    // (karmaşıklık-bazlı 750/1500/2500); buradaki priceMinorUnit yalnız güvenli fallback.
+    key: 'redteam_s1',
+    displayName: 'Otonom AI Red Team (S1)',
+    description:
+      'Otonom bir yapay-zekâ ajanının, izole ve cap-sınırlı bir ortamda hedefinize karşı gerçek (pasif + hafif-aktif) ' +
+      'saldırı teknikleri denediği deneysel S1 taraması. Her "kanıtlı" bulgu saklanan ham istek/yanıt kanıtına bağlanır. ' +
+      'Resmi bir sızma testi/denetim yerine geçmez.',
+    priceMinorUnit: 150000, // ₺1.500 fallback — GERÇEK fiyat order-create'te s1PriceForHost ile hesaplanır
+    modelProvider: PROVIDER, // (kullanılmaz — S1 PentAGI worker'ı değil ayrı runner'ı kullanır)
+    maxToolCalls: 30,        // (kullanılmaz — S1 cap runner'da: 900s/$2.50/30 çağrı)
+    // securityProfile YOK → isActivePackage(redteam_s1)=false: 6-paket DNS çelik-kapısı + ActiveTestConsent
+    // makinesine BAĞLANMAZ. S1 kendi onayı (ownershipConfirmed+riskAccepted) + runner guard'larıyla korunur.
+    available: true,          // sipariş kabul edilir (RT sayfasından); ana listeden orders.ts filtresiyle gizli
+    comingSoon: false,
+    requiresManualReview: false, // koşu-SONRASI awaiting_admin_review kapısı devrede (koşu-ÖNCESİ değil)
+    promptTemplate: () =>
+      'redteam_s1 PentAGI worker promptTemplate KULLANMAZ — ödeme sonrası ayrı RedTeamJob runner tetiklenir.',
   },
 ];
 

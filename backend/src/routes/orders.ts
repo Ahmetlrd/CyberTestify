@@ -9,6 +9,7 @@ import { validateConsentInput, activeTestScope, ACTIVE_TEST_CONSENT_VERSION, ACT
 import { storeTestCredential, hasTestCredential, consumeTestCredential } from '../services/testCredentials.js';
 import { renderConsentPdf } from '../services/pdf.js';
 import { getPricing, currencyFor, PRICE_OVERRIDE_MINOR } from '../services/pricing.js';
+import { s1PriceForHost } from '../services/pricingModel.js';
 import { getPaymentProvider } from '../services/payment/index.js';
 import { initiateBundlePayment } from '../services/payment/iyzico.js';
 import { getSampleReportPdf } from '../services/sampleReports.js';
@@ -60,6 +61,9 @@ ordersRouter.get('/packages', async (req, res) => {
       // paket akisinda (GET /bundles + POST /bundle) satilir; burada bir ScanPackage satiri
       // olarak var ama musteriye tekil satis olarak sunulmaz.
       .filter((p) => !p.key.startsWith('bundle_'))
+      // (S1) redteam_s1 ana paket listesinde GÖRÜNMEZ — yalnız Otonom AI Red Team sayfasından satın alınır
+      // (fiyat karmaşıklık-bazlı, ayrı akış). Sipariş kabul edilir (available:true) ama grid'e girmez.
+      .filter((p) => p.key !== 'redteam_s1')
       .map((p) => {
         const row = priceByKey.get(p.key);
         const t = localizedPackage(p, locale);
@@ -194,6 +198,7 @@ const createOrderSchema = z.object({
     'rce_verify',
     'authenticated_scan',
     'autonomous_pentest',
+    'redteam_s1', // (S1) Otonom AI Red Team — RT sayfasından; fiyat karmaşıklık-bazlı (server-side)
   ]),
   // Pentest yetkilendirmesi (TCK 243 hukuka uygunluk) — true olmadan siparis yok.
   ownershipConfirmed: z.literal(true, {
@@ -326,7 +331,17 @@ ordersRouter.post('/', createLimiter, requireAuth, async (req, res) => {
   }
 
   // Bolgesel fiyat + para birimi (config-driven; bkz services/pricing.ts).
-  const { amountMinorUnit, currency } = getPricing(packageKey, region);
+  // (S1) redteam_s1: fiyat SABİT değil — hedefin ölçülen karmaşıklığına göre SUNUCU-tarafı hesaplanır
+  // (750/1500/2500 ₺, tavan 2500). Client'tan gelen fiyata GÜVENİLMEZ; burada yeniden hesaplanır.
+  let amountMinorUnit: number;
+  let currency: string;
+  if (packageKey === 'redteam_s1') {
+    const s1 = await s1PriceForHost(domain.hostname);
+    amountMinorUnit = Math.round(s1.priceTL * 100);
+    currency = 'TRY';
+  } else {
+    ({ amountMinorUnit, currency } = getPricing(packageKey, region));
+  }
 
   // Promosyon kodu (opsiyonel). Gecerliyse fiyati dusurur; %100 -> effective 0 (odeme atlanir).
   // Kredi ile birlikte KULLANILMAZ (promo verildiyse promo yolu kazanir).
