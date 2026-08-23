@@ -134,12 +134,14 @@ def passive_config_findings(artifacts, target_host, target_ip):
     """GERÇEK yanıt başlıklarından deterministik KANITLI config bulguları (düşük şiddet): Server sürüm
     ifşası, cookie güvenlik bayrağı eksiği, güvenlik-başlığı eksiği. Yalnız hedefe atılmış 2xx/3xx yanıtlar."""
     out = []
-    def emit(cat, endp, detail, a, sev, marker='', title=None):
+    def emit(cat, endp, detail, a, sev, marker='', title=None, missing=None):
         # (P0-2b) Başlık HAM KANIT'te GÖRÜLEN veriyle birebir: jenerik "biri/birkaçı eksik" YERİNE gerçekten
         # eksik olan bayrak/başlık isimle yazılır. title verilmezse CAT_LABEL+endpoint'e düşer.
         ev = {'artifactRef': a.get('id', '?'), 'signature': 'response-header', 'detail': detail, **_mk_evidence(a)}
         if marker:
             ev['marker'] = marker                              # P0-3: raporun vurgulayacağı ham satır anahtarı
+        if missing:
+            ev['missing'] = missing                            # (P0-9) yalnız GERÇEKTEN eksik olan(lar) → flag-spesifik İŞ ETKİSİ
         ttl = title or f"{CAT_LABEL.get(cat, cat)}{(' — ' + endp) if endp else ''}"
         out.append({'title': ttl, 'category': cat,
                     'endpoint': endp, 'severity': sev, 'tier': 'KANITLI', 'evidence': ev,
@@ -168,14 +170,15 @@ def passive_config_findings(artifacts, target_host, target_ip):
         if not cookie_done:
             sc = hdrs.get('set-cookie', '')
             if sc:
-                present = [f.title() for f in ('httponly', 'secure', 'samesite') if f in sc.lower()]
-                miss = [f.title() for f in ('httponly', 'secure', 'samesite') if f not in sc.lower()]
+                _CANON = {'httponly': 'HttpOnly', 'secure': 'Secure', 'samesite': 'SameSite'}
+                present = [_CANON[f] for f in ('httponly', 'secure', 'samesite') if f in sc.lower()]
+                miss = [_CANON[f] for f in ('httponly', 'secure', 'samesite') if f not in sc.lower()]
                 if miss:
                     cookie_done = True
                     # (P0-2b) Yalnız GERÇEKTEN eksik bayrağı isimle yaz + mevcut olanları da belirt (kanıtla birebir).
                     det = f"Set-Cookie eksik güvenlik bayrağı: {', '.join(miss)}" + (f" — {', '.join(present)} zaten mevcut" if present else "") + " (oturum çerezi)"
                     emit('cookie_config', endp, det, a, 'düşük', marker='Set-Cookie',
-                         title=f"Çerez Güvenlik Bayrağı Eksik: {', '.join(miss)}")
+                         title=f"Çerez Güvenlik Bayrağı Eksik: {', '.join(miss)}", missing=miss)
         if not hdr_done and 200 <= st < 300:
             hdr_done = True
             miss = [d for h, d in _SECURITY_HEADERS.items()

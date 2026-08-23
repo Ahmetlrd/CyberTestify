@@ -14,7 +14,7 @@ Hedefe YALNIZ pinlenen IP'ye --resolve ile bağlanır (orkestratörün ajana ver
 domain yeniden çözülmez. Bu betik BİR SALDIRI DEĞİL — checklist'in deterministik, kanıta-bağlı
 tamamlanmasını garanti eder; bulgu yalnız binder gerçek imza görürse çıkar (yoksa "denendi, imza yok").
 """
-import sys, json, argparse, subprocess
+import sys, json, argparse, subprocess, re
 
 
 def run(cmd):
@@ -25,6 +25,36 @@ def run(cmd):
         return 'PROBE_TIMEOUT (45s)'
     except Exception as e:  # betik asla patlamamalı — best-effort
         return f'PROBE_ERROR: {e}'
+
+
+def _http_body(raw):
+    """curl -i çıktısından (durum+başlık+gövde) gövdeyi ayır (son boş satırdan sonrası)."""
+    parts = re.split(r'\r?\n\r?\n', raw, maxsplit=1)
+    return parts[1] if len(parts) == 2 else raw
+
+
+def parse_login_form(html, page_path):
+    """(P0-8) GERÇEK login formunu HTML'den ayrıştır: parola alanı İÇEREN <form>'u bul, action + alan
+    adlarını çıkar (deterministik, salt-okunur DOM keşfi — LLM yok). Bulunamazsa None."""
+    for m in re.finditer(r'<form\b([^>]*)>(.*?)</form>', html, re.I | re.S):
+        attrs, inner = m.group(1), m.group(2)
+        if not re.search(r'<input\b[^>]*type\s*=\s*["\']?password', inner, re.I):
+            continue  # parola alanı yoksa login formu değil
+        am = re.search(r'action\s*=\s*["\']?([^"\'\s>]*)', attrs, re.I)
+        action = (am.group(1) if am and am.group(1) else page_path) or page_path
+        fields = []
+        for im in re.finditer(r'<input\b([^>]*)>', inner, re.I):
+            ia = im.group(1)
+            tm = re.search(r'type\s*=\s*["\']?([a-z]+)', ia, re.I)
+            itype = (tm.group(1).lower() if tm else 'text')
+            if itype in ('submit', 'button', 'image', 'reset', 'checkbox', 'radio', 'file'):
+                continue
+            nm = re.search(r'name\s*=\s*["\']?([^"\'\s>]+)', ia, re.I)
+            if nm:
+                fields.append(nm.group(1))
+        if fields:
+            return action, fields
+    return None
 
 
 def main():
@@ -44,9 +74,39 @@ def main():
 
     arts = []
     for i, e in enumerate(plan.get('probes', [])):
+        fam = e.get('family', '')
+        payload = e.get('payload', '')
+        if fam == 'login_sqli':
+            # (P0-8) LOGIN FORMU SQLi: aday login path'lerini GET'le, parola-alanlı formu bul, action'a
+            # keşfedilen alanlara SQLi payload'ı ile POST at. "Arama kutusuna tırnak" login testi SAYILMAZ.
+            done = False
+            for path in (e.get('candidates') or []):
+                getcmd = f'curl -sk -i --resolve {a.target}:443:{a.ip} --resolve {a.target}:80:{a.ip} "https://{a.target}{path}"'
+                getraw = run(getcmd)
+                form = parse_login_form(_http_body(getraw), path)
+                if not form:
+                    continue
+                action, fields = form
+                if action.startswith('http'):
+                    mp = re.search(r'https?://[^/]+(/[^\s"\']*)', action)
+                    action = mp.group(1) if mp else path
+                elif not action.startswith('/'):
+                    action = '/' + action
+                data = ' '.join(f'--data-urlencode "{n}={payload}"' for n in fields[:8])
+                postcmd = f'curl -sk -i -X POST --resolve {a.target}:443:{a.ip} "https://{a.target}{action}" {data}'
+                raw = run(postcmd)
+                arts.append({'id': f'probe#{i + 1}', 'kind': 'terminal', 'command': postcmd, 'rawText': raw})
+                done = True
+                break
+            if not done:
+                # Login formu keşfedilemedi — DÜRÜST kayıt (sahte "denendi" demeyiz; sadece keşif izini bırak).
+                tried = ', '.join(e.get('candidates') or [])
+                arts.append({'id': f'probe#{i + 1}', 'kind': 'note',
+                             'command': f'login-form-discovery {tried}',
+                             'rawText': f'LOGIN_FORM_NOT_FOUND: parola-alanlı form aday path(ler)de bulunamadı ({tried})'})
+            continue
         path = e.get('path') or '/'
         param = e.get('param')
-        payload = e.get('payload', '')
         # Ajanın kullandığı aynı curl disiplini: -sk -i (durum+başlık), --resolve ile YALNIZ pinlenen IP.
         base = f'curl -sk -i -G --resolve {a.target}:443:{a.ip} "https://{a.target}{path}"'
         cmd = base + (f' --data-urlencode "{param}={payload}"' if param else '')

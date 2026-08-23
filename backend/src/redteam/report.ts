@@ -10,7 +10,14 @@
  * 6 paketin deterministik rapor motoruna DOKUNMAZ (ayrı modül).
  */
 
-export type BinderEvidence = { artifactRef: string; signature: string; detail: string; rawExcerpt?: string; command?: string; marker?: string };
+export type BinderEvidence = { artifactRef: string; signature: string; detail: string; rawExcerpt?: string; command?: string; marker?: string; missing?: string[] };
+
+// (P0-9) Çerez bayrağı → YALNIZ o bayrağın gerçek riski (jenerik "hepsi eksik" listesi DEĞİL).
+const COOKIE_FLAG_IMPACT: Record<string, string> = {
+  HttpOnly: 'JavaScript ile çerez okunabilir — XSS ile oturum çerezi çalınabilir',
+  Secure: 'Çerez şifresiz (HTTP) kanalda da gönderilir — ağ dinleyicisi oturumu ele geçirebilir',
+  SameSite: 'Tarayıcı çerezi farklı-site isteklerinde otomatik gönderebilir — Cross-Site Request Forgery (CSRF) yüzeyi artar',
+};
 
 /** Kategori → iş-etkisi + önerilen düzeltme + referans (deterministik; LLM YOK). */
 export const REMEDIATION: Record<string, { label: string; desc: string; impact: string; fix: string; cwe: string; owasp: string }> = {
@@ -243,6 +250,11 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
     // (P0-2b) Config bulgularında Açıklama = HAM KANIT'ten okunan SPESİFİK gözlem (hangi bayrak/başlık
     // gerçekten eksik), jenerik "biri/birkaçı eksik" şablonu DEĞİL. Diğer bulgularda kategori açıklaması.
     const specific = CONFIG_CATS.has(f.category) && ev?.detail ? ev.detail : null;
+    // (P0-9) İŞ ETKİSİ de flag-spesifik: çerez bulgusunda YALNIZ gerçekten eksik bayrağın riski yazılır
+    // (HttpOnly/Secure zaten mevcutsa onların riski gösterilmez — jenerik XSS/şifresiz-kanal listesi DEĞİL).
+    const impact = (f.category === 'cookie_config' && ev?.missing?.length)
+      ? ev.missing.map((m) => COOKIE_FLAG_IMPACT[m]).filter(Boolean).join('; ') || rem.impact
+      : rem.impact;
     return `<div class="fcard">
       <div class="fhead">
         <span class="sev" style="background:${sc}">${esc((RISK_LABEL[f.severity] ?? f.severity)).toUpperCase()}</span>
@@ -254,7 +266,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport): string {
         <tr><th>Kategori</th><td>${esc(rem.label)} <span class="ref">${esc(rem.cwe)} · ${esc(rem.owasp)}</span></td></tr>
         <tr><th>Açıklama</th><td>${esc(specific ?? rem.desc)}</td></tr>
         ${specific ? `<tr><th>Kategori bilgisi</th><td>${esc(rem.desc)}</td></tr>` : ''}
-        <tr><th>İş etkisi</th><td>${esc(rem.impact)}</td></tr>
+        <tr><th>İş etkisi</th><td>${esc(impact)}</td></tr>
         <tr><th>Doğrulama</th><td>${esc(f.reason)}${ev?.signature ? ` · imza: <code>${esc(ev.signature)}</code>` : ''}</td></tr>
       </tbody></table>
       ${ev && (ev.rawExcerpt || ev.command) ? `<div class="evbox">

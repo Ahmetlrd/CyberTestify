@@ -143,12 +143,33 @@ export function discoverProbeTargets(rawFlow: unknown): ProbeTarget[] {
   return [...seen.values()].sort((x, y) => (y.param ? 1 : 0) - (x.param ? 1 : 0)).slice(0, 3);
 }
 
-export type ProbePlan = { probes: Array<{ path: string; param?: string; payload: string; family: 'sqli' | 'xss' }> };
-export function buildProbePlan(targets: ProbeTarget[]): ProbePlan {
+// (P0-8) Login formu SQLi için aday path'ler: ajanın gerçekten dokunduğu login-benzeri path'ler
+// (rawFlow'dan) + yaygın varsayılanlar. run_probes.py bunları GET'leyip parola-alanlı formu bulunca
+// action'a SQLi POST atar — "arama kutusuna tırnak" login testi SAYILMAZ.
+const LOGIN_DEFAULTS = ['/login.jsp', '/doLogin', '/login', '/signin', '/auth/login', '/account/login', '/user/login'];
+export function discoverLoginCandidates(rawFlow: unknown): string[] {
+  const arts = ((rawFlow as { artifacts?: Array<{ command?: string }> } | undefined)?.artifacts) ?? [];
+  const found = new Set<string>();
+  for (const a of arts) {
+    const cmd = a?.command ?? '';
+    const um = /https?:\/\/[^/\s"']+(\/[^\s"'?\\]*)/.exec(cmd);
+    const path = um?.[1];
+    if (path && /(login|signin|logon|doLogin|authenticate|auth\b)/i.test(path)) found.add(path);
+  }
+  // Keşfedilenler önce, sonra varsayılanlar (tekrarsız). run_probes ilk çalışan login formunda durur.
+  return [...found, ...LOGIN_DEFAULTS.filter((d) => !found.has(d))].slice(0, 8);
+}
+
+export type ProbePlan = { probes: Array<{ path?: string; param?: string; payload: string; family: 'sqli' | 'xss' | 'login_sqli'; candidates?: string[] }> };
+export function buildProbePlan(targets: ProbeTarget[], loginCandidates: string[] = []): ProbePlan {
   const probes: ProbePlan['probes'] = [];
+  // (P0-8) STEP2 zorunlu alt-adımı: LOGIN FORMU SQLi — parametreli GET probundan ÖNCE, öncelikli.
+  if (loginCandidates.length) {
+    probes.push({ family: 'login_sqli', payload: `' OR '1'='1`, candidates: loginCandidates });
+  }
   for (const t of targets) {
     if (!t.param) continue;                       // SQLi/XSS probu parametre ister
-    probes.push({ path: t.path, param: t.param, payload: `' OR '1'='1`, family: 'sqli' });         // STEP2
+    probes.push({ path: t.path, param: t.param, payload: `' OR '1'='1`, family: 'sqli' });         // STEP2 (param)
     probes.push({ path: t.path, param: t.param, payload: `zqxprobemarker7788<script>alert(1)</script>`, family: 'xss' }); // STEP3 (2. yansıma)
   }
   return { probes };
@@ -337,7 +358,8 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
       // "denendi, imza yok" olarak Pozitif Güvence'ye sayılır). Best-effort: hata koşuyu BOZMAZ.
       try {
         const targets = discoverProbeTargets(rawFlow);
-        const plan = buildProbePlan(targets);
+        const loginCandidates = discoverLoginCandidates(rawFlow);   // (P0-8) login formu SQLi adayları
+        const plan = buildProbePlan(targets, loginCandidates);
         if (plan.probes.length > 0) {
           const planB64 = Buffer.from(JSON.stringify(plan), 'utf8').toString('base64');
           await ctx.exec(`bash -lc 'echo ${planB64} | base64 -d > ${DROPLET_RUN}/probe_plan.json'`, []);
@@ -346,7 +368,8 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
           if (/PROBES_DONE/.test(pr.stdout)) {
             extraFlag = ['--extra', `${DROPLET_RUN}/extra_probes.json`];
             const fams = [...new Set(plan.probes.map((p) => p.family))].join('+');
-            await record({ phase: 'campaign', ok: true, detail: `checklist HARD-GATE: ${plan.probes.length} deterministik prob çalıştı (${fams}) — ${targets.filter((t) => t.param).map((t) => t.path).join(', ')} · ajan erken dursa bile STEP2/STEP3 kapsandı` });
+            const loginNote = plan.probes.some((p) => p.family === 'login_sqli') ? ` · login-formu SQLi aday: ${loginCandidates.slice(0, 4).join(', ')}` : '';
+            await record({ phase: 'campaign', ok: true, detail: `checklist HARD-GATE: ${plan.probes.length} deterministik prob çalıştı (${fams}) — param uç: ${targets.filter((t) => t.param).map((t) => t.path).join(', ') || '—'}${loginNote} · ajan erken dursa bile STEP2(login+param)/STEP3 kapsandı` });
           } else {
             await record({ phase: 'campaign', ok: true, detail: `checklist HARD-GATE: prob motoru çıktı vermedi (${(pr.stderr || pr.stdout || '').slice(-200)}) — yalnız ajan artefaktlarıyla devam` });
           }
