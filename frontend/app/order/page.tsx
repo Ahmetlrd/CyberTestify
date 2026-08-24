@@ -25,6 +25,235 @@ function minDateTimeLocal(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+// (Çok-bölge) Checkout metinleri tr/de. Client sayfa → region cookie'sinden lang (hydration-safe:
+// 'tr' başlar, mount sonrası set). us/ae (en) → tr'ye düşer (mevcut davranışla aynı; checkout zaten
+// TR'ydi + intlComingSoon bloklar). /de'de onay grupları Alman legal sayfalarına bağlanır (Widerruf dahil),
+// KVKK yerine DSGVO. /tr metni birebir korunur.
+const ORD = {
+  tr: {
+    title: 'Taramanızı Başlatın', sub: 'Paketi seçin, onayları işaretleyin ve güvenli ödemeye geçin.',
+    noDomainPre: 'Önce taranacak bir alan adı seçin.', noDomainLink: 'Alan adı seç →',
+    dnsVerified: 'Alan adı DNS ile doğrulandı — aktif tarama ödeme onayından sonra başlar.',
+    activeVerifyTitle: 'Bu paket aktif problar gönderir — DNS doğrulaması gerekir',
+    activeVerifyBodyHtml: 'Alan adı sahipliğinizi DNS ile doğrulamadan aktif tarama (enjeksiyon/oturum denemeleri) <strong>başlamaz</strong> — ödeme alınsa bile sipariş <strong>“alan adı doğrulaması bekleniyor”</strong> durumunda tutulur, doğrulanınca <strong>otomatik başlar</strong>.',
+    verifyNow: 'Şimdi DNS ile doğrula →',
+    passiveNoVerify: 'Bu paket için doğrulama gerekmez — ödeme onaylanınca tarama hemen başlar.',
+    step1: '1 · Paket seçin', entryBadge: 'Giriş',
+    basitDesc: 'Hızlı, ucuz deneme taraması — ön izleme niteliğindedir (kapsamlı denetim değildir).',
+    kdv: 'KDV Dahil', sampleReport: 'Örnek raporu gör', buy: 'Satın Al',
+    popular: 'Popüler', includes: 'İçindekiler',
+    reconItems: [
+      'Terk edilmiş alt domain (Subdomain Takeover) taraması — CT loglarından alt domain envanteri',
+      'Açık API / Swagger dokümantasyon keşfi',
+      'CMS & teknoloji parmak izi analizi',
+      'Site haritasından idari/hassas yol tespiti',
+    ],
+    reconNote: 'Pasif dış yüzey keşfidir; aktif uç nokta enjeksiyonu veya kimlik doğrulamalı test içermez.',
+    soon: 'Yakında', soonClosed: 'Şu an satışa kapalı',
+    testCredsMembers: 'Test hesabı bilgileri',
+    // Aktif Doğrulama şeffaflık kutusu
+    avTitle: '💡 Şeffaflık & Kapsam — ödemeden önce okuyun',
+    avP1Html: 'Bu paket, web sitenizin <strong>herkese açık (login gerektirmeyen) dış saldırı yüzeyini</strong> zararsız problarla test eder — dışa açık arama, form, API ve login/kayıt akışı üzerindeki enjeksiyon, yetkilendirme ve mantık riskleri.',
+    avP2Html: 'Sitenizde dışa açık <strong>arama, form, API veya id-tabanlı uç nokta bulunmuyorsa</strong>, içerikte listelenen <strong>IDOR / İş Mantığı / Dosya Yükleme / Race</strong> gibi kontroller raporda <strong>“İncelenemedi”</strong> görünebilir. Bu bir <strong>hata değildir</strong> — sitenizin dış yüzey yapısının doğal sonucudur (test edilecek açık bir giriş noktası olmaması).',
+    avP3Html: 'Oturum içi (kullanıcı girişi <strong>sonrası</strong>) derin yetkilendirme/iş-mantığı testleri için <strong>Tam Kapsamlı Pentest</strong> paketini seçin.',
+    // Tam Kapsamlı Pentest detay kutusu
+    fpReviewHtml: '<strong class="text-ink">İnceleme süreci:</strong> Bu paket, güvenlik nedeniyle sipariş sonrası <strong>ödeme onaylanınca hemen</strong> başlar.',
+    fpAccountHtml: '<strong class="text-ink">Test hesabı:</strong> Kimlik doğrulamalı test için bir <strong>TEST hesabı</strong> (ana/üretim hesabınız DEĞİL; 2FA’sız, sınırlı yetkili, tek-kullanımlık) vermelisiniz. Kimlik bilgileriniz <strong>şifreli/geçici</strong> saklanır ve tarama sonrası silinir.',
+    fpMethodHtml: '<strong class="text-ink">Yöntem:</strong> Login sonrası çerez/oturum/yetki, authenticated enjeksiyon ve IDOR, yetki yükseltme ve çok-adımlı iş mantığı göstergeleri <strong>deterministik güvenlik kontrolleriyle</strong> incelenir. Gerçek veri/hesap değişikliği ve ödeme tamamlama <strong>kod seviyesinde engellidir</strong> — bu bir otonom/sınırsız pentest değildir.',
+    fpAiHtml: '<strong class="text-ink">Opsiyonel AI katmanı:</strong> İki kontrolde (yetki yükseltme + çok-adımlı iş mantığı) isteğe bağlı, hafif bir <strong>yapay zekâ danışma katmanı</strong> vardır; <strong>varsayılan olarak kapalıdır</strong> ve yalnız açıkken ek, doğrulanabilir bir gösterge bulduğunda devreye girer. Kapalıyken sonuçlar <strong>tam deterministik authenticated kontrollerle</strong> üretilir — normal ve beklenen davranıştır, rapor bunu şeffaf gösterir.',
+    fpScopeHtml: '<strong class="text-ink">Kapsam:</strong> <strong>Cross-account</strong> (başka bir kullanıcının verisine erişim) IDOR bu sürümün kapsamı dışındadır.',
+    step2: '2 · Onaylar', needConsents: (n: number) => `Devam etmek için aşağıdaki ${n} onayı işaretleyin.`,
+    contractShow: 'Bu siparişe özel Mesafeli Satış Sözleşmesi’ni görüntüle', contractHide: 'Bu siparişe özel sözleşmeyi gizle',
+    step3: '3 · Tekrar', oneOff: 'Tek seferlik tarama', repeat: 'Düzenli tekrarla',
+    frequency: 'Sıklık', weekly: 'Haftalık', biweekly: 'İki haftada bir', monthly: 'Aylık',
+    howManyRuns: 'Kaç tarama (peşin)',
+    recurringNote: (runs: number) => `${runs} tarama için baştan ödeme yaparsınız; ilki hemen, sonrakiler seçtiğiniz sıklıkta çalışır. (Minimum sıklık: haftalık.)`,
+    step4: '4 · Başlangıç', firstScan: '(ilk tarama)', startNow: 'Hemen başlat', startLater: 'Belirli bir tarihte başlat',
+    startDateTime: 'Başlangıç tarihi ve saati',
+    startLaterNote: 'Tarama seçtiğiniz zamana en yakın kontrol turunda (birkaç dakika içinde) başlar.',
+    // Active test authorization
+    atTitle: 'Aktif Test Yetkilendirmesi (zorunlu)',
+    atBody: 'Bu paket, zafiyeti doğrulamak için sınırlı aktif test istekleri gönderir. Devam etmek için kapsamı okuyup beyanı doldurmalısınız.',
+    atDoes: 'Bu tarama NE YAPAR', atDoesNot: 'Bu tarama NE YAPMAZ',
+    atConsentNote: 'Onayınız; hesabınız, zaman damgası, IP ve metin sürümü ile birlikte otomatik olarak kayıt altına alınır (ek bilgi girmenize gerek yoktur). İsterseniz bir yetkilendirme PDF’i olarak siparişinize bağlanır.',
+    // Auth cred block
+    acTitle: 'Test hesabı bilgileri', acOptional: '(opsiyonel)',
+    acInfoHtml: 'Bu alan <strong>opsiyoneldir</strong>. Sitenizde bir <strong>giriş (login) mekanizması yoksa</strong> boş bırakın — tarama <strong>loginsiz (kimlik-doğrulamasız)</strong> yapılır. Giriş varsa, oturum-içi kontroller için bir <strong>TEST hesabı</strong> girebilirsiniz.',
+    acWarnTitle: '⚠️ Yalnız TEST hesabı girin — ana/üretim hesabınızı DEĞİL',
+    acWarnBodyHtml: 'Bu tarama için oluşturulmuş, <strong>sınırlı yetkili, tek-kullanımlık</strong> bir hesap kullanın; şifresini tarama sonrası değiştirin.',
+    acWarn2Html: '<strong>2FA’sı olmayan</strong> bir hesap verin. Kimlik bilgileriniz <strong>şifreli</strong> saklanır ve tarama sonrası <strong>silinir</strong>.',
+    acUser: 'Kullanıcı adı / e-posta', acPass: 'Şifre', acPassPh: 'Test hesabı şifresi',
+    acCheckBtn: 'Test girişini doğrula (opsiyonel)', acChecking: 'Giriş deneniyor…',
+    acCheckingHint: 'Giriş formu aranıp deneniyor — birkaç saniye sürebilir…',
+    acNoCredsHtml: 'ℹ️ Test hesabı bilgisi girmediniz — tarama <strong>loginsiz (kimlik-doğrulamasız)</strong> yapılacak. Sitenizde giriş yoksa bu normaldir.',
+    lcOk: 'Test hesabıyla giriş doğrulandı.',
+    lcBad: 'Bu kullanıcı adı/şifreyle giriş yapılamadı — bilgileri kontrol edin.',
+    lc2fa: 'Hesapta 2FA görünüyor — 2FA’sız bir test hesabı verin.',
+    lcNoForm: 'Otomatik giriş formu bulunamadı — yine de devam edebilirsiniz (tarama daha kapsamlı deneyecektir).',
+    lcTimeout: 'Doğrulama uzun sürdü — yine de devam edebilirsiniz (gerçek tarama daha kapsamlı deneyecektir).',
+    lcOther: 'Giriş şu an doğrulanamadı — yine de devam edebilirsiniz.',
+    // Promo
+    promoLabel: 'Promosyon kodu (opsiyonel)', promoPh: 'Kodunuz', apply: 'Uygula',
+    promoAppliedPre: 'Kod uygulandı — indirim', promoNewTotal: 'Yeni tutar:', promoFree: ' — ödeme adımı atlanır, tarama hemen kuyruğa alınır.',
+    queueBusyHtml: 'Sipariş verebilirsiniz — <strong>taramanız en kısa sürede başlayacaktır</strong> ve durumu bu panelden takip edebilirsiniz.',
+    // Precheck warnings
+    checking: 'Hedefinize ulaşılıyor mu, ön kontrol yapılıyor…',
+    unreachTitle: '🚫 Hedefinize şu an dışarıdan ulaşılamıyor',
+    unreachP1Html: 'Sitenizin ana adresi (<strong>443/HTTPS ve 80/HTTP</strong>) şu an yanıt vermiyor. Bu bir hata değildir — sitenizin <strong>yayında olmadığı, kapalı olduğu ya da bizim erişimimizi engellediği</strong> anlamına gelir. Tarama şu an başlatılırsa dışarıdan test edilecek bir yüzey bulunamayacağı için rapor büyük olasılıkla <strong>boş / "İncelenemedi"</strong> gelir.',
+    unreachP2Html: '<strong>Önerimiz:</strong> sitenizin yayında ve erişilebilir olduğundan emin olun, sonra bu sayfayı yenileyip tekrar deneyin. Erişim sorununun geçici olduğunu düşünüyorsanız yine de devam edebilirsiniz.',
+    unreachAck: 'Erişim sorununu anladım; yine de şimdi başlatmak istiyorum.',
+    lowTitle: '⚠️ Önemli Ön Kontrol',
+    lowP1Html: 'Sitenizde otomatik hızlı taramada <strong>test edilebilir giriş noktası</strong> (form, query parametresi, sayısal ID içeren uç nokta) <strong>neredeyse hiç bulunamadı</strong>. Bu genellikle sitenin <strong>JavaScript ile render edilen (SPA)</strong> bir yapıya sahip olmasından kaynaklanır.',
+    lowP2Html: 'Tarama yine de çalıştırılacaktır, ancak çoğu kontrol <strong>"kapsam dışı / incelenemedi"</strong> olarak sonuçlanabilir. Ödenen tutar <strong>bulgu garantisi değildir</strong>; kapsamlı bir değerlendirme sürecinin tamamı içindir.',
+    lowAck: 'Devam etmek istiyorum.',
+    // Summary
+    summary: 'Sipariş Özeti', domainLabel: 'Alan adı', freqLabel: 'Sıklık', startLabelKey: 'Başlangıç', contentLabel: 'İçerik',
+    scanCount: (n: number) => `${n} tarama`, total: 'Toplam', totalRuns: (n: number) => `Toplam · ${n} tarama`, kdvIncl: 'KDV dahildir',
+    verifyDomain: 'Alan adını doğrula',
+    verifyHint: 'Aktif tarama için önce alan adı sahipliğinizi DNS ile doğrulayın — doğrulandıktan sonra satın alabilirsiniz.',
+    scheduledHint: 'Zamanlanmış taramalarım ekranından yönetebilirsiniz.', autoStartHint: 'Ödeme onaylanınca tarama otomatik başlar.',
+    selectPackage: 'Devam etmek için bir paket seçin.',
+    freqOneOff: 'Tek seferlik', freqEvery: (label: string, runs: number) => `${label} · ${runs} tarama`, startImmediate: 'Hemen',
+    // CTA labels
+    ctaStarting: 'Başlatılıyor…', ctaBuyBundle: 'Paketi Satın Al', ctaSetupRecurring: 'Düzenli Taramayı Kur', ctaSchedule: 'Taramayı Zamanla', ctaStart: 'Taramayı Başlat',
+    // disabled hints
+    hintSelectDomain: 'Önce site sahipliğinizi doğrulayın.', hintSelectModules: 'Paket içeriğini seçin.',
+    hintConsents: 'Devam etmek için aşağıdaki onayları işaretleyin →', hintLowScope: 'Ön kontrol uyarısını okuyup onaylayın →', hintUnreach: 'Erişim uyarısını okuyup onaylayın →', hintChecking: 'Ön kontrol yapılıyor…',
+    // Payment errors + validation
+    payPageErr: 'Ödeme sayfası alınamadı. Lütfen tekrar deneyin.',
+    errSelectPackage: 'Lütfen bir paket seçin.',
+    errAllConsents: 'Devam etmek için onayların tümünü işaretlemelisiniz.',
+    errActiveNoSchedule: 'Aktif-test paketleri zamanlanamaz; tek seferlik ve hemen çalıştırılır.',
+    errActiveRisk: 'Aktif test için risk kabul kutusunu işaretlemelisiniz.',
+    errFutureDate: 'İleri tarih için gelecekte bir tarih/saat seçin.',
+    errAuthConsents: 'Test hesabı bilgisi girdiniz — kimlik-doğrulamalı test için ek onayları (test hesabı beyanı ve yüksek-risk kabulü) işaretleyin. (Ya da bilgileri boş bırakıp loginsiz devam edin.)',
+    errSelectModule: 'En az bir modül seçin.',
+    errLowScopeAck: 'Devam etmek için ön kontrol uyarısını onaylamalısınız.',
+    errUnreachAck: 'Hedefe erişilemiyor — devam etmek için uyarıyı onaylamalısınız.',
+    // Trust strip
+    trustSSL: '256-bit SSL · iyzico güvenli ödeme', trustCard: 'Kart bilgileri iyzico’da işlenir, bizde saklanmaz', trustKvkk: 'KVKK’ya uygun · veriler şifreli saklanır',
+    // Mobile bar
+    noPackage: 'Paket seçilmedi', mobileVerify: 'Doğrula',
+    // Consents (gruplu)
+    cGenStrong: 'Okudum, onaylıyorum:', cGenOwn1: 'Bu alan adının', cGenOwn2: 've altyapısının', cGenOwn3: 'sahibi/yetkilisiyim ve bu hedefe',
+    cGenActive: 'bir aktif-hafif doğrulama testi', cGenPassive: 'pasif', cGenScan: 'tarama', cGenConsent: 'yapılmasına rıza gösteriyorum;',
+    cGenLegalMid: 'koşullarını ve', cGenLegalRead: '’ni okudum, kabul ediyorum.',
+    cGenActiveRiskHtml: ' Bu paketin <strong>daha yüksek risk</strong> taşıyan aktif test istekleri gönderdiğini kabul ediyorum.',
+    cGenAuthHtml: ' Vereceğim hesabın üretim/ana hesabım <strong>olmadığını</strong>, sınırlı yetkili tek-kullanımlık bir <strong>TEST hesabı</strong> olduğunu beyan ederim.',
+    cCrossStrong: 'Yapay zekâ analizi:', cCrossBodyPre: ' Bu pakette tarama verilerim', cCrossAuth: ' ve verdiğim ', cCrossAuthStrong: 'test hesabı bilgilerim', cCrossBodyPost: ', analiz için ', cCrossForeign: 'yurt dışında yerleşik bir yapay zekâ hizmetine', cCrossBodyEnd: ' aktarılır; buna açıkça rıza gösteriyorum.', cCrossAuthNote: ' Bilgilerim şifreli saklanır ve tarama sonrası silinir.',
+    cWithStrong: 'Cayma hakkı:', cWithBodyHtml: ' Hizmetin cayma süresi dolmadan <strong>onayımla derhal başlatılmasını</strong> istiyorum ve bu durumda <strong>cayma hakkımı kaybedeceğimi</strong> kabul ediyorum.',
+    // Legal link labels + hrefs (tr)
+    legalOn: 'Ön Bilgilendirme', legalMesafeli: 'Mesafeli Satış', legalIptal: 'İptal/İade', legalGizlilik: 'Gizlilik Politikası', legalKvkk: 'KVKK Aydınlatma Metni',
+    legalOnHref: '/legal/on-bilgilendirme', legalMesafeliHref: '/legal/mesafeli-satis', legalIptalHref: '/legal/iptal-iade', legalGizlilikHref: '/legal/gizlilik', legalKvkkHref: '/legal/kvkk-aydinlatma',
+    legalSlash: ' /',
+    intlSoonHtml: '',
+  },
+  de: {
+    title: 'Starten Sie Ihren Scan', sub: 'Paket wählen, Zustimmungen ankreuzen und zur sicheren Zahlung.',
+    noDomainPre: 'Wählen Sie zuerst eine zu scannende Domain.', noDomainLink: 'Domain wählen →',
+    dnsVerified: 'Domain per DNS bestätigt — der aktive Scan startet nach der Zahlungsbestätigung.',
+    activeVerifyTitle: 'Dieses Paket sendet aktive Prüfungen — DNS-Bestätigung erforderlich',
+    activeVerifyBodyHtml: 'Ohne DNS-Bestätigung Ihrer Domain-Inhaberschaft startet der aktive Scan (Injection-/Session-Versuche) <strong>nicht</strong> — selbst nach Zahlung wird die Bestellung im Status <strong>„Domain-Bestätigung ausstehend“</strong> gehalten und startet nach der Bestätigung <strong>automatisch</strong>.',
+    verifyNow: 'Jetzt per DNS bestätigen →',
+    passiveNoVerify: 'Für dieses Paket ist keine Bestätigung nötig — der Scan startet direkt nach der Zahlungsbestätigung.',
+    step1: '1 · Paket wählen', entryBadge: 'Einstieg',
+    basitDesc: 'Ein schneller, günstiger Test-Scan — als Vorschau gedacht (keine umfassende Prüfung).',
+    kdv: 'inkl. MwSt.', sampleReport: 'Musterbericht ansehen', buy: 'Jetzt kaufen',
+    popular: 'Beliebt', includes: 'Enthält',
+    reconItems: [
+      'Scan auf aufgegebene Subdomains (Takeover) — Subdomain-Inventar aus CT-Logs',
+      'Erkennung öffentlicher API- / Swagger-Dokumentation',
+      'CMS- & Technologie-Fingerprint-Analyse',
+      'Erkennung administrativer/sensibler Pfade aus der Sitemap',
+    ],
+    reconNote: 'Passive Erkundung der externen Oberfläche; keine aktive Endpunkt-Injection und keine authentifizierten Tests.',
+    soon: 'Bald', soonClosed: 'Derzeit nicht im Verkauf',
+    testCredsMembers: 'Testkonto-Daten',
+    avTitle: '💡 Transparenz & Umfang — bitte vor der Zahlung lesen',
+    avP1Html: 'Dieses Paket testet die <strong>öffentliche (kein Login erforderliche) externe Angriffsfläche</strong> Ihrer Website mit harmlosen Prüfungen — Injection-, Autorisierungs- und Logik-Risiken bei öffentlichen Such-, Formular-, API- und Login-/Registrierungs-Flows.',
+    avP2Html: 'Wenn Ihre Website <strong>keine öffentlichen Such-, Formular-, API- oder ID-basierten Endpunkte</strong> hat, können im Inhalt gelistete Prüfungen wie <strong>IDOR / Geschäftslogik / Datei-Upload / Race</strong> im Bericht als <strong>„nicht geprüft“</strong> erscheinen. Das ist <strong>kein Fehler</strong> — es ergibt sich natürlich aus der externen Oberflächenstruktur Ihrer Website (kein offener Einstiegspunkt zum Testen).',
+    avP3Html: 'Für tiefe Autorisierungs-/Geschäftslogik-Tests <strong>nach</strong> dem Login wählen Sie das Paket <strong>Umfassender Pentest</strong>.',
+    fpReviewHtml: '<strong class="text-ink">Ablauf:</strong> Dieses Paket startet aus Sicherheitsgründen nach der Bestellung <strong>unmittelbar nach der Zahlungsbestätigung</strong>.',
+    fpAccountHtml: '<strong class="text-ink">Testkonto:</strong> Für authentifizierte Tests müssen Sie ein <strong>TEST-Konto</strong> bereitstellen (NICHT Ihr Produktivkonto; ohne 2FA, minimale Rechte, Einmalgebrauch). Ihre Zugangsdaten werden <strong>verschlüsselt/temporär</strong> gespeichert und nach dem Scan gelöscht.',
+    fpMethodHtml: '<strong class="text-ink">Methode:</strong> Nach dem Login werden Cookie/Session/Autorisierung, authentifizierte Injection und IDOR, Rechteausweitung und mehrstufige Geschäftslogik-Indikatoren mit <strong>deterministischen Sicherheitsprüfungen</strong> untersucht. Echte Daten-/Kontoänderungen und Zahlungsabschluss sind <strong>auf Code-Ebene blockiert</strong> — dies ist kein autonomer/unbegrenzter Pentest.',
+    fpAiHtml: '<strong class="text-ink">Optionale KI-Schicht:</strong> Bei zwei Prüfungen (Rechteausweitung + mehrstufige Geschäftslogik) gibt es eine optionale, leichte <strong>KI-Beratungsschicht</strong>; sie ist <strong>standardmäßig deaktiviert</strong> und greift nur ein, wenn sie aktiviert ist und einen zusätzlichen, nachweisbaren Indikator findet. Deaktiviert werden die Ergebnisse mit <strong>vollständig deterministischen authentifizierten Prüfungen</strong> erzeugt — das ist normal und erwartet; der Bericht zeigt dies transparent.',
+    fpScopeHtml: '<strong class="text-ink">Umfang:</strong> <strong>Cross-Account</strong>-IDOR (Zugriff auf Daten eines anderen Nutzers) ist in dieser Version außerhalb des Scope.',
+    step2: '2 · Zustimmungen', needConsents: (n: number) => `Kreuzen Sie die folgenden ${n} Zustimmungen an, um fortzufahren.`,
+    contractShow: 'Für diese Bestellung gültigen Fernabsatzvertrag anzeigen', contractHide: 'Vertrag für diese Bestellung ausblenden',
+    step3: '3 · Wiederholung', oneOff: 'Einmaliger Scan', repeat: 'Regelmäßig wiederholen',
+    frequency: 'Häufigkeit', weekly: 'Wöchentlich', biweekly: 'Alle zwei Wochen', monthly: 'Monatlich',
+    howManyRuns: 'Wie viele Scans (im Voraus)',
+    recurringNote: (runs: number) => `Sie zahlen im Voraus für ${runs} Scans; der erste sofort, die weiteren in der gewählten Häufigkeit. (Mindesthäufigkeit: wöchentlich.)`,
+    step4: '4 · Start', firstScan: '(erster Scan)', startNow: 'Sofort starten', startLater: 'An einem bestimmten Datum starten',
+    startDateTime: 'Startdatum und -uhrzeit',
+    startLaterNote: 'Der Scan startet in der Kontrollrunde, die Ihrem gewählten Zeitpunkt am nächsten liegt (innerhalb weniger Minuten).',
+    atTitle: 'Autorisierung für aktive Tests (erforderlich)',
+    atBody: 'Dieses Paket sendet begrenzte aktive Testanfragen, um Schwachstellen zu bestätigen. Zum Fortfahren müssen Sie den Umfang lesen und die Erklärung ausfüllen.',
+    atDoes: 'Was dieser Scan TUT', atDoesNot: 'Was dieser Scan NICHT tut',
+    atConsentNote: 'Ihre Zustimmung wird zusammen mit Ihrem Konto, Zeitstempel, IP und der Textversion automatisch protokolliert (keine zusätzlichen Angaben nötig). Auf Wunsch wird sie als Autorisierungs-PDF an Ihre Bestellung angehängt.',
+    acTitle: 'Testkonto-Daten', acOptional: '(optional)',
+    acInfoHtml: 'Dieses Feld ist <strong>optional</strong>. Wenn Ihre Website <strong>keinen Login-Mechanismus</strong> hat, lassen Sie es leer — der Scan wird <strong>ohne Login (ohne Authentifizierung)</strong> durchgeführt. Gibt es einen Login, können Sie ein <strong>TEST-Konto</strong> für sitzungsinterne Prüfungen eingeben.',
+    acWarnTitle: '⚠️ Geben Sie nur ein TEST-Konto ein — NICHT Ihr Produktivkonto',
+    acWarnBodyHtml: 'Verwenden Sie ein für diesen Scan erstelltes Konto mit <strong>minimalen Rechten und Einmalgebrauch</strong>; ändern Sie das Passwort nach dem Scan.',
+    acWarn2Html: 'Geben Sie ein Konto <strong>ohne 2FA</strong> an. Ihre Zugangsdaten werden <strong>verschlüsselt</strong> gespeichert und nach dem Scan <strong>gelöscht</strong>.',
+    acUser: 'Benutzername / E-Mail', acPass: 'Passwort', acPassPh: 'Testkonto-Passwort',
+    acCheckBtn: 'Test-Login prüfen (optional)', acChecking: 'Anmeldung wird versucht…',
+    acCheckingHint: 'Login-Formular wird gesucht und versucht — kann einige Sekunden dauern…',
+    acNoCredsHtml: 'ℹ️ Sie haben keine Testkonto-Daten eingegeben — der Scan wird <strong>ohne Login (ohne Authentifizierung)</strong> durchgeführt. Wenn Ihre Website keinen Login hat, ist das normal.',
+    lcOk: 'Anmeldung mit dem Testkonto bestätigt.',
+    lcBad: 'Mit diesem Benutzernamen/Passwort war keine Anmeldung möglich — bitte prüfen Sie die Daten.',
+    lc2fa: 'Beim Konto scheint 2FA aktiv zu sein — bitte geben Sie ein Testkonto ohne 2FA an.',
+    lcNoForm: 'Kein automatisches Login-Formular gefunden — Sie können dennoch fortfahren (der Scan versucht mehr).',
+    lcTimeout: 'Die Prüfung hat zu lange gedauert — Sie können dennoch fortfahren (der echte Scan versucht mehr).',
+    lcOther: 'Die Anmeldung konnte derzeit nicht bestätigt werden — Sie können dennoch fortfahren.',
+    promoLabel: 'Aktionscode (optional)', promoPh: 'Ihr Code', apply: 'Anwenden',
+    promoAppliedPre: 'Code angewendet — Rabatt', promoNewTotal: 'Neuer Betrag:', promoFree: ' — der Zahlungsschritt entfällt, der Scan wird sofort eingereiht.',
+    queueBusyHtml: 'Sie können bestellen — <strong>Ihr Scan startet baldmöglichst</strong> und Sie verfolgen den Status über dieses Panel.',
+    checking: 'Erreichbarkeit Ihres Ziels wird vorab geprüft…',
+    unreachTitle: '🚫 Ihr Ziel ist derzeit von außen nicht erreichbar',
+    unreachP1Html: 'Die Hauptadresse Ihrer Website (<strong>443/HTTPS und 80/HTTP</strong>) antwortet derzeit nicht. Das ist kein Fehler — es bedeutet, dass Ihre Website <strong>offline oder geschlossen ist oder unseren Zugriff blockiert</strong>. Wird der Scan jetzt gestartet, findet er keine von außen testbare Oberfläche, sodass der Bericht wahrscheinlich <strong>leer / „nicht geprüft“</strong> ausfällt.',
+    unreachP2Html: '<strong>Unsere Empfehlung:</strong> Stellen Sie sicher, dass Ihre Website online und erreichbar ist, aktualisieren Sie dann diese Seite und versuchen Sie es erneut. Wenn Sie meinen, das Problem sei vorübergehend, können Sie dennoch fortfahren.',
+    unreachAck: 'Ich habe das Zugriffsproblem verstanden; ich möchte trotzdem jetzt starten.',
+    lowTitle: '⚠️ Wichtige Vorabprüfung',
+    lowP1Html: 'Bei der automatischen Schnellprüfung wurde <strong>fast kein testbarer Einstiegspunkt</strong> (Formular, Query-Parameter, Endpunkt mit numerischer ID) auf Ihrer Website gefunden. Das liegt meist an einer <strong>per JavaScript gerenderten (SPA)</strong> Struktur der Website.',
+    lowP2Html: 'Der Scan wird dennoch ausgeführt, aber viele Prüfungen können als <strong>„außerhalb des Scope / nicht geprüft“</strong> enden. Der gezahlte Betrag ist <strong>keine Fundgarantie</strong>; er gilt für den gesamten umfassenden Bewertungsprozess.',
+    lowAck: 'Ich möchte fortfahren.',
+    summary: 'Bestellübersicht', domainLabel: 'Domain', freqLabel: 'Häufigkeit', startLabelKey: 'Start', contentLabel: 'Inhalt',
+    scanCount: (n: number) => `${n} Scans`, total: 'Gesamt', totalRuns: (n: number) => `Gesamt · ${n} Scans`, kdvIncl: 'inkl. MwSt.',
+    verifyDomain: 'Domain bestätigen',
+    verifyHint: 'Für den aktiven Scan bestätigen Sie zuerst Ihre Domain-Inhaberschaft per DNS — danach können Sie kaufen.',
+    scheduledHint: 'Sie können sie über „Geplante Scans“ verwalten.', autoStartHint: 'Nach der Zahlungsbestätigung startet der Scan automatisch.',
+    selectPackage: 'Wählen Sie ein Paket, um fortzufahren.',
+    freqOneOff: 'Einmalig', freqEvery: (label: string, runs: number) => `${label} · ${runs} Scans`, startImmediate: 'Sofort',
+    ctaStarting: 'Wird gestartet…', ctaBuyBundle: 'Paket kaufen', ctaSetupRecurring: 'Regelmäßigen Scan einrichten', ctaSchedule: 'Scan planen', ctaStart: 'Scan starten',
+    hintSelectDomain: 'Bestätigen Sie zuerst Ihre Website-Inhaberschaft.', hintSelectModules: 'Wählen Sie den Paketinhalt.',
+    hintConsents: 'Kreuzen Sie zum Fortfahren die Zustimmungen unten an →', hintLowScope: 'Lesen und bestätigen Sie den Vorabprüfungs-Hinweis →', hintUnreach: 'Lesen und bestätigen Sie den Zugriffs-Hinweis →', hintChecking: 'Vorabprüfung läuft…',
+    payPageErr: 'Zahlungsseite konnte nicht geladen werden. Bitte versuchen Sie es erneut.',
+    errSelectPackage: 'Bitte wählen Sie ein Paket.',
+    errAllConsents: 'Zum Fortfahren müssen Sie alle Zustimmungen ankreuzen.',
+    errActiveNoSchedule: 'Aktiv-Test-Pakete können nicht geplant werden; sie laufen einmalig und sofort.',
+    errActiveRisk: 'Für den aktiven Test müssen Sie das Risiko-Kästchen ankreuzen.',
+    errFutureDate: 'Für einen späteren Start wählen Sie ein Datum/eine Uhrzeit in der Zukunft.',
+    errAuthConsents: 'Sie haben Testkonto-Daten eingegeben — kreuzen Sie für den authentifizierten Test die zusätzlichen Zustimmungen an (Testkonto-Erklärung und Akzeptanz des höheren Risikos). (Oder lassen Sie die Felder leer und fahren Sie ohne Login fort.)',
+    errSelectModule: 'Wählen Sie mindestens ein Modul.',
+    errLowScopeAck: 'Zum Fortfahren müssen Sie den Vorabprüfungs-Hinweis bestätigen.',
+    errUnreachAck: 'Ziel nicht erreichbar — zum Fortfahren müssen Sie den Hinweis bestätigen.',
+    trustSSL: '256-Bit-SSL · sichere Zahlung über iyzico', trustCard: 'Kartendaten werden bei iyzico verarbeitet, nicht bei uns gespeichert', trustKvkk: 'DSGVO-konform · Daten werden verschlüsselt gespeichert',
+    noPackage: 'Kein Paket gewählt', mobileVerify: 'Bestätigen',
+    cGenStrong: 'Ich habe gelesen und stimme zu:', cGenOwn1: 'Ich bin Inhaber/Berechtigter dieser Domain', cGenOwn2: 'und ihrer Infrastruktur', cGenOwn3: 'und willige ein, dass an diesem Ziel',
+    cGenActive: 'ein aktiv-leichter Verifizierungstest', cGenPassive: 'ein passiver', cGenScan: 'Scan', cGenConsent: 'durchgeführt wird;',
+    cGenLegalMid: 'sowie die', cGenLegalRead: ' gelesen und akzeptiere sie.',
+    cGenActiveRiskHtml: ' Ich akzeptiere, dass dieses Paket aktive Testanfragen mit <strong>höherem Risiko</strong> sendet.',
+    cGenAuthHtml: ' Ich erkläre, dass das von mir angegebene Konto <strong>nicht</strong> mein Produktiv-/Hauptkonto ist, sondern ein <strong>TEST-Konto</strong> mit minimalen Rechten und Einmalgebrauch.',
+    cCrossStrong: 'KI-Analyse:', cCrossBodyPre: ' In diesem Paket werden meine Scan-Daten', cCrossAuth: ' und die von mir angegebenen ', cCrossAuthStrong: 'Testkonto-Daten', cCrossBodyPost: ' zur Analyse an einen ', cCrossForeign: 'außerhalb der EU ansässigen KI-Dienst', cCrossBodyEnd: ' übermittelt; dem stimme ich ausdrücklich zu.', cCrossAuthNote: ' Meine Daten werden verschlüsselt gespeichert und nach dem Scan gelöscht.',
+    cWithStrong: 'Widerrufsrecht:', cWithBodyHtml: ' Ich verlange, dass die Dienstleistung mit meiner Zustimmung <strong>vor Ablauf der Widerrufsfrist unmittelbar beginnt</strong>, und akzeptiere, dass ich dadurch <strong>mein Widerrufsrecht verliere</strong> (§ 356 Abs. 5 BGB).',
+    legalOn: 'AGB', legalMesafeli: 'Widerrufsbelehrung', legalIptal: 'Widerruf', legalGizlilik: 'Datenschutzerklärung', legalKvkk: 'Datenschutz',
+    legalOnHref: '/de/legal/agb', legalMesafeliHref: '/de/legal/widerruf', legalIptalHref: '/de/legal/widerruf', legalGizlilikHref: '/de/legal/datenschutz', legalKvkkHref: '/de/legal/datenschutz',
+    legalSlash: '',
+    intlSoonHtml: '',
+  },
+} as const;
+
 export default function OrderPage() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -153,12 +382,17 @@ export default function OrderPage() {
     return () => { cancelled = true; };
   }, [domainId, selected, selectedBundle?.key]);
 
+  // (Çok-bölge) Dil: region cookie'sinden. de → Almanca metin + Alman legal linkleri (Widerruf dahil).
+  const deLang = getRegion(region).lang === 'de';
+  const L = ORD[deLang ? 'de' : 'tr'];
   const selectedPkg = packages.find((p) => p.key === selected);
   // SATIS MODELI: tekil kontrol satisi YOK — secilebilir TEK "tekil" paket basit_tarama (giris).
   const basitPkg = packages.find((p) => p.key === 'basit_tarama');
   const isActiveLight = selectedPkg?.securityProfile === 'active-light';
   // (#4) Uluslararasi odeme (Paddle) henuz canli degil — TR disi bolgede nazik "yakinda".
-  const intlComingSoon = region !== 'tr';
+  // /de artık gerçek iyzico+EUR ödemesiyle satın alınabilir → intlComingSoon'a DAHİL DEĞİL.
+  // Yalnız us/ae (Paddle canlı değil) "yakında" olur.
+  const intlComingSoon = region !== 'tr' && region !== 'de';
   const needsAuthCreds = selected === 'authenticated_scan';
 
   // (İŞ 3) Onay GRUPLAMA — UI'da ≤3 checkbox. Sunucu-tarafı zorunluluk DEĞİŞMEZ: her grup, altındaki
@@ -214,16 +448,16 @@ export default function OrderPage() {
 
   async function handleStart() {
     if (!domainId || busy) return;
-    if (!selected) return setError('Lütfen bir paket seçin.');
-    if (!allConsents) return setError('Devam etmek için onayların tümünü işaretlemelisiniz.');
-    if (isActiveLight && (recurring || startMode === 'later')) return setError('Aktif-test paketleri zamanlanamaz; tek seferlik ve hemen çalıştırılır.');
-    if (!activeConsentOk) return setError('Aktif test için risk kabul kutusunu işaretlemelisiniz.');
+    if (!selected) return setError(L.errSelectPackage);
+    if (!allConsents) return setError(L.errAllConsents);
+    if (isActiveLight && (recurring || startMode === 'later')) return setError(L.errActiveNoSchedule);
+    if (!activeConsentOk) return setError(L.errActiveRisk);
     // İleri tarih seçildiyse geçerli ve gelecekte olmalı.
     let startAtIso: string | undefined;
     if (startMode === 'later') {
       const t = new Date(startAt);
       if (!startAt || Number.isNaN(t.getTime()) || t.getTime() <= Date.now()) {
-        return setError('İleri tarih için gelecekte bir tarih/saat seçin.');
+        return setError(L.errFutureDate);
       }
       startAtIso = t.toISOString();
     }
@@ -277,15 +511,15 @@ export default function OrderPage() {
 
   async function handleBundleStart() {
     if (!domainId || busy || !selectedBundle) return;
-    if (!allConsents) return setError('Devam etmek için onayların tümünü işaretlemelisiniz.');
+    if (!allConsents) return setError(L.errAllConsents);
     const isAL = selectedBundle.category === 'active-light';
-    if (isAL && !atRisk) return setError('Aktif test için risk kabul kutusunu işaretlemelisiniz.');
+    if (isAL && !atRisk) return setError(L.errActiveRisk);
     const needsAuth = selectedBundle.members?.some((m: any) => m.key === 'authenticated_scan');
     // (LOGİNSİZ TEST) creds opsiyonel: boşsa loginsiz devam. Girildiyse ek onaylar gerekir.
-    if (needsAuth && hasCreds && !authConsentsOk) return setError('Test hesabı bilgisi girdiniz — kimlik-doğrulamalı test için ek onayları (test hesabı beyanı ve yüksek-risk kabulü) işaretleyin. (Ya da bilgileri boş bırakıp loginsiz devam edin.)');
-    if (selectedBundle.selectable && bundleModules.length === 0) return setError('En az bir modül seçin.');
-    if (showLowScopeWarning && !lowScopeAck) return setError('Devam etmek için ön kontrol uyarısını onaylamalısınız.');
-    if (showUnreachableWarning && !unreachableAck) return setError('Hedefe erişilemiyor — devam etmek için uyarıyı onaylamalısınız.');
+    if (needsAuth && hasCreds && !authConsentsOk) return setError(L.errAuthConsents);
+    if (selectedBundle.selectable && bundleModules.length === 0) return setError(L.errSelectModule);
+    if (showLowScopeWarning && !lowScopeAck) return setError(L.errLowScopeAck);
+    if (showUnreachableWarning && !unreachableAck) return setError(L.errUnreachAck);
     setBusy(true);
     setError(null);
     try {
@@ -330,7 +564,20 @@ export default function OrderPage() {
     {
       checked: groupGeneralChecked,
       set: setGroupGeneral,
-      node: (
+      node: deLang ? (
+        <>
+          <strong>Ich habe gelesen und stimme zu:</strong> Ich bin Inhaber/Berechtigter dieser Domain <strong>und ihrer Infrastruktur</strong> und
+          willige ein, dass an diesem Ziel {isActiveLightSel ? <>ein <strong>aktiv-leichter Verifizierungstest</strong></> : <>ein <strong>passiver</strong> Scan</>} durchgeführt wird;
+          ich habe die{' '}
+          <Link href="/de/legal/agb" target="_blank" className="font-semibold text-accent-600 underline">AGB</Link>, die{' '}
+          <Link href="/de/legal/widerruf" target="_blank" className="font-semibold text-accent-600 underline">Widerrufsbelehrung</Link>{' '}
+          sowie die{' '}
+          <Link href="/de/legal/datenschutz" target="_blank" className="font-semibold text-accent-600 underline">Datenschutzerklärung</Link>{' '}
+          gelesen und akzeptiere sie.
+          {isActiveLightSel && <> Ich akzeptiere, dass dieses Paket aktive Testanfragen mit <strong>höherem Risiko</strong> sendet.</>}
+          {needsAuthSel && <> Ich erkläre, dass das von mir angegebene Konto <strong>nicht</strong> mein Produktiv-/Hauptkonto ist, sondern ein <strong>TEST-Konto</strong> mit minimalen Rechten und Einmalgebrauch.</>}
+        </>
+      ) : (
         <>
           <strong>Okudum, onaylıyorum:</strong> Bu alan adının <strong>ve altyapısının</strong> sahibi/yetkilisiyim ve
           bu hedefe {isActiveLightSel ? <>bir <strong>aktif-hafif doğrulama testi</strong></> : <><strong>pasif</strong> tarama</>} yapılmasına
@@ -353,7 +600,11 @@ export default function OrderPage() {
       ? [{
           checked: groupCrossBorderChecked,
           set: setGroupCrossBorder,
-          node: (
+          node: deLang ? (
+            <>
+              <strong>KI-Analyse:</strong> In diesem Paket werden meine Scan-Daten{needsAuthSel && <> und die von mir angegebenen <strong>Testkonto-Daten</strong></>} zur Analyse an einen <strong>außerhalb der EU ansässigen KI-Dienst</strong> übermittelt; dem stimme ich ausdrücklich zu.{needsAuthSel && ' Meine Daten werden verschlüsselt gespeichert und nach dem Scan gelöscht.'}
+            </>
+          ) : (
             <>
               <strong>Yapay zekâ analizi:</strong> Bu pakette tarama verilerim{needsAuthSel && <> ve verdiğim <strong>test hesabı bilgilerim</strong></>}, analiz için <strong>yurt dışında yerleşik bir yapay zekâ hizmetine</strong> aktarılır; buna açıkça rıza gösteriyorum.{needsAuthSel && ' Bilgilerim şifreli saklanır ve tarama sonrası silinir.'}
             </>
@@ -362,9 +613,15 @@ export default function OrderPage() {
       : []),
     {
       // AYRI (hukuken): mesafeli satış cayma hakkı feragati (Mesafeli Sözleşmeler Yön. m.15/ğ).
+      // (/de) AB dijital-hizmet cayma feragati — §356 Abs. 5 BGB.
       checked: withdrawalConsent,
       set: setWithdrawalConsent,
-      node: (
+      node: deLang ? (
+        <>
+          <strong>Widerrufsrecht:</strong> Ich verlange, dass die Dienstleistung mit meiner Zustimmung <strong>vor Ablauf der
+          Widerrufsfrist unmittelbar beginnt</strong>, und akzeptiere, dass ich dadurch <strong>mein Widerrufsrecht verliere</strong> (§ 356 Abs. 5 BGB).
+        </>
+      ) : (
         <>
           <strong>Cayma hakkı:</strong> Hizmetin cayma süresi dolmadan <strong>onayımla derhal başlatılmasını</strong> istiyorum
           ve bu durumda <strong>cayma hakkımı kaybedeceğimi</strong> kabul ediyorum.
@@ -377,12 +634,12 @@ export default function OrderPage() {
   const activeBundles = bundles.filter((b) => !b.comingSoon);
   const soonBundles = bundles.filter((b) => b.comingSoon);
   const selName = selectedBundle ? selectedBundle.displayName : selectedPkg ? selectedPkg.displayName : null;
-  const intervalLabel = intervalDays === 7 ? 'Haftalık' : intervalDays === 14 ? 'İki haftada bir' : 'Aylık';
-  const freqLabel = selectedBundle || !recurring ? 'Tek seferlik' : `${intervalLabel} · ${runs} tarama`;
+  const intervalLabel = intervalDays === 7 ? L.weekly : intervalDays === 14 ? L.biweekly : L.monthly;
+  const freqLabel = selectedBundle || !recurring ? L.freqOneOff : L.freqEvery(intervalLabel, runs);
   const startLabel =
     !selectedBundle && startMode === 'later' && startAt
-      ? new Date(startAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })
-      : 'Hemen';
+      ? new Date(startAt).toLocaleString(deLang ? 'de-DE' : 'tr-TR', { dateStyle: 'short', timeStyle: 'short' })
+      : L.startImmediate;
   const baseAmountMinor = selectedBundle ? selectedBundle.amountMinorUnit : selectedPkg ? selectedPkg.priceMinorUnit : 0;
   // Promo (tekil paket VEYA bundle) gecerliyse indirimli tutari goster.
   const unitAmountMinor =
@@ -409,14 +666,14 @@ export default function OrderPage() {
       preCheckGate
     : !domainId || busy || !selected || !allConsents || !activeConsentOk || intlComingSoon || needsDomainVerify || preCheckGate;
   const ctaLabel = busy
-    ? 'Başlatılıyor…'
+    ? L.ctaStarting
     : selectedBundle
-      ? 'Paketi Satın Al'
+      ? L.ctaBuyBundle
       : recurring
-        ? 'Düzenli Taramayı Kur'
+        ? L.ctaSetupRecurring
         : startMode === 'later'
-          ? 'Taramayı Zamanla'
-          : 'Taramayı Başlat';
+          ? L.ctaSchedule
+          : L.ctaStart;
   const onCta = () => (selectedBundle ? handleBundleStart() : handleStart());
 
   // (İŞ 3 · Sorun A) "Satın Al" neden pasif? Müşteri tahmin etmesin — net sebep + onaylara kaydırma.
@@ -426,13 +683,13 @@ export default function OrderPage() {
   // "→ oraya kaydır" yapıyoruz. Aksi halde ön-kontrol uyarısının onay kutusuna ulaşılamayıp kilitleniyordu.
   const disabledHint: { text: string; scroll: boolean; target?: string } | null = (() => {
     if (!(selected || selectedBundle) || busy) return null;
-    if (!domainId) return { text: 'Önce site sahipliğinizi doğrulayın.', scroll: false };
-    if (selectedBundle?.selectable && bundleModules.length === 0) return { text: 'Paket içeriğini seçin.', scroll: false };
+    if (!domainId) return { text: L.hintSelectDomain, scroll: false };
+    if (selectedBundle?.selectable && bundleModules.length === 0) return { text: L.hintSelectModules, scroll: false };
     // (LOGİNSİZ TEST) test hesabı bilgisi artık zorunlu değil — boş bırakılırsa loginsiz devam edilir (uyarı formda).
-    if (!allGroupsChecked) return { text: 'Devam etmek için aşağıdaki onayları işaretleyin →', scroll: true, target: 'onaylar' };
-    if (showLowScopeWarning && !lowScopeAck) return { text: 'Ön kontrol uyarısını okuyup onaylayın →', scroll: true, target: 'oncontrol-uyari' };
-    if (showUnreachableWarning && !unreachableAck) return { text: 'Erişim uyarısını okuyup onaylayın →', scroll: true, target: 'oncontrol-uyari' };
-    if (scopeChecking) return { text: 'Ön kontrol yapılıyor…', scroll: false };
+    if (!allGroupsChecked) return { text: L.hintConsents, scroll: true, target: 'onaylar' };
+    if (showLowScopeWarning && !lowScopeAck) return { text: L.hintLowScope, scroll: true, target: 'oncontrol-uyari' };
+    if (showUnreachableWarning && !unreachableAck) return { text: L.hintUnreach, scroll: true, target: 'oncontrol-uyari' };
+    if (scopeChecking) return { text: L.hintChecking, scroll: false };
     return null;
   })();
 
@@ -449,7 +706,7 @@ export default function OrderPage() {
         }`}
       >
         {b.popular ? (
-          <span className="absolute -top-3 left-6 rounded-pill bg-accent px-3 py-0.5 text-[10px] font-bold text-white">★ Popüler</span>
+          <span className="absolute -top-3 left-6 rounded-pill bg-accent px-3 py-0.5 text-[10px] font-bold text-white">★ {L.popular}</span>
         ) : b.discountPct > 0 ? (
           <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-0.5 text-[10px] font-bold text-white">%{b.discountPct}</span>
         ) : null}
@@ -457,18 +714,15 @@ export default function OrderPage() {
         <p className="mt-1 text-xs leading-relaxed text-ink-soft">{renderEmphasis(b.description)}</p>
         {b.key === 'bundle_recon' ? (
           <div className="mt-1.5 flex-1 text-[11px] text-ink-muted">
-            İçindekiler:
+            {L.includes}:
             <ul className="mt-1 space-y-0.5">
-              <li>· Terk edilmiş alt domain (Subdomain Takeover) taraması — CT loglarından alt domain envanteri</li>
-              <li>· Açık API / Swagger dokümantasyon keşfi</li>
-              <li>· CMS &amp; teknoloji parmak izi analizi</li>
-              <li>· Site haritasından idari/hassas yol tespiti</li>
+              {L.reconItems.map((it) => <li key={it}>· {it}</li>)}
             </ul>
-            <p className="mt-1.5 italic">Pasif dış yüzey keşfidir; aktif uç nokta enjeksiyonu veya kimlik doğrulamalı test içermez.</p>
+            <p className="mt-1.5 italic">{L.reconNote}</p>
           </div>
         ) : (
           <p className="mt-1.5 flex-1 text-[11px] text-ink-muted">
-            İçindekiler: {b.members.map((m: any) => m.displayName).join(' · ')}
+            {L.includes}: {b.members.map((m: any) => m.displayName).join(' · ')}
           </p>
         )}
         <p className="mt-2 text-ink">
@@ -476,7 +730,7 @@ export default function OrderPage() {
             <span className="text-xs text-ink-muted line-through">{formatMoney(b.originalMinorUnit, getRegion(region))}</span>
           )}{' '}
           <span className="font-bold">{formatMoney(b.amountMinorUnit, getRegion(region))}</span>
-          <span className="text-xs font-normal text-ink-muted"> · KDV Dahil</span>
+          <span className="text-xs font-normal text-ink-muted"> · {L.kdv}</span>
         </p>
       </button>
     );
@@ -495,21 +749,21 @@ export default function OrderPage() {
       const r = await api.precheckLogin(domainId, authUser.trim(), authPass);
       if (r.ok) {
         setLoginCheck('ok');
-        setLoginCheckMsg('Test hesabıyla giriş doğrulandı.');
+        setLoginCheckMsg(L.lcOk);
       } else {
         setLoginCheck('fail');
         setLoginCheckMsg(
-          r.reason === 'bad_credentials' ? 'Bu kullanıcı adı/şifreyle giriş yapılamadı — bilgileri kontrol edin.'
-          : r.reason === 'two_factor' ? 'Hesapta 2FA görünüyor — 2FA’sız bir test hesabı verin.'
-          : r.reason === 'no_login_endpoint' ? 'Otomatik giriş formu bulunamadı — yine de devam edebilirsiniz (tarama daha kapsamlı deneyecektir).'
-          : r.reason === 'timeout' ? 'Doğrulama uzun sürdü — yine de devam edebilirsiniz (gerçek tarama daha kapsamlı deneyecektir).'
-          : 'Giriş şu an doğrulanamadı — yine de devam edebilirsiniz.',
+          r.reason === 'bad_credentials' ? L.lcBad
+          : r.reason === 'two_factor' ? L.lc2fa
+          : r.reason === 'no_login_endpoint' ? L.lcNoForm
+          : r.reason === 'timeout' ? L.lcTimeout
+          : L.lcOther,
         );
       }
     } catch {
       // (HIZ) İstemci zaman aşımı (AbortError) dahil — takılı kalmaz, bilgilendirici mesaj.
       setLoginCheck('fail');
-      setLoginCheckMsg('Doğrulama uzun sürdü — yine de devam edebilirsiniz (gerçek tarama daha kapsamlı deneyecektir).');
+      setLoginCheckMsg(L.lcTimeout);
     }
   }
 
@@ -517,35 +771,27 @@ export default function OrderPage() {
     <div className="mt-3 space-y-4 rounded-card border-2 border-brand/20 bg-brand-50/50 p-4 sm:p-5">
       <p className="flex items-center gap-2 text-sm font-bold text-brand">
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand text-xs text-white">🔑</span>
-        Test hesabı bilgileri <span className="font-normal text-ink-muted">(opsiyonel)</span>
+        {L.acTitle} <span className="font-normal text-ink-muted">{L.acOptional}</span>
       </p>
       {/* (LOGİNSİZ TEST) Opsiyonel olduğunu net söyle — sitede login olmayabilir. */}
       <div className="rounded-card border border-brand-200 bg-white/70 px-4 py-3 text-sm text-ink-soft">
-        <p>
-          Bu alan <strong>opsiyoneldir</strong>. Sitenizde bir <strong>giriş (login) mekanizması yoksa</strong> boş bırakın —
-          tarama <strong>loginsiz (kimlik-doğrulamasız)</strong> yapılır. Giriş varsa, oturum-içi kontroller için bir
-          <strong> TEST hesabı</strong> girebilirsiniz.
-        </p>
+        <p dangerouslySetInnerHTML={{ __html: L.acInfoHtml }} />
       </div>
       {/* Uyarı — güçlü kontrast: sol accent bar + koyu kırmızı başlık + koyu metin */}
       <div className="rounded-card border border-red-300 border-l-4 border-l-red-600 bg-red-50 px-4 py-3 text-red-900">
-        <p className="text-sm font-bold text-red-700">⚠️ Yalnız TEST hesabı girin — ana/üretim hesabınızı DEĞİL</p>
-        <p className="mt-1 text-sm">
-          Bu tarama için oluşturulmuş, <strong>sınırlı yetkili, tek-kullanımlık</strong> bir hesap kullanın; şifresini tarama sonrası değiştirin.
-        </p>
-        <p className="mt-1.5 text-xs text-red-800">
-          <strong>2FA’sı olmayan</strong> bir hesap verin. Kimlik bilgileriniz <strong>şifreli</strong> saklanır ve tarama sonrası <strong>silinir</strong>.
-        </p>
+        <p className="text-sm font-bold text-red-700">{L.acWarnTitle}</p>
+        <p className="mt-1 text-sm" dangerouslySetInnerHTML={{ __html: L.acWarnBodyHtml }} />
+        <p className="mt-1.5 text-xs text-red-800" dangerouslySetInnerHTML={{ __html: L.acWarn2Html }} />
       </div>
       {/* Etiketli girişler — beyaz alanlar tint zemine karşı belirgin */}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="label !mb-1 !text-ink">Kullanıcı adı / e-posta</span>
+          <span className="label !mb-1 !text-ink">{L.acUser}</span>
           <input placeholder="test@örnek.com" value={authUser} onChange={(e) => { setAuthUser(e.target.value); setLoginCheck('idle'); }} className="field border-line/80" autoComplete="off" />
         </label>
         <label className="block">
-          <span className="label !mb-1 !text-ink">Şifre</span>
-          <input type="password" placeholder="Test hesabı şifresi" value={authPass} onChange={(e) => { setAuthPass(e.target.value); setLoginCheck('idle'); }} className="field border-line/80" autoComplete="new-password" />
+          <span className="label !mb-1 !text-ink">{L.acPass}</span>
+          <input type="password" placeholder={L.acPassPh} value={authPass} onChange={(e) => { setAuthPass(e.target.value); setLoginCheck('idle'); }} className="field border-line/80" autoComplete="new-password" />
         </label>
       </div>
       {/* (ÖDEME ÖNCESİ TEST GİRİŞİ) tek buton + tek satır sonuç — ek checkbox/uyarı YOK, bloklamaz. */}
@@ -559,14 +805,14 @@ export default function OrderPage() {
           {loginCheck === 'checking' ? (
             <span className="flex items-center gap-2">
               <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              Giriş deneniyor…
+              {L.acChecking}
             </span>
           ) : (
-            'Test girişini doğrula (opsiyonel)'
+            L.acCheckBtn
           )}
         </button>
         {loginCheck === 'checking' && (
-          <span className="text-xs text-ink-muted">Giriş formu aranıp deneniyor — birkaç saniye sürebilir…</span>
+          <span className="text-xs text-ink-muted">{L.acCheckingHint}</span>
         )}
         {loginCheck === 'ok' && (
           <span className="rounded-pill bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-800">✓ {loginCheckMsg}</span>
@@ -577,9 +823,7 @@ export default function OrderPage() {
       </div>
       {/* (LOGİNSİZ TEST) Bilgi girilmediyse küçük uyarı — tarama loginsiz yapılacak. */}
       {!hasCreds && (
-        <p className="text-xs font-medium text-ink-muted">
-          ℹ️ Test hesabı bilgisi girmediniz — tarama <strong>loginsiz (kimlik-doğrulamasız)</strong> yapılacak. Sitenizde giriş yoksa bu normaldir.
-        </p>
+        <p className="text-xs font-medium text-ink-muted" dangerouslySetInnerHTML={{ __html: L.acNoCredsHtml }} />
       )}
       {/* (İŞ 3) Test-hesabı beyanı + kimlik-bilgisi yurt dışı açık rıza + yüksek-risk kabulü aşağıdaki
           "2 · Onaylar" bölümündeki gruplu checkbox'larda (sunucu-tarafı alanlar AYNEN korunur). */}
@@ -589,15 +833,15 @@ export default function OrderPage() {
   return (
     <main className="container-page max-w-6xl py-10 pb-28 lg:py-14 lg:pb-14">
       <div>
-        <h1 className="text-2xl font-extrabold text-brand sm:text-3xl">Taramanızı Başlatın</h1>
-        <p className="mt-1 text-sm text-ink-soft">Paketi seçin, onayları işaretleyin ve güvenli ödemeye geçin.</p>
+        <h1 className="text-2xl font-extrabold text-brand sm:text-3xl">{L.title}</h1>
+        <p className="mt-1 text-sm text-ink-soft">{L.sub}</p>
       </div>
 
       {!domainId && (
         <p className="mt-4 rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Önce taranacak bir alan adı seçin.{' '}
+          {L.noDomainPre}{' '}
           <Link href="/verify" className="font-semibold underline">
-            Alan adı seç →
+            {L.noDomainLink}
           </Link>
         </p>
       )}
@@ -608,25 +852,21 @@ export default function OrderPage() {
           domainVerified ? (
             <p className="mt-4 flex items-center gap-2 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="shrink-0" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
-              Alan adı DNS ile doğrulandı — aktif tarama ödeme onayından sonra başlar.
+              {L.dnsVerified}
             </p>
           ) : (
             <div className="mt-4 rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900/90">
-              <p className="font-bold text-amber-900">Bu paket aktif problar gönderir — DNS doğrulaması gerekir</p>
-              <p className="mt-1 leading-relaxed">
-                Alan adı sahipliğinizi DNS ile doğrulamadan aktif tarama (enjeksiyon/oturum denemeleri)
-                <strong> başlamaz</strong> — ödeme alınsa bile sipariş <strong>“alan adı doğrulaması bekleniyor”</strong>
-                durumunda tutulur, doğrulanınca <strong>otomatik başlar</strong>.
-              </p>
+              <p className="font-bold text-amber-900">{L.activeVerifyTitle}</p>
+              <p className="mt-1 leading-relaxed" dangerouslySetInnerHTML={{ __html: L.activeVerifyBodyHtml }} />
               <Link href={verifyHref} className="mt-2 inline-flex items-center gap-1 font-semibold text-amber-900 underline">
-                Şimdi DNS ile doğrula →
+                {L.verifyNow}
               </Link>
             </div>
           )
         ) : (
           <p className="mt-4 flex items-center gap-2 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="shrink-0" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
-            Bu paket için doğrulama gerekmez — ödeme onaylanınca tarama hemen başlar.
+            {L.passiveNoVerify}
           </p>
         )
       )}
@@ -635,7 +875,7 @@ export default function OrderPage() {
         {/* ================= SOL: form adimlari ================= */}
         <div className="min-w-0">
       {/* Paket seçimi — SADECE paketler: Basit Tarama (giriş) + kombine paketler. Tekil kontrol satışı YOK. */}
-      <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">1 · Paket seçin</h2>
+      <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">{L.step1}</h2>
       <div className="mt-3 grid items-stretch gap-3 sm:grid-cols-2">
         {/* Basit Tarama — giriş seviyesi paket (tek "tekil" paket) */}
         {basitPkg && !basitPkg.comingSoon && (
@@ -644,14 +884,14 @@ export default function OrderPage() {
             onClick={() => { setSelected(basitPkg.key); setSelectedBundle(null); setBundleModules([]); setPromo(null); }}
             className={`card relative flex flex-col p-4 text-left transition ${selected === basitPkg.key ? 'ring-2 ring-accent' : 'hover:border-brand-300'}`}
           >
-            <span className="absolute -top-3 left-6 rounded-pill bg-ink-soft px-3 py-0.5 text-[10px] font-bold text-white">Giriş</span>
+            <span className="absolute -top-3 left-6 rounded-pill bg-ink-soft px-3 py-0.5 text-[10px] font-bold text-white">{L.entryBadge}</span>
             <span className="font-bold text-brand">{basitPkg.displayName}</span>
             <p className="mt-1 flex-1 text-xs leading-relaxed text-ink-soft">
-              Hızlı, ucuz deneme taraması — ön izleme niteliğindedir (kapsamlı denetim değildir).
+              {L.basitDesc}
             </p>
             <p className="mt-2 font-bold text-ink">
               {formatMoney(basitPkg.priceMinorUnit, getRegion(region))}{' '}
-              <span className="text-xs font-normal text-ink-muted">· KDV Dahil</span>
+              <span className="text-xs font-normal text-ink-muted">· {L.kdv}</span>
             </p>
           </button>
         )}
@@ -660,7 +900,7 @@ export default function OrderPage() {
       {/* "Yakında" paketler — devre disi, gri, SONA alindi (secilemez). */}
       {soonBundles.length > 0 && (
         <div className="mt-5">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">Yakında</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">{L.soon}</p>
           <div className="mt-2 grid items-stretch gap-3 sm:grid-cols-2">
             {soonBundles.map((b) => (
               <div
@@ -668,10 +908,10 @@ export default function OrderPage() {
                 aria-disabled="true"
                 className="card relative flex cursor-not-allowed flex-col border-dashed bg-brand-50/30 p-4 text-left opacity-60"
               >
-                <span className="absolute -top-3 left-6 rounded-pill bg-ink-muted px-3 py-0.5 text-[10px] font-bold text-white">Yakında</span>
+                <span className="absolute -top-3 left-6 rounded-pill bg-ink-muted px-3 py-0.5 text-[10px] font-bold text-white">{L.soon}</span>
                 <span className="font-bold text-ink-soft">{b.displayName}</span>
                 <p className="mt-1 flex-1 text-xs leading-relaxed text-ink-muted">{renderEmphasis(b.description)}</p>
-                <p className="mt-2 text-xs font-semibold text-ink-muted">Şu an satışa kapalı</p>
+                <p className="mt-2 text-xs font-semibold text-ink-muted">{L.soonClosed}</p>
               </div>
             ))}
           </div>
@@ -681,7 +921,7 @@ export default function OrderPage() {
           giriş alanları gösterilir (kimlik-doğrulamalı bundle üyesi için). */}
       {selectedBundle?.members?.some((m: any) => m.key === 'authenticated_scan') && (
         <div className="mt-3 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm">
-          <p className="text-sm font-semibold text-brand">Test hesabı bilgileri</p>
+          <p className="text-sm font-semibold text-brand">{L.testCredsMembers}</p>
           {authCredBlock}
         </div>
       )}
@@ -690,22 +930,10 @@ export default function OrderPage() {
           (düşük-sinyal ön-kontrol uyarısından bağımsız; o uyarı ek olarak gösterilir). */}
       {selectedBundle?.key === 'bundle_active_verify' && (
         <div className="mt-3 rounded-card border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900/90">
-          <p className="font-bold text-amber-900">💡 Şeffaflık &amp; Kapsam — ödemeden önce okuyun</p>
-          <p className="mt-1 leading-relaxed">
-            Bu paket, web sitenizin <strong>herkese açık (login gerektirmeyen) dış saldırı yüzeyini</strong>{' '}
-            zararsız problarla test eder — dışa açık arama, form, API ve login/kayıt akışı üzerindeki enjeksiyon,
-            yetkilendirme ve mantık riskleri.
-          </p>
-          <p className="mt-2 leading-relaxed">
-            Sitenizde dışa açık <strong>arama, form, API veya id-tabanlı uç nokta bulunmuyorsa</strong>, içerikte
-            listelenen <strong>IDOR / İş Mantığı / Dosya Yükleme / Race</strong> gibi kontroller raporda{' '}
-            <strong>“İncelenemedi”</strong> görünebilir. Bu bir <strong>hata değildir</strong> — sitenizin dış
-            yüzey yapısının doğal sonucudur (test edilecek açık bir giriş noktası olmaması).
-          </p>
-          <p className="mt-2 leading-relaxed">
-            Oturum içi (kullanıcı girişi <strong>sonrası</strong>) derin yetkilendirme/iş-mantığı testleri için{' '}
-            <strong>Tam Kapsamlı Pentest</strong> paketini seçin.
-          </p>
+          <p className="font-bold text-amber-900">{L.avTitle}</p>
+          <p className="mt-1 leading-relaxed" dangerouslySetInnerHTML={{ __html: L.avP1Html }} />
+          <p className="mt-2 leading-relaxed" dangerouslySetInnerHTML={{ __html: L.avP2Html }} />
+          <p className="mt-2 leading-relaxed" dangerouslySetInnerHTML={{ __html: L.avP3Html }} />
         </div>
       )}
 
@@ -713,29 +941,19 @@ export default function OrderPage() {
           ödeme öncesi NET bilsin: inceleme süreci + test hesabı + sınırlı-otonom ajan. */}
       {selectedBundle?.key === 'bundle_full_pentest' && (
         <div className="mt-3 space-y-2 rounded-card border border-brand-200 bg-brand-50/50 px-4 py-3 text-sm text-ink-soft">
-          <p><strong className="text-ink">İnceleme süreci:</strong> Bu paket, güvenlik nedeniyle sipariş sonrası
-          <strong>ödeme onaylanınca hemen</strong> başlar.</p>
-          <p><strong className="text-ink">Test hesabı:</strong> Kimlik doğrulamalı test için bir <strong>TEST hesabı</strong>
-          (ana/üretim hesabınız DEĞİL; 2FA’sız, sınırlı yetkili, tek-kullanımlık) vermelisiniz. Kimlik bilgileriniz
-          <strong> şifreli/geçici</strong> saklanır ve tarama sonrası silinir.</p>
-          <p><strong className="text-ink">Yöntem:</strong> Login sonrası çerez/oturum/yetki, authenticated enjeksiyon ve IDOR,
-          yetki yükseltme ve çok-adımlı iş mantığı göstergeleri <strong>deterministik güvenlik kontrolleriyle</strong> incelenir.
-          Gerçek veri/hesap değişikliği ve ödeme tamamlama <strong>kod seviyesinde engellidir</strong> — bu bir otonom/sınırsız
-          pentest değildir.</p>
-          <p><strong className="text-ink">Opsiyonel AI katmanı:</strong> İki kontrolde (yetki yükseltme + çok-adımlı iş mantığı)
-          isteğe bağlı, hafif bir <strong>yapay zekâ danışma katmanı</strong> vardır; <strong>varsayılan olarak kapalıdır</strong> ve
-          yalnız açıkken ek, doğrulanabilir bir gösterge bulduğunda devreye girer. Kapalıyken sonuçlar <strong>tam deterministik
-          authenticated kontrollerle</strong> üretilir — normal ve beklenen davranıştır, rapor bunu şeffaf gösterir.</p>
-          <p><strong className="text-ink">Kapsam:</strong> <strong>Cross-account</strong> (başka bir kullanıcının verisine
-          erişim) IDOR bu sürümün kapsamı dışındadır.</p>
+          <p dangerouslySetInnerHTML={{ __html: L.fpReviewHtml }} />
+          <p dangerouslySetInnerHTML={{ __html: L.fpAccountHtml }} />
+          <p dangerouslySetInnerHTML={{ __html: L.fpMethodHtml }} />
+          <p dangerouslySetInnerHTML={{ __html: L.fpAiHtml }} />
+          <p dangerouslySetInnerHTML={{ __html: L.fpScopeHtml }} />
         </div>
       )}
 
       {/* Onaylar — (İŞ 3) ≤3 gruplu checkbox; sunucu-tarafı bireysel zorunluluk korunur. */}
-      <h2 id="onaylar" className="mt-8 scroll-mt-24 text-sm font-bold uppercase tracking-wide text-ink-muted">2 · Onaylar</h2>
+      <h2 id="onaylar" className="mt-8 scroll-mt-24 text-sm font-bold uppercase tracking-wide text-ink-muted">{L.step2}</h2>
       {(selected || selectedBundle) && !allConsents && (
         <p className="mt-2 rounded-card border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-800">
-          Devam etmek için aşağıdaki {consentGroups.length} onayı işaretleyin.
+          {L.needConsents(consentGroups.length)}
         </p>
       )}
       <div className="mt-3 space-y-2.5">
@@ -749,7 +967,7 @@ export default function OrderPage() {
       {selectedPkg && (
         <div className="mt-3">
           <button type="button" onClick={() => setShowContract((v) => !v)} className="text-xs font-semibold text-accent-600 underline">
-            {showContract ? 'Bu siparişe özel sözleşmeyi gizle' : 'Bu siparişe özel Mesafeli Satış Sözleşmesi’ni görüntüle'}
+            {showContract ? L.contractHide : L.contractShow}
           </button>
           {showContract && (
             <DynamicContract
@@ -765,29 +983,29 @@ export default function OrderPage() {
       {!selectedBundle && (
       <>
       {/* Düzenli tekrar (opsiyonel) */}
-      <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">3 · Tekrar</h2>
+      <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">{L.step3}</h2>
       <div className="mt-3 space-y-2.5">
         <label className={`flex items-center gap-3 rounded-card border p-3.5 text-sm ${!recurring ? 'border-brand-300 bg-brand-50/50' : 'border-line'}`}>
           <input type="radio" checked={!recurring} onChange={() => setRecurring(false)} className="h-4 w-4 accent-brand" />
-          <span className="font-medium text-ink">Tek seferlik tarama</span>
+          <span className="font-medium text-ink">{L.oneOff}</span>
         </label>
         <label className={`flex items-center gap-3 rounded-card border p-3.5 text-sm ${recurring ? 'border-brand-300 bg-brand-50/50' : 'border-line'}`}>
           <input type="radio" checked={recurring} onChange={() => setRecurring(true)} className="h-4 w-4 accent-brand" />
-          <span className="font-medium text-ink">Düzenli tekrarla</span>
+          <span className="font-medium text-ink">{L.repeat}</span>
         </label>
         {recurring && (
           <div className="rounded-card border border-line bg-white p-4">
             <div className="flex flex-wrap items-end gap-4">
               <div>
-                <label className="label">Sıklık</label>
+                <label className="label">{L.frequency}</label>
                 <select value={intervalDays} onChange={(e) => setIntervalDays(Number(e.target.value))} className="field">
-                  <option value={7}>Haftalık</option>
-                  <option value={14}>İki haftada bir</option>
-                  <option value={30}>Aylık</option>
+                  <option value={7}>{L.weekly}</option>
+                  <option value={14}>{L.biweekly}</option>
+                  <option value={30}>{L.monthly}</option>
                 </select>
               </div>
               <div>
-                <label className="label">Kaç tarama (peşin)</label>
+                <label className="label">{L.howManyRuns}</label>
                 <input
                   type="number"
                   min={1}
@@ -798,30 +1016,27 @@ export default function OrderPage() {
                 />
               </div>
             </div>
-            <p className="mt-3 text-xs text-ink-muted">
-              {runs} tarama için baştan ödeme yaparsınız; ilki hemen, sonrakiler seçtiğiniz sıklıkta
-              çalışır. (Minimum sıklık: haftalık.)
-            </p>
+            <p className="mt-3 text-xs text-ink-muted">{L.recurringNote(runs)}</p>
           </div>
         )}
       </div>
 
       {/* Başlangıç zamanı */}
       <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">
-        4 · Başlangıç {recurring && <span className="font-normal normal-case text-ink-muted">(ilk tarama)</span>}
+        {L.step4} {recurring && <span className="font-normal normal-case text-ink-muted">{L.firstScan}</span>}
       </h2>
       <div className="mt-3 space-y-2.5">
         <label className={`flex items-center gap-3 rounded-card border p-3.5 text-sm ${startMode === 'now' ? 'border-brand-300 bg-brand-50/50' : 'border-line'}`}>
           <input type="radio" checked={startMode === 'now'} onChange={() => setStartMode('now')} className="h-4 w-4 accent-brand" />
-          <span className="font-medium text-ink">Hemen başlat</span>
+          <span className="font-medium text-ink">{L.startNow}</span>
         </label>
         <label className={`flex items-center gap-3 rounded-card border p-3.5 text-sm ${startMode === 'later' ? 'border-brand-300 bg-brand-50/50' : 'border-line'}`}>
           <input type="radio" checked={startMode === 'later'} onChange={() => setStartMode('later')} className="h-4 w-4 accent-brand" />
-          <span className="font-medium text-ink">Belirli bir tarihte başlat</span>
+          <span className="font-medium text-ink">{L.startLater}</span>
         </label>
         {startMode === 'later' && (
           <div className="rounded-card border border-line bg-white p-4">
-            <label className="label">Başlangıç tarihi ve saati</label>
+            <label className="label">{L.startDateTime}</label>
             <input
               type="datetime-local"
               value={startAt}
@@ -829,9 +1044,7 @@ export default function OrderPage() {
               onChange={(e) => setStartAt(e.target.value)}
               className="field"
             />
-            <p className="mt-2 text-xs text-ink-muted">
-              Tarama seçtiğiniz zamana en yakın kontrol turunda (birkaç dakika içinde) başlar.
-            </p>
+            <p className="mt-2 text-xs text-ink-muted">{L.startLaterNote}</p>
           </div>
         )}
       </div>
@@ -841,14 +1054,11 @@ export default function OrderPage() {
       {/* (Faz 3) Active-light yetkilendirme beyani — pasif onaylarin USTUNE, ayri blok */}
       {isActiveLight && selectedPkg?.activeTest && (
         <div className="mt-6 rounded-card border-2 border-accent/60 bg-accent-soft/30 p-5">
-          <h3 className="text-base font-bold text-brand">Aktif Test Yetkilendirmesi (zorunlu)</h3>
-          <p className="mt-1 text-sm text-ink-soft">
-            Bu paket, zafiyeti <strong>doğrulamak</strong> için sınırlı aktif test istekleri gönderir. Devam etmek için
-            kapsamı okuyup beyanı doldurmalısınız.
-          </p>
+          <h3 className="text-base font-bold text-brand">{L.atTitle}</h3>
+          <p className="mt-1 text-sm text-ink-soft">{L.atBody}</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div className="rounded-card bg-white/70 p-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-brand-500">Bu tarama NE YAPAR</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-brand-500">{L.atDoes}</p>
               <ul className="mt-1 space-y-1 text-sm text-ink-soft">
                 {selectedPkg.activeTest.scope.does.map((d) => (
                   <li key={d}>✅ {d}</li>
@@ -856,7 +1066,7 @@ export default function OrderPage() {
               </ul>
             </div>
             <div className="rounded-card bg-white/70 p-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-red-600">Bu tarama NE YAPMAZ</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-red-600">{L.atDoesNot}</p>
               <ul className="mt-1 space-y-1 text-sm text-ink-soft">
                 {selectedPkg.activeTest.scope.doesNot.map((d) => (
                   <li key={d}>⛔ {d}</li>
@@ -864,15 +1074,13 @@ export default function OrderPage() {
               </ul>
             </div>
           </div>
-          {/* (İŞ 3) Risk kabulü aşağıdaki "2 · Onaylar" gruplu checkbox'ına taşındı. */}
+          {/* (İŞ 3) Risk kabulü aşağıdaki "2 · Onaylar" gruplu checkbox'ına taşındı. NOT: riskText backend'den
+              (paket tanımı) gelir; şimdilik TR — backend paket i18n'i ayrı iş. */}
           <p className="mt-3 rounded-card bg-white/70 p-3 text-xs text-ink-soft">{selectedPkg.activeTest.riskText}</p>
-          <p className="mt-2 text-xs text-ink-muted">
-            Onayınız; hesabınız, zaman damgası, IP ve metin sürümü ile birlikte otomatik olarak kayıt altına alınır
-            (ek bilgi girmenize gerek yoktur). İsterseniz bir yetkilendirme PDF’i olarak siparişinize bağlanır.
-          </p>
+          <p className="mt-2 text-xs text-ink-muted">{L.atConsentNote}</p>
           {needsAuthCreds && (
             <div className="mt-4 border-t border-accent/30 pt-4">
-              <p className="text-sm font-semibold text-brand">Test hesabı bilgileri</p>
+              <p className="text-sm font-semibold text-brand">{L.testCredsMembers}</p>
               {authCredBlock}
             </div>
           )}
@@ -882,12 +1090,12 @@ export default function OrderPage() {
 
       {(selected || selectedBundle) && !intlComingSoon && (
         <div className="mt-5 rounded-card border border-brand-100 bg-white px-4 py-3 text-sm">
-          <label className="label">Promosyon kodu (opsiyonel)</label>
+          <label className="label">{L.promoLabel}</label>
           <div className="mt-1 flex gap-2">
             <input
               value={promoInput}
               onChange={(e) => { setPromoInput(e.target.value); setPromo(null); }}
-              placeholder="Kodunuz"
+              placeholder={L.promoPh}
               className="field flex-1 uppercase"
             />
             <button
@@ -902,19 +1110,16 @@ export default function OrderPage() {
           {promo && !promo.valid && <p className="mt-2 text-xs text-red-600">{promo.error}</p>}
           {promo && promo.valid && (
             <p className="mt-2 text-xs text-emerald-700">
-              Kod uygulandı — indirim {formatMoney(promo.discountMinorUnit ?? 0, getRegion(region))}. Yeni tutar:{' '}
+              {L.promoAppliedPre} {formatMoney(promo.discountMinorUnit ?? 0, getRegion(region))}. {L.promoNewTotal}{' '}
               <strong>{formatMoney(promo.finalAmountMinorUnit ?? 0, getRegion(region))}</strong>
-              {promo.finalAmountMinorUnit === 0 && ' — ödeme adımı atlanır, tarama hemen kuyruğa alınır.'}
+              {promo.finalAmountMinorUnit === 0 && L.promoFree}
             </p>
           )}
         </div>
       )}
 
       {queue?.busy && !intlComingSoon && (
-        <div className="mt-6 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-ink-soft">
-          Sipariş verebilirsiniz — <strong>taramanız en kısa sürede başlayacaktır</strong> ve durumu bu panelden
-          takip edebilirsiniz.
-        </div>
+        <div className="mt-6 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-ink-soft" dangerouslySetInnerHTML={{ __html: L.queueBusyHtml }} />
       )}
 
       {intlComingSoon && (
@@ -931,43 +1136,27 @@ export default function OrderPage() {
       {/* ÖN KONTROL UYARILARI — ana kolonda (mobil DÂHİL görünür). aside masaüstü-only olduğundan
           buraya taşındı; aksi halde mobilde onay kutusuna ulaşılamayıp sistem kilitleniyordu. */}
               {scopeChecking && (
-                <p className="mt-3 text-center text-xs text-ink-muted">Hedefinize ulaşılıyor mu, ön kontrol yapılıyor…</p>
+                <p className="mt-3 text-center text-xs text-ink-muted">{L.checking}</p>
               )}
               {showUnreachableWarning && (
                 <div id="oncontrol-uyari" className="mt-4 scroll-mt-24 rounded-card border-2 border-rose-400 bg-rose-50 p-4 text-sm">
-                  <p className="font-bold text-rose-900">🚫 Hedefinize şu an dışarıdan ulaşılamıyor</p>
-                  <p className="mt-1 leading-relaxed text-rose-900/90">
-                    Sitenizin ana adresi (<strong>443/HTTPS ve 80/HTTP</strong>) şu an yanıt vermiyor. Bu bir hata
-                    değildir — sitenizin <strong>yayında olmadığı, kapalı olduğu ya da bizim erişimimizi
-                    engellediği</strong> anlamına gelir. Tarama şu an başlatılırsa dışarıdan test edilecek bir yüzey
-                    bulunamayacağı için rapor büyük olasılıkla <strong>boş / "İncelenemedi"</strong> gelir.
-                  </p>
-                  <p className="mt-2 leading-relaxed text-rose-900/90">
-                    <strong>Önerimiz:</strong> sitenizin yayında ve erişilebilir olduğundan emin olun, sonra bu sayfayı
-                    yenileyip tekrar deneyin. Erişim sorununun geçici olduğunu düşünüyorsanız yine de devam edebilirsiniz.
-                  </p>
+                  <p className="font-bold text-rose-900">{L.unreachTitle}</p>
+                  <p className="mt-1 leading-relaxed text-rose-900/90" dangerouslySetInnerHTML={{ __html: L.unreachP1Html }} />
+                  <p className="mt-2 leading-relaxed text-rose-900/90" dangerouslySetInnerHTML={{ __html: L.unreachP2Html }} />
                   <label className="mt-3 flex cursor-pointer items-start gap-2 font-medium text-rose-900">
                     <input type="checkbox" checked={unreachableAck} onChange={(e) => setUnreachableAck(e.target.checked)} className="mt-0.5" />
-                    <span>Erişim sorununu anladım; yine de şimdi başlatmak istiyorum.</span>
+                    <span>{L.unreachAck}</span>
                   </label>
                 </div>
               )}
               {showLowScopeWarning && (
                 <div id="oncontrol-uyari" className="mt-4 scroll-mt-24 rounded-card border-2 border-amber-400 bg-amber-50 p-4 text-sm">
-                  <p className="font-bold text-amber-900">⚠️ Önemli Ön Kontrol</p>
-                  <p className="mt-1 leading-relaxed text-amber-900/90">
-                    Sitenizde otomatik hızlı taramada <strong>test edilebilir giriş noktası</strong> (form, query
-                    parametresi, sayısal ID içeren uç nokta) <strong>neredeyse hiç bulunamadı</strong>. Bu genellikle
-                    sitenin <strong>JavaScript ile render edilen (SPA)</strong> bir yapıya sahip olmasından kaynaklanır.
-                  </p>
-                  <p className="mt-2 leading-relaxed text-amber-900/90">
-                    Tarama yine de çalıştırılacaktır, ancak çoğu kontrol <strong>"kapsam dışı / incelenemedi"</strong>{' '}
-                    olarak sonuçlanabilir. Ödenen tutar <strong>bulgu garantisi değildir</strong>; kapsamlı bir
-                    değerlendirme sürecinin tamamı içindir.
-                  </p>
+                  <p className="font-bold text-amber-900">{L.lowTitle}</p>
+                  <p className="mt-1 leading-relaxed text-amber-900/90" dangerouslySetInnerHTML={{ __html: L.lowP1Html }} />
+                  <p className="mt-2 leading-relaxed text-amber-900/90" dangerouslySetInnerHTML={{ __html: L.lowP2Html }} />
                   <label className="mt-3 flex cursor-pointer items-start gap-2 font-medium text-amber-900">
                     <input type="checkbox" checked={lowScopeAck} onChange={(e) => setLowScopeAck(e.target.checked)} className="mt-0.5" />
-                    <span>Devam etmek istiyorum.</span>
+                    <span>{L.lowAck}</span>
                   </label>
                 </div>
               )}
@@ -982,47 +1171,47 @@ export default function OrderPage() {
         <aside className="hidden lg:block">
           <div className="sticky top-6 space-y-3">
             <div className="rounded-card border border-line bg-white p-5 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">Sipariş Özeti</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">{L.summary}</p>
               {selName ? (
                 <>
                   <p className="mt-2 text-base font-bold text-brand">{selName}</p>
                   <dl className="mt-3 space-y-1.5 text-sm">
                     {hostname && (
                       <div className="flex justify-between gap-2">
-                        <dt className="text-ink-muted">Alan adı</dt>
+                        <dt className="text-ink-muted">{L.domainLabel}</dt>
                         <dd className="text-right font-semibold text-ink break-all">{hostname}</dd>
                       </div>
                     )}
                     <div className="flex justify-between gap-2">
-                      <dt className="text-ink-muted">Sıklık</dt>
+                      <dt className="text-ink-muted">{L.freqLabel}</dt>
                       <dd className="text-right font-medium text-ink">{freqLabel}</dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-ink-muted">Başlangıç</dt>
+                      <dt className="text-ink-muted">{L.startLabelKey}</dt>
                       <dd className="text-right font-medium text-ink">{startLabel}</dd>
                     </div>
                     {selectedBundle && (
                       <div className="flex justify-between gap-2">
-                        <dt className="text-ink-muted">İçerik</dt>
-                        <dd className="text-right font-medium text-ink">{selectedBundle.members.length} tarama</dd>
+                        <dt className="text-ink-muted">{L.contentLabel}</dt>
+                        <dd className="text-right font-medium text-ink">{L.scanCount(selectedBundle.members.length)}</dd>
                       </div>
                     )}
                   </dl>
                   <div className="mt-3 border-t border-line pt-3">
                     <div className="flex items-baseline justify-between">
-                      <span className="text-sm text-ink-muted">{recurring ? `Toplam · ${runs} tarama` : 'Toplam'}</span>
+                      <span className="text-sm text-ink-muted">{recurring ? L.totalRuns(runs) : L.total}</span>
                       <span className="text-2xl font-extrabold text-brand">{formatMoney(totalMinor, getRegion(region))}</span>
                     </div>
-                    <p className="mt-0.5 text-right text-[11px] text-ink-muted">KDV dahildir</p>
+                    <p className="mt-0.5 text-right text-[11px] text-ink-muted">{L.kdvIncl}</p>
                   </div>
                 </>
               ) : (
-                <p className="mt-2 text-sm text-ink-soft">Devam etmek için bir paket seçin.</p>
+                <p className="mt-2 text-sm text-ink-soft">{L.selectPackage}</p>
               )}
               {needsDomainVerify ? (
                 <button onClick={() => router.push(verifyHref)} className="btn-primary mt-4 flex w-full items-center justify-center gap-1.5">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M12 2l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V5l7-3z" /><path d="M9 12l2 2 4-4" /></svg>
-                  Alan adını doğrula
+                  {L.verifyDomain}
                 </button>
               ) : (
                 <button onClick={onCta} disabled={ctaDisabled} className="btn-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-50">
@@ -1030,9 +1219,7 @@ export default function OrderPage() {
                 </button>
               )}
               {needsDomainVerify ? (
-                <p className="mt-2 text-center text-[11px] text-amber-700">
-                  Aktif tarama için önce alan adı sahipliğinizi DNS ile doğrulayın — doğrulandıktan sonra satın alabilirsiniz.
-                </p>
+                <p className="mt-2 text-center text-[11px] text-amber-700">{L.verifyHint}</p>
               ) : disabledHint ? (
                 disabledHint.scroll ? (
                   <button type="button" onClick={() => scrollToTarget(disabledHint.target ?? 'onaylar')} className="mt-2 w-full rounded-card border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs font-semibold text-amber-800 hover:bg-amber-100">
@@ -1043,9 +1230,7 @@ export default function OrderPage() {
                 )
               ) : (
                 <p className="mt-2 text-center text-[11px] text-ink-muted">
-                  {recurring || startMode === 'later'
-                    ? 'Zamanlanmış taramalarım ekranından yönetebilirsiniz.'
-                    : 'Ödeme onaylanınca tarama otomatik başlar.'}
+                  {recurring || startMode === 'later' ? L.scheduledHint : L.autoStartHint}
                 </p>
               )}
               {/* Ödeme/başlatma hatası — CTA'nın HEMEN ALTINDA (masaüstü özet kolonunda). */}
@@ -1057,15 +1242,15 @@ export default function OrderPage() {
               <ul className="space-y-1.5">
                 <li className="flex items-center gap-2">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0" aria-hidden><path d="M12 2l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V5l7-3z" fill="#123F3A"/><path d="M9 12l2 2 4-4" stroke="#F5A623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-                  256-bit SSL · iyzico güvenli ödeme
+                  {L.trustSSL}
                 </li>
                 <li className="flex items-center gap-2">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#123F3A" strokeWidth="2" className="shrink-0" aria-hidden><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-                  Kart bilgileri iyzico’da işlenir, bizde saklanmaz
+                  {L.trustCard}
                 </li>
                 <li className="flex items-center gap-2">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1C6B60" strokeWidth="2" className="shrink-0" aria-hidden><circle cx="12" cy="12" r="9"/><path d="M8 12l2.5 2.5L16 9" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  KVKK’ya uygun · veriler şifreli saklanır
+                  {L.trustKvkk}
                 </li>
               </ul>
               <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -1081,16 +1266,16 @@ export default function OrderPage() {
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 px-4 py-2.5 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-xs font-semibold text-brand">{selName ?? 'Paket seçilmedi'}</p>
+            <p className="truncate text-xs font-semibold text-brand">{selName ?? L.noPackage}</p>
             {hostname && <p className="truncate text-[11px] text-ink-muted">{hostname}</p>}
             <p className="text-sm font-extrabold text-ink">
               {formatMoney(totalMinor, getRegion(region))}
-              <span className="ml-1 text-[10px] font-normal text-ink-muted">KDV dahil</span>
+              <span className="ml-1 text-[10px] font-normal text-ink-muted">{L.kdv}</span>
             </p>
           </div>
           {needsDomainVerify ? (
             <button type="button" onClick={() => router.push(verifyHref)} className="btn-primary shrink-0 px-5">
-              Doğrula
+              {L.mobileVerify}
             </button>
           ) : disabledHint?.scroll ? (
             <button type="button" onClick={() => scrollToTarget(disabledHint.target ?? 'onaylar')} className="shrink-0 rounded-pill border border-amber-400 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800">
