@@ -6,6 +6,8 @@
  * Her fonksiyon { findings, fixText } | null doner (hedefe ulasilamazsa null -> fallback).
  * Risk hesabi TAMAMEN kod; GENEL DEĞERLENDİRME'ye acik "Risk Seviyesi: X" yazilir (pdf.ts
  * assessBasit bunu okuyup rozeti tutarli gosterir).
+ *
+ * P2: locale='de' desteği (uykuda) — çıktı 'de' değilse BYTE-AYNI Türkçe kalır.
  */
 import {
   collectHttp, collectTls, collectCors, collectCorsForUrl, collectDns, collectExposedFiles, resolveOrigin,
@@ -15,12 +17,17 @@ import { buildHeaderFixSuggestions } from './fixSuggestions.js';
 import { detectOutdatedSoftware } from './techEol.js';
 
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
+const RISK_WORD_DE = { low: 'Niedrig', medium: 'Mittel', 'medium-high': 'Mittel-Hoch', high: 'Hoch' } as const;
+// Bulgu tablosundaki şiddet kelimesini locale'e çevir (makine-değer TR kalır; yalnız görüntü).
+const SEV_DE: Record<string, string> = { 'Kritik': 'Kritisch', 'Yüksek': 'Hoch', 'Orta': 'Mittel', 'Düşük': 'Niedrig', 'Bilgilendirme': 'Hinweis' };
 type Level = 'low' | 'medium' | 'medium-high' | 'high';
 
-function assemble(_title: string, level: Level, summaryBullets: string[], genelSentence: string, sections: string): string {
+function assemble(_title: string, level: Level, summaryBullets: string[], genelSentence: string, sections: string, locale: string = 'tr'): string {
+  const de = locale === 'de';
+  const RW = de ? RISK_WORD_DE : RISK_WORD;
   return (
-    `## YÖNETİCİ ÖZETİ\n\n${summaryBullets.join('\n')}\n\n` +
-    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[level]}**\n\n${genelSentence}\n\n` +
+    `## ${de ? 'MANAGEMENTZUSAMMENFASSUNG' : 'YÖNETİCİ ÖZETİ'}\n\n${summaryBullets.join('\n')}\n\n` +
+    `## ${de ? 'GESAMTBEWERTUNG' : 'GENEL DEĞERLENDİRME'}\n\n**${de ? 'Risikostufe' : 'Risk Seviyesi'}: ${RW[level]}**\n\n${genelSentence}\n\n` +
     `${sections}`
   );
 }
@@ -30,21 +37,28 @@ function assemble(_title: string, level: Level, summaryBullets: string[], genelS
 // Master'a GİRMEZ (rozet Yüksek der ama master "Temiz" gösterirdi — tutarsızlık). Tabloya çevirince
 // her alanın bulgusu tek merkezi master tabloda toplanır; rozet=dağılım=master aynı kaynaktan gelir.
 // Bullet formatı: "- **Yüksek — Başlık:** açıklama". Parse edilemeyen (temiz) satırlar metin kalır.
-function risksTable(risks: string[]): string {
+// NOT: bullet içindeki şiddet TOKEN'ı (Kritik|Yüksek|…) locale'den BAĞIMSIZ TR kalır (regex + makine
+// değeri); yalnız GÖRÜNTÜLENEN şiddet de'de çevrilir.
+function risksTable(risks: string[], locale: string = 'tr'): string {
+  const de = locale === 'de';
   const rows: string[] = [];
   for (const r of risks) {
     const m = r.match(/^-\s*\*\*\s*(Kritik|Yüksek|Orta|Düşük|Bilgilendirme)\s*[—–-]\s*([^:]+?)\s*:\s*\*\*\s*([\s\S]*)$/);
-    if (m) rows.push(`| ${m[2].trim()} | ${m[1]} | ${m[3].trim().replace(/\|/g, '\\|').replace(/\n+/g, ' ')} |`);
+    if (m) rows.push(`| ${m[2].trim()} | ${de ? (SEV_DE[m[1]] ?? m[1]) : m[1]} | ${m[3].trim().replace(/\|/g, '\\|').replace(/\n+/g, ' ')} |`);
   }
   // Parse edilebilir hiç risk yoksa (temiz alan) eski metni koru -> parseFindings 0 sayar (doğru "temiz").
   if (!rows.length) return risks.join('\n');
-  return `| Bulgu | Şiddet | Açıklama |\n|-------|--------|----------|\n${rows.join('\n')}`;
+  const hdr = de ? `| Befund | Schweregrad | Beschreibung |` : `| Bulgu | Şiddet | Açıklama |`;
+  return `${hdr}\n|-------|--------|----------|\n${rows.join('\n')}`;
 }
 
 // ======================================================================================
 // 1) ssl_tls — SSL/TLS Yapılandırma Denetimi
 // ======================================================================================
-export async function generateSslTlsReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+export async function generateSslTlsReport(host: string, locale: string = 'tr'): Promise<{ findings: string; fixText: string } | null> {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const RW = de ? RISK_WORD_DE : RISK_WORD;
   const [http, tls] = await Promise.all([collectHttp(host), collectTls(host)]);
   if (!tls.found && !http.ok) return null;
 
@@ -61,71 +75,80 @@ export async function generateSslTlsReport(host: string): Promise<{ findings: st
   else if (expiringSoon || !hstsPresent) level = 'medium';
 
   const tlsSection = httpOnly
-    ? `## TLS SERTİFİKA DURUMU\n\n⚠️ Bu hedef **HTTPS (443) üzerinden yanıt vermedi**; geçerli bir TLS sertifikası bulunamadı. Site yalnızca **şifresiz HTTP** üzerinden yayında.\n\n`
-    : tlsBlock(host, tls);
+    ? `## ${t('TLS SERTİFİKA DURUMU', 'TLS-ZERTIFIKATSSTATUS')}\n\n` + t(
+        `⚠️ Bu hedef **HTTPS (443) üzerinden yanıt vermedi**; geçerli bir TLS sertifikası bulunamadı. Site yalnızca **şifresiz HTTP** üzerinden yayında.\n\n`,
+        `⚠️ Dieses Ziel **hat nicht über HTTPS (443) geantwortet**; es wurde kein gültiges TLS-Zertifikat gefunden. Die Website ist nur über **unverschlüsseltes HTTP** erreichbar.\n\n`,
+      )
+    : tlsBlock(host, tls, locale);
   const protoSection =
-    `## TLS PROTOKOL & CIPHER\n\n` +
-    `- **Aktif protokol:** ${tls.protocol ?? 'tespit edilemedi'}${tls.protocol && /TLSv1\.[01]$/.test(tls.protocol) ? ' — ⚠️ zayıf' : ''}\n` +
-    `- **Cipher:** ${tls.cipher ?? 'tespit edilemedi'}\n` +
-    `- **Eski/zayıf sürüm desteği:** ${weak ? `⚠️ ${tls.weakProtocols.join(', ')} hâlâ kabul ediliyor — kapatılması önerilir` : 'Gözlemlenmedi (yalnızca TLS 1.2+ görüldü)'}\n\n`;
+    `## ${t('TLS PROTOKOL & CIPHER', 'TLS-PROTOKOLL & CIPHER')}\n\n` +
+    `- **${t('Aktif protokol', 'Aktives Protokoll')}:** ${tls.protocol ?? t('tespit edilemedi', 'nicht ermittelbar')}${tls.protocol && /TLSv1\.[01]$/.test(tls.protocol) ? t(' — ⚠️ zayıf', ' — ⚠️ schwach') : ''}\n` +
+    `- **Cipher:** ${tls.cipher ?? t('tespit edilemedi', 'nicht ermittelbar')}\n` +
+    `- **${t('Eski/zayıf sürüm desteği', 'Unterstützung veralteter/schwacher Versionen')}:** ${weak ? t(`⚠️ ${tls.weakProtocols.join(', ')} hâlâ kabul ediliyor — kapatılması önerilir`, `⚠️ ${tls.weakProtocols.join(', ')} wird weiterhin akzeptiert — Deaktivierung empfohlen`) : t('Gözlemlenmedi (yalnızca TLS 1.2+ görüldü)', 'Nicht beobachtet (nur TLS 1.2+ gesehen)')}\n\n`;
   const hstsSection =
     `## HSTS (HTTP Strict Transport Security)\n\n` +
     (hstsPresent
-      ? `- **Durum:** Var — \`${http.headers.get('strict-transport-security')}\`. Tarayıcıya HTTPS zorunluluğu bildiriliyor.\n\n`
-      : `- **Durum:** Yok — Tarayıcıya HTTPS zorunluluğu bildirilmiyor; ilk isteklerde SSL-stripping/downgrade saldırısı riski var.\n\n`);
+      ? `- **${t('Durum', 'Status')}:** ` + t(`Var — \`${http.headers.get('strict-transport-security')}\`. Tarayıcıya HTTPS zorunluluğu bildiriliyor.\n\n`, `Vorhanden — \`${http.headers.get('strict-transport-security')}\`. Dem Browser wird die HTTPS-Pflicht mitgeteilt.\n\n`)
+      : `- **${t('Durum', 'Status')}:** ` + t(`Yok — Tarayıcıya HTTPS zorunluluğu bildirilmiyor; ilk isteklerde SSL-stripping/downgrade saldırısı riski var.\n\n`, `Fehlt — Dem Browser wird die HTTPS-Pflicht nicht mitgeteilt; bei Erstanfragen besteht das Risiko von SSL-Stripping-/Downgrade-Angriffen.\n\n`));
 
   const risks: string[] = [];
-  if (httpOnly) risks.push(`- **Yüksek — HTTPS desteklenmiyor (şifresiz iletişim):** Site HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor. Aynı ağdaki bir saldırgan dinleyebilir, oturum/şifre çalabilir veya içeriği değiştirebilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS.`);
-  if (mismatch) risks.push(`- **Yüksek — Sertifika hostname uyuşmazlığı:** Sertifika ${host} adına düzenlenmemiş; ziyaretçiler tarayıcı güvenlik uyarısıyla karşılaşır.`);
-  if (expired) risks.push('- **Yüksek — Sertifika süresi dolmuş:** Site tarayıcılarca güvensiz kabul edilir.');
-  if (weak) risks.push(`- **Yüksek — Zayıf TLS sürümü:** ${tls.weakProtocols.join(', ')} destekleniyor. Bu sürümlerde bilinen zayıflıklar (POODLE/BEAST vb.) vardır; devre dışı bırakılmalı.`);
-  if (veryClose) risks.push(`- **Yüksek — Sertifika çok yakında sona eriyor:** yalnızca ${tls.daysLeft} gün kaldı; acilen yenilenmeli (aksi halde site erişilemez/güvensiz olur).`);
-  if (expiringSoon) risks.push(`- **Orta — Sertifika yakında sona eriyor:** ${tls.daysLeft} gün kaldı; kesinti yaşamamak için yenileme planlanmalı.`);
-  if (!hstsPresent) risks.push('- **Orta — HSTS eksik:** HTTPS zorunluluğu tarayıcıya bildirilmiyor; downgrade saldırılarına açık.');
-  if (!risks.length) risks.push('- Belirgin bir TLS yapılandırma sorunu öne çıkmadı; şifreleme yapılandırması güncel.');
+  if (httpOnly) risks.push(t(`- **Yüksek — HTTPS desteklenmiyor (şifresiz iletişim):** Site HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor. Aynı ağdaki bir saldırgan dinleyebilir, oturum/şifre çalabilir veya içeriği değiştirebilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS.`, `- **Yüksek — HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation):** Die Website antwortet nicht über HTTPS; der gesamte Datenverkehr wird unverschlüsselt (Klartext) übertragen. Ein Angreifer im selben Netzwerk kann mithören, Sitzungen/Passwörter stehlen oder Inhalte verändern. Lösung: gültiges TLS-Zertifikat + HTTP→HTTPS-Umleitung + HSTS.`));
+  if (mismatch) risks.push(t(`- **Yüksek — Sertifika hostname uyuşmazlığı:** Sertifika ${host} adına düzenlenmemiş; ziyaretçiler tarayıcı güvenlik uyarısıyla karşılaşır.`, `- **Yüksek — Zertifikat-Hostname-Abweichung:** Das Zertifikat ist nicht auf ${host} ausgestellt; Besucher erhalten eine Browser-Sicherheitswarnung.`));
+  if (expired) risks.push(t('- **Yüksek — Sertifika süresi dolmuş:** Site tarayıcılarca güvensiz kabul edilir.', '- **Yüksek — Zertifikat abgelaufen:** Die Website wird von Browsern als unsicher eingestuft.'));
+  if (weak) risks.push(t(`- **Yüksek — Zayıf TLS sürümü:** ${tls.weakProtocols.join(', ')} destekleniyor. Bu sürümlerde bilinen zayıflıklar (POODLE/BEAST vb.) vardır; devre dışı bırakılmalı.`, `- **Yüksek — Schwache TLS-Version:** ${tls.weakProtocols.join(', ')} wird unterstützt. Diese Versionen weisen bekannte Schwächen auf (POODLE/BEAST usw.); sie sollten deaktiviert werden.`));
+  if (veryClose) risks.push(t(`- **Yüksek — Sertifika çok yakında sona eriyor:** yalnızca ${tls.daysLeft} gün kaldı; acilen yenilenmeli (aksi halde site erişilemez/güvensiz olur).`, `- **Yüksek — Zertifikat läuft sehr bald ab:** nur noch ${tls.daysLeft} Tage; umgehende Erneuerung erforderlich (andernfalls wird die Website nicht erreichbar/unsicher).`));
+  if (expiringSoon) risks.push(t(`- **Orta — Sertifika yakında sona eriyor:** ${tls.daysLeft} gün kaldı; kesinti yaşamamak için yenileme planlanmalı.`, `- **Orta — Zertifikat läuft bald ab:** noch ${tls.daysLeft} Tage; planen Sie die Erneuerung, um Ausfälle zu vermeiden.`));
+  if (!hstsPresent) risks.push(t('- **Orta — HSTS eksik:** HTTPS zorunluluğu tarayıcıya bildirilmiyor; downgrade saldırılarına açık.', '- **Orta — HSTS fehlt:** Die HTTPS-Pflicht wird dem Browser nicht mitgeteilt; anfällig für Downgrade-Angriffe.'));
+  if (!risks.length) risks.push(t('- Belirgin bir TLS yapılandırma sorunu öne çıkmadı; şifreleme yapılandırması güncel.', '- Es wurde kein deutliches TLS-Konfigurationsproblem festgestellt; die Verschlüsselungskonfiguration ist aktuell.'));
 
   const bullets: string[] = [];
-  bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'sertifika ve/veya protokol düzeyinde acil ele alınması gereken bir sorun tespit edildi.' : level === 'medium' ? 'şifreleme temelde sağlam; kısa vadede giderilecek eksikler var.' : 'şifreleme yapılandırması güncel ve sağlam.'}`);
-  bullets.push(`- Sertifika: ${tls.found ? (mismatch ? '⚠️ hostname uyuşmazlığı' : expired ? '⚠️ süresi dolmuş' : `geçerli (${tls.daysLeft} gün)`) : 'tespit edilemedi'}${tls.protocol ? `, ${tls.protocol}` : ''}.`);
-  bullets.push(`- HSTS: ${hstsPresent ? 'var' : 'yok'}; Eski TLS desteği: ${weak ? tls.weakProtocols.join(', ') : 'gözlemlenmedi'}.`);
-  bullets.push('- **Önerilen ilk adım:** ' + (weak ? 'Eski TLS sürümlerini kapatın ve ' : '') + (hstsPresent ? 'sertifika yenilemeyi takip edin.' : 'HSTS başlığını ekleyin (hazır komutlar "AI Çözüm Önerileri" eklentisinde).'));
+  bullets.push(`- **${t('Genel risk seviyesi', 'Gesamtrisikostufe')}: ${RW[level]}** — ${level === 'high' ? t('sertifika ve/veya protokol düzeyinde acil ele alınması gereken bir sorun tespit edildi.', 'auf Zertifikats- und/oder Protokollebene wurde ein dringend zu behebendes Problem festgestellt.') : level === 'medium' ? t('şifreleme temelde sağlam; kısa vadede giderilecek eksikler var.', 'die Verschlüsselung ist grundsätzlich solide; kurzfristig zu behebende Lücken bestehen.') : t('şifreleme yapılandırması güncel ve sağlam.', 'die Verschlüsselungskonfiguration ist aktuell und solide.')}`);
+  bullets.push(`- ${t('Sertifika', 'Zertifikat')}: ${tls.found ? (mismatch ? t('⚠️ hostname uyuşmazlığı', '⚠️ Hostname-Abweichung') : expired ? t('⚠️ süresi dolmuş', '⚠️ abgelaufen') : t(`geçerli (${tls.daysLeft} gün)`, `gültig (${tls.daysLeft} Tage)`)) : t('tespit edilemedi', 'nicht ermittelbar')}${tls.protocol ? `, ${tls.protocol}` : ''}.`);
+  bullets.push(`- HSTS: ${hstsPresent ? t('var', 'vorhanden') : t('yok', 'fehlt')}; ${t('Eski TLS desteği', 'Veraltete TLS-Unterstützung')}: ${weak ? tls.weakProtocols.join(', ') : t('gözlemlenmedi', 'nicht beobachtet')}.`);
+  bullets.push(`- **${t('Önerilen ilk adım', 'Empfohlener erster Schritt')}:** ` + (weak ? t('Eski TLS sürümlerini kapatın ve ', 'Deaktivieren Sie veraltete TLS-Versionen und ') : '') + (hstsPresent ? t('sertifika yenilemeyi takip edin.', 'verfolgen Sie die Zertifikatserneuerung.') : t('HSTS başlığını ekleyin (hazır komutlar "AI Çözüm Önerileri" eklentisinde).', 'ergänzen Sie den HSTS-Header (fertige Befehle im Add-on „KI-Lösungsvorschläge").')));
 
   const genel =
     level === 'high'
-      ? 'Şifreleme katmanında ziyaretçileri doğrudan etkileyebilecek (sertifika/protokol) acil bir sorun tespit edildi; öncelikli giderilmesi önerilir.'
+      ? t('Şifreleme katmanında ziyaretçileri doğrudan etkileyebilecek (sertifika/protokol) acil bir sorun tespit edildi; öncelikli giderilmesi önerilir.', 'In der Verschlüsselungsschicht wurde ein dringendes Problem (Zertifikat/Protokoll) festgestellt, das Besucher direkt betreffen kann; eine vorrangige Behebung wird empfohlen.')
       : level === 'medium'
-        ? 'Taşıma güvenliği temelde sağlam; kısa vadede giderilmesi önerilen eksikler (ör. HSTS / yaklaşan yenileme) var.'
-        : 'TLS/SSL yapılandırması güncel ve sağlam; rapor yalnızca küçük iyileştirme fırsatlarını listeler.';
+        ? t('Taşıma güvenliği temelde sağlam; kısa vadede giderilmesi önerilen eksikler (ör. HSTS / yaklaşan yenileme) var.', 'Die Transportsicherheit ist grundsätzlich solide; es bestehen kurzfristig zu behebende Lücken (z. B. HSTS / bevorstehende Erneuerung).')
+        : t('TLS/SSL yapılandırması güncel ve sağlam; rapor yalnızca küçük iyileştirme fırsatlarını listeler.', 'Die TLS/SSL-Konfiguration ist aktuell und solide; der Bericht listet nur kleine Verbesserungsmöglichkeiten auf.');
 
-  const findings = assemble('SSL/TLS', level, bullets, genel, `${tlsSection}${protoSection}${hstsSection}## TESPİT EDİLEN RİSKLER\n\n${risksTable(risks)}\n`);
-  const fixText = buildTlsFix(host, { hstsMissing: !hstsPresent, weak: tls.weakProtocols });
+  const findings = assemble('SSL/TLS', level, bullets, genel, `${tlsSection}${protoSection}${hstsSection}## ${t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN')}\n\n${risksTable(risks, locale)}\n`, locale);
+  const fixText = buildTlsFix(host, { hstsMissing: !hstsPresent, weak: tls.weakProtocols }, locale);
   return { findings, fixText };
 }
 
-function tlsBlock(host: string, tls: TlsEvidence): string {
-  if (!tls.found) return '## TLS SERTİFİKA DURUMU\n\nTLS sertifika bilgisi elde edilemedi (443 portuna güvenli bağlantı kurulamadı).\n\n';
+function tlsBlock(host: string, tls: TlsEvidence, locale: string = 'tr'): string {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const heading = `## ${t('TLS SERTİFİKA DURUMU', 'TLS-ZERTIFIKATSSTATUS')}`;
+  if (!tls.found) return `${heading}\n\n` + t('TLS sertifika bilgisi elde edilemedi (443 portuna güvenli bağlantı kurulamadı).\n\n', 'Es konnten keine TLS-Zertifikatsinformationen ermittelt werden (keine sichere Verbindung zu Port 443 möglich).\n\n');
   const l: string[] = [];
-  l.push(`- **Geçerlilik:** ${tls.daysLeft != null ? (tls.daysLeft >= 0 ? `Geçerli, ${tls.daysLeft} gün kaldı` : `SÜRESİ DOLMUŞ (${Math.abs(tls.daysLeft)} gün önce)`) : 'Belirlenemedi'}${tls.notAfter ? ` (bitiş: ${tls.notAfter})` : ''}`);
-  if (tls.hostnameMatch === false) l.push(`- **Hostname eşleşmesi:** ⚠️ Sertifika ${host} ile eşleşmiyor${tls.cn ? ` (sahibi: ${tls.cn})` : ''}${tls.san.length ? `; kapsanan: ${tls.san.slice(0, 6).join(', ')}` : ''}.`);
-  else if (tls.hostnameMatch === true) { const multi = tls.cn && tls.cn.toLowerCase() !== host.toLowerCase(); l.push(`- **Hostname eşleşmesi:** Uyumlu${multi ? ` (çok alanlı sertifika; ${host} kapsanıyor)` : ''}.`); }
-  if (tls.issuer) l.push(`- **Veren (issuer):** ${tls.issuer}`);
-  return `## TLS SERTİFİKA DURUMU\n\n${l.join('\n')}\n\n`;
+  l.push(`- **${t('Geçerlilik', 'Gültigkeit')}:** ${tls.daysLeft != null ? (tls.daysLeft >= 0 ? t(`Geçerli, ${tls.daysLeft} gün kaldı`, `Gültig, noch ${tls.daysLeft} Tage`) : t(`SÜRESİ DOLMUŞ (${Math.abs(tls.daysLeft)} gün önce)`, `ABGELAUFEN (vor ${Math.abs(tls.daysLeft)} Tagen)`)) : t('Belirlenemedi', 'Nicht ermittelbar')}${tls.notAfter ? t(` (bitiş: ${tls.notAfter})`, ` (Ablauf: ${tls.notAfter})`) : ''}`);
+  if (tls.hostnameMatch === false) l.push(t(`- **Hostname eşleşmesi:** ⚠️ Sertifika ${host} ile eşleşmiyor${tls.cn ? ` (sahibi: ${tls.cn})` : ''}${tls.san.length ? `; kapsanan: ${tls.san.slice(0, 6).join(', ')}` : ''}.`, `- **Hostname-Abgleich:** ⚠️ Das Zertifikat stimmt nicht mit ${host} überein${tls.cn ? ` (Inhaber: ${tls.cn})` : ''}${tls.san.length ? `; abgedeckt: ${tls.san.slice(0, 6).join(', ')}` : ''}.`));
+  else if (tls.hostnameMatch === true) { const multi = tls.cn && tls.cn.toLowerCase() !== host.toLowerCase(); l.push(t(`- **Hostname eşleşmesi:** Uyumlu${multi ? ` (çok alanlı sertifika; ${host} kapsanıyor)` : ''}.`, `- **Hostname-Abgleich:** Übereinstimmend${multi ? ` (Multi-Domain-Zertifikat; ${host} ist abgedeckt)` : ''}.`)); }
+  if (tls.issuer) l.push(`- **${t('Veren (issuer)', 'Aussteller (Issuer)')}:** ${tls.issuer}`);
+  return `${heading}\n\n${l.join('\n')}\n\n`;
 }
 
 // ======================================================================================
 // 2) header_leak — Güvenlik Başlıkları & Bilgi Sızıntısı
 // ======================================================================================
-const SEC_HDRS: Array<{ hdr: string; name: string; absent: string }> = [
-  { hdr: 'strict-transport-security', name: 'Strict-Transport-Security', absent: 'HTTPS zorunluluğu bildirilmiyor; SSL-stripping riski.' },
-  { hdr: 'content-security-policy', name: 'Content-Security-Policy', absent: 'XSS/enjeksiyona karşı tarayıcı savunması yok.' },
-  { hdr: 'x-frame-options', name: 'X-Frame-Options', absent: 'Clickjacking’e açık; iframe’e gömülebilir.' },
-  { hdr: 'x-content-type-options', name: 'X-Content-Type-Options', absent: 'MIME-sniffing mümkün.' },
-  { hdr: 'referrer-policy', name: 'Referrer-Policy', absent: 'Referrer bilgisi dış kaynaklara sızabilir.' },
-  { hdr: 'permissions-policy', name: 'Permissions-Policy', absent: 'Hassas tarayıcı API’leri kısıtlanmamış.' },
-  { hdr: 'x-xss-protection', name: 'X-XSS-Protection', absent: 'Eski tarayıcı XSS filtresi ayarlı değil (modernlerde kritik değil).' },
+const SEC_HDRS: Array<{ hdr: string; name: string; absent: string; absentDe: string }> = [
+  { hdr: 'strict-transport-security', name: 'Strict-Transport-Security', absent: 'HTTPS zorunluluğu bildirilmiyor; SSL-stripping riski.', absentDe: 'Die HTTPS-Pflicht wird nicht mitgeteilt; SSL-Stripping-Risiko.' },
+  { hdr: 'content-security-policy', name: 'Content-Security-Policy', absent: 'XSS/enjeksiyona karşı tarayıcı savunması yok.', absentDe: 'Keine Browser-Verteidigung gegen XSS/Injection.' },
+  { hdr: 'x-frame-options', name: 'X-Frame-Options', absent: 'Clickjacking’e açık; iframe’e gömülebilir.', absentDe: 'Anfällig für Clickjacking; kann in ein iframe eingebettet werden.' },
+  { hdr: 'x-content-type-options', name: 'X-Content-Type-Options', absent: 'MIME-sniffing mümkün.', absentDe: 'MIME-Sniffing möglich.' },
+  { hdr: 'referrer-policy', name: 'Referrer-Policy', absent: 'Referrer bilgisi dış kaynaklara sızabilir.', absentDe: 'Referrer-Informationen können an externe Quellen abfließen.' },
+  { hdr: 'permissions-policy', name: 'Permissions-Policy', absent: 'Hassas tarayıcı API’leri kısıtlanmamış.', absentDe: 'Sensible Browser-APIs sind nicht eingeschränkt.' },
+  { hdr: 'x-xss-protection', name: 'X-XSS-Protection', absent: 'Eski tarayıcı XSS filtresi ayarlı değil (modernlerde kritik değil).', absentDe: 'Der Legacy-XSS-Filter älterer Browser ist nicht gesetzt (in modernen Browsern unkritisch).' },
 ];
 
-export async function generateHeaderLeakReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+export async function generateHeaderLeakReport(host: string, locale: string = 'tr'): Promise<{ findings: string; fixText: string } | null> {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const RW = de ? RISK_WORD_DE : RISK_WORD;
   const http = await collectHttp(host);
   if (!http.ok) return null;
   const exposed = await collectExposedFiles(host, http.html);
@@ -140,7 +163,7 @@ export async function generateHeaderLeakReport(host: string): Promise<{ findings
   const hlPageCount = Math.max(1, hlPages.length);
   const hdrAbsentCount = new Map<string, number>();
   for (const pg of hlPages) for (const h of SEC_HDRS) if (!pg.headers.has(h.hdr)) hdrAbsentCount.set(h.hdr, (hdrAbsentCount.get(h.hdr) ?? 0) + 1);
-  const hdrCov = (hdrs: { hdr: string }[]) => (hlPageCount > 1 ? ` (${Math.max(...hdrs.map((h) => hdrAbsentCount.get(h.hdr) ?? hlPageCount))}/${hlPageCount} sayfada eksik)` : '');
+  const hdrCov = (hdrs: { hdr: string }[]) => (hlPageCount > 1 ? t(` (${Math.max(...hdrs.map((h) => hdrAbsentCount.get(h.hdr) ?? hlPageCount))}/${hlPageCount} sayfada eksik)`, ` (fehlt auf ${Math.max(...hdrs.map((h) => hdrAbsentCount.get(h.hdr) ?? hlPageCount))}/${hlPageCount} Seiten)`) : '');
 
   // (HATA 4) EOL/eski yazılım imzası -> GERÇEK bulgu (sunucu/X-Powered-By/generator sürümünden).
   const techStrings: string[] = [];
@@ -149,7 +172,7 @@ export async function generateHeaderLeakReport(host: string): Promise<{ findings
   const genMeta = http.html?.match(/<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)/i)?.[1];
   if (genMeta) techStrings.push(genMeta);
   for (const pg of hlPages) { const s = pg.headers.get('server'); if (s) techStrings.push(`Sunucu: ${s}`); const x = pg.headers.get('x-powered-by'); if (x) techStrings.push(`X-Powered-By: ${x}`); }
-  const eolRisks = detectOutdatedSoftware(techStrings);
+  const eolRisks = detectOutdatedSoftware(techStrings, locale);
   const eolHigh = eolRisks.some((r) => r.sev === 'Yüksek');
   const eolMed = eolRisks.some((r) => r.sev === 'Orta');
 
@@ -158,54 +181,57 @@ export async function generateHeaderLeakReport(host: string): Promise<{ findings
   else if (missingCrit.length || missing.length >= 3 || eolMed) level = 'medium';
 
   const table =
-    `## HTTP GÜVENLİK BAŞLIKLARI\n\n| Başlık | Durum | Açıklama |\n|--------|-------|----------|\n` +
+    `## ${t('HTTP GÜVENLİK BAŞLIKLARI', 'HTTP-SICHERHEITS-HEADER')}\n\n| ${t('Başlık', 'Header')} | ${t('Durum', 'Status')} | ${t('Açıklama', 'Beschreibung')} |\n|--------|-------|----------|\n` +
     SEC_HDRS.map((h) => {
       const present = http.headers.has(h.hdr);
-      return `| ${h.name} | ${present ? 'Var' : 'Yok'} | ${present ? 'Mevcut ve yapılandırılmış.' : h.absent} |`;
+      return `| ${h.name} | ${present ? t('Var', 'Vorhanden') : t('Yok', 'Fehlt')} | ${present ? t('Mevcut ve yapılandırılmış.', 'Vorhanden und konfiguriert.') : t(h.absent, h.absentDe)} |`;
     }).join('\n') + '\n\n';
 
   const leakSection =
-    `## BİLGİ SIZINTISI / AÇIKTA DOSYALAR\n\n` +
-    `Yaygın hassas yollar tek GET ile kontrol edildi (içerik doğrulandı — yalnız HTTP 200 kanıt sayılmaz):\n\n` +
-    `| Yol | Durum | Not |\n|-----|-------|-----|\n` +
-    exposed.map((e) => `| \`${e.path}\` | ${e.exposed ? '⚠️ AÇIK' : 'Kapalı'} | ${e.reason} |`).join('\n') + '\n\n';
+    `## ${t('BİLGİ SIZINTISI / AÇIKTA DOSYALAR', 'INFORMATIONSLECKS / OFFENLIEGENDE DATEIEN')}\n\n` +
+    t(`Yaygın hassas yollar tek GET ile kontrol edildi (içerik doğrulandı — yalnız HTTP 200 kanıt sayılmaz):\n\n`, `Häufige sensible Pfade wurden mit einem einzigen GET geprüft (Inhalt verifiziert — allein HTTP 200 gilt nicht als Nachweis):\n\n`) +
+    `| ${t('Yol', 'Pfad')} | ${t('Durum', 'Status')} | ${t('Not', 'Hinweis')} |\n|-----|-------|-----|\n` +
+    exposed.map((e) => `| \`${e.path}\` | ${e.exposed ? t('⚠️ AÇIK', '⚠️ OFFEN') : t('Kapalı', 'Geschlossen')} | ${e.reason} |`).join('\n') + '\n\n';
 
   const risks: string[] = [];
-  for (const e of exposedHits) risks.push(`- **Yüksek — Hassas dosya erişilebilir (\`${e.path}\`):** İçerik doğrulandı; yapılandırma/kaynak sızıntısı riski. Erişim derhal engellenmeli.`);
+  for (const e of exposedHits) risks.push(t(`- **Yüksek — Hassas dosya erişilebilir (\`${e.path}\`):** İçerik doğrulandı; yapılandırma/kaynak sızıntısı riski. Erişim derhal engellenmeli.`, `- **Yüksek — Sensible Datei erreichbar (\`${e.path}\`):** Inhalt verifiziert; Risiko eines Konfigurations-/Quellcode-Lecks. Der Zugriff muss umgehend gesperrt werden.`));
   for (const e of eolRisks) risks.push(`- **${e.sev} — ${e.bulgu}:** ${e.aciklama}`);
-  if (missingCrit.length) risks.push(`- **Orta — Kritik güvenlik başlıkları eksik (${missingCrit.map((h) => h.name).join(', ')}):** XSS/clickjacking’e karşı tarayıcı savunması zayıf.${hdrCov(missingCrit)}`);
+  if (missingCrit.length) risks.push(t(`- **Orta — Kritik güvenlik başlıkları eksik (${missingCrit.map((h) => h.name).join(', ')}):** XSS/clickjacking’e karşı tarayıcı savunması zayıf.${hdrCov(missingCrit)}`, `- **Orta — Kritische Sicherheits-Header fehlen (${missingCrit.map((h) => h.name).join(', ')}):** Die Browser-Verteidigung gegen XSS/Clickjacking ist schwach.${hdrCov(missingCrit)}`));
   const otherMissing = missing.filter((h) => !missingCrit.includes(h));
-  if (otherMissing.length) risks.push(`- **Orta — Ek başlıklar eksik (${otherMissing.map((h) => h.name).join(', ')}):** Savunma derinliği zayıf.${hdrCov(otherMissing)}`);
-  if (!risks.length) risks.push('- Belirgin bir başlık/sızıntı sorunu öne çıkmadı.');
+  if (otherMissing.length) risks.push(t(`- **Orta — Ek başlıklar eksik (${otherMissing.map((h) => h.name).join(', ')}):** Savunma derinliği zayıf.${hdrCov(otherMissing)}`, `- **Orta — Weitere Header fehlen (${otherMissing.map((h) => h.name).join(', ')}):** Die Verteidigungstiefe ist schwach.${hdrCov(otherMissing)}`));
+  if (!risks.length) risks.push(t('- Belirgin bir başlık/sızıntı sorunu öne çıkmadı.', '- Es wurde kein deutliches Header-/Leck-Problem festgestellt.'));
 
-  const highReason = exposedHits.length ? 'dışarıdan erişilebilir hassas dosya tespit edildi.' : 'eski/desteksiz yazılım sürümü ifşa ediliyor (aşağıda).';
-  const medReason = (missingCrit.length || missing.length >= 3) ? 'önemli güvenlik başlığı eksiklikleri var.' : 'güncel olmayan yazılım sürümü ifşa ediliyor (aşağıda).';
+  const highReason = exposedHits.length ? t('dışarıdan erişilebilir hassas dosya tespit edildi.', 'eine von außen erreichbare sensible Datei wurde festgestellt.') : t('eski/desteksiz yazılım sürümü ifşa ediliyor (aşağıda).', 'eine veraltete/nicht unterstützte Softwareversion wird offengelegt (siehe unten).');
+  const medReason = (missingCrit.length || missing.length >= 3) ? t('önemli güvenlik başlığı eksiklikleri var.', 'es bestehen wichtige Lücken bei Sicherheits-Headern.') : t('güncel olmayan yazılım sürümü ifşa ediliyor (aşağıda).', 'eine nicht aktuelle Softwareversion wird offengelegt (siehe unten).');
   const bullets: string[] = [];
-  bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? highReason : level === 'medium' ? medReason : 'ciddi bir sorun öne çıkmadı.'}`);
-  bullets.push(`- ${missing.length}/${SEC_HDRS.length} güvenlik başlığı eksik${missing.length ? `: ${missing.map((h) => h.name).join(', ')}` : ''}.`);
-  bullets.push(`- Açıkta dosya: ${exposedHits.length ? `⚠️ ${exposedHits.map((e) => e.path).join(', ')}` : 'tespit edilmedi'}.`);
-  if (eolRisks.length) bullets.push(`- ⚠️ Eski/desteksiz yazılım sürümü ifşası: ${eolRisks.map((e) => e.bulgu.replace(/^.*\(/, '(')).join(', ')}.`);
-  bullets.push('- **Önerilen ilk adım:** ' + (exposedHits.length ? 'Açıkta kalan dosyalara erişimi engelleyin ve ' : eolRisks.length ? 'İfşa edilen eski yazılımı güncel sürüme yükseltin ve ' : '') + 'eksik güvenlik başlıklarını ekleyin (hazır komutlar "AI Çözüm Önerileri" eklentisinde).');
+  bullets.push(`- **${t('Genel risk seviyesi', 'Gesamtrisikostufe')}: ${RW[level]}** — ${level === 'high' ? highReason : level === 'medium' ? medReason : t('ciddi bir sorun öne çıkmadı.', 'es wurde kein ernstes Problem festgestellt.')}`);
+  bullets.push(t(`- ${missing.length}/${SEC_HDRS.length} güvenlik başlığı eksik${missing.length ? `: ${missing.map((h) => h.name).join(', ')}` : ''}.`, `- ${missing.length}/${SEC_HDRS.length} Sicherheits-Header fehlen${missing.length ? `: ${missing.map((h) => h.name).join(', ')}` : ''}.`));
+  bullets.push(t(`- Açıkta dosya: ${exposedHits.length ? `⚠️ ${exposedHits.map((e) => e.path).join(', ')}` : 'tespit edilmedi'}.`, `- Offenliegende Datei: ${exposedHits.length ? `⚠️ ${exposedHits.map((e) => e.path).join(', ')}` : 'keine festgestellt'}.`));
+  if (eolRisks.length) bullets.push(t(`- ⚠️ Eski/desteksiz yazılım sürümü ifşası: ${eolRisks.map((e) => e.bulgu.replace(/^.*\(/, '(')).join(', ')}.`, `- ⚠️ Offenlegung einer veralteten/nicht unterstützten Softwareversion: ${eolRisks.map((e) => e.bulgu.replace(/^.*\(/, '(')).join(', ')}.`));
+  bullets.push(`- **${t('Önerilen ilk adım', 'Empfohlener erster Schritt')}:** ` + (exposedHits.length ? t('Açıkta kalan dosyalara erişimi engelleyin ve ', 'Sperren Sie den Zugriff auf die offenliegenden Dateien und ') : eolRisks.length ? t('İfşa edilen eski yazılımı güncel sürüme yükseltin ve ', 'Aktualisieren Sie die offengelegte veraltete Software auf eine aktuelle Version und ') : '') + t('eksik güvenlik başlıklarını ekleyin (hazır komutlar "AI Çözüm Önerileri" eklentisinde).', 'ergänzen Sie die fehlenden Sicherheits-Header (fertige Befehle im Add-on „KI-Lösungsvorschläge").'));
 
-  const eolClause = eolRisks.length ? ` Ayrıca eski/desteksiz yazılım sürümü ifşa ediliyor (${eolRisks.map((e) => e.bulgu.replace(/^.*\(/, '(')).join(', ')}); güncel sürüme yükseltilmelidir.` : '';
+  const eolClause = eolRisks.length ? t(` Ayrıca eski/desteksiz yazılım sürümü ifşa ediliyor (${eolRisks.map((e) => e.bulgu.replace(/^.*\(/, '(')).join(', ')}); güncel sürüme yükseltilmelidir.`, ` Zudem wird eine veraltete/nicht unterstützte Softwareversion offengelegt (${eolRisks.map((e) => e.bulgu.replace(/^.*\(/, '(')).join(', ')}); sie sollte auf eine aktuelle Version aktualisiert werden.`) : '';
   const genel =
     level === 'high'
       ? (exposedHits.length
-          ? `Dışarıdan erişilebilen hassas bir dosya tespit edildi (içerik doğrulandı); öncelikli olarak erişimin engellenmesi gerekir.${eolClause} Ayrıca eksik güvenlik başlıkları savunmayı zayıflatıyor.`
-          : `Eski/desteksiz yazılım sürümü ifşa ediliyor; bilinen güvenlik açıkları yamasız kalabilir — öncelikli olarak güncel, desteklenen sürüme yükseltilmelidir.`)
+          ? t(`Dışarıdan erişilebilen hassas bir dosya tespit edildi (içerik doğrulandı); öncelikli olarak erişimin engellenmesi gerekir.${eolClause} Ayrıca eksik güvenlik başlıkları savunmayı zayıflatıyor.`, `Eine von außen erreichbare sensible Datei wurde festgestellt (Inhalt verifiziert); der Zugriff muss vorrangig gesperrt werden.${eolClause} Zudem schwächen fehlende Sicherheits-Header die Verteidigung.`)
+          : t(`Eski/desteksiz yazılım sürümü ifşa ediliyor; bilinen güvenlik açıkları yamasız kalabilir — öncelikli olarak güncel, desteklenen sürüme yükseltilmelidir.`, `Eine veraltete/nicht unterstützte Softwareversion wird offengelegt; bekannte Sicherheitslücken können ungepatcht bleiben — vorrangig sollte auf eine aktuelle, unterstützte Version aktualisiert werden.`))
       : level === 'medium'
-        ? `${(missingCrit.length || missing.length >= 3) ? 'Önemli güvenlik başlığı eksiklikleri var; hassas dosya sızıntısı tespit edilmedi. Eksik başlıklar düşük maliyetli sunucu ayarlarıyla kapatılabilir.' : 'Güncel olmayan bir yazılım sürümü ifşa ediliyor; desteklenen sürüme yükseltilmesi önerilir.'}${(missingCrit.length || missing.length >= 3) ? eolClause : ''}`
-        : 'Güvenlik başlıkları büyük ölçüde mevcut ve dışarıdan erişilebilen hassas dosya bulunmadı.';
+        ? t(`${(missingCrit.length || missing.length >= 3) ? 'Önemli güvenlik başlığı eksiklikleri var; hassas dosya sızıntısı tespit edilmedi. Eksik başlıklar düşük maliyetli sunucu ayarlarıyla kapatılabilir.' : 'Güncel olmayan bir yazılım sürümü ifşa ediliyor; desteklenen sürüme yükseltilmesi önerilir.'}${(missingCrit.length || missing.length >= 3) ? eolClause : ''}`, `${(missingCrit.length || missing.length >= 3) ? 'Es bestehen wichtige Lücken bei Sicherheits-Headern; kein Datei-Leck festgestellt. Fehlende Header lassen sich mit kostengünstigen Servereinstellungen schließen.' : 'Eine nicht aktuelle Softwareversion wird offengelegt; ein Upgrade auf eine unterstützte Version wird empfohlen.'}${(missingCrit.length || missing.length >= 3) ? eolClause : ''}`)
+        : t('Güvenlik başlıkları büyük ölçüde mevcut ve dışarıdan erişilebilen hassas dosya bulunmadı.', 'Die Sicherheits-Header sind weitgehend vorhanden und es wurde keine von außen erreichbare sensible Datei gefunden.');
 
-  const findings = assemble('Başlıklar', level, bullets, genel, `${table}${leakSection}## TESPİT EDİLEN RİSKLER\n\n${risksTable(risks)}\n`);
-  const fixText = buildHeaderFixSuggestions(findings, host) + (exposedHits.length ? '\n\n' + buildExposedFileFix(exposedHits.map((e) => e.path)) : '');
+  const findings = assemble('Başlıklar', level, bullets, genel, `${table}${leakSection}## ${t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN')}\n\n${risksTable(risks, locale)}\n`, locale);
+  const fixText = buildHeaderFixSuggestions(findings, host, locale) + (exposedHits.length ? '\n\n' + buildExposedFileFix(exposedHits.map((e) => e.path), locale) : '');
   return { findings, fixText };
 }
 
 // ======================================================================================
 // 3) dns_email — DNS & E-posta Güvenliği
 // ======================================================================================
-export async function generateDnsEmailReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+export async function generateDnsEmailReport(host: string, locale: string = 'tr'): Promise<{ findings: string; fixText: string } | null> {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const RW = de ? RISK_WORD_DE : RISK_WORD;
   const dns = await collectDns(host);
   if (!dns.ok) return null;
 
@@ -219,10 +245,6 @@ export async function generateDnsEmailReport(host: string): Promise<{ findings: 
   const dkimMissing = !dns.dkim?.found;
   const dnsInconclusive = !spfQueried || !dmarcQueried;
 
-  // Risk YALNIZ SPF/DMARC'a (yetkili/kesin sinyaller) gore. DKIM "tespit edilemedi" belirsizdir
-  // (seçici bilinmiyor) ve DNSSEC yoklugu tek basina — ikisi de LEVEL'i YUKSELTMEZ, yalniz
-  // bilgilendirme olarak listelenir. Aksi halde guclu bir alan (ör. google.com) yanlislikla
-  // "Orta" cikar.
   let level: Level = 'low';
   if (spfMissing && dmarcMissing) level = 'high'; // spoofing sonuna kadar acik
   else {
@@ -233,56 +255,56 @@ export async function generateDnsEmailReport(host: string): Promise<{ findings: 
 
   const checked = dns.checkedDomain;
   const spfSection =
-    `## SPF (Gönderen Politikası) — kontrol edilen alan: \`${checked}\`\n\n` +
+    `## ${t('SPF (Gönderen Politikası) — kontrol edilen alan', 'SPF (Sender-Richtlinie) — geprüfte Domain')}: \`${checked}\`\n\n` +
     (!spfQueried
-      ? `- **Durum:** Sorgulanamadı — geçici bir DNS hatası nedeniyle SPF kaydı bu taramada okunamadı. Bu **"kayıt yok" anlamına gelmez**; lütfen taramayı tekrarlayın.\n\n`
+      ? `- **${t('Durum', 'Status')}:** ` + t(`Sorgulanamadı — geçici bir DNS hatası nedeniyle SPF kaydı bu taramada okunamadı. Bu **"kayıt yok" anlamına gelmez**; lütfen taramayı tekrarlayın.\n\n`, `Nicht abfragbar — aufgrund eines temporären DNS-Fehlers konnte der SPF-Eintrag in dieser Prüfung nicht gelesen werden. Das bedeutet **NICHT „kein Eintrag"**; bitte wiederholen Sie die Prüfung.\n\n`)
       : dns.spf && dns.spf.all !== 'yok'
-        ? `- **Durum:** Var — \`${dns.spf.record}\`\n- **Sertlik:** \`${dns.spf.all}\` — ${dns.spf.all === '-all' ? 'katı (hardfail; en güvenli).' : dns.spf.all === '~all' ? 'yumuşak (softfail; kabul edilebilir, ideal değil).' : dns.spf.all === '+all' || dns.spf.all === '?all' ? '⚠️ zayıf/etkisiz — herkesin sizin adınıza mail göndermesine izin verir.' : 'belirsiz.'}\n\n`
-        : `- **Durum:** Yok — SPF kaydı bulunamadı. Alan adınız adına sahte e-posta gönderimi (spoofing) kolaylaşır.\n\n`);
+        ? `- **${t('Durum', 'Status')}:** ` + t(`Var — \`${dns.spf.record}\`\n- **Sertlik:** \`${dns.spf.all}\` — ${dns.spf.all === '-all' ? 'katı (hardfail; en güvenli).' : dns.spf.all === '~all' ? 'yumuşak (softfail; kabul edilebilir, ideal değil).' : dns.spf.all === '+all' || dns.spf.all === '?all' ? '⚠️ zayıf/etkisiz — herkesin sizin adınıza mail göndermesine izin verir.' : 'belirsiz.'}\n\n`, `Vorhanden — \`${dns.spf.record}\`\n- **Härte:** \`${dns.spf.all}\` — ${dns.spf.all === '-all' ? 'streng (hardfail; am sichersten).' : dns.spf.all === '~all' ? 'weich (softfail; akzeptabel, nicht ideal).' : dns.spf.all === '+all' || dns.spf.all === '?all' ? '⚠️ schwach/wirkungslos — erlaubt jedem, in Ihrem Namen E-Mails zu senden.' : 'unklar.'}\n\n`)
+        : `- **${t('Durum', 'Status')}:** ` + t(`Yok — SPF kaydı bulunamadı. Alan adınız adına sahte e-posta gönderimi (spoofing) kolaylaşır.\n\n`, `Fehlt — Es wurde kein SPF-Eintrag gefunden. Das Versenden gefälschter E-Mails (Spoofing) in Ihrem Domain-Namen wird erleichtert.\n\n`));
   const dmarcSection =
-    `## DMARC (Kimlik Doğrulama Politikası) — kontrol edilen alan: \`${checked}\`\n\n` +
+    `## ${t('DMARC (Kimlik Doğrulama Politikası) — kontrol edilen alan', 'DMARC (Authentifizierungsrichtlinie) — geprüfte Domain')}: \`${checked}\`\n\n` +
     (!dmarcQueried
-      ? `- **Durum:** Sorgulanamadı — geçici bir DNS hatası nedeniyle DMARC kaydı bu taramada okunamadı. Bu **"kayıt yok" anlamına gelmez**; lütfen taramayı tekrarlayın.\n\n`
+      ? `- **${t('Durum', 'Status')}:** ` + t(`Sorgulanamadı — geçici bir DNS hatası nedeniyle DMARC kaydı bu taramada okunamadı. Bu **"kayıt yok" anlamına gelmez**; lütfen taramayı tekrarlayın.\n\n`, `Nicht abfragbar — aufgrund eines temporären DNS-Fehlers konnte der DMARC-Eintrag in dieser Prüfung nicht gelesen werden. Das bedeutet **NICHT „kein Eintrag"**; bitte wiederholen Sie die Prüfung.\n\n`)
       : dns.dmarc && dns.dmarc.policy !== 'yok'
-        ? `- **Durum:** Var — \`${dns.dmarc.record}\`\n- **Politika:** \`p=${dns.dmarc.policy}\` — ${dns.dmarc.policy === 'reject' ? 'güçlü (sahte mailler reddedilir).' : dns.dmarc.policy === 'quarantine' ? 'orta (sahte mailler spam’e düşer).' : '⚠️ zayıf (p=none; yalnızca izler, engellemez).'}\n\n`
-        : `- **Durum:** Yok — DMARC kaydı bulunamadı. SPF/DKIM sonuçlarına göre uygulama yapılmıyor; spoofing’e karşı koruma zayıf.\n\n`);
+        ? `- **${t('Durum', 'Status')}:** ` + t(`Var — \`${dns.dmarc.record}\`\n- **Politika:** \`p=${dns.dmarc.policy}\` — ${dns.dmarc.policy === 'reject' ? 'güçlü (sahte mailler reddedilir).' : dns.dmarc.policy === 'quarantine' ? 'orta (sahte mailler spam’e düşer).' : '⚠️ zayıf (p=none; yalnızca izler, engellemez).'}\n\n`, `Vorhanden — \`${dns.dmarc.record}\`\n- **Richtlinie:** \`p=${dns.dmarc.policy}\` — ${dns.dmarc.policy === 'reject' ? 'stark (gefälschte Mails werden abgelehnt).' : dns.dmarc.policy === 'quarantine' ? 'mittel (gefälschte Mails landen im Spam).' : '⚠️ schwach (p=none; überwacht nur, blockiert nicht).'}\n\n`)
+        : `- **${t('Durum', 'Status')}:** ` + t(`Yok — DMARC kaydı bulunamadı. SPF/DKIM sonuçlarına göre uygulama yapılmıyor; spoofing’e karşı koruma zayıf.\n\n`, `Fehlt — Es wurde kein DMARC-Eintrag gefunden. Es erfolgt keine Durchsetzung anhand der SPF/DKIM-Ergebnisse; der Schutz vor Spoofing ist schwach.\n\n`));
   const dkimSection =
-    `## DKIM (İmza)\n\n` +
+    `## ${t('DKIM (İmza)', 'DKIM (Signatur)')}\n\n` +
     (dns.dkim?.found
-      ? `- **Durum:** Tespit edildi (\`${dns.dkim.selector}._domainkey\` seçicisi). E-postalar kriptografik olarak imzalanıyor.\n\n`
-      : `- **Durum:** Tespit edilemedi — Yaygın seçicilerde (default/google/selector1…) DKIM kaydı bulunamadı. Farklı bir seçici kullanıyor olabilirsiniz; bu kesin “yok” anlamına gelmez.\n\n`);
+      ? `- **${t('Durum', 'Status')}:** ` + t(`Tespit edildi (\`${dns.dkim.selector}._domainkey\` seçicisi). E-postalar kriptografik olarak imzalanıyor.\n\n`, `Erkannt (Selektor \`${dns.dkim.selector}._domainkey\`). E-Mails werden kryptografisch signiert.\n\n`)
+      : `- **${t('Durum', 'Status')}:** ` + t(`Tespit edilemedi — Yaygın seçicilerde (default/google/selector1…) DKIM kaydı bulunamadı. Farklı bir seçici kullanıyor olabilirsiniz; bu kesin “yok” anlamına gelmez.\n\n`, `Nicht erkannt — Bei gängigen Selektoren (default/google/selector1…) wurde kein DKIM-Eintrag gefunden. Möglicherweise verwenden Sie einen anderen Selektor; dies bedeutet nicht sicher „kein Eintrag".\n\n`));
   const dnssecSection =
-    `## DNSSEC\n\n- **Durum:** ${dns.dnssec ? 'Aktif — DNS yanıtları kriptografik olarak imzalı (DNS zehirlenmesine karşı koruma).' : 'Pasif/yok — DNS yanıtları imzalı değil; DNS spoofing/cache-poisoning riskine daha açık.'}\n\n`;
+    `## DNSSEC\n\n- **${t('Durum', 'Status')}:** ${dns.dnssec ? t('Aktif — DNS yanıtları kriptografik olarak imzalı (DNS zehirlenmesine karşı koruma).', 'Aktiv — DNS-Antworten sind kryptografisch signiert (Schutz gegen DNS-Poisoning).') : t('Pasif/yok — DNS yanıtları imzalı değil; DNS spoofing/cache-poisoning riskine daha açık.', 'Passiv/fehlt — DNS-Antworten sind nicht signiert; erhöhtes Risiko für DNS-Spoofing/Cache-Poisoning.')}\n\n`;
 
   const risks: string[] = [];
-  if (spfMissing && dmarcMissing) risks.push('- **Yüksek — Alan adınız e-posta sahteciliğine (spoofing) tamamen açık:** Ne SPF ne DMARC var. Saldırgan sizin adınıza sahte e-posta gönderebilir.');
+  if (spfMissing && dmarcMissing) risks.push(t('- **Yüksek — Alan adınız e-posta sahteciliğine (spoofing) tamamen açık:** Ne SPF ne DMARC var. Saldırgan sizin adınıza sahte e-posta gönderebilir.', '- **Yüksek — Ihre Domain ist vollständig anfällig für E-Mail-Spoofing:** Weder SPF noch DMARC vorhanden. Ein Angreifer kann in Ihrem Namen gefälschte E-Mails senden.'));
   else {
-    if (spfMissing) risks.push('- **Orta — SPF eksik:** Yetkili gönderen sunucular tanımlı değil.');
-    else if (spfWeak) risks.push(`- **Orta — SPF zayıf (\`${dns.spf?.all}\`):** Sahte gönderimi etkili biçimde engellemiyor.`);
-    if (dmarcMissing) risks.push('- **Orta — DMARC eksik:** SPF/DKIM sonuçları uygulanmıyor.');
-    else if (dmarcWeak) risks.push('- **Orta — DMARC zayıf (`p=none`):** Yalnızca raporlama; sahte mailler yine de teslim edilir.');
+    if (spfMissing) risks.push(t('- **Orta — SPF eksik:** Yetkili gönderen sunucular tanımlı değil.', '- **Orta — SPF fehlt:** Es sind keine autorisierten sendenden Server definiert.'));
+    else if (spfWeak) risks.push(t(`- **Orta — SPF zayıf (\`${dns.spf?.all}\`):** Sahte gönderimi etkili biçimde engellemiyor.`, `- **Orta — SPF schwach (\`${dns.spf?.all}\`):** Verhindert gefälschten Versand nicht wirksam.`));
+    if (dmarcMissing) risks.push(t('- **Orta — DMARC eksik:** SPF/DKIM sonuçları uygulanmıyor.', '- **Orta — DMARC fehlt:** Die SPF/DKIM-Ergebnisse werden nicht durchgesetzt.'));
+    else if (dmarcWeak) risks.push(t('- **Orta — DMARC zayıf (`p=none`):** Yalnızca raporlama; sahte mailler yine de teslim edilir.', '- **Orta — DMARC schwach (`p=none`):** Nur Berichterstattung; gefälschte Mails werden dennoch zugestellt.'));
   }
-  if (dnsInconclusive) risks.push(`- **Bilgilendirme — ${!spfQueried && !dmarcQueried ? 'SPF ve DMARC' : !spfQueried ? 'SPF' : 'DMARC'} sorgulanamadı:** Geçici DNS hatası; "kayıt yok" olarak değerlendirilMEDİ. Kesin sonuç için taramayı tekrarlayın.`);
-  if (dkimMissing) risks.push('- **Bilgilendirme — DKIM tespit edilemedi:** Yaygın seçicilerde bulunamadı (farklı seçici olabilir).');
-  if (!dns.dnssec) risks.push('- **Bilgilendirme — DNSSEC pasif:** DNS yanıtları imzalı değil.');
-  if (!risks.length) risks.push('- E-posta kimlik doğrulama kayıtları (SPF/DMARC/DKIM) düzgün yapılandırılmış.');
+  if (dnsInconclusive) risks.push(t(`- **Bilgilendirme — ${!spfQueried && !dmarcQueried ? 'SPF ve DMARC' : !spfQueried ? 'SPF' : 'DMARC'} sorgulanamadı:** Geçici DNS hatası; "kayıt yok" olarak değerlendirilMEDİ. Kesin sonuç için taramayı tekrarlayın.`, `- **Bilgilendirme — ${!spfQueried && !dmarcQueried ? 'SPF und DMARC' : !spfQueried ? 'SPF' : 'DMARC'} nicht abfragbar:** Temporärer DNS-Fehler; wurde NICHT als „kein Eintrag" gewertet. Für ein sicheres Ergebnis wiederholen Sie die Prüfung.`));
+  if (dkimMissing) risks.push(t('- **Bilgilendirme — DKIM tespit edilemedi:** Yaygın seçicilerde bulunamadı (farklı seçici olabilir).', '- **Bilgilendirme — DKIM nicht erkannt:** Bei gängigen Selektoren nicht gefunden (möglicherweise anderer Selektor).'));
+  if (!dns.dnssec) risks.push(t('- **Bilgilendirme — DNSSEC pasif:** DNS yanıtları imzalı değil.', '- **Bilgilendirme — DNSSEC passiv:** Die DNS-Antworten sind nicht signiert.'));
+  if (!risks.length) risks.push(t('- E-posta kimlik doğrulama kayıtları (SPF/DMARC/DKIM) düzgün yapılandırılmış.', '- Die E-Mail-Authentifizierungseinträge (SPF/DMARC/DKIM) sind ordnungsgemäß konfiguriert.'));
 
   const bullets: string[] = [];
-  bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'e-posta sahteciliğine karşı koruma kritik seviyede zayıf.' : level === 'medium' ? 'e-posta kimlik doğrulamasında giderilmesi gereken eksikler var.' : 'e-posta kimlik doğrulama kayıtları büyük ölçüde sağlam.'}`);
-  const spfSummary = !spfQueried ? 'sorgulanamadı' : dns.spf && dns.spf.all !== 'yok' ? `var (${dns.spf.all})` : 'yok';
-  const dmarcSummary = !dmarcQueried ? 'sorgulanamadı' : dns.dmarc && dns.dmarc.policy !== 'yok' ? `p=${dns.dmarc.policy}` : 'yok';
-  bullets.push(`- SPF: ${spfSummary} · DMARC: ${dmarcSummary} · DKIM: ${dns.dkim?.found ? 'var' : 'tespit edilemedi'} · DNSSEC: ${dns.dnssec ? 'aktif' : 'yok'}.`);
-  bullets.push('- **Önerilen ilk adım:** ' + (spfMissing || dmarcMissing ? 'SPF ve DMARC kayıtlarını ekleyin (örnek TXT kayıtları "AI Çözüm Önerileri" eklentisinde).' : 'DMARC politikasını kademeli sıkılaştırın (none → quarantine → reject).'));
+  bullets.push(`- **${t('Genel risk seviyesi', 'Gesamtrisikostufe')}: ${RW[level]}** — ${level === 'high' ? t('e-posta sahteciliğine karşı koruma kritik seviyede zayıf.', 'der Schutz vor E-Mail-Spoofing ist kritisch schwach.') : level === 'medium' ? t('e-posta kimlik doğrulamasında giderilmesi gereken eksikler var.', 'bei der E-Mail-Authentifizierung bestehen zu behebende Lücken.') : t('e-posta kimlik doğrulama kayıtları büyük ölçüde sağlam.', 'die E-Mail-Authentifizierungseinträge sind weitgehend solide.')}`);
+  const spfSummary = !spfQueried ? t('sorgulanamadı', 'nicht abfragbar') : dns.spf && dns.spf.all !== 'yok' ? t(`var (${dns.spf.all})`, `vorhanden (${dns.spf.all})`) : t('yok', 'fehlt');
+  const dmarcSummary = !dmarcQueried ? t('sorgulanamadı', 'nicht abfragbar') : dns.dmarc && dns.dmarc.policy !== 'yok' ? `p=${dns.dmarc.policy}` : t('yok', 'fehlt');
+  bullets.push(`- SPF: ${spfSummary} · DMARC: ${dmarcSummary} · DKIM: ${dns.dkim?.found ? t('var', 'vorhanden') : t('tespit edilemedi', 'nicht erkannt')} · DNSSEC: ${dns.dnssec ? t('aktif', 'aktiv') : t('yok', 'fehlt')}.`);
+  bullets.push(`- **${t('Önerilen ilk adım', 'Empfohlener erster Schritt')}:** ` + (spfMissing || dmarcMissing ? t('SPF ve DMARC kayıtlarını ekleyin (örnek TXT kayıtları "AI Çözüm Önerileri" eklentisinde).', 'Ergänzen Sie SPF- und DMARC-Einträge (Beispiel-TXT-Einträge im Add-on „KI-Lösungsvorschläge").') : t('DMARC politikasını kademeli sıkılaştırın (none → quarantine → reject).', 'Verschärfen Sie die DMARC-Richtlinie schrittweise (none → quarantine → reject).')));
 
   const genel =
     level === 'high'
-      ? 'Alan adınız e-posta sahteciliğine (spoofing/phishing) karşı yetersiz korunuyor; SPF/DMARC eksik veya etkisiz. Öncelikli olarak ele alınması önerilir.'
+      ? t('Alan adınız e-posta sahteciliğine (spoofing/phishing) karşı yetersiz korunuyor; SPF/DMARC eksik veya etkisiz. Öncelikli olarak ele alınması önerilir.', 'Ihre Domain ist unzureichend gegen E-Mail-Spoofing/Phishing geschützt; SPF/DMARC fehlen oder sind wirkungslos. Eine vorrangige Behandlung wird empfohlen.')
       : level === 'medium'
-        ? 'E-posta kimlik doğrulama kayıtlarında (SPF/DMARC/DKIM) giderilmesi önerilen eksikler var. Bunlar kademeli olarak sıkılaştırılabilir.'
-        : 'E-posta kimlik doğrulama kayıtları büyük ölçüde sağlam; rapor yalnızca küçük iyileştirmeleri listeler.';
+        ? t('E-posta kimlik doğrulama kayıtlarında (SPF/DMARC/DKIM) giderilmesi önerilen eksikler var. Bunlar kademeli olarak sıkılaştırılabilir.', 'Bei den E-Mail-Authentifizierungseinträgen (SPF/DMARC/DKIM) bestehen zu behebende Lücken. Diese können schrittweise verschärft werden.')
+        : t('E-posta kimlik doğrulama kayıtları büyük ölçüde sağlam; rapor yalnızca küçük iyileştirmeleri listeler.', 'Die E-Mail-Authentifizierungseinträge sind weitgehend solide; der Bericht listet nur kleine Verbesserungen auf.');
 
-  const findings = assemble('DNS/E-posta', level, bullets, genel, `${spfSection}${dmarcSection}${dkimSection}${dnssecSection}## TESPİT EDİLEN RİSKLER\n\n${risksTable(risks)}\n`);
-  const fixText = buildDnsFix(host, dns);
+  const findings = assemble('DNS/E-posta', level, bullets, genel, `${spfSection}${dmarcSection}${dkimSection}${dnssecSection}## ${t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN')}\n\n${risksTable(risks, locale)}\n`, locale);
+  const fixText = buildDnsFix(host, dns, locale);
   return { findings, fixText };
 }
 
@@ -291,7 +313,10 @@ export async function generateDnsEmailReport(host: string): Promise<{ findings: 
 // ======================================================================================
 const CORS_SEV = (c: CorsEvidence): number => ((c.wildcard || c.reflected) && /true/i.test(c.acac ?? '') ? 3 : c.wildcard || c.reflected ? 2 : c.acao ? 1 : 0);
 
-export async function generateCorsCookieReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+export async function generateCorsCookieReport(host: string, locale: string = 'tr'): Promise<{ findings: string; fixText: string } | null> {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const RW = de ? RISK_WORD_DE : RISK_WORD;
   // (BÖLÜM 1 — ÇOK SAYFA) CORS ve çerez politikaları PATH-BAZLI değişebilir (/api altında farklı,
   // statik sayfada farklı). Keşfedilen sayfaların HER BİRİNDE çerez bayraklarını + CORS'u değerlendir.
   // PASİF: yalnız GET (+ zararsız Origin request-header'ı); prob/payload YOK.
@@ -304,7 +329,7 @@ export async function generateCorsCookieReport(host: string): Promise<{ findings
   //     hangi sayfalarda set edildiğini kaydet. (Grok kritiği: her çerez ayrı ayrı, hangi bayrak eksik.)
   const cookieMap = new Map<string, { c: Cookie; onPages: Set<string> }>();
   for (const pg of pages) for (const raw of pg.setCookies) {
-    const c = parseCookie(raw);
+    const c = parseCookie(raw, locale);
     const e = cookieMap.get(c.name);
     if (!e) cookieMap.set(c.name, { c, onPages: new Set([pathOf(pg.url)]) });
     else { e.onPages.add(pathOf(pg.url)); e.c = { name: c.name, secure: e.c.secure && c.secure, httpOnly: e.c.httpOnly && c.httpOnly, sameSite: e.c.sameSite ?? c.sameSite }; }
@@ -327,67 +352,73 @@ export async function generateCorsCookieReport(host: string): Promise<{ findings
   if (credsWildcardDanger) level = 'high';
   else if (CORS_SEV(worstCors) >= 2 || insecureCookies.length) level = 'medium';
 
-  const covPages = (paths: Set<string>) => `${paths.size}/${pageCount} sayfada`;
+  const covPages = (paths: Set<string>) => t(`${paths.size}/${pageCount} sayfada`, `auf ${paths.size}/${pageCount} Seiten`);
   const corsSection =
-    `## CORS YAPILANDIRMASI (${corsOkList.length}/${pageCount} sayfada test edildi)\n\n` +
+    `## ${t('CORS YAPILANDIRMASI', 'CORS-KONFIGURATION')} (${t(`${corsOkList.length}/${pageCount} sayfada test edildi`, `auf ${corsOkList.length}/${pageCount} Seiten getestet`)})\n\n` +
     (!worst
-      ? '- CORS yanıtı elde edilemedi.\n\n'
-      : `- **Test Origin:** \`${worstCors.testedOrigin}\` — her sayfaya zararsız bir Origin başlığı gönderilip yanıt değerlendirildi.\n` +
-        `- **En açık gözlemlenen politika** (\`${worst.path}\`): Access-Control-Allow-Origin: ${worstCors.acao ? `\`${worstCors.acao}\`` : 'gönderilmiyor (kapalı — güvenli varsayılan)'}${worstCors.wildcard ? ' — ⚠️ wildcard (`*`)' : worstCors.reflected ? ' — ⚠️ Origin yansıtma' : ''}; Allow-Credentials: ${worstCors.acac ? `\`${worstCors.acac}\`` : 'gönderilmiyor'}.\n` +
-        (credsWildcardDanger ? `- ⚠️ **TEHLİKELİ KOMBİNASYON:** Kimlik bilgisi (credentials) + açık/yansıtılan origin — başka sitelerin kullanıcı oturumuyla veri okumasına yol açabilir.\n` : '') +
-        (corsVariance ? `- ℹ️ CORS politikası sayfaya göre DEĞİŞİYOR (bazı yollar açık, bazıları kapalı) — en açık yol yukarıda.\n` : '') +
+      ? t('- CORS yanıtı elde edilemedi.\n\n', '- Es konnte keine CORS-Antwort ermittelt werden.\n\n')
+      : t(`- **Test Origin:** \`${worstCors.testedOrigin}\` — her sayfaya zararsız bir Origin başlığı gönderilip yanıt değerlendirildi.\n`, `- **Test-Origin:** \`${worstCors.testedOrigin}\` — an jede Seite wurde ein harmloser Origin-Header gesendet und die Antwort ausgewertet.\n`) +
+        t(`- **En açık gözlemlenen politika** (\`${worst.path}\`): Access-Control-Allow-Origin: ${worstCors.acao ? `\`${worstCors.acao}\`` : 'gönderilmiyor (kapalı — güvenli varsayılan)'}${worstCors.wildcard ? ' — ⚠️ wildcard (`*`)' : worstCors.reflected ? ' — ⚠️ Origin yansıtma' : ''}; Allow-Credentials: ${worstCors.acac ? `\`${worstCors.acac}\`` : 'gönderilmiyor'}.\n`, `- **Offenste beobachtete Richtlinie** (\`${worst.path}\`): Access-Control-Allow-Origin: ${worstCors.acao ? `\`${worstCors.acao}\`` : 'wird nicht gesendet (geschlossen — sichere Voreinstellung)'}${worstCors.wildcard ? ' — ⚠️ Wildcard (`*`)' : worstCors.reflected ? ' — ⚠️ Origin-Spiegelung' : ''}; Allow-Credentials: ${worstCors.acac ? `\`${worstCors.acac}\`` : 'wird nicht gesendet'}.\n`) +
+        (credsWildcardDanger ? t(`- ⚠️ **TEHLİKELİ KOMBİNASYON:** Kimlik bilgisi (credentials) + açık/yansıtılan origin — başka sitelerin kullanıcı oturumuyla veri okumasına yol açabilir.\n`, `- ⚠️ **GEFÄHRLICHE KOMBINATION:** Anmeldeinformationen (Credentials) + offener/gespiegelter Origin — kann dazu führen, dass andere Websites mit der Nutzersitzung Daten auslesen.\n`) : '') +
+        (corsVariance ? t(`- ℹ️ CORS politikası sayfaya göre DEĞİŞİYOR (bazı yollar açık, bazıları kapalı) — en açık yol yukarıda.\n`, `- ℹ️ Die CORS-Richtlinie VARIIERT je Seite (einige Pfade offen, andere geschlossen) — der offenste Pfad oben.\n`) : '') +
         '\n');
 
   const cookieSection =
-    `## ÇEREZ BAYRAKLARI (${pageCount} sayfada gözlemlenen tüm çerezler)\n\n` +
+    `## ${t('ÇEREZ BAYRAKLARI', 'COOKIE-FLAGS')} (${t(`${pageCount} sayfada gözlemlenen tüm çerezler`, `alle auf ${pageCount} Seiten beobachteten Cookies`)})\n\n` +
     (cookieEntries.length === 0
-      ? `- Taranan ${pageCount} sayfanın hiçbirinde Set-Cookie gözlemlenmedi.\n\n`
-      : `| Çerez | Secure | HttpOnly | SameSite | Gözlemlendiği yer | Not |\n|-------|--------|----------|----------|------------------|-----|\n` +
-        cookieEntries.map((e) => `| \`${e.c.name}\` | ${e.c.secure ? '✅' : '❌'} | ${e.c.httpOnly ? '✅' : '❌'} | ${e.c.sameSite ?? '—'} | ${covPages(e.onPages)} | ${cookieNote(e.c)} |`).join('\n') + '\n\n');
+      ? t(`- Taranan ${pageCount} sayfanın hiçbirinde Set-Cookie gözlemlenmedi.\n\n`, `- Auf keiner der ${pageCount} geprüften Seiten wurde ein Set-Cookie beobachtet.\n\n`)
+      : `| ${t('Çerez', 'Cookie')} | Secure | HttpOnly | SameSite | ${t('Gözlemlendiği yer', 'Beobachtet auf')} | ${t('Not', 'Hinweis')} |\n|-------|--------|----------|----------|------------------|-----|\n` +
+        cookieEntries.map((e) => `| \`${e.c.name}\` | ${e.c.secure ? '✅' : '❌'} | ${e.c.httpOnly ? '✅' : '❌'} | ${e.c.sameSite ?? '—'} | ${covPages(e.onPages)} | ${cookieNote(e.c, locale)} |`).join('\n') + '\n\n');
 
   const risks: string[] = [];
-  if (credsWildcardDanger) risks.push(`- **Yüksek — Tehlikeli CORS kombinasyonu (\`${worst!.path}\`):** \`Allow-Credentials: true\` ile açık/yansıtılan \`Allow-Origin\`. Kötü niyetli bir site, kurbanın oturum çerezleriyle bu uç noktadan veri çekip saldırgana gönderebilir (hesap verisi sızıntısı).`);
-  else if (worstCors.wildcard) risks.push(`- **Orta — CORS wildcard (\`*\`, \`${worst!.path}\`):** Tüm kökenlere açık. Kimlik bilgisi olmayan uç noktalarda kabul edilebilir; hassas API'lerde origin allowlist önerilir.`);
-  else if (worstCors.reflected) risks.push(`- **Orta — CORS Origin yansıtması (\`${worst!.path}\`):** Gelen Origin doğrulanmadan yansıtılıyor; bir allowlist ile sınırlanmalı.`);
-  for (const e of insecureCookies) risks.push(`- **Orta — Çerez bayrağı eksik (\`${e.c.name}\`, ${covPages(e.onPages)}):** ${!e.c.secure ? '**Secure yok** — çerez HTTP üzerinden düz metin gidebilir, ağ dinleyen bir saldırgan oturum çerezini çalabilir. ' : ''}${!e.c.httpOnly ? '**HttpOnly yok** — bir XSS açığı olması hâlinde JavaScript çerezi okuyup oturumu ele geçirebilir.' : ''}`);
-  for (const e of sameSiteNone) risks.push(`- **Orta — \`${e.c.name}\` SameSite=None ama Secure yok (${covPages(e.onPages)}):** Modern tarayıcılar reddeder; ayrıca CSRF yüzeyini artırır.`);
-  if (!risks.length) risks.push('- CORS ve çerez yapılandırmasında belirgin bir risk öne çıkmadı.');
+  if (credsWildcardDanger) risks.push(t(`- **Yüksek — Tehlikeli CORS kombinasyonu (\`${worst!.path}\`):** \`Allow-Credentials: true\` ile açık/yansıtılan \`Allow-Origin\`. Kötü niyetli bir site, kurbanın oturum çerezleriyle bu uç noktadan veri çekip saldırgana gönderebilir (hesap verisi sızıntısı).`, `- **Yüksek — Gefährliche CORS-Kombination (\`${worst!.path}\`):** \`Allow-Credentials: true\` mit offenem/gespiegeltem \`Allow-Origin\`. Eine bösartige Website kann mit den Sitzungscookies des Opfers Daten von diesem Endpunkt abrufen und an den Angreifer senden (Leck von Kontodaten).`));
+  else if (worstCors.wildcard) risks.push(t(`- **Orta — CORS wildcard (\`*\`, \`${worst!.path}\`):** Tüm kökenlere açık. Kimlik bilgisi olmayan uç noktalarda kabul edilebilir; hassas API'lerde origin allowlist önerilir.`, `- **Orta — CORS-Wildcard (\`*\`, \`${worst!.path}\`):** Für alle Origins offen. Bei Endpunkten ohne Anmeldeinformationen akzeptabel; bei sensiblen APIs wird eine Origin-Allowlist empfohlen.`));
+  else if (worstCors.reflected) risks.push(t(`- **Orta — CORS Origin yansıtması (\`${worst!.path}\`):** Gelen Origin doğrulanmadan yansıtılıyor; bir allowlist ile sınırlanmalı.`, `- **Orta — CORS-Origin-Spiegelung (\`${worst!.path}\`):** Der eingehende Origin wird ohne Prüfung gespiegelt; er sollte mit einer Allowlist eingeschränkt werden.`));
+  for (const e of insecureCookies) risks.push(t(`- **Orta — Çerez bayrağı eksik (\`${e.c.name}\`, ${covPages(e.onPages)}):** ${!e.c.secure ? '**Secure yok** — çerez HTTP üzerinden düz metin gidebilir, ağ dinleyen bir saldırgan oturum çerezini çalabilir. ' : ''}${!e.c.httpOnly ? '**HttpOnly yok** — bir XSS açığı olması hâlinde JavaScript çerezi okuyup oturumu ele geçirebilir.' : ''}`, `- **Orta — Fehlendes Cookie-Flag (\`${e.c.name}\`, ${covPages(e.onPages)}):** ${!e.c.secure ? '**Kein Secure** — das Cookie kann im Klartext über HTTP übertragen werden; ein Angreifer, der das Netzwerk mithört, kann das Sitzungscookie stehlen. ' : ''}${!e.c.httpOnly ? '**Kein HttpOnly** — bei einer XSS-Schwachstelle kann JavaScript das Cookie auslesen und die Sitzung übernehmen.' : ''}`));
+  for (const e of sameSiteNone) risks.push(t(`- **Orta — \`${e.c.name}\` SameSite=None ama Secure yok (${covPages(e.onPages)}):** Modern tarayıcılar reddeder; ayrıca CSRF yüzeyini artırır.`, `- **Orta — \`${e.c.name}\` SameSite=None, aber kein Secure (${covPages(e.onPages)}):** Moderne Browser lehnen es ab; erhöht zudem die CSRF-Fläche.`));
+  if (!risks.length) risks.push(t('- CORS ve çerez yapılandırmasında belirgin bir risk öne çıkmadı.', '- Bei der CORS- und Cookie-Konfiguration wurde kein deutliches Risiko festgestellt.'));
 
   const bullets: string[] = [];
-  bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'high' ? 'kimlik bilgisiyle birlikte tehlikeli bir CORS yapılandırması tespit edildi.' : level === 'medium' ? 'CORS ve/veya çerez bayraklarında giderilmesi önerilen eksikler var.' : 'belirgin bir CORS/çerez sorunu öne çıkmadı.'}`);
-  bullets.push(`- **Kapsam:** ${pageCount} benzersiz sayfada değerlendirildi. CORS: ${worstCors.wildcard ? 'wildcard (*)' : worstCors.reflected ? 'origin yansıtma' : worstCors.acao ? 'sınırlı' : 'kapalı'}${credsWildcardDanger ? ' + credentials ⚠️' : ''}. Çerez: ${cookieEntries.length} benzersiz, ${insecureCookies.length} eksik bayraklı.`);
-  bullets.push('- **Önerilen ilk adım:** ' + (credsWildcardDanger ? 'CORS’u origin allowlist’e çekin; credentials ile wildcard/yansıtmayı kaldırın.' : 'Çerezlere Secure + HttpOnly + uygun SameSite ekleyin (hazır örnekler "AI Çözüm Önerileri" eklentisinde).'));
+  bullets.push(`- **${t('Genel risk seviyesi', 'Gesamtrisikostufe')}: ${RW[level]}** — ${level === 'high' ? t('kimlik bilgisiyle birlikte tehlikeli bir CORS yapılandırması tespit edildi.', 'eine gefährliche CORS-Konfiguration in Verbindung mit Anmeldeinformationen wurde festgestellt.') : level === 'medium' ? t('CORS ve/veya çerez bayraklarında giderilmesi önerilen eksikler var.', 'bei CORS und/oder Cookie-Flags bestehen zu behebende Lücken.') : t('belirgin bir CORS/çerez sorunu öne çıkmadı.', 'es wurde kein deutliches CORS-/Cookie-Problem festgestellt.')}`);
+  bullets.push(`- **${t('Kapsam', 'Umfang')}:** ${t(`${pageCount} benzersiz sayfada değerlendirildi. CORS: ${worstCors.wildcard ? 'wildcard (*)' : worstCors.reflected ? 'origin yansıtma' : worstCors.acao ? 'sınırlı' : 'kapalı'}${credsWildcardDanger ? ' + credentials ⚠️' : ''}. Çerez: ${cookieEntries.length} benzersiz, ${insecureCookies.length} eksik bayraklı.`, `Auf ${pageCount} einzigartigen Seiten ausgewertet. CORS: ${worstCors.wildcard ? 'Wildcard (*)' : worstCors.reflected ? 'Origin-Spiegelung' : worstCors.acao ? 'eingeschränkt' : 'geschlossen'}${credsWildcardDanger ? ' + Credentials ⚠️' : ''}. Cookies: ${cookieEntries.length} einzigartige, ${insecureCookies.length} mit fehlenden Flags.`)}`);
+  bullets.push(`- **${t('Önerilen ilk adım', 'Empfohlener erster Schritt')}:** ` + (credsWildcardDanger ? t('CORS’u origin allowlist’e çekin; credentials ile wildcard/yansıtmayı kaldırın.', 'Stellen Sie CORS auf eine Origin-Allowlist um; entfernen Sie Wildcard/Spiegelung in Verbindung mit Credentials.') : t('Çerezlere Secure + HttpOnly + uygun SameSite ekleyin (hazır örnekler "AI Çözüm Önerileri" eklentisinde).', 'Ergänzen Sie bei Cookies Secure + HttpOnly + passendes SameSite (fertige Beispiele im Add-on „KI-Lösungsvorschläge").')));
 
   const genel =
     level === 'high'
-      ? 'Kimlik bilgisiyle (credentials) birlikte açık/yansıtılan bir CORS politikası tespit edildi; bu, çapraz-köken veri sızıntısına yol açabilir ve öncelikli giderilmelidir.'
+      ? t('Kimlik bilgisiyle (credentials) birlikte açık/yansıtılan bir CORS politikası tespit edildi; bu, çapraz-köken veri sızıntısına yol açabilir ve öncelikli giderilmelidir.', 'Es wurde eine offene/gespiegelte CORS-Richtlinie in Verbindung mit Anmeldeinformationen (Credentials) festgestellt; dies kann zu einem Cross-Origin-Datenleck führen und sollte vorrangig behoben werden.')
       : level === 'medium'
-        ? 'CORS ve/veya çerez bayraklarında giderilmesi önerilen eksikler var; taşıma güvenliği açısından kritik değil ancak saldırı yüzeyini artırıyor.'
-        : 'CORS ve çerez yapılandırması güvenli varsayılanlara yakın; rapor yalnızca küçük iyileştirmeleri listeler.';
+        ? t('CORS ve/veya çerez bayraklarında giderilmesi önerilen eksikler var; taşıma güvenliği açısından kritik değil ancak saldırı yüzeyini artırıyor.', 'Bei CORS und/oder Cookie-Flags bestehen zu behebende Lücken; für die Transportsicherheit nicht kritisch, aber sie vergrößern die Angriffsfläche.')
+        : t('CORS ve çerez yapılandırması güvenli varsayılanlara yakın; rapor yalnızca küçük iyileştirmeleri listeler.', 'Die CORS- und Cookie-Konfiguration ist nahe an sicheren Voreinstellungen; der Bericht listet nur kleine Verbesserungen auf.');
 
-  const findings = assemble('CORS/Çerez', level, bullets, genel, `${corsSection}${cookieSection}## TESPİT EDİLEN RİSKLER\n\n${risksTable(risks)}\n`);
-  const fixText = buildCorsCookieFix(host, { credsWildcardDanger, wildcard: worstCors.wildcard, reflected: worstCors.reflected, insecure: insecureCookies.length > 0 });
+  const findings = assemble('CORS/Çerez', level, bullets, genel, `${corsSection}${cookieSection}## ${t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN')}\n\n${risksTable(risks, locale)}\n`, locale);
+  const fixText = buildCorsCookieFix(host, { credsWildcardDanger, wildcard: worstCors.wildcard, reflected: worstCors.reflected, insecure: insecureCookies.length > 0 }, locale);
   return { findings, fixText };
 }
 
 type Cookie = { name: string; secure: boolean; httpOnly: boolean; sameSite?: string };
-function parseCookie(raw: string): Cookie {
-  const name = raw.split('=')[0]?.trim() || '(çerez)';
+function parseCookie(raw: string, locale: string = 'tr'): Cookie {
+  const de = locale === 'de';
+  const name = raw.split('=')[0]?.trim() || (de ? '(Cookie)' : '(çerez)');
   const ss = raw.match(/;\s*samesite\s*=\s*(strict|lax|none)/i)?.[1];
   return { name, secure: /;\s*secure/i.test(raw), httpOnly: /;\s*httponly/i.test(raw), sameSite: ss ? ss[0].toUpperCase() + ss.slice(1).toLowerCase() : undefined };
 }
-function cookieNote(c: Cookie): string {
+function cookieNote(c: Cookie, locale: string = 'tr'): string {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const p: string[] = [];
-  if (!c.secure) p.push('Secure eksik');
-  if (!c.httpOnly) p.push('HttpOnly eksik');
-  if (c.sameSite === 'None' && !c.secure) p.push('SameSite=None+Secure yok');
-  return p.length ? p.join('; ') : 'Bayraklar uygun';
+  if (!c.secure) p.push(t('Secure eksik', 'Secure fehlt'));
+  if (!c.httpOnly) p.push(t('HttpOnly eksik', 'HttpOnly fehlt'));
+  if (c.sameSite === 'None' && !c.secure) p.push(t('SameSite=None+Secure yok', 'SameSite=None+kein Secure'));
+  return p.length ? p.join('; ') : t('Bayraklar uygun', 'Flags in Ordnung');
 }
 
 // ======================================================================================
 // 5) csp_analiz — CSP Analizi
 // ======================================================================================
-export async function generateCspReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+export async function generateCspReport(host: string, locale: string = 'tr'): Promise<{ findings: string; fixText: string } | null> {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const RW = de ? RISK_WORD_DE : RISK_WORD;
   const http = await collectHttp(host);
   if (!http.ok) return null;
   const csp = http.headers.get('content-security-policy') ?? '';
@@ -398,64 +429,58 @@ export async function generateCspReport(host: string): Promise<{ findings: strin
   const directives = present ? parseCsp(csp) : null;
   const weakFindings: string[] = [];
   if (directives) {
-    if (directives.unsafeInline) weakFindings.push("`'unsafe-inline'` kullanılıyor — inline script/style’a izin verir, XSS korumasını büyük ölçüde zayıflatır.");
-    if (directives.unsafeEval) weakFindings.push("`'unsafe-eval'` kullanılıyor — eval() benzeri dinamik kod yürütmeye izin verir.");
-    if (directives.wildcard) weakFindings.push('Kaynak olarak wildcard (`*`) var — herhangi bir kökeni yükleyebilir, politikayı etkisizleştirir.');
-    if (!directives.hasDefaultSrc) weakFindings.push('`default-src` tanımlı değil — kapsanmayan kaynak türleri için yedek politika yok.');
-    if (!directives.hasFrameAncestors) weakFindings.push('`frame-ancestors` yok — clickjacking için ek koruma sağlanmıyor.');
+    if (directives.unsafeInline) weakFindings.push(t("`'unsafe-inline'` kullanılıyor — inline script/style’a izin verir, XSS korumasını büyük ölçüde zayıflatır.", "`'unsafe-inline'` wird verwendet — erlaubt Inline-Script/Style und schwächt den XSS-Schutz erheblich."));
+    if (directives.unsafeEval) weakFindings.push(t("`'unsafe-eval'` kullanılıyor — eval() benzeri dinamik kod yürütmeye izin verir.", "`'unsafe-eval'` wird verwendet — erlaubt dynamische Codeausführung ähnlich wie eval()."));
+    if (directives.wildcard) weakFindings.push(t('Kaynak olarak wildcard (`*`) var — herhangi bir kökeni yükleyebilir, politikayı etkisizleştirir.', 'Als Quelle ist ein Wildcard (`*`) vorhanden — es kann jeden Origin laden und macht die Richtlinie wirkungslos.'));
+    if (!directives.hasDefaultSrc) weakFindings.push(t('`default-src` tanımlı değil — kapsanmayan kaynak türleri için yedek politika yok.', '`default-src` ist nicht definiert — keine Fallback-Richtlinie für nicht abgedeckte Ressourcentypen.'));
+    if (!directives.hasFrameAncestors) weakFindings.push(t('`frame-ancestors` yok — clickjacking için ek koruma sağlanmıyor.', '`frame-ancestors` fehlt — kein zusätzlicher Schutz gegen Clickjacking.'));
   }
 
-  // KALIBRE (SÜTUN 0 — TUTARLI RİSK): CSP eksikliği bir savunma-derinliği başlık boşluğudur → "Orta"
-  // (Basit Tarama ile AYNI seviye). Yapay "Orta-Yüksek" şişirmesi KALDIRILDI: aynı eksik-başlık bulgusu
-  // tüm paketlerde aynı seviyeyi vermeli. Gerçek Yüksek yalnız TLS süresi/hostname/zayıf protokol gibi
-  // somut kritik bulgulardan gelir (baseWorst='high').
   let level: Level = 'low';
   if (!present && !cspRO) level = 'medium';
   else if (present && (directives?.unsafeInline || directives?.unsafeEval || directives?.wildcard)) level = 'medium';
   else if (!present && cspRO) level = 'medium';
 
   // (BÖLÜM 1 — ÇOK SAYFA) CSP başlığı path-bazlı değişebilir (bir sayfada var, diğerinde yok).
-  // Keşfedilen sayfalarda CSP varlığını say. PASİF: yalnız GET (paylaşılan crawl'dan).
   const cspPages = await collectPages(host);
   const cspPageCount = Math.max(1, cspPages.length);
   const cspAbsentPaths = cspPages.filter((pg) => !(pg.headers.get('content-security-policy') ?? '').trim()).map((pg) => { try { return new URL(pg.url).pathname; } catch { return pg.url; } });
   const cspVariance = present && cspAbsentPaths.length > 0; // home'da var ama bazı sayfalarda YOK
-  const cspCov = cspPageCount > 1 ? ` Taranan ${cspPageCount} sayfanın ${cspAbsentPaths.length === cspPageCount ? 'TAMAMINDA' : `${cspAbsentPaths.length}/${cspPageCount}'sinde`} CSP başlığı yok.` : '';
+  const cspCov = cspPageCount > 1 ? t(` Taranan ${cspPageCount} sayfanın ${cspAbsentPaths.length === cspPageCount ? 'TAMAMINDA' : `${cspAbsentPaths.length}/${cspPageCount}'sinde`} CSP başlığı yok.`, ` Auf ${cspAbsentPaths.length === cspPageCount ? `ALLEN ${cspPageCount}` : `${cspAbsentPaths.length}/${cspPageCount}`} geprüften Seiten fehlt der CSP-Header.`) : '';
 
   const statusSection =
-    `## CSP DURUMU\n\n` +
+    `## ${t('CSP DURUMU', 'CSP-STATUS')}\n\n` +
     (present
-      ? `- **Durum:** Var (uygulanıyor).\n- **Politika:** \`${csp.slice(0, 400)}${csp.length > 400 ? '…' : ''}\`\n\n`
+      ? `- **${t('Durum', 'Status')}:** ${t('Var (uygulanıyor).', 'Vorhanden (wird durchgesetzt).')}\n- **${t('Politika', 'Richtlinie')}:** \`${csp.slice(0, 400)}${csp.length > 400 ? '…' : ''}\`\n\n`
       : cspRO
-        ? `- **Durum:** Yalnızca Report-Only modda (\`Content-Security-Policy-Report-Only\`) — ihlaller raporlanıyor ama ENGELLENMİYOR. Gerçek koruma için uygulanan (enforce) moda geçilmeli.\n\n`
-        : `- **Durum:** Yok — Content-Security-Policy başlığı hiç gönderilmiyor.${isSpa ? ' Site JavaScript ağırlıklı bir SPA olduğundan CSP eksikliği XSS etkisini belirgin şekilde büyütür.' : ''}\n\n`);
+        ? `- **${t('Durum', 'Status')}:** ` + t(`Yalnızca Report-Only modda (\`Content-Security-Policy-Report-Only\`) — ihlaller raporlanıyor ama ENGELLENMİYOR. Gerçek koruma için uygulanan (enforce) moda geçilmeli.\n\n`, `Nur im Report-Only-Modus (\`Content-Security-Policy-Report-Only\`) — Verstöße werden gemeldet, aber NICHT blockiert. Für echten Schutz sollte in den durchsetzenden (enforce) Modus gewechselt werden.\n\n`)
+        : `- **${t('Durum', 'Status')}:** ` + t(`Yok — Content-Security-Policy başlığı hiç gönderilmiyor.${isSpa ? ' Site JavaScript ağırlıklı bir SPA olduğundan CSP eksikliği XSS etkisini belirgin şekilde büyütür.' : ''}\n\n`, `Fehlt — Es wird kein Content-Security-Policy-Header gesendet.${isSpa ? ' Da die Website eine JavaScript-lastige SPA ist, vergrößert das Fehlen einer CSP die XSS-Auswirkung deutlich.' : ''}\n\n`));
 
   const analysisSection =
-    `## CSP DİREKTİF ANALİZİ\n\n` +
+    `## ${t('CSP DİREKTİF ANALİZİ', 'CSP-DIREKTIVENANALYSE')}\n\n` +
     (present
-      ? (weakFindings.length ? weakFindings.map((w) => `- ⚠️ ${w}`).join('\n') + '\n\n' : '- Politika temel zayıflatıcı direktifler (unsafe-inline/unsafe-eval/wildcard) içermiyor; sağlam görünüyor.\n\n')
-      : '- Uygulanan bir CSP olmadığından direktif analizi yapılamadı.\n\n');
+      ? (weakFindings.length ? weakFindings.map((w) => `- ⚠️ ${w}`).join('\n') + '\n\n' : t('- Politika temel zayıflatıcı direktifler (unsafe-inline/unsafe-eval/wildcard) içermiyor; sağlam görünüyor.\n\n', '- Die Richtlinie enthält keine grundlegend schwächenden Direktiven (unsafe-inline/unsafe-eval/wildcard); sie wirkt solide.\n\n'))
+      : t('- Uygulanan bir CSP olmadığından direktif analizi yapılamadı.\n\n', '- Da keine durchgesetzte CSP vorhanden ist, konnte keine Direktivenanalyse durchgeführt werden.\n\n'));
 
   const risks: string[] = [];
-  if (!present && !cspRO) risks.push(`- **${isSpa ? 'Orta-Yüksek' : 'Orta'} — CSP tamamen eksik:** XSS ve içerik enjeksiyonuna karşı tarayıcı seviyesinde savunma yok.${isSpa ? ' SPA olduğu için XSS etkisi belirgindir.' : ''}${cspCov}`);
-  if (!present && cspRO) risks.push('- **Orta — CSP yalnızca Report-Only:** İhlaller engellenmiyor; enforce moda geçilmeli.');
-  if (present) for (const w of weakFindings.filter((x) => /unsafe|wildcard/.test(x))) risks.push(`- **Orta — Zayıf CSP direktifi:** ${w}`);
-  // (BÖLÜM 1) SAYFAYA-ÖZGÜ: CSP ana sayfada uygulanıyor ama bazı iç sayfalarda gönderilmiyor.
-  if (cspVariance) risks.push(`- **Orta — Sayfaya özgü CSP tutarsızlığı:** CSP ana sayfada mevcut ancak ${cspAbsentPaths.length}/${cspPageCount} iç sayfada gönderilmiyor (ör. ${cspAbsentPaths.slice(0, 3).join(', ')}). Politika tüm yollarda tutarlı uygulanmalı.`);
-  if (!risks.length) risks.push('- CSP mevcut ve belirgin bir zayıflatıcı direktif içermiyor.');
+  if (!present && !cspRO) risks.push(t(`- **${isSpa ? 'Orta-Yüksek' : 'Orta'} — CSP tamamen eksik:** XSS ve içerik enjeksiyonuna karşı tarayıcı seviyesinde savunma yok.${isSpa ? ' SPA olduğu için XSS etkisi belirgindir.' : ''}${cspCov}`, `- **${isSpa ? 'Orta-Yüksek' : 'Orta'} — CSP vollständig fehlend:** Keine Verteidigung auf Browser-Ebene gegen XSS und Content-Injection.${isSpa ? ' Da es sich um eine SPA handelt, ist die XSS-Auswirkung ausgeprägt.' : ''}${cspCov}`));
+  if (!present && cspRO) risks.push(t('- **Orta — CSP yalnızca Report-Only:** İhlaller engellenmiyor; enforce moda geçilmeli.', '- **Orta — CSP nur Report-Only:** Verstöße werden nicht blockiert; ein Wechsel in den Enforce-Modus ist erforderlich.'));
+  if (present) for (const w of weakFindings.filter((x) => /unsafe|wildcard/.test(x))) risks.push(t(`- **Orta — Zayıf CSP direktifi:** ${w}`, `- **Orta — Schwache CSP-Direktive:** ${w}`));
+  if (cspVariance) risks.push(t(`- **Orta — Sayfaya özgü CSP tutarsızlığı:** CSP ana sayfada mevcut ancak ${cspAbsentPaths.length}/${cspPageCount} iç sayfada gönderilmiyor (ör. ${cspAbsentPaths.slice(0, 3).join(', ')}). Politika tüm yollarda tutarlı uygulanmalı.`, `- **Orta — Seitenspezifische CSP-Inkonsistenz:** CSP ist auf der Startseite vorhanden, wird aber auf ${cspAbsentPaths.length}/${cspPageCount} Unterseiten nicht gesendet (z. B. ${cspAbsentPaths.slice(0, 3).join(', ')}). Die Richtlinie sollte auf allen Pfaden konsistent angewendet werden.`));
+  if (!risks.length) risks.push(t('- CSP mevcut ve belirgin bir zayıflatıcı direktif içermiyor.', '- CSP ist vorhanden und enthält keine deutlich schwächende Direktive.'));
 
   const bullets: string[] = [];
-  bullets.push(`- **Genel risk seviyesi: ${RISK_WORD[level]}** — ${level === 'medium' ? (present ? 'CSP var ama zayıflatıcı direktifler içeriyor.' : 'CSP eksik/enforce edilmiyor.') : 'CSP mevcut ve makul yapılandırılmış.'}`);
-  bullets.push(`- CSP: ${present ? 'uygulanıyor' : cspRO ? 'yalnızca Report-Only' : 'yok'}${directives && weakFindings.length ? `, ${weakFindings.length} zayıf nokta` : ''}.`);
-  bullets.push('- **Önerilen ilk adım:** ' + (present ? "unsafe-inline/unsafe-eval/wildcard direktiflerini kaldırın." : 'Önce Report-Only modda test edip ardından uygulanan CSP ekleyin (hazır örnekler "AI Çözüm Önerileri" eklentisinde).'));
+  bullets.push(`- **${t('Genel risk seviyesi', 'Gesamtrisikostufe')}: ${RW[level]}** — ${level === 'medium' ? (present ? t('CSP var ama zayıflatıcı direktifler içeriyor.', 'CSP ist vorhanden, enthält aber schwächende Direktiven.') : t('CSP eksik/enforce edilmiyor.', 'CSP fehlt/wird nicht durchgesetzt.')) : t('CSP mevcut ve makul yapılandırılmış.', 'CSP ist vorhanden und sinnvoll konfiguriert.')}`);
+  bullets.push(`- CSP: ${present ? t('uygulanıyor', 'wird durchgesetzt') : cspRO ? t('yalnızca Report-Only', 'nur Report-Only') : t('yok', 'fehlt')}${directives && weakFindings.length ? t(`, ${weakFindings.length} zayıf nokta`, `, ${weakFindings.length} Schwachstelle(n)`) : ''}.`);
+  bullets.push(`- **${t('Önerilen ilk adım', 'Empfohlener erster Schritt')}:** ` + (present ? t("unsafe-inline/unsafe-eval/wildcard direktiflerini kaldırın.", 'Entfernen Sie die Direktiven unsafe-inline/unsafe-eval/wildcard.') : t('Önce Report-Only modda test edip ardından uygulanan CSP ekleyin (hazır örnekler "AI Çözüm Önerileri" eklentisinde).', 'Testen Sie zunächst im Report-Only-Modus und ergänzen Sie dann eine durchgesetzte CSP (fertige Beispiele im Add-on „KI-Lösungsvorschläge").')));
 
   const genel =
     level === 'medium'
-        ? (present ? 'CSP mevcut ancak koruma değerini düşüren direktifler (unsafe-inline/unsafe-eval/wildcard) içeriyor; sıkılaştırılması önerilir.' : 'Uygulanan bir CSP yok (yok veya yalnızca Report-Only). XSS azaltması için enforce edilen bir politika önerilir.')
-        : 'Content-Security-Policy mevcut ve makul yapılandırılmış; rapor yalnızca küçük iyileştirmeleri listeler.';
+        ? (present ? t('CSP mevcut ancak koruma değerini düşüren direktifler (unsafe-inline/unsafe-eval/wildcard) içeriyor; sıkılaştırılması önerilir.', 'CSP ist vorhanden, enthält aber Direktiven (unsafe-inline/unsafe-eval/wildcard), die den Schutzwert mindern; eine Verschärfung wird empfohlen.') : t('Uygulanan bir CSP yok (yok veya yalnızca Report-Only). XSS azaltması için enforce edilen bir politika önerilir.', 'Es gibt keine durchgesetzte CSP (fehlt oder nur Report-Only). Zur XSS-Minderung wird eine durchgesetzte Richtlinie empfohlen.'))
+        : t('Content-Security-Policy mevcut ve makul yapılandırılmış; rapor yalnızca küçük iyileştirmeleri listeler.', 'Die Content-Security-Policy ist vorhanden und sinnvoll konfiguriert; der Bericht listet nur kleine Verbesserungen auf.');
 
-  const findings = assemble('CSP', level, bullets, genel, `${statusSection}${analysisSection}## TESPİT EDİLEN RİSKLER\n\n${risksTable(risks)}\n`);
-  const fixText = buildCspFix(host, { present, weak: weakFindings.length > 0 });
+  const findings = assemble('CSP', level, bullets, genel, `${statusSection}${analysisSection}## ${t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN')}\n\n${risksTable(risks, locale)}\n`, locale);
+  const fixText = buildCspFix(host, { present, weak: weakFindings.length > 0 }, locale);
   return { findings, fixText };
 }
 
@@ -474,122 +499,134 @@ function parseCsp(csp: string): CspInfo {
 // ======================================================================================
 // FIX URETICILERI (kod-gomulu remediation sablonlari; coklu platform)
 // ======================================================================================
-function platformHeaderBlock(entries: Array<{ name: string; value: string }>): string {
+function platformHeaderBlock(entries: Array<{ name: string; value: string }>, locale: string = 'tr'): string {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const nginx = entries.map((e) => `add_header ${e.name} "${e.value}" always;`).join('\n');
   const json = entries.map((e) => `          { "key": "${e.name}", "value": "${e.value}" }`).join(',\n');
   const apache = entries.map((e) => `Header always set ${e.name} "${e.value}"`).join('\n');
   return (
     '**Nginx:**\n\n```nginx\n' + nginx + '\n```\n\n' +
-    '**Firebase Hosting — `firebase.json`:**\n\n```json\n' +
+    t('**Firebase Hosting — `firebase.json`:**\n\n```json\n', '**Firebase Hosting — `firebase.json`:**\n\n```json\n') +
     `{\n  "hosting": {\n    "headers": [\n      {\n        "source": "**",\n        "headers": [\n${json}\n        ]\n      }\n    ]\n  }\n}\n` + '```\n\n' +
     '**Apache — `.htaccess`:**\n\n```apache\n' + apache + '\n```'
   );
 }
 
-function buildTlsFix(host: string, o: { hstsMissing: boolean; weak: string[] }): string {
-  const parts: string[] = [`Aşağıdaki öneriler ${host} için TLS/şifreleme yapılandırmasını güçlendirir.`];
+function buildTlsFix(host: string, o: { hstsMissing: boolean; weak: string[] }, locale: string = 'tr'): string {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const parts: string[] = [t(`Aşağıdaki öneriler ${host} için TLS/şifreleme yapılandırmasını güçlendirir.`, `Die folgenden Empfehlungen stärken die TLS-/Verschlüsselungskonfiguration für ${host}.`)];
   if (o.hstsMissing) {
-    parts.push('### 1. HSTS başlığını ekleyin\n\nTarayıcıya siteye yalnızca HTTPS ile bağlanmasını söyler (yalnızca siteniz tamamen HTTPS ise uygulayın):\n\n' +
-      platformHeaderBlock([{ name: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' }]));
+    parts.push(t('### 1. HSTS başlığını ekleyin\n\nTarayıcıya siteye yalnızca HTTPS ile bağlanmasını söyler (yalnızca siteniz tamamen HTTPS ise uygulayın):\n\n', '### 1. HSTS-Header ergänzen\n\nWeist den Browser an, die Website nur über HTTPS aufzurufen (nur anwenden, wenn Ihre Website vollständig auf HTTPS läuft):\n\n') +
+      platformHeaderBlock([{ name: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' }], locale));
   }
   if (o.weak.length) {
-    parts.push(`### ${o.hstsMissing ? 2 : 1}. Eski TLS sürümlerini kapatın (${o.weak.join(', ')})\n\n` +
+    parts.push(t(`### ${o.hstsMissing ? 2 : 1}. Eski TLS sürümlerini kapatın (${o.weak.join(', ')})\n\n`, `### ${o.hstsMissing ? 2 : 1}. Veraltete TLS-Versionen deaktivieren (${o.weak.join(', ')})\n\n`) +
       '**Nginx:**\n\n```nginx\nssl_protocols TLSv1.2 TLSv1.3;\nssl_prefer_server_ciphers on;\n```\n\n' +
       '**Cloudflare:** SSL/TLS → Edge Certificates → **Minimum TLS Version = 1.2**.\n\n' +
       '**Apache:**\n\n```apache\nSSLProtocol -all +TLSv1.2 +TLSv1.3\n```');
   }
-  if (parts.length === 1) parts.push('TLS yapılandırmanız güncel görünüyor. Sürekli güvence için sertifika yenilemenizi otomatik (ör. certbot/ACME) tutun ve yalnızca TLS 1.2+ kabul edin.');
+  if (parts.length === 1) parts.push(t('TLS yapılandırmanız güncel görünüyor. Sürekli güvence için sertifika yenilemenizi otomatik (ör. certbot/ACME) tutun ve yalnızca TLS 1.2+ kabul edin.', 'Ihre TLS-Konfiguration wirkt aktuell. Halten Sie zur dauerhaften Absicherung die Zertifikatserneuerung automatisch (z. B. certbot/ACME) und akzeptieren Sie nur TLS 1.2+.'));
   return parts.join('\n\n');
 }
 
-function buildExposedFileFix(paths: string[]): string {
+function buildExposedFileFix(paths: string[], locale: string = 'tr'): string {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   return (
-    `### Açıkta kalan dosyalara erişimi engelleyin\n\n` +
-    `Tespit edilen yollar: ${paths.map((p) => `\`${p}\``).join(', ')}. Sunucu seviyesinde erişimi kapatın:\n\n` +
+    t(`### Açıkta kalan dosyalara erişimi engelleyin\n\n`, `### Zugriff auf offenliegende Dateien sperren\n\n`) +
+    t(`Tespit edilen yollar: ${paths.map((p) => `\`${p}\``).join(', ')}. Sunucu seviyesinde erişimi kapatın:\n\n`, `Festgestellte Pfade: ${paths.map((p) => `\`${p}\``).join(', ')}. Sperren Sie den Zugriff auf Serverebene:\n\n`) +
     '**Nginx:**\n\n```nginx\nlocation ~ /\\.(git|env|ht) { deny all; return 404; }\nlocation ~* \\.(bak|old|zip|sql)$ { deny all; return 404; }\n```\n\n' +
     '**Apache — `.htaccess`:**\n\n```apache\nRedirectMatch 404 /\\.git\nRedirectMatch 404 /\\.env\n<FilesMatch "\\.(bak|old|zip|sql)$">\n  Require all denied\n</FilesMatch>\n```\n\n' +
-    'Ayrıca bu dosyaların web köküne (public) hiç konmaması en sağlıklısıdır.'
+    t('Ayrıca bu dosyaların web köküne (public) hiç konmaması en sağlıklısıdır.', 'Am besten legen Sie diese Dateien zudem gar nicht erst in das Web-Root (public).')
   );
 }
 
-function buildDnsFix(host: string, dns: DnsEvidence): string {
+function buildDnsFix(host: string, dns: DnsEvidence, locale: string = 'tr'): string {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const apex = host.split('.').slice(-2).join('.');
-  const parts: string[] = [`Aşağıdaki öneriler ${apex} alan adının e-posta kimlik doğrulamasını güçlendirir. Kayıtları DNS sağlayıcınızın (Cloudflare/GoDaddy/…) TXT arayüzünden ekleyin.`];
+  const parts: string[] = [t(`Aşağıdaki öneriler ${apex} alan adının e-posta kimlik doğrulamasını güçlendirir. Kayıtları DNS sağlayıcınızın (Cloudflare/GoDaddy/…) TXT arayüzünden ekleyin.`, `Die folgenden Empfehlungen stärken die E-Mail-Authentifizierung der Domain ${apex}. Fügen Sie die Einträge über die TXT-Oberfläche Ihres DNS-Anbieters (Cloudflare/GoDaddy/…) hinzu.`)];
   if (!dns.spf || dns.spf.all === 'yok' || dns.spf.all === '+all' || dns.spf.all === '?all') {
-    parts.push('### SPF kaydı ekleyin/sertleştirin\n\nYalnızca yetkili sunucuların sizin adınıza mail göndermesine izin verir. Kendi gönderen servislerinizi (`include:`) ekleyin:\n\n```dns\n' +
+    parts.push(t('### SPF kaydı ekleyin/sertleştirin\n\nYalnızca yetkili sunucuların sizin adınıza mail göndermesine izin verir. Kendi gönderen servislerinizi (`include:`) ekleyin:\n\n', '### SPF-Eintrag hinzufügen/verschärfen\n\nErlaubt nur autorisierten Servern, in Ihrem Namen E-Mails zu senden. Fügen Sie Ihre eigenen sendenden Dienste (`include:`) hinzu:\n\n') + '```dns\n' +
       `${apex}.  TXT  "v=spf1 include:_spf.google.com -all"\n` +
-      '```\n\n`-all` (hardfail) en güvenlidir; geçiş sırasında `~all` (softfail) ile başlayabilirsiniz.');
+      '```\n\n' + t('`-all` (hardfail) en güvenlidir; geçiş sırasında `~all` (softfail) ile başlayabilirsiniz.', '`-all` (hardfail) ist am sichersten; für die Umstellung können Sie mit `~all` (softfail) beginnen.'));
   }
   if (!dns.dmarc || dns.dmarc.policy === 'yok' || dns.dmarc.policy === 'none') {
-    parts.push('### DMARC kaydı ekleyin/sıkılaştırın\n\nÖnce `p=none` ile izleyin, raporları inceleyip yanlış-pozitif olmadığından emin olunca `quarantine` → `reject` yapın:\n\n```dns\n' +
+    parts.push(t('### DMARC kaydı ekleyin/sıkılaştırın\n\nÖnce `p=none` ile izleyin, raporları inceleyip yanlış-pozitif olmadığından emin olunca `quarantine` → `reject` yapın:\n\n', '### DMARC-Eintrag hinzufügen/verschärfen\n\nÜberwachen Sie zunächst mit `p=none`; sobald Sie die Berichte geprüft und Fehlalarme ausgeschlossen haben, wechseln Sie zu `quarantine` → `reject`:\n\n') + '```dns\n' +
       `_dmarc.${apex}.  TXT  "v=DMARC1; p=quarantine; rua=mailto:dmarc@${apex}; fo=1"\n` +
       '```');
   }
   if (!dns.dkim?.found) {
-    parts.push('### DKIM imzalamayı etkinleştirin\n\nE-posta sağlayıcınızın (Google Workspace/Microsoft 365/gönderim servisi) panelinden DKIM üretin ve verdiği TXT kaydını `seçici._domainkey` altına ekleyin:\n\n```dns\n' +
-      `google._domainkey.${apex}.  TXT  "v=DKIM1; k=rsa; p=<sağlayıcının-verdiği-anahtar>"\n` +
+    parts.push(t('### DKIM imzalamayı etkinleştirin\n\nE-posta sağlayıcınızın (Google Workspace/Microsoft 365/gönderim servisi) panelinden DKIM üretin ve verdiği TXT kaydını `seçici._domainkey` altına ekleyin:\n\n', '### DKIM-Signierung aktivieren\n\nErzeugen Sie DKIM über das Panel Ihres E-Mail-Anbieters (Google Workspace/Microsoft 365/Versanddienst) und fügen Sie den bereitgestellten TXT-Eintrag unter `selektor._domainkey` hinzu:\n\n') + '```dns\n' +
+      `google._domainkey.${apex}.  TXT  "v=DKIM1; k=rsa; p=${t('<sağlayıcının-verdiği-anahtar>', '<vom-Anbieter-bereitgestellter-Schlüssel>')}"\n` +
       '```');
   }
   if (!dns.dnssec) {
-    parts.push('### DNSSEC’i etkinleştirin\n\nDNS sağlayıcınızın panelinden **DNSSEC**’i açın; sağlayıcı DS kaydını üretir, bunu alan adı kayıt operatörünüze (registrar) girin. DNS yanıtlarını imzalayarak cache-poisoning’i zorlaştırır.');
+    parts.push(t('### DNSSEC’i etkinleştirin\n\nDNS sağlayıcınızın panelinden **DNSSEC**’i açın; sağlayıcı DS kaydını üretir, bunu alan adı kayıt operatörünüze (registrar) girin. DNS yanıtlarını imzalayarak cache-poisoning’i zorlaştırır.', '### DNSSEC aktivieren\n\nAktivieren Sie **DNSSEC** im Panel Ihres DNS-Anbieters; der Anbieter erzeugt den DS-Eintrag, den Sie bei Ihrem Domain-Registrar eintragen. Es signiert die DNS-Antworten und erschwert Cache-Poisoning.'));
   }
-  if (parts.length === 1) parts.push('E-posta kimlik doğrulama kayıtlarınız (SPF/DMARC/DKIM) sağlam görünüyor. DMARC politikanızı zamanla `reject`’e çekmeyi ve raporları (rua) izlemeyi sürdürün.');
+  if (parts.length === 1) parts.push(t('E-posta kimlik doğrulama kayıtlarınız (SPF/DMARC/DKIM) sağlam görünüyor. DMARC politikanızı zamanla `reject`’e çekmeyi ve raporları (rua) izlemeyi sürdürün.', 'Ihre E-Mail-Authentifizierungseinträge (SPF/DMARC/DKIM) wirken solide. Ziehen Sie Ihre DMARC-Richtlinie mit der Zeit auf `reject` und überwachen Sie weiterhin die Berichte (rua).'));
   return parts.join('\n\n');
 }
 
-function buildCorsCookieFix(host: string, o: { credsWildcardDanger: boolean; wildcard: boolean; reflected: boolean; insecure: boolean }): string {
-  const parts: string[] = [`Aşağıdaki öneriler ${host} için CORS ve çerez güvenliğini güçlendirir.`];
+function buildCorsCookieFix(host: string, o: { credsWildcardDanger: boolean; wildcard: boolean; reflected: boolean; insecure: boolean }, locale: string = 'tr'): string {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const parts: string[] = [t(`Aşağıdaki öneriler ${host} için CORS ve çerez güvenliğini güçlendirir.`, `Die folgenden Empfehlungen stärken die CORS- und Cookie-Sicherheit für ${host}.`)];
   if (o.credsWildcardDanger || o.wildcard || o.reflected) {
-    parts.push('### CORS’u origin allowlist’e çekin\n\nGelen Origin’i doğrulamadan yansıtmayın ve kimlik bilgisi (credentials) ile wildcard’ı ASLA birlikte kullanmayın. Yalnızca bilinen kökenlere izin verin:\n\n' +
-      '**Nginx (örnek allowlist):**\n\n```nginx\nset $cors "";\nif ($http_origin ~* "^https://(app\\.example\\.com|www\\.example\\.com)$") { set $cors $http_origin; }\nadd_header Access-Control-Allow-Origin $cors always;\nadd_header Vary Origin always;\n# credentials gerekmiyorsa Allow-Credentials göndermeyin\n```\n\n' +
+    parts.push(t('### CORS’u origin allowlist’e çekin\n\nGelen Origin’i doğrulamadan yansıtmayın ve kimlik bilgisi (credentials) ile wildcard’ı ASLA birlikte kullanmayın. Yalnızca bilinen kökenlere izin verin:\n\n', '### CORS auf eine Origin-Allowlist umstellen\n\nSpiegeln Sie den eingehenden Origin nicht ungeprüft und verwenden Sie Wildcard NIEMALS zusammen mit Anmeldeinformationen (Credentials). Erlauben Sie nur bekannte Origins:\n\n') +
+      t('**Nginx (örnek allowlist):**\n\n', '**Nginx (Beispiel-Allowlist):**\n\n') + '```nginx\nset $cors "";\nif ($http_origin ~* "^https://(app\\.example\\.com|www\\.example\\.com)$") { set $cors $http_origin; }\nadd_header Access-Control-Allow-Origin $cors always;\nadd_header Vary Origin always;\n' + t('# credentials gerekmiyorsa Allow-Credentials göndermeyin', '# Senden Sie Allow-Credentials nicht, wenn keine Credentials benötigt werden') + '\n```\n\n' +
       '**Express/Node:**\n\n```js\nconst allow = new Set([\'https://app.example.com\']);\napp.use((req,res,next)=>{ const o=req.headers.origin; if(o&&allow.has(o)){ res.set(\'Access-Control-Allow-Origin\',o); res.set(\'Vary\',\'Origin\'); } next(); });\n```');
   }
   if (o.insecure) {
-    parts.push('### Çerez bayraklarını tamamlayın\n\nOturum çerezlerine `Secure` (yalnız HTTPS), `HttpOnly` (JS erişimini engeller) ve uygun `SameSite` ekleyin:\n\n' +
+    parts.push(t('### Çerez bayraklarını tamamlayın\n\nOturum çerezlerine `Secure` (yalnız HTTPS), `HttpOnly` (JS erişimini engeller) ve uygun `SameSite` ekleyin:\n\n', '### Cookie-Flags vervollständigen\n\nErgänzen Sie bei Sitzungscookies `Secure` (nur HTTPS), `HttpOnly` (verhindert JS-Zugriff) und ein passendes `SameSite`:\n\n') +
       '```\nSet-Cookie: session=...; Secure; HttpOnly; SameSite=Lax; Path=/\n```\n\n' +
-      'Çapraz-site gönderim gerekiyorsa `SameSite=None` kullanın ama mutlaka `Secure` ile birlikte.');
+      t('Çapraz-site gönderim gerekiyorsa `SameSite=None` kullanın ama mutlaka `Secure` ile birlikte.', 'Wenn seitenübergreifender Versand erforderlich ist, verwenden Sie `SameSite=None`, aber stets zusammen mit `Secure`.'));
   }
-  if (parts.length === 1) parts.push('CORS ve çerez yapılandırmanız güvenli varsayılanlara yakın. Yeni uç noktalar eklerken origin allowlist ve çerez bayrakları (Secure/HttpOnly/SameSite) prensibini koruyun.');
+  if (parts.length === 1) parts.push(t('CORS ve çerez yapılandırmanız güvenli varsayılanlara yakın. Yeni uç noktalar eklerken origin allowlist ve çerez bayrakları (Secure/HttpOnly/SameSite) prensibini koruyun.', 'Ihre CORS- und Cookie-Konfiguration ist nahe an sicheren Voreinstellungen. Behalten Sie beim Hinzufügen neuer Endpunkte das Prinzip der Origin-Allowlist und der Cookie-Flags (Secure/HttpOnly/SameSite) bei.'));
   return parts.join('\n\n');
 }
 
-function buildCspFix(host: string, o: { present: boolean; weak: boolean }): string {
-  const parts: string[] = [`Aşağıdaki öneriler ${host} için Content-Security-Policy’yi güçlendirir. CSP’yi önce \`Content-Security-Policy-Report-Only\` başlığıyla test edip, siteyi bozmadığından emin olduktan sonra uygulanan (enforce) başlığa geçin.`];
-  parts.push('### Temel (başlangıç) CSP\n\nKendi üçüncü taraf alan adlarınızı (analytics, CDN, font) `script-src`/`connect-src`/`img-src`’ye ekleyerek genişletin:\n\n' +
-    platformHeaderBlock([{ name: 'Content-Security-Policy', value: "default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'" }]));
+function buildCspFix(host: string, o: { present: boolean; weak: boolean }, locale: string = 'tr'): string {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const parts: string[] = [t(`Aşağıdaki öneriler ${host} için Content-Security-Policy’yi güçlendirir. CSP’yi önce \`Content-Security-Policy-Report-Only\` başlığıyla test edip, siteyi bozmadığından emin olduktan sonra uygulanan (enforce) başlığa geçin.`, `Die folgenden Empfehlungen stärken die Content-Security-Policy für ${host}. Testen Sie die CSP zunächst mit dem Header \`Content-Security-Policy-Report-Only\` und wechseln Sie erst dann zum durchgesetzten (enforce) Header, wenn Sie sicher sind, dass die Website nicht beeinträchtigt wird.`)];
+  parts.push(t('### Temel (başlangıç) CSP\n\nKendi üçüncü taraf alan adlarınızı (analytics, CDN, font) `script-src`/`connect-src`/`img-src`’ye ekleyerek genişletin:\n\n', '### Basis-CSP (Einstieg)\n\nErweitern Sie sie, indem Sie Ihre eigenen Drittanbieter-Domains (Analytics, CDN, Schriftarten) zu `script-src`/`connect-src`/`img-src` hinzufügen:\n\n') +
+    platformHeaderBlock([{ name: 'Content-Security-Policy', value: "default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'" }], locale));
   if (o.weak) {
-    parts.push("### Zayıflatıcı direktifleri kaldırın\n\n`'unsafe-inline'` ve `'unsafe-eval'` XSS korumasını büyük ölçüde etkisizleştirir. Inline script’leri harici dosyalara taşıyın veya **nonce/hash** kullanın:\n\n```\nscript-src 'self' 'nonce-<rastgele-üretilen>';\n```\n\nWildcard (`*`) kaynakları yerine spesifik alan adları tanımlayın.");
+    parts.push(t("### Zayıflatıcı direktifleri kaldırın\n\n`'unsafe-inline'` ve `'unsafe-eval'` XSS korumasını büyük ölçüde etkisizleştirir. Inline script’leri harici dosyalara taşıyın veya **nonce/hash** kullanın:\n\n```\nscript-src 'self' 'nonce-<rastgele-üretilen>';\n```\n\nWildcard (`*`) kaynakları yerine spesifik alan adları tanımlayın.", "### Schwächende Direktiven entfernen\n\n`'unsafe-inline'` und `'unsafe-eval'` machen den XSS-Schutz weitgehend wirkungslos. Verlagern Sie Inline-Skripte in externe Dateien oder verwenden Sie **Nonce/Hash**:\n\n```\nscript-src 'self' 'nonce-<zufällig-generiert>';\n```\n\nDefinieren Sie spezifische Domains statt Wildcard-Quellen (`*`)."));
   }
-  parts.push('### Report-Only ile test\n\n```\nContent-Security-Policy-Report-Only: default-src \'self\'; report-uri /csp-report\n```\n\nRaporları izleyip yanlış-pozitifleri giderdikten sonra başlığı `Content-Security-Policy` olarak yayınlayın.');
+  parts.push(t('### Report-Only ile test\n\n', '### Test mit Report-Only\n\n') + '```\nContent-Security-Policy-Report-Only: default-src \'self\'; report-uri /csp-report\n```\n\n' + t('Raporları izleyip yanlış-pozitifleri giderdikten sonra başlığı `Content-Security-Policy` olarak yayınlayın.', 'Nachdem Sie die Berichte überwacht und Fehlalarme beseitigt haben, veröffentlichen Sie den Header als `Content-Security-Policy`.'));
   return parts.join('\n\n');
 }
 
 // ======================================================================================
 // BUNDLE: Dış Yüzey & Yapılandırma — 5 alani TEK raporda birlestir (worst-case rozet)
 // ======================================================================================
-const BUNDLE_AREAS: Array<{ title: string; gen: (h: string) => Promise<{ findings: string; fixText: string } | null> }> = [
-  { title: 'SSL/TLS Yapılandırma Denetimi', gen: generateSslTlsReport },
-  { title: 'Güvenlik Başlıkları & Bilgi Sızıntısı', gen: generateHeaderLeakReport },
-  { title: 'DNS & E-posta Güvenliği', gen: generateDnsEmailReport },
-  { title: 'CORS & Çerez Güvenliği', gen: generateCorsCookieReport },
-  { title: 'CSP (İçerik Güvenlik Politikası) Analizi', gen: generateCspReport },
+const BUNDLE_AREAS: Array<{ title: string; titleDe: string; gen: (h: string, locale: string) => Promise<{ findings: string; fixText: string } | null> }> = [
+  { title: 'SSL/TLS Yapılandırma Denetimi', titleDe: 'SSL/TLS-Konfigurationsaudit', gen: generateSslTlsReport },
+  { title: 'Güvenlik Başlıkları & Bilgi Sızıntısı', titleDe: 'Sicherheits-Header & Informationslecks', gen: generateHeaderLeakReport },
+  { title: 'DNS & E-posta Güvenliği', titleDe: 'DNS- & E-Mail-Sicherheit', gen: generateDnsEmailReport },
+  { title: 'CORS & Çerez Güvenliği', titleDe: 'CORS- & Cookie-Sicherheit', gen: generateCorsCookieReport },
+  { title: 'CSP (İçerik Güvenlik Politikası) Analizi', titleDe: 'CSP-Analyse (Content Security Policy)', gen: generateCspReport },
 ];
+function areaTitle(i: number, de: boolean): string { return de ? BUNDLE_AREAS[i].titleDe : BUNDLE_AREAS[i].title; }
 
 function levelRank(l: Level): number { return l === 'high' ? 3 : l === 'medium-high' ? 2 : l === 'medium' ? 1 : 0; }
 function extractLevel(findings: string): Level | null {
-  // "Orta-Yüksek" ONCE eslesmeli (yoksa "Orta" ya da "Yüksek" yanlis yakalar).
-  const m = findings.match(/Risk Seviyesi:\s*(Orta[-\s]?Y[uü]ksek|Y[uü]ksek|Orta|D[uü][sş][uü]k)/i);
+  // "Orta-Yüksek"/"Mittel-Hoch" ONCE eslesmeli (yoksa "Orta"/"Yüksek"/"Mittel"/"Hoch" yanlis yakalar).
+  const m = findings.match(/(?:Risk Seviyesi|Risikostufe):\s*(Orta[-\s]?Y[uü]ksek|Y[uü]ksek|Orta|D[uü][sş][uü]k|Mittel[-\s]?Hoch|Hoch|Mittel|Niedrig)/i);
   if (!m) return null;
   const w = m[1].toLocaleLowerCase('tr');
-  if (/orta[-\s]?y[uü]ksek/.test(w)) return 'medium-high';
-  if (/y[uü]ksek/.test(w)) return 'high';
-  if (/orta/.test(w)) return 'medium';
+  if (/orta[-\s]?y[uü]ksek/.test(w) || /mittel[-\s]?hoch/.test(w)) return 'medium-high';
+  if (/y[uü]ksek/.test(w) || /hoch/.test(w)) return 'high';
+  if (/orta/.test(w) || /mittel/.test(w)) return 'medium';
   return 'low';
 }
 function areaHeadline(findings: string): string {
   // "... : <seviye> — <gerekce>" — ayirici YALNIZ BOSLUKLA cevrili tire ( — / – / - ).
-  // "Orta-Yüksek" icindeki bosluksuz tireyi AYIRICI sanma (yoksa "Yüksek — ..." kalintisi cikar).
-  const m = findings.match(/Genel risk seviyesi:\s*[^\n]+?\s[—–-]\s([^\n]+)/i);
+  const m = findings.match(/(?:Genel risk seviyesi|Gesamtrisikostufe):\s*[^\n]+?\s[—–-]\s([^\n]+)/i);
   return m ? m[1].trim().replace(/\*\*/g, '') : '';
 }
 // YÖNETİCİ ÖZETİ + GENEL DEĞERLENDİRME'yi cikar, detay bolumlerini dondur (## -> ### indir).
@@ -598,29 +635,36 @@ function detailOnly(findings: string): string {
   return parts.slice(2).join('').replace(/^## /gm, '### ').trim();
 }
 
-export async function generateBundleSurfaceReport(host: string): Promise<{ findings: string; fixText: string } | null> {
+export async function generateBundleSurfaceReport(host: string, locale: string = 'tr'): Promise<{ findings: string; fixText: string } | null> {
   const o = await resolveOrigin(host);
   // (DÜRÜSTLÜK — c durumu) HEDEFE HİÇ ULAŞILAMADI -> "İncelenemedi" raporu (ASLA "temiz"/"düşük").
-  if (!o.reachable) return unscannableSurfaceReport(host);
+  if (!o.reachable) return unscannableSurfaceReport(host, locale);
   // Her alan kendi kanitini toplar (bagimsiz, saf); paralel calistir, biri patlarsa null.
   // (BÖLÜM 1) Alanlar collectPages'i PAYLAŞIR (in-flight cache) -> hedefe tek crawl gider.
   const [results, pages] = await Promise.all([
-    Promise.all(BUNDLE_AREAS.map((a) => a.gen(host).catch(() => null))),
+    Promise.all(BUNDLE_AREAS.map((a) => a.gen(host, locale).catch(() => null))),
     collectPages(host).catch(() => [] as PageEvidence[]),
   ]);
   // Hiçbir alan veri toplayamadıysa (reachable ama tüm sorgular başarısız) -> "İncelenemedi".
-  return combineSurfaceAreas(results, { httpOnly: o.reachable && !o.httpsWorks, pageCount: pages.length }) ?? unscannableSurfaceReport(host);
+  return combineSurfaceAreas(results, { httpOnly: o.reachable && !o.httpsWorks, pageCount: pages.length, locale }) ?? unscannableSurfaceReport(host, locale);
 }
 
 // Hedefe ulaşılamadığında dürüst "İncelenemedi" raporu (pdf.ts assessBasit nötr amber rozet basar).
-function unscannableSurfaceReport(host: string): { findings: string; fixText: string } {
-  const findings =
-    `## YÖNETİCİ ÖZETİ\n\n` +
-    `- **Genel risk seviyesi: İncelenemedi** — hedefe (${host}) bağlanılamadığı için dış yüzey taraması yürütülemedi.\n` +
-    `- Bu sonuç sitenin GÜVENLİ olduğu anlamına GELMEZ; yalnızca kontrollerin çalıştırılamadığını gösterir.\n` +
-    `- **Önerilen ilk adım:** Alan adının yayında ve dışarıdan erişilebilir olduğunu doğrulayıp taramayı tekrarlayın.\n\n` +
-    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: İncelenemedi**\n\n` +
-    `Hedefin 443 (HTTPS) ve 80 (HTTP) portlarına bağlantı kurulamadı. 5 dış-yüzey alanının (TLS, güvenlik başlıkları, DNS/e-posta, CORS/çerez, CSP) hiçbiri veri toplayamadı. Bu rapor bir "temiz/güvenli" sonucu DEĞİLDİR; erişim sağlanınca yeniden taranmalıdır.\n`;
+function unscannableSurfaceReport(host: string, locale: string = 'tr'): { findings: string; fixText: string } {
+  const de = locale === 'de';
+  const findings = de
+    ? `## MANAGEMENTZUSAMMENFASSUNG\n\n` +
+      `- **Gesamtrisikostufe: Nicht prüfbar** — die Prüfung der externen Angriffsfläche konnte nicht durchgeführt werden, da keine Verbindung zum Ziel (${host}) hergestellt werden konnte.\n` +
+      `- Dieses Ergebnis bedeutet NICHT, dass die Website SICHER ist; es zeigt lediglich, dass die Kontrollen nicht ausgeführt werden konnten.\n` +
+      `- **Empfohlener erster Schritt:** Prüfen Sie, ob die Domain online und von außen erreichbar ist, und wiederholen Sie die Prüfung.\n\n` +
+      `## GESAMTBEWERTUNG\n\n**Risikostufe: Nicht prüfbar**\n\n` +
+      `Zu den Ports 443 (HTTPS) und 80 (HTTP) des Ziels konnte keine Verbindung hergestellt werden. Keiner der 5 Bereiche der externen Angriffsfläche (TLS, Sicherheits-Header, DNS/E-Mail, CORS/Cookie, CSP) konnte Daten erheben. Dieser Bericht ist KEIN „sauberes/sicheres" Ergebnis; sobald der Zugriff möglich ist, sollte erneut geprüft werden.\n`
+    : `## YÖNETİCİ ÖZETİ\n\n` +
+      `- **Genel risk seviyesi: İncelenemedi** — hedefe (${host}) bağlanılamadığı için dış yüzey taraması yürütülemedi.\n` +
+      `- Bu sonuç sitenin GÜVENLİ olduğu anlamına GELMEZ; yalnızca kontrollerin çalıştırılamadığını gösterir.\n` +
+      `- **Önerilen ilk adım:** Alan adının yayında ve dışarıdan erişilebilir olduğunu doğrulayıp taramayı tekrarlayın.\n\n` +
+      `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: İncelenemedi**\n\n` +
+      `Hedefin 443 (HTTPS) ve 80 (HTTP) portlarına bağlantı kurulamadı. 5 dış-yüzey alanının (TLS, güvenlik başlıkları, DNS/e-posta, CORS/çerez, CSP) hiçbiri veri toplayamadı. Bu rapor bir "temiz/güvenli" sonucu DEĞİLDİR; erişim sağlanınca yeniden taranmalıdır.\n`;
   return { findings, fixText: '' };
 }
 
@@ -628,9 +672,12 @@ function unscannableSurfaceReport(host: string): { findings: string; fixText: st
 // verilerle (null-alan / worst-case) test edilebilsin diye. Hepsi null ise -> null (fallback).
 export function combineSurfaceAreas(
   results: Array<{ findings: string; fixText: string } | null>,
-  opts?: { httpOnly?: boolean; pageCount?: number },
+  opts?: { httpOnly?: boolean; pageCount?: number; locale?: string },
 ): { findings: string; fixText: string } | null {
   if (results.every((r) => r === null)) return null; // hicbir alan veri toplayamadi -> fallback
+  const de = opts?.locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const RW = de ? RISK_WORD_DE : RISK_WORD;
   const httpOnly = opts?.httpOnly ?? false;
   const pageCount = Math.max(1, opts?.pageCount ?? 1);
 
@@ -644,15 +691,9 @@ export function combineSurfaceAreas(
     .sort((a, b) => levelRank(b.lv) - levelRank(a.lv));
   const worstIdx = ranked.length ? ranked[0].i : -1;
   const baseWorst: Level = worstIdx >= 0 ? (levels[worstIdx] as Level) : 'low';
-  const worstTitle = worstIdx >= 0 ? BUNDLE_AREAS[worstIdx].title : '';
+  const worstTitle = worstIdx >= 0 ? areaTitle(worstIdx, de) : '';
   const worstHl = worstIdx >= 0 && results[worstIdx] ? areaHeadline(results[worstIdx]!.findings) : '';
 
-  // (SÜTUN 0 — TUTARLI RİSK) BİRİKİMLİ ŞİŞİRME KALDIRILDI: genel seviye = en yüksek TEK alanın
-  // seviyesi (worst-case). "0 kritik + 0 yüksek + N orta → Yüksek" gibi dağılımla tutarsız
-  // şişirme YAPILMAZ; en yüksek bulgu Orta ise genel de Orta kalır. Gerçek 'Yüksek' yalnız
-  // baseWorst='high' (TLS süresi/hostname/zayıf protokol) veya httpOnly'dan gelir.
-  // (DÜRÜSTLÜK) http-only (şifresiz) = ciddi -> genel en az Yüksek. Kısmi tarama (2+ alan
-  // incelenemedi) -> ASLA "Düşük" gösterme (en az Orta), aksi halde yanlış-güvenli hissi verir.
   const nullCount = results.filter((r) => r === null).length;
   const partial = nullCount >= 2;
   let worst: Level = baseWorst;
@@ -663,73 +704,85 @@ export function combineSurfaceAreas(
   const summary: string[] = [];
   summary.push(
     worst === 'low'
-      ? `- **Genel risk seviyesi: Düşük** — dış yüzey yapılandırmanız 5 alanda incelendi; belirgin bir sorun öne çıkmadı.`
-      : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — 5 alan incelendi; en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`,
+      ? t(`- **Genel risk seviyesi: Düşük** — dış yüzey yapılandırmanız 5 alanda incelendi; belirgin bir sorun öne çıkmadı.`, `- **Gesamtrisikostufe: Niedrig** — Ihre externe Angriffsfläche wurde in 5 Bereichen geprüft; es wurde kein deutliches Problem festgestellt.`)
+      : t(`- **Genel risk seviyesi: ${RW[worst]}** — 5 alan incelendi; en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`, `- **Gesamtrisikostufe: ${RW[worst]}** — 5 Bereiche wurden geprüft; das höchste Risiko liegt im Bereich **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}.`),
   );
-  if (httpOnly) summary.push('- ⚠️ **HTTPS desteklenmiyor:** Hedef HTTPS (443) üzerinden yanıt vermedi; iletişim şifresiz (düz metin) taşınıyor. Tarama http:// üzerinden yürütüldü. Bu başlı başına ciddi bir bulgudur (aşağıda).');
+  if (httpOnly) summary.push(t('- ⚠️ **HTTPS desteklenmiyor:** Hedef HTTPS (443) üzerinden yanıt vermedi; iletişim şifresiz (düz metin) taşınıyor. Tarama http:// üzerinden yürütüldü. Bu başlı başına ciddi bir bulgudur (aşağıda).', '- ⚠️ **HTTPS wird nicht unterstützt:** Das Ziel hat nicht über HTTPS (443) geantwortet; die Kommunikation läuft unverschlüsselt (Klartext). Die Prüfung wurde über http:// durchgeführt. Das ist für sich genommen ein ernster Befund (siehe unten).'));
   BUNDLE_AREAS.forEach((a, i) => {
     const r = results[i];
     const lv = levels[i];
+    const title = areaTitle(i, de);
     // (c durumu) "veri toplanamadı" DÜRÜSTÇE ayrı: bu "temiz" DEĞİL, o alan İNCELENEMEDİ demektir.
-    if (!r || !lv) { summary.push(`- **${a.title}:** ⚠️ incelenemedi (bağlantı/sorgu başarısız) — "temiz" anlamına gelmez.`); return; }
+    if (!r || !lv) { summary.push(t(`- **${title}:** ⚠️ incelenemedi (bağlantı/sorgu başarısız) — "temiz" anlamına gelmez.`, `- **${title}:** ⚠️ nicht prüfbar (Verbindung/Abfrage fehlgeschlagen) — bedeutet nicht „sauber".`)); return; }
     const hl = areaHeadline(r.findings);
-    summary.push(`- **${a.title}:** ${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`);
+    summary.push(`- **${title}:** ${RW[lv]}${hl ? ` — ${hl}` : ''}`);
   });
-  if (partial) summary.push(`- ⚠️ **Kısmi tarama:** ${nullCount}/5 alan incelenemedi; sonuç eksiktir, tam güvence vermez.`);
-  summary.push('- **Önerilen ilk adım:** En yüksek riskli alandan başlayın; her bulgu için adım adım hazır komutlar "AI Çözüm Önerileri" bölümünde sunulur.');
+  if (partial) summary.push(t(`- ⚠️ **Kısmi tarama:** ${nullCount}/5 alan incelenemedi; sonuç eksiktir, tam güvence vermez.`, `- ⚠️ **Teilweise Prüfung:** ${nullCount}/5 Bereiche konnten nicht geprüft werden; das Ergebnis ist unvollständig und bietet keine vollständige Zusicherung.`));
+  summary.push(t('- **Önerilen ilk adım:** En yüksek riskli alandan başlayın; her bulgu için adım adım hazır komutlar "AI Çözüm Önerileri" bölümünde sunulur.', '- **Empfohlener erster Schritt:** Beginnen Sie mit dem Bereich mit dem höchsten Risiko; für jeden Befund werden schrittweise fertige Befehle im Abschnitt „KI-Lösungsvorschläge" bereitgestellt.'));
 
   // GENEL DEĞERLENDİRME cumlesi worst-case ALANA ozgu (pdf.ts bunu ust kutuda da kullanir).
   const genelSentence =
     worst === 'high'
-        ? `En yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`
+        ? t(`En yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`, `Das höchste Risiko wurde im Bereich **${worstTitle}**${worstHl ? ` (${worstHl})` : ''} festgestellt; eine vorrangige Behebung wird empfohlen. Nachfolgend wird jeder Bereich einzeln berichtet.`)
         : worst === 'medium-high'
-          ? `Öne çıkan alan **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; tek başına yüksek etkili ancak başka ciddi alan yok. Öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`
+          ? t(`Öne çıkan alan **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; tek başına yüksek etkili ancak başka ciddi alan yok. Öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`, `Der hervorstechende Bereich ist **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; für sich genommen hochwirksam, aber kein weiterer ernster Bereich. Eine vorrangige Behebung wird empfohlen. Nachfolgend wird jeder Bereich einzeln berichtet.`)
           : worst === 'medium'
-            ? `Öne çıkan alan **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; kısa vadede giderilmesi önerilir. Kritik/acil bir sorun öne çıkmadı. Aşağıda her alan ayrı ayrı raporlanmıştır.`
-            : 'Dış yüzey yapılandırmanız genel olarak sağlam; rapor yalnızca küçük iyileştirme fırsatlarını listeler. Aşağıda her alan ayrı ayrı raporlanmıştır.';
+            ? t(`Öne çıkan alan **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; kısa vadede giderilmesi önerilir. Kritik/acil bir sorun öne çıkmadı. Aşağıda her alan ayrı ayrı raporlanmıştır.`, `Der hervorstechende Bereich ist **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; eine kurzfristige Behebung wird empfohlen. Kein kritisches/dringendes Problem festgestellt. Nachfolgend wird jeder Bereich einzeln berichtet.`)
+            : t('Dış yüzey yapılandırmanız genel olarak sağlam; rapor yalnızca küçük iyileştirme fırsatlarını listeler. Aşağıda her alan ayrı ayrı raporlanmıştır.', 'Ihre externe Angriffsfläche ist insgesamt solide konfiguriert; der Bericht listet nur kleine Verbesserungsmöglichkeiten auf. Nachfolgend wird jeder Bereich einzeln berichtet.');
 
   // --- Alan bolumleri (exec/genel cikarilmis, ## -> ### indirilmis) ---
   const areaSections = BUNDLE_AREAS.map((a, i) => {
     const r = results[i];
-    if (!r) return `## ${a.title}\n\n> Bu alan için veri toplanamadı (bağlantı/sorgu başarısız); diğer alanlar tam olarak raporlanmıştır.\n`;
-    return `## ${a.title}\n\n${detailOnly(r.findings)}\n`;
+    const title = areaTitle(i, de);
+    if (!r) return `## ${title}\n\n> ${t('Bu alan için veri toplanamadı (bağlantı/sorgu başarısız); diğer alanlar tam olarak raporlanmıştır.', 'Für diesen Bereich konnten keine Daten erhoben werden (Verbindung/Abfrage fehlgeschlagen); die übrigen Bereiche wurden vollständig berichtet.')}\n`;
+    return `## ${title}\n\n${detailOnly(r.findings)}\n`;
   }).join('\n');
 
   // (MASTER TABLO + ZAFİYET DAĞILIMI) https_missing ŞİDDET-KOLONLU tablo -> parseFindings sayar
-  // (bullet olan alan bölümleri sayılmaz). Böylece HTTPS eksikliği "temiz" değil GERÇEK bulgu olur.
   const httpsFindingSection = httpOnly
-    ? `## TESPİT EDİLEN RİSKLER\n\n| Bulgu | Şiddet | Açıklama |\n|-------|--------|----------|\n| HTTPS desteklenmiyor (şifresiz iletişim) | Yüksek | Site HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir, oturum/şifre çalınabilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS. |\n\n`
+    ? `## ${t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN')}\n\n| ${t('Bulgu', 'Befund')} | ${t('Şiddet', 'Schweregrad')} | ${t('Açıklama', 'Beschreibung')} |\n|-------|--------|----------|\n| ${t('HTTPS desteklenmiyor (şifresiz iletişim)', 'HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation)')} | ${de ? 'Hoch' : 'Yüksek'} | ${t(`Site HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir, oturum/şifre çalınabilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS.`, `Die Website antwortet nicht über HTTPS; der gesamte Verkehr wird unverschlüsselt (Klartext) übertragen — mitlesbar/veränderbar, Sitzungen/Passwörter können gestohlen werden. Lösung: gültiges TLS-Zertifikat + HTTP→HTTPS-Umleitung + HSTS.`)} |\n\n`
     : '';
 
-  // (BÖLÜM 2 — POZİTİF GÜVENCE) "Sorun bulunamadı"yı da ŞEFFAF kıl: hangi alanlar GERÇEKTEN kontrol
-  // edildi, kaç sayfada, üç-durum ayrımıyla (Temiz / Bulgu / İncelenemedi). SADECE gerçek veriden.
+  // (BÖLÜM 2 — POZİTİF GÜVENCE) "Sorun bulunamadı"yı da ŞEFFAF kıl.
   const assuranceRows = BUNDLE_AREAS.map((a, i) => {
     const r = results[i]; const lv = levels[i];
-    const state = !r || !lv ? '⚠️ İncelenemedi (veri toplanamadı — “temiz” DEĞİL)' : lv === 'low' ? '✅ Sorun bulunmadı' : `⚠️ Bulgu var (${RISK_WORD[lv]} — yukarıda ayrıntılı)`;
-    return `| ${a.title} | ${state} |`;
+    const title = areaTitle(i, de);
+    const state = !r || !lv
+      ? t('⚠️ İncelenemedi (veri toplanamadı — “temiz” DEĞİL)', '⚠️ Nicht prüfbar (keine Daten erhebbar — NICHT „sauber")')
+      : lv === 'low'
+        ? t('✅ Sorun bulunmadı', '✅ Kein Problem gefunden')
+        : t(`⚠️ Bulgu var (${RW[lv]} — yukarıda ayrıntılı)`, `⚠️ Befund vorhanden (${RW[lv]} — oben im Detail)`);
+    return `| ${title} | ${state} |`;
   }).join('\n');
-  const assuranceSection =
-    `## POZİTİF GÜVENCE — KONTROL EDİLEN ALANLAR\n\n` +
-    `Bulgu çıkmayan alanlar da dâhil, dış-yüzey kontrolleri ana sayfa dâhil **${pageCount} benzersiz sayfada** gerçekten çalıştırıldı. Aşağıdaki tablo, "sorun bulunamadı" sonuçlarını da şeffaf biçimde gösterir:\n\n` +
-    `| Kontrol Alanı | Sonuç |\n|---------------|-------|\n${assuranceRows}\n\n` +
-    `> **Üç-durum ayrımı (dürüstlük):** ✅ *Sorun bulunmadı* = kontrol çalıştı, temiz çıktı · ⚠️ *Bulgu var* = yukarıda detaylı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).\n\n` +
-    `### Bu paket NE kontrol EDER, NE ETMEZ\n\n` +
-    `**EDER (pasif — yalnız GET ile sayfa çekme + zararsız Origin/DNS sorgusu):** TLS/sertifika, HTTP güvenlik başlıkları, CORS politikası, çerez bayrakları (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS/e-posta kayıtları (SPF/DKIM/DMARC/DNSSEC), açıkta hassas dosya, eski/desteksiz yazılım sürümü — keşfedilen ${pageCount} sayfada.\n\n` +
-    `**ETMEZ:** Aktif zafiyet doğrulaması (SQLi/XSS/IDOR gibi payload/prob denemesi), kimlik-doğrulamalı akış testi, iş-mantığı istismarı. Bunlar **Aktif Doğrulama** ve **Tam Kapsamlı Pentest** paketlerinin kapsamındadır. Bu rapor pasif gözleme dayanır; bir alanda "bulgu yok" ifadesi, aktif istismar denenmediği için **güvenli olduğunu KANITLAMAZ** — yalnız dışarıdan gözlemlenen yapılandırmanın temiz olduğunu gösterir.\n\n`;
+  const assuranceSection = de
+    ? `## POSITIVE ZUSICHERUNG — GEPRÜFTE BEREICHE\n\n` +
+      `Auch die Bereiche ohne Befund eingeschlossen, wurden die Kontrollen der externen Angriffsfläche tatsächlich auf **${pageCount} einzigartigen Seiten** einschließlich der Startseite ausgeführt. Die folgende Tabelle zeigt auch die „kein Problem gefunden"-Ergebnisse transparent:\n\n` +
+      `| Kontrollbereich | Ergebnis |\n|---------------|-------|\n${assuranceRows}\n\n` +
+      `> **Drei-Zustands-Unterscheidung (Ehrlichkeit):** ✅ *Kein Problem gefunden* = Kontrolle lief, Ergebnis sauber · ⚠️ *Befund vorhanden* = oben im Detail · ⚠️ *Nicht prüfbar* = keine Daten erhebbar (bedeutet NICHT sicher).\n\n` +
+      `### Was dieses Paket prüft — und was NICHT\n\n` +
+      `**PRÜFT (passiv — nur Seitenabruf per GET + harmlose Origin-/DNS-Abfrage):** TLS/Zertifikat, HTTP-Sicherheits-Header, CORS-Richtlinie, Cookie-Flags (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS-/E-Mail-Einträge (SPF/DKIM/DMARC/DNSSEC), offenliegende sensible Dateien, veraltete/nicht unterstützte Softwareversionen — auf den ${pageCount} entdeckten Seiten.\n\n` +
+      `**PRÜFT NICHT:** Aktive Schwachstellenverifikation (Payload-/Probe-Versuche wie SQLi/XSS/IDOR), authentifizierte Ablauftests, Missbrauch der Geschäftslogik. Diese gehören zum Umfang der Pakete **Aktive Verifikation** und **Umfassender Pentest**. Dieser Bericht beruht auf passiver Beobachtung; die Aussage „kein Befund" in einem Bereich **BEWEIST NICHT**, dass er sicher ist, da kein aktiver Exploit versucht wurde — sie zeigt lediglich, dass die von außen beobachtete Konfiguration sauber ist.\n\n`
+    : `## POZİTİF GÜVENCE — KONTROL EDİLEN ALANLAR\n\n` +
+      `Bulgu çıkmayan alanlar da dâhil, dış-yüzey kontrolleri ana sayfa dâhil **${pageCount} benzersiz sayfada** gerçekten çalıştırıldı. Aşağıdaki tablo, "sorun bulunamadı" sonuçlarını da şeffaf biçimde gösterir:\n\n` +
+      `| Kontrol Alanı | Sonuç |\n|---------------|-------|\n${assuranceRows}\n\n` +
+      `> **Üç-durum ayrımı (dürüstlük):** ✅ *Sorun bulunmadı* = kontrol çalıştı, temiz çıktı · ⚠️ *Bulgu var* = yukarıda detaylı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).\n\n` +
+      `### Bu paket NE kontrol EDER, NE ETMEZ\n\n` +
+      `**EDER (pasif — yalnız GET ile sayfa çekme + zararsız Origin/DNS sorgusu):** TLS/sertifika, HTTP güvenlik başlıkları, CORS politikası, çerez bayrakları (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS/e-posta kayıtları (SPF/DKIM/DMARC/DNSSEC), açıkta hassas dosya, eski/desteksiz yazılım sürümü — keşfedilen ${pageCount} sayfada.\n\n` +
+      `**ETMEZ:** Aktif zafiyet doğrulaması (SQLi/XSS/IDOR gibi payload/prob denemesi), kimlik-doğrulamalı akış testi, iş-mantığı istismarı. Bunlar **Aktif Doğrulama** ve **Tam Kapsamlı Pentest** paketlerinin kapsamındadır. Bu rapor pasif gözleme dayanır; bir alanda "bulgu yok" ifadesi, aktif istismar denenmediği için **güvenli olduğunu KANITLAMAZ** — yalnız dışarıdan gözlemlenen yapılandırmanın temiz olduğunu gösterir.\n\n`;
 
   const findings =
-    `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
-    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${httpOnly ? 'Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz (düz metin) taşınıyor — öncelikli olarak geçerli bir TLS sertifikasıyla HTTPS’e geçilmelidir. Diğer alanlar http:// üzerinden incelenmiştir. ' : ''}${genelSentence}\n\n` +
+    `## ${t('YÖNETİCİ ÖZETİ', 'MANAGEMENTZUSAMMENFASSUNG')}\n\n${summary.join('\n')}\n\n` +
+    `## ${t('GENEL DEĞERLENDİRME', 'GESAMTBEWERTUNG')}\n\n**${t('Risk Seviyesi', 'Risikostufe')}: ${RW[worst]}**\n\n${httpOnly ? t('Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz (düz metin) taşınıyor — öncelikli olarak geçerli bir TLS sertifikasıyla HTTPS’e geçilmelidir. Diğer alanlar http:// üzerinden incelenmiştir. ', 'Dieses Ziel antwortet nicht über HTTPS; die Kommunikation läuft unverschlüsselt (Klartext) — vorrangig sollte mit einem gültigen TLS-Zertifikat auf HTTPS umgestellt werden. Die übrigen Bereiche wurden über http:// geprüft. ') : ''}${genelSentence}\n\n` +
     `${httpsFindingSection}${areaSections}\n${assuranceSection}`;
 
   // --- AI ÇÖZÜM ÖNERİLERİ (5 alan TEK bolumde, alt-basliklarla) ---
   const fixParts = BUNDLE_AREAS.map((a, i) => {
     const r = results[i];
     if (!r || !r.fixText.trim()) return '';
-    return `### ${a.title}\n\n${r.fixText.trim()}`;
+    return `### ${areaTitle(i, de)}\n\n${r.fixText.trim()}`;
   }).filter(Boolean);
   const fixText =
-    'Bu bölüm, dış yüzey taramanızda tespit edilen tüm eksiklikler için alan alan düzeltme önerileri içerir. Sunucunuza uygun örnekleri (Nginx/Firebase/Apache/DNS) kopyalayın.\n\n' +
+    t('Bu bölüm, dış yüzey taramanızda tespit edilen tüm eksiklikler için alan alan düzeltme önerileri içerir. Sunucunuza uygun örnekleri (Nginx/Firebase/Apache/DNS) kopyalayın.', 'Dieser Abschnitt enthält bereichsweise Korrekturvorschläge für alle in Ihrer Prüfung der externen Angriffsfläche festgestellten Lücken. Kopieren Sie die für Ihren Server passenden Beispiele (Nginx/Firebase/Apache/DNS).') + '\n\n' +
     fixParts.join('\n\n');
 
   return { findings, fixText };

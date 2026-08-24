@@ -66,7 +66,7 @@ function injLevel(ev: InjEvidence): Level {
 }
 
 export async function generateInjectionVerifyReport(host: string, locale: string = 'tr'): Promise<{ findings: string; fixText: string } | null> {
-  const ev = await collectInjectionEvidence(host);
+  const ev = await collectInjectionEvidence(host, undefined, locale === 'de');
   return buildInjectionReport(ev, locale === 'de');
 }
 
@@ -191,7 +191,7 @@ function idorLevel(ev: IdorEvidence): Level {
 }
 
 export async function generateIdorVerifyReport(host: string, locale: string = 'tr'): Promise<{ findings: string; fixText: string } | null> {
-  const ev = await collectIdorEvidence(host);
+  const ev = await collectIdorEvidence(host, undefined, locale === 'de');
   return buildIdorReport(ev, locale === 'de');
 }
 
@@ -329,13 +329,13 @@ const ACTIVE_INDICATORS_CFG: CheckCfg = {
 };
 
 const ACTIVE_BUNDLE_MEMBERS: ActiveMember[] = [
-  { key: 'injection_verify', title: 'Enjeksiyon (SQLi/XSS) Doğrulama', titleDe: 'Injektion (SQLi/XSS) Verifizierung', conf: 'Yüksek', run: async (h, de) => { const ev = await collectInjectionEvidence(h); return { rep: buildInjectionReport(ev, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length, formsTested: ev.formsTested, formsSkipped: ev.formsSkipped }; } },
-  { key: 'idor_verify', title: 'Yetkisiz Erişim (IDOR) Doğrulama', titleDe: 'Unbefugter Zugriff (IDOR) Verifizierung', conf: 'Orta', run: async (h, de) => { const ev = await collectIdorEvidence(h); return { rep: buildIdorReport(ev, de), pages: ev.pagesScanned, inputs: ev.candidates, probes: ev.probesSent, fc: ev.findings.length }; } },
-  { key: 'ssrf_verify', title: 'SSRF Doğrulama', titleDe: 'SSRF Verifizierung', conf: 'Orta', run: async (h, de) => { const ev = await collectSsrfEvidence(h); return { rep: buildActiveCheckReport(ev, SSRF_CFG, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
-  { key: 'file_upload_verify', title: 'Dosya Yükleme Doğrulama', titleDe: 'Datei-Upload-Verifizierung', conf: 'Düşük', run: async (h, de) => { const ev = await collectFileUploadEvidence(h); return { rep: buildActiveCheckReport(ev, UPLOAD_CFG, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
-  { key: 'business_logic_verify', title: 'İş Mantığı Doğrulama', titleDe: 'Geschäftslogik-Verifizierung', conf: 'Düşük', run: async (h, de) => { const ev = await collectBusinessLogicEvidence(h); return { rep: buildActiveCheckReport(ev, BUSINESS_CFG, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
-  { key: 'race_massassign_verify', title: 'Race / Mass-Assignment Doğrulama', titleDe: 'Race / Mass-Assignment Verifizierung', conf: 'Düşük', run: async (h, de) => { const ev = await collectRaceMassAssignEvidence(h); return { rep: buildActiveCheckReport(ev, RACE_CFG, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
-  { key: 'rce_verify', title: 'RCE / Komut Enjeksiyonu Doğrulama', titleDe: 'RCE / Befehlsinjektion Verifizierung', conf: 'Orta', run: async (h, de) => { const ev = await collectRceEvidence(h); return { rep: buildActiveCheckReport(ev, RCE_CFG, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
+  { key: 'injection_verify', title: 'Enjeksiyon (SQLi/XSS) Doğrulama', titleDe: 'Injektion (SQLi/XSS) Verifizierung', conf: 'Yüksek', run: async (h, de) => { const ev = await collectInjectionEvidence(h, undefined, de); return { rep: buildInjectionReport(ev, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length, formsTested: ev.formsTested, formsSkipped: ev.formsSkipped }; } },
+  { key: 'idor_verify', title: 'Yetkisiz Erişim (IDOR) Doğrulama', titleDe: 'Unbefugter Zugriff (IDOR) Verifizierung', conf: 'Orta', run: async (h, de) => { const ev = await collectIdorEvidence(h, undefined, de); return { rep: buildIdorReport(ev, de), pages: ev.pagesScanned, inputs: ev.candidates, probes: ev.probesSent, fc: ev.findings.length }; } },
+  { key: 'ssrf_verify', title: 'SSRF Doğrulama', titleDe: 'SSRF Verifizierung', conf: 'Orta', run: async (h, de) => { const ev = await collectSsrfEvidence(h, undefined, de); return { rep: buildActiveCheckReport(ev, SSRF_CFG, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
+  { key: 'file_upload_verify', title: 'Dosya Yükleme Doğrulama', titleDe: 'Datei-Upload-Verifizierung', conf: 'Düşük', run: async (h, de) => { const ev = await collectFileUploadEvidence(h, de); return { rep: buildActiveCheckReport(ev, UPLOAD_CFG, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
+  { key: 'business_logic_verify', title: 'İş Mantığı Doğrulama', titleDe: 'Geschäftslogik-Verifizierung', conf: 'Düşük', run: async (h, de) => { const ev = await collectBusinessLogicEvidence(h, de); return { rep: buildActiveCheckReport(ev, BUSINESS_CFG, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
+  { key: 'race_massassign_verify', title: 'Race / Mass-Assignment Doğrulama', titleDe: 'Race / Mass-Assignment Verifizierung', conf: 'Düşük', run: async (h, de) => { const ev = await collectRaceMassAssignEvidence(h, de); return { rep: buildActiveCheckReport(ev, RACE_CFG, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
+  { key: 'rce_verify', title: 'RCE / Komut Enjeksiyonu Doğrulama', titleDe: 'RCE / Befehlsinjektion Verifizierung', conf: 'Orta', run: async (h, de) => { const ev = await collectRceEvidence(h, undefined, de); return { rep: buildActiveCheckReport(ev, RCE_CFG, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
   // (İŞ 3) Giriş baypası (SQLi göstergesi) — login POST'a kontrol vs SQLi karşılaştırması (gözlemsel).
   { key: 'active_indicators', title: 'Güvenli Aktif Göstergeler (LFI/Redirect/HPP/SSTI)', titleDe: 'Sichere aktive Indikatoren (LFI/Redirect/HPP/SSTI)', conf: 'Orta', run: async (h, de) => { const ev = await collectActiveIndicatorsEvidence(h); return { rep: buildActiveCheckReport(ev, ACTIVE_INDICATORS_CFG, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
   { key: 'login_bypass', title: 'Giriş Baypası (SQLi Göstergesi)', titleDe: 'Login-Bypass (SQLi-Indikator)', conf: 'Yüksek', run: async (h, de) => { const ev = await collectLoginBypassEvidence(h); return { rep: buildActiveCheckReport(ev, LOGIN_BYPASS_CFG, de), pages: ev.pagesScanned, inputs: ev.inputsFound, probes: ev.probesSent, fc: ev.findings.length }; } },
@@ -407,12 +407,12 @@ export async function generateBundleActiveVerifyReport(host: string, locale: str
     t(`> ### Değerlendirme Özeti\n`, `> ### Bewertungsübersicht\n`) +
     t(`> **${ACTIVE_BUNDLE_MEMBERS.length} aktif güvenlik kontrol kategorisinin tamamı değerlendirildi.** `, `> **Alle ${ACTIVE_BUNDLE_MEMBERS.length} aktiven Sicherheitskontrollkategorien wurden bewertet.** `) +
     (noInputs
-      ? t(`**${pagesScanned}** benzersiz sayfa/uç nokta tarandı; **test edilebilir giriş noktası (parametre/form/ID) bulunamadı** — bu nedenle gerçek doğrulama probu gönderilmedi (yalnızca ${totalProbes} erişilebilirlik/baseline isteği). Bu **zafiyet olmadığının kanıtı değildir**; kapsam sınırına bakınız.`, `**${pagesScanned}** einzigartige Seiten/Endpunkte wurden gescannt; **es wurde kein prüfbarer Eingabepunkt (Parameter/Formular/ID) gefunden** — daher wurde keine echte Verifizierungssonde gesendet (nur ${totalProbes} Erreichbarkeits-/Baseline-Anfragen). Dies **ist kein Beweis für das Fehlen von Schwachstellen**; siehe Geltungsbereichsgrenze.`) + spaHint(surf)
+      ? t(`**${pagesScanned}** benzersiz sayfa/uç nokta tarandı; **test edilebilir giriş noktası (parametre/form/ID) bulunamadı** — bu nedenle gerçek doğrulama probu gönderilmedi (yalnızca ${totalProbes} erişilebilirlik/baseline isteği). Bu **zafiyet olmadığının kanıtı değildir**; kapsam sınırına bakınız.`, `**${pagesScanned}** einzigartige Seiten/Endpunkte wurden gescannt; **es wurde kein prüfbarer Eingabepunkt (Parameter/Formular/ID) gefunden** — daher wurde keine echte Verifizierungssonde gesendet (nur ${totalProbes} Erreichbarkeits-/Baseline-Anfragen). Dies **ist kein Beweis für das Fehlen von Schwachstellen**; siehe Geltungsbereichsgrenze.`) + spaHint(surf, de)
       : t(`**${pagesScanned}** benzersiz sayfa/uç nokta tarandı, **${totalInputs}** giriş noktası test edildi, toplam **${totalProbes}** istek gönderildi. `, `**${pagesScanned}** einzigartige Seiten/Endpunkte wurden gescannt, **${totalInputs}** Eingabepunkte getestet, insgesamt **${totalProbes}** Anfragen gesendet. `) +
         (confirmedHigh > 0
           ? t(`**${confirmedHigh}** kontrolde yüksek/kritik seviyeli zafiyet göstergesi bulundu (aşağıda detaylı).`, `In **${confirmedHigh}** Prüfungen wurde ein Schwachstellenindikator hoher/kritischer Stufe gefunden (unten im Detail).`)
           : t(`Doğrulanmış kritik/yüksek seviyeli bir zafiyet **tespit edilmedi**.`, `Es wurde **keine** verifizierte Schwachstelle kritischer/hoher Stufe festgestellt.`))) +
-    t(`\n>\n> _Keşif yöntemi: ${discoveryMethodNote(surf)}_`, `\n>\n> _Entdeckungsmethode: ${discoveryMethodNote(surf)}_`);
+    t(`\n>\n> _Keşif yöntemi: ${discoveryMethodNote(surf, de)}_`, `\n>\n> _Entdeckungsmethode: ${discoveryMethodNote(surf, de)}_`);
 
   // --- KONTROL ÖZETİ TABLOSU (durum + güven) ---
   // Güven: SADECE gerçekten test çalıştıysa (input>0) seviye gösterilir; aksi halde NÖTR "Kapsam dışı"
@@ -468,7 +468,7 @@ export async function generateBundleActiveVerifyReport(host: string, locale: str
   });
   summary.push(
     noInputs
-      ? t(`- **Şeffaflık:** ${dataOk}/${ACTIVE_BUNDLE_MEMBERS.length} kontrol çalıştı; **${pagesScanned}** benzersiz sayfa tarandı ancak **test edilebilir giriş noktası bulunamadı** — gerçek doğrulama probu gönderilmedi (yalnızca ${totalProbes} baseline erişilebilirlik isteği). Bu, zafiyet olmadığının kanıtı değildir.`, `- **Transparenz:** ${dataOk}/${ACTIVE_BUNDLE_MEMBERS.length} Prüfungen liefen; **${pagesScanned}** einzigartige Seiten wurden gescannt, aber **es wurde kein prüfbarer Eingabepunkt gefunden** — es wurde keine echte Verifizierungssonde gesendet (nur ${totalProbes} Baseline-Erreichbarkeitsanfragen). Dies ist kein Beweis für das Fehlen von Schwachstellen.`) + spaHint(surf)
+      ? t(`- **Şeffaflık:** ${dataOk}/${ACTIVE_BUNDLE_MEMBERS.length} kontrol çalıştı; **${pagesScanned}** benzersiz sayfa tarandı ancak **test edilebilir giriş noktası bulunamadı** — gerçek doğrulama probu gönderilmedi (yalnızca ${totalProbes} baseline erişilebilirlik isteği). Bu, zafiyet olmadığının kanıtı değildir.`, `- **Transparenz:** ${dataOk}/${ACTIVE_BUNDLE_MEMBERS.length} Prüfungen liefen; **${pagesScanned}** einzigartige Seiten wurden gescannt, aber **es wurde kein prüfbarer Eingabepunkt gefunden** — es wurde keine echte Verifizierungssonde gesendet (nur ${totalProbes} Baseline-Erreichbarkeitsanfragen). Dies ist kein Beweis für das Fehlen von Schwachstellen.`) + spaHint(surf, de)
       : t(`- **Şeffaflık:** ${dataOk}/${ACTIVE_BUNDLE_MEMBERS.length} kontrol veri toplayabildi; **${pagesScanned}** benzersiz sayfa, **${totalInputs}** giriş noktası${surf.method === 'headless' ? ' (JS render sırasında gözlemlenen API uçları dâhil)' : ''}, **${totalProbes}** istek.${surf.method === 'headless' && surf.apiWrites.length ? ` Ayrıca **${surf.apiWrites.length}** durum-değiştiren API ucu (ör. login/sepet/sipariş) gözlemlendi ancak güvenlik gereği **probe edilmedi**.` : ''} SSRF/RCE tespitleri OOB altyapısı olmadan zaman-tabanlı/dolaylı (orta güven); gözlemsel kontroller (Dosya Yükleme/İş Mantığı/Race) kesin doğrulama için manuel test gerektirir.`, `- **Transparenz:** ${dataOk}/${ACTIVE_BUNDLE_MEMBERS.length} Prüfungen konnten Daten erheben; **${pagesScanned}** einzigartige Seiten, **${totalInputs}** Eingabepunkte${surf.method === 'headless' ? ' (einschließlich der beim JS-Rendering beobachteten API-Endpunkte)' : ''}, **${totalProbes}** Anfragen.${surf.method === 'headless' && surf.apiWrites.length ? ` Zudem wurden **${surf.apiWrites.length}** zustandsändernde API-Endpunkte (z. B. Login/Warenkorb/Bestellung) beobachtet, aber aus Sicherheitsgründen **nicht sondiert**.` : ''} SSRF/RCE-Erkennungen sind ohne OOB-Infrastruktur zeitbasiert/indirekt (mittlere Konfidenz); beobachtende Prüfungen (Datei-Upload/Geschäftslogik/Race) erfordern für eine sichere Verifizierung einen manuellen Test.`),
   );
   summary.push(t('- **Önerilen ilk adım:** Çalıştırılan kontrollerdeki bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.', '- **Empfohlener erster Schritt:** Beheben Sie die Befunde der ausgeführten Prüfungen; fertige Schritte im Abschnitt „KI-Lösungsvorschläge".'));
@@ -831,11 +831,11 @@ const RACE_CFG: CheckCfg = {
   cleanGenelDe: 'Es wurde kein geeignetes (nicht abschluss-/zahlungsbezogenes) Registrierungs-/Profilformular gefunden oder die Mass-Assignment-Sonde wurde nicht akzeptiert.',
 };
 
-export async function generateSsrfVerifyReport(host: string, locale: string = 'tr') { return buildActiveCheckReport(await collectSsrfEvidence(host), SSRF_CFG, locale === 'de'); }
-export async function generateRceVerifyReport(host: string, locale: string = 'tr') { return buildActiveCheckReport(await collectRceEvidence(host), RCE_CFG, locale === 'de'); }
-export async function generateFileUploadVerifyReport(host: string, locale: string = 'tr') { return buildActiveCheckReport(await collectFileUploadEvidence(host), UPLOAD_CFG, locale === 'de'); }
-export async function generateBusinessLogicVerifyReport(host: string, locale: string = 'tr') { return buildActiveCheckReport(await collectBusinessLogicEvidence(host), BUSINESS_CFG, locale === 'de'); }
-export async function generateRaceMassAssignVerifyReport(host: string, locale: string = 'tr') { return buildActiveCheckReport(await collectRaceMassAssignEvidence(host), RACE_CFG, locale === 'de'); }
+export async function generateSsrfVerifyReport(host: string, locale: string = 'tr') { return buildActiveCheckReport(await collectSsrfEvidence(host, undefined, locale === 'de'), SSRF_CFG, locale === 'de'); }
+export async function generateRceVerifyReport(host: string, locale: string = 'tr') { return buildActiveCheckReport(await collectRceEvidence(host, undefined, locale === 'de'), RCE_CFG, locale === 'de'); }
+export async function generateFileUploadVerifyReport(host: string, locale: string = 'tr') { return buildActiveCheckReport(await collectFileUploadEvidence(host, locale === 'de'), UPLOAD_CFG, locale === 'de'); }
+export async function generateBusinessLogicVerifyReport(host: string, locale: string = 'tr') { return buildActiveCheckReport(await collectBusinessLogicEvidence(host, locale === 'de'), BUSINESS_CFG, locale === 'de'); }
+export async function generateRaceMassAssignVerifyReport(host: string, locale: string = 'tr') { return buildActiveCheckReport(await collectRaceMassAssignEvidence(host, locale === 'de'), RACE_CFG, locale === 'de'); }
 // Saf kurucu testler icin (sentetik ActiveCheckEvidence ile):
 export const _cfg = { SSRF_CFG, RCE_CFG, UPLOAD_CFG, BUSINESS_CFG, RACE_CFG };
 export { buildActiveCheckReport };
