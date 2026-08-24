@@ -63,8 +63,11 @@ export interface Dict {
     howTitle: string; howSteps: Array<{ t: string; d: string }>;
     evTitle: string; evKanitli: string; evBelirsiz: string; evHayalet: string;
     diffTitle: string; diffBody: string; diffPoints: [string, string, string];
-    levelsTitle: string;
-    levels: Array<{ name: string; tag: string; risk: string; technique: string; consistency: string; humanLoop: string; note: string }>;
+    levelsTitle: string; levelsSubtitle: string;
+    levels: Array<{ name: string; tag: string; risk: string; technique: string; consistency: string; humanLoop: string; note: string; price: string; cta: string; available: boolean }>;
+    heroCtaPrimary: string; heroCtaSecondary: string; heroFootnote: string; stickyWarn: string;
+    compareTitle: string; compareCol1: string; compareCol2: string; compareRows: Array<{ k: string; a: string; b: string }>; compareLink: string;
+    ctaBandTitle: string; ctaBandBtn: string;
     principleTitle: string; principleBody: string; disclaimer: string; triggerWord: string;
     lockedTitle: string; lockedBody: string;
     codeLabel: string; codePlaceholder: string; unlock: string; unlocking: string; invalid: string; unlockedMsg: string;
@@ -198,10 +201,28 @@ const tr: Dict = {
       'İkisi birbirini tamamlar; bu katman deterministik paketlerin yerine geçmez.',
     ],
     levelsTitle: 'Üç risk seviyesi',
+    levelsSubtitle: 'S1 şu an beta olarak açık ve satın alınabilir. S2 ve S3 yakında.',
+    heroCtaPrimary: 'S1’i Başlat',
+    heroCtaSecondary: 'Nasıl çalışır',
+    heroFootnote: 'Resmi bir denetim, sızma testi sertifikasyonu ya da uygunluk belgesi değildir.',
+    stickyWarn: 'Gerçek saldırı teknikleri · Yalnız yetkili hedefler · Deterministik değildir',
+    compareTitle: '6 paketten farkı',
+    compareCol1: 'Deterministik paketler',
+    compareCol2: 'Otonom AI Red Team',
+    compareRows: [
+      { k: 'Kapsam', a: 'Sabit kontrol listesi', b: 'Keşif-güdümlü, bağlama-özel' },
+      { k: 'Tekrarlanabilirlik', a: 'Aynı girdi → aynı sonuç', b: 'Değişken (deterministik değil)' },
+      { k: 'Risk', a: 'Düşük — istismar yok', b: 'Seviyeye göre (S1–S3)' },
+      { k: 'Rapor', a: 'Deterministik şablon', b: 'Kanıt-bağlamalı üç katman' },
+      { k: 'Uygun', a: 'Uyumluluk / rutin kontrol', b: 'Derin / deneysel test' },
+    ],
+    compareLink: 'Paketlere git →',
+    ctaBandTitle: 'Deneysel otonom red-team’e sınırlı erişim',
+    ctaBandBtn: 'S1’i Başlat',
     levels: [
-      { name: 'S1 · Güvenli', tag: 'En düşük risk', risk: 'Düşük — çoğunlukla okuma ve az-etkili denemeler', technique: 'Pasif + hafif aktif göstergeler', consistency: 'Görece kararlı', humanLoop: 'Otomatik; kritik adımlarda onay', note: '' },
-      { name: 'S2 · Dengeli', tag: 'Önerilen varsayılan', risk: 'Orta — kontrollü aktif teknikler', technique: 'Aktif doğrulama + sınırlı sömürü denemesi', consistency: 'Değişken', humanLoop: 'Riskli adımlarda insan onayı', note: '' },
-      { name: 'S3 · Agresif', tag: 'İleri düzey', risk: 'Yüksek — derin, ısrarcı teknikler', technique: 'Geniş sömürü yüzeyi, zincirleme denemeler', consistency: 'Belirgin değişken', humanLoop: 'Sık insan onayı önerilir', note: 'Yalnız izole test/staging ortamı önerilir; canlı prod önerilmez.' },
+      { name: 'S1 · Güvenli', tag: 'Beta — açık', risk: 'Düşük — çoğunlukla okuma ve az-etkili denemeler', technique: 'Pasif + hafif aktif göstergeler', consistency: 'Görece kararlı', humanLoop: 'Otomatik; sonuç ekip onayından sonra açılır', note: '', price: 'Karmaşıklığa göre ₺750–2.500', cta: 'S1’i Başlat', available: true },
+      { name: 'S2 · Dengeli', tag: 'Yakında', risk: 'Orta — kontrollü aktif teknikler', technique: 'Aktif doğrulama + sınırlı sömürü denemesi', consistency: 'Değişken', humanLoop: 'Riskli adımlarda insan onayı', note: '', price: 'Yakında', cta: 'Yakında', available: false },
+      { name: 'S3 · Agresif', tag: 'Yakında', risk: 'Yüksek — derin, ısrarcı teknikler', technique: 'Geniş sömürü yüzeyi, zincirleme denemeler', consistency: 'Belirgin değişken', humanLoop: 'Sık insan onayı önerilir', note: 'Yalnız izole test/staging ortamı önerilir; canlı prod önerilmez.', price: 'Yakında', cta: 'Yakında', available: false },
     ],
     principleTitle: 'Kanıt ve dürüstlük ilkesi',
     principleBody: 'Hiçbir bulgu ajanın sözüne dayanmaz; yalnız saklanan ham kanıta dayanır. Belirsiz bulgular gizlice silinmez, insana açık biçimde işaretlenir. Kanıtsız iddia rapora girmez.',
@@ -365,10 +386,28 @@ const en: Dict = {
       'They complement each other; this layer does not replace the deterministic packages.',
     ],
     levelsTitle: 'Three risk levels',
+    levelsSubtitle: 'S1 is open in beta and purchasable now. S2 and S3 are coming soon.',
+    heroCtaPrimary: 'Start S1',
+    heroCtaSecondary: 'How it works',
+    heroFootnote: 'Not a formal audit, penetration-test certification or compliance document.',
+    stickyWarn: 'Real attack techniques · Authorized targets only · Not deterministic',
+    compareTitle: 'How it differs from the 6 packages',
+    compareCol1: 'Deterministic packages',
+    compareCol2: 'Autonomous AI Red Team',
+    compareRows: [
+      { k: 'Scope', a: 'Fixed checklist', b: 'Discovery-driven, context-specific' },
+      { k: 'Repeatability', a: 'Same input → same result', b: 'Variable (not deterministic)' },
+      { k: 'Risk', a: 'Low — no exploitation', b: 'By level (S1–S3)' },
+      { k: 'Report', a: 'Deterministic template', b: 'Evidence-bound three tiers' },
+      { k: 'Best for', a: 'Compliance / routine checks', b: 'Deep / experimental testing' },
+    ],
+    compareLink: 'Go to packages →',
+    ctaBandTitle: 'Limited access to the experimental autonomous red-team',
+    ctaBandBtn: 'Start S1',
     levels: [
-      { name: 'S1 · Safe', tag: 'Lowest risk', risk: 'Low — mostly reading and low-impact probes', technique: 'Passive + light active indicators', consistency: 'Relatively stable', humanLoop: 'Automatic; approval on critical steps', note: '' },
-      { name: 'S2 · Balanced', tag: 'Recommended default', risk: 'Medium — controlled active techniques', technique: 'Active verification + limited exploitation attempts', consistency: 'Variable', humanLoop: 'Human approval on risky steps', note: '' },
-      { name: 'S3 · Aggressive', tag: 'Advanced', risk: 'High — deep, persistent techniques', technique: 'Broad exploitation surface, chained attempts', consistency: 'Highly variable', humanLoop: 'Frequent human approval recommended', note: 'Recommended only on isolated test/staging; live prod is not advised.' },
+      { name: 'S1 · Safe', tag: 'Beta — open', risk: 'Low — mostly reading and low-impact probes', technique: 'Passive + light active indicators', consistency: 'Relatively stable', humanLoop: 'Automatic; results released after team review', note: '', price: 'By complexity ₺750–2,500', cta: 'Start S1', available: true },
+      { name: 'S2 · Balanced', tag: 'Coming soon', risk: 'Medium — controlled active techniques', technique: 'Active verification + limited exploitation attempts', consistency: 'Variable', humanLoop: 'Human approval on risky steps', note: '', price: 'Coming soon', cta: 'Coming soon', available: false },
+      { name: 'S3 · Aggressive', tag: 'Coming soon', risk: 'High — deep, persistent techniques', technique: 'Broad exploitation surface, chained attempts', consistency: 'Highly variable', humanLoop: 'Frequent human approval recommended', note: 'Recommended only on isolated test/staging; live prod is not advised.', price: 'Coming soon', cta: 'Coming soon', available: false },
     ],
     principleTitle: 'Evidence and honesty principle',
     principleBody: 'No finding rests on the agent\'s word; only on stored raw evidence. Uncertain findings are never silently deleted — they are openly flagged for a human. Unproven claims never enter the report.',
