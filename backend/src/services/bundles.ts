@@ -14,6 +14,7 @@ export interface ComboBundle {
   key: string;
   displayName: string; // TR
   displayNameEn: string;
+  displayNameDe: string;
   description: string; // TR
   descriptionEn: string;
   category: 'passive' | 'active-light' | 'compliance';
@@ -57,6 +58,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     key: 'bundle_surface',
     displayName: 'Dış Yüzey & Yapılandırma Paketi',
     displayNameEn: 'External Surface & Configuration Bundle',
+    displayNameDe: 'Paket Externe Angriffsfläche & Konfiguration',
     description:
       'Dış yüzeyinizin yapılandırma güvenliğini birlikte inceleyen paket: SSL/TLS, güvenlik başlıkları, DNS/e-posta, CORS ve CSP. Tekil toplamdan indirimli.',
     descriptionEn:
@@ -72,6 +74,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     key: 'bundle_recon',
     displayName: 'Keşif Paketi',
     displayNameEn: 'Discovery Bundle',
+    displayNameDe: 'Reconnaissance-Paket',
     description:
       'Dış saldırı yüzeyinizi haritalayan ve sahipsiz/ifşa olmuş varlıkları tespit eden derin keşif paketi.',
     descriptionEn:
@@ -86,6 +89,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     key: 'bundle_compliance',
     displayName: 'Uyum Paketi',
     displayNameEn: 'Compliance Bundle',
+    displayNameDe: 'Compliance-Paket',
     description:
       'KVKK, PCI-DSS ve ISO 27001 ön-uyum kontrollerinin üçü birden tek pakette. Dışarıdan gözlemlenebilir hazırlık eksiklerini ilgili ilkelerle eşler (resmî denetim/uyum beyanı değildir). Tekil toplamdan indirimli.',
     descriptionEn:
@@ -102,6 +106,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     key: 'bundle_active_verify',
     displayName: 'Aktif Doğrulama Paketi',
     displayNameEn: 'Active Verification Bundle',
+    displayNameDe: 'Paket Aktive Verifikation',
     description:
       'Yedi aktif-hafif zafiyet doğrulama kontrolünün tümü tek pakette: Enjeksiyon, IDOR, SSRF, Dosya Yükleme, İş Mantığı, Race/Mass-Assignment ve RCE. Zafiyeti kanıtlar, istismar etmez; tek yetkilendirme beyanı yeterli. Tekil toplamdan belirgin indirimli. ' +
       'Kapsam: Bu paket kimlik doğrulaması gerektirmeyen (login olmadan test edilebilen) yüzeyde çalışır. Login sonrası ortaya çıkan derin yetkilendirme/iş mantığı zafiyetleri bu paketin kapsamı dışındadır; sonuçlar hedefin yapısına göre değişir.',
@@ -127,6 +132,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     key: 'bundle_full_pentest',
     displayName: 'Tam Kapsamlı Pentest Paketi',
     displayNameEn: 'Full-Scope Pentest Bundle',
+    displayNameDe: 'Umfassendes Pentest-Paket',
     description:
       'Sağladığınız **TEST hesabıyla login sonrası derin, deterministik güvenlik taraması**: authenticated enjeksiyon/IDOR, yetki & oturum, client-side/JS, API (OWASP API Top 10), CORS & güvenlik başlıkları, TLS, yapılandırma ifşaları ve e-posta/DNS. **İstismar edilmez**; sonuçlar hedefin yüzeyine göre değişir.',
     descriptionEn:
@@ -145,6 +151,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     key: 'bundle_elite_autonomous',
     displayName: 'Elit Otonom Pentest (Kurumsal)',
     displayNameEn: 'Elite Autonomous Pentest (Enterprise)',
+    displayNameDe: 'Elite Autonomes Pentest (Enterprise)',
     description:
       'Sitenizin/uygulamanızın tüm güvenlik açıklarını, gerçek bir saldırgandan önce en derin ve kapsamlı şekilde tespit eder ve kanıtlarız — otonom yapay zekâ ajanı (PentAGI) tam kapasiteyle çalışır. ' +
       '**“Kanıtla, istismar etme” ilkesi:** açıklar kanıtlanır; verileriniz çekilmez, sisteminiz zarar görmez veya kesintiye uğratılmaz. ' +
@@ -276,8 +283,8 @@ export function isBundleOnlyPackage(key: string): boolean {
 }
 
 /** Bu paketi iceren ILK bundle'in gosterim adi (locale'e gore) — kullaniciya mesaj icin. */
-export function primaryBundleForPackage(key: string, locale: 'tr' | 'en'): string | null {
+export function primaryBundleForPackage(key: string, locale: 'tr' | 'en' | 'de'): string | null {
   const b = COMBO_BUNDLES.find((bb) => bb.memberKeys.includes(key) || (bb.selectableKeys ?? []).includes(key));
   if (!b) return null;
-  return locale === 'en' ? b.displayNameEn : b.displayName;
+  return locale === 'de' ? b.displayNameDe : locale === 'en' ? b.displayNameEn : b.displayName;
 }

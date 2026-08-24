@@ -78,9 +78,12 @@ export interface ScanPackageDef {
   promptTemplate: (targetHostname: string) => string;
 }
 
-// Cikti dili bolgeden turetilir: tr -> tr, digerleri (us/ae/...) -> en.
-export function localeFor(region: string | undefined | null): 'tr' | 'en' {
-  return region === 'tr' ? 'tr' : 'en';
+// Cikti dili bolgeden turetilir: tr -> tr, de -> de (Almanya lansmani: rapor+e-posta Almanca),
+// digerleri (us/ae/...) -> en.
+export function localeFor(region: string | undefined | null): 'tr' | 'en' | 'de' {
+  if (region === 'tr') return 'tr';
+  if (region === 'de') return 'de';
+  return 'en';
 }
 
 // GECICI TEST OVERRIDE (bkz pricing.ts PRICE_OVERRIDE_MINOR — burada dongusel import olmasin
@@ -199,8 +202,34 @@ const PACKAGE_I18N: Partial<Record<ScanPackageDef['key'], { displayName: string;
 };
 
 // kvkk_hazirlik EN sozlukte YOK — global menude gosterilmez (bkz orders.ts filtresi).
-export function localizedPackage(def: ScanPackageDef, locale: 'tr' | 'en') {
-  const t = locale === 'en' ? PACKAGE_I18N[def.key] : undefined;
+// Almanca paket adi/aciklamasi (Almanya lansmani). Gorunur /de paketleri onceliklidir;
+// gerisi de eksiksiz ceviri. Eksikse en, o da yoksa tr (def) fallback.
+const PACKAGE_I18N_DE: Partial<Record<ScanPackageDef['key'], { displayName: string; description: string }>> = {
+  basit_tarama: { displayName: 'Basis-Scan', description: 'Schnelle passive Vorprüfung: Sicherheits-Header der Startseite, TLS-Gültigkeit und Server-Banner-Zusammenfassung. Das günstigste Einstiegspaket, in Minuten erledigt.' },
+  ssl_tls: { displayName: 'SSL/TLS-Konfigurationsaudit', description: 'Zertifikatsgültigkeit/-ablauf, Nutzung schwacher Protokolle und Cipher-Suites, fehlendes HSTS. Ein vollständig passives, nicht-intrusives Verschlüsselungsaudit.' },
+  header_leak: { displayName: 'Sicherheits-Header & Informationslecks', description: 'Fehlende Sicherheits-Header (CSP, X-Frame-Options usw.) und passive Prüfung auf versehentlich offen zugängliche sensible Dateien (.git, .env, Backups).' },
+  dns_email: { displayName: 'DNS- & E-Mail-Sicherheit', description: 'SPF/DKIM/DMARC-Lücken, DNSSEC und DNS-Fehlkonfigurationen. Wertvoll gegen E-Mail-Spoofing, vollständig passiv.' },
+  cms_cve: { displayName: 'CMS- & Bekannte-CVE-Scan', description: 'CMS-/Framework-Fingerprinting, Versionserkennung und Zuordnung bekannter CVEs. NUR ERKENNUNG — es wird kein Exploit versucht.' },
+  pci_hazirlik: { displayName: 'PCI-DSS-Bereitschafts-Vorbewertung', description: 'Ein passiver Bereitschaftsbericht, der Ihre externe Angriffsfläche (TLS, Header, offene Dateien, bekannte Versionsprobleme, Cookie-/Sitzungssicherheit) den PCI-DSS-Anforderungen zuordnet. KEIN offizieller ASV/QSA-Test.' },
+  iso27001_hazirlik: { displayName: 'ISO-27001-Bereitschafts-Checkliste', description: 'Ein passiver Bereitschaftsbericht, der von außen beobachtbare technische Kontrollen dem ISO-27001-Anhang A zuordnet. KEINE offizielle Zertifizierung/Auditierung.' },
+  cors_cookie: { displayName: 'CORS- & Cookie-Sicherheit', description: 'Passive Prüfung der CORS-Header (riskante Access-Control-Allow-Origin-Muster, Credentials-Kombination) und Cookie-Flags (Secure/HttpOnly/SameSite). Vollständig passiv.' },
+  csp_analiz: { displayName: 'CSP-Analyse (Content Security Policy)', description: 'Passive Analyse des Content-Security-Policy-Headers: Vorhandensein, abschwächende Direktiven (unsafe-inline/unsafe-eval), fehlendes default-src. Vollständig passiv.' },
+  subdomain_takeover: { displayName: 'Subdomain-Takeover-Scan', description: 'Entdeckt Subdomains passiv (über DNS + Certificate-Transparency-Logs, KEIN Brute-Force) und markiert verwaiste CNAME-Einträge, die auf stillgelegte Cloud-Ressourcen (Heroku/S3/Azure usw.) verweisen. Vollständig passiv.' },
+  api_discovery: { displayName: 'API- & Swagger-Discovery', description: 'Sucht an gängigen Pfaden nach OpenAPI-/Swagger-Dokumentationen (/swagger-ui.html, /openapi.json usw.), extrahiert die gelisteten Endpunkte und markiert öffentliche, potenziell sensible. Passives GET.' },
+  injection_verify: { displayName: 'Schwachstellenverifikation — Injektion (SQLi/XSS)', description: 'Aktiv-leichte Prüfung: sendet begrenzte, harmlose Proof-of-Concept-Payloads, um zu BEWEISEN, ob Injektionsfehler bestehen. Keine Datenextraktion, keine Datenänderung. Erfordert eine Autorisierungserklärung.' },
+  idor_verify: { displayName: 'Schwachstellenverifikation — Fehlerhafte Zugriffskontrolle (IDOR)', description: 'Aktiv-leichte Prüfung: testet vorhersehbare Ressourcen-IDs, um zu verifizieren, ob unbefugter Zugriff möglich ist. Liest/speichert niemals die tatsächlichen Daten. Erfordert eine Autorisierungserklärung.' },
+  ssrf_verify: { displayName: 'Schwachstellenverifikation — SSRF', description: 'Aktiv-leichte Prüfung: beweist über einen kontrollierten, harmlosen Callback-/DNS-/Timing-Nachweis, ob Server-Side Request Forgery möglich ist. Erreicht oder erkundet niemals das interne Netzwerk. Erfordert eine Autorisierungserklärung.' },
+  file_upload_verify: { displayName: 'Schwachstellenverifikation — Datei-Upload', description: 'Aktiv-leichte Prüfung: verifiziert durch Einreichen einer harmlosen, nicht ausführbaren Testdatei, ob Upload-Punkte Typ-/Größenprüfungen erzwingen. Lädt niemals eine echte Payload/Webshell hoch oder führt sie aus. Erfordert eine Autorisierungserklärung.' },
+  business_logic_verify: { displayName: 'Schwachstellenverifikation — Geschäftslogik', description: 'Aktiv-leichte Prüfung: Proof-of-Concept-Tests für häufige Logikfehler (Preis-/Mengenmanipulation, Schrittüberspringen). Schließt niemals eine echte Transaktion ab und schreibt keine Daten. Erfordert eine Autorisierungserklärung.' },
+  race_massassign_verify: { displayName: 'Schwachstellenverifikation — Race / Mass Assignment', description: 'Aktiv-leichte Prüfung: einige parallele Anfragen zur Erkennung von Race Conditions und Beobachtung, ob unerwartete Felder (z. B. isAdmin) akzeptiert werden. Beschädigt niemals Daten und schließt keine Rechteausweitung ab. Erfordert eine Autorisierungserklärung.' },
+  rce_verify: { displayName: 'Schwachstellenverifikation — RCE / Command Injection', description: 'Strengste aktive Prüfung: beweist Command Injection AUSSCHLIESSLICH über blinde zeitbasierte oder harmlose Canary-Nachweise. Führt NIEMALS einen echten Befehl aus. Erfordert eine Autorisierungserklärung.' },
+  authenticated_scan: { displayName: 'Authentifizierter Scan (angemeldet)', description: 'Aktiv-leichter Scan mit einer von Ihnen bereitgestellten Testkonto-Sitzung. Anmeldedaten werden verschlüsselt, nur gegen Ihre Domain verwendet und nach dem Scan gelöscht. Erfordert eine Autorisierungserklärung.' },
+  autonomous_pentest: { displayName: 'KI-gestützte Analyse (Rechte & Geschäftslogik)', description: 'KI-gestützte Analyse (ein einzelner LLM-Beratungsaufruf) über die entdeckte authentifizierte Oberfläche: Indikatoren für Rechteausweitung und mehrstufige Geschäftslogik. Nur Beobachtung; kein Exploit/Exfil/DoS/Auth-Umgehung/Datenänderung (Aktiv-leicht-Grenzen). Erfordert eine Autorisierungserklärung.' },
+  redteam_s1: { displayName: 'Autonomes KI-Red-Team (S1)', description: 'Eine experimentelle S1-Bewertung, bei der ein autonomer KI-Agent echte (passive + leicht-aktive) Angriffstechniken gegen Ihr Ziel in einer isolierten, kapazitätsbegrenzten Umgebung versucht. Jeder „nachgewiesene" Befund ist an gespeicherte Roh-Request/Response-Nachweise gebunden. Kein Ersatz für einen formellen Penetrationstest/ein Audit.' },
+};
+
+export function localizedPackage(def: ScanPackageDef, locale: 'tr' | 'en' | 'de') {
+  const t = locale === 'de' ? (PACKAGE_I18N_DE[def.key] ?? PACKAGE_I18N[def.key]) : locale === 'en' ? PACKAGE_I18N[def.key] : undefined;
   return { displayName: t?.displayName ?? def.displayName, description: t?.description ?? def.description };
 }
 
