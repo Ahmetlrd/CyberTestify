@@ -37,12 +37,12 @@ Bulunan alt domainler ve CNAME çözümlemesi sonucu durumları:
 
 | Alt Domain | CNAME Hedefi | Durum |
 |-----------|--------------|-------|
-| fo.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
-| kamera.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
-| mail.ornek.com | webmail.turkticaret.net | Aktif (CNAME kaydı var) |
-| osos.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
-| personel.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
-| veribanapi.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
+| api.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
+| blog.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
+| mail.ornek.com | mail.barindirma-saglayici.example | Aktif (CNAME kaydı var) |
+| panel.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
+| cdn.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
+| destek.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
 | www.ornek.com | ornek.com | Aktif (CNAME kaydı var) |
 
 > Kapsam: Yalnızca pasif kaynaklar (Certificate Transparency logları + gözlemlenebilir DNS). Alt domain brute-force / aktif tarama yapılmamıştır.
@@ -78,11 +78,11 @@ Sabit liste **dışında**, keşfedilen sayfalardaki link/script/form referansla
 |----------|--------------|------|-----|
 | /wp-content/uploads/elementor/css/global.css | / | 200 | ⚠️ mevcut (idari-görünümlü) |
 | /wp-content/uploads/elementor/css/post-5.css | / | 200 | ⚠️ mevcut (idari-görünümlü) |
-| /wp-content/uploads/2021/07/ipek-Logo-150x150.png | / | 200 | ⚠️ mevcut (idari-görünümlü) |
-| /wp-content/uploads/2021/07/ipek-Logo.png | / | 200 | ⚠️ mevcut (idari-görünümlü) |
-| /wp-content/uploads/2021/07/14043-scaled.jpg | / | 200 | ⚠️ mevcut (idari-görünümlü) |
-| /wp-content/uploads/2021/07/gunes-enerjisi-santrali-takip.jpg | / | 200 | ⚠️ mevcut (idari-görünümlü) |
-| /wp-content/uploads/2021/07/muze-otomasyon-sistemi.jpg | / | 200 | ⚠️ mevcut (idari-görünümlü) |
+| /wp-content/uploads/2023/05/logo-150x150.png | / | 200 | ⚠️ mevcut (idari-görünümlü) |
+| /wp-content/uploads/2023/05/logo.png | / | 200 | ⚠️ mevcut (idari-görünümlü) |
+| /wp-content/uploads/2023/05/banner-scaled.jpg | / | 200 | ⚠️ mevcut (idari-görünümlü) |
+| /wp-content/uploads/2023/05/urun-gorseli-1.jpg | / | 200 | ⚠️ mevcut (idari-görünümlü) |
+| /wp-content/uploads/2023/05/hizmet-gorseli-2.jpg | / | 200 | ⚠️ mevcut (idari-görünümlü) |
 
 > **7** idari/hassas-görünümlü yol site haritasından keşfedildi ve erişilebilir (HTTP 200). Bu yolların YETKİ kontrolü **Aktif Doğrulama / Tam Pentest** ile doğrulanmalıdır — Keşif yalnız varlığı tespit eder, yetki testi yapmaz.
 
