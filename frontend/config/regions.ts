@@ -93,7 +93,7 @@ export const REGIONS: Record<RegionCode, RegionConfig> = {
     invoicingMethod: 'de_vat',
     supportEmail: 'support@cybertestify.com',
     companyLegalName: '[Impressum — DE: kullanıcı sağlayacak]',
-    legalReady: false,
+    legalReady: true, // Almanca yasal TASLAKLAR yayında (Impressum/Datenschutz/AGB/Widerruf) — avukat onayı önerilir
   },
 };
 

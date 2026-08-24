@@ -48,6 +48,11 @@ export function middleware(req: NextRequest) {
   if (seg === 'de' && (pathname === '/de/blog' || pathname.startsWith('/de/blog/'))) {
     return pass();
   }
+  // (Almanya) Almanca yasal sayfalar (/de/legal/impressum|datenschutz|agb|widerruf) — /de görünmese
+  // de erişilebilir olsun (inceleme/avukat). Taslak oldukları için sayfalar robots index:false.
+  if (seg === 'de' && pathname.startsWith('/de/legal/')) {
+    return pass();
+  }
   // GEÇİCİ: Kapalı bölgeye doğrudan erişim (/us, /ae, görünmez /de) -> aynı yolu görünür bölgeyle (tr) ver.
   if (isRegionCode(seg)) {
     const rest = pathname.slice(seg.length + 1); // "/us/packages" -> "/packages"

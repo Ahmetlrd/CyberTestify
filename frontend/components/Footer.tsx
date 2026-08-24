@@ -5,7 +5,7 @@ import { CookiePrefsButton } from './CookiePrefsButton';
 import type { RegionConfig } from '../config/regions';
 import { getDict } from '../config/i18n';
 
-const LEGAL_LINKS: Array<[string, string]> = [
+const LEGAL_LINKS_TR: Array<[string, string]> = [
   ['Kullanım Koşulları', '/legal/kullanim-kosullari'],
   ['KVKK Aydınlatma Metni', '/legal/kvkk-aydinlatma'],
   ['Gizlilik Politikası ve Sözleşmesi', '/legal/gizlilik'],
@@ -15,9 +15,17 @@ const LEGAL_LINKS: Array<[string, string]> = [
   ['Teslimat, İptal / İade & Cayma', '/legal/iptal-iade'],
   ['Sorumluluk Reddi', '/legal/sorumluluk-reddi'],
 ];
+// (Almanya) /de'de Alman hukuki sayfa seti (TR slug'larından AYRI).
+const LEGAL_LINKS_DE: Array<[string, string]> = [
+  ['Impressum', '/legal/impressum'],
+  ['Datenschutzerklärung', '/legal/datenschutz'],
+  ['AGB', '/legal/agb'],
+  ['Widerrufsbelehrung', '/legal/widerruf'],
+];
 
 export function Footer({ region }: { region: RegionConfig }) {
   const d = getDict(region).footer;
+  const legalLinks = region.lang === 'de' ? LEGAL_LINKS_DE : LEGAL_LINKS_TR;
 
   return (
     <footer className="mt-24 bg-brand-deep text-white/80">
@@ -56,7 +64,7 @@ export function Footer({ region }: { region: RegionConfig }) {
             <h3 className="text-xs font-semibold uppercase tracking-widest text-white/50">{d.legal}</h3>
             {region.legalReady ? (
               <ul className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                {LEGAL_LINKS.map(([label, href]) => (
+                {legalLinks.map(([label, href]) => (
                   <li key={href}>
                     <Link href={`/${region.code}${href}`} className="text-sm text-white/70 transition hover:text-white">
                       {label}
