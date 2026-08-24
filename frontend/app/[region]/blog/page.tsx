@@ -9,8 +9,8 @@ const SITE = 'https://cybertestify.com';
 type Post = { title: string; description: string; slug: string; publishedAt: string | null };
 
 // Bölge -> blog dili. Şu an yalnız tr ve de blog var (us/ae görünmez). Bilinmeyen -> tr.
-function blogLang(region: string): 'tr' | 'de' {
-  return region === 'de' ? 'de' : 'tr';
+function blogLang(region: string): 'tr' | 'de' | 'en' {
+  return region === 'de' ? 'de' : region === 'en' ? 'en' : 'tr';
 }
 
 // (Çok-dilli blog) UI metinleri dile göre. /de bağlamında Türkçe SIZMAZ.
@@ -31,6 +31,14 @@ const T = {
     metaTitle: 'Blog — CyberTestify',
     metaDesc: 'Artikel über Web-Sicherheit, DSGVO/ISO 27001/PCI-DSS-Vorbereitung und Sicherheitsbewertung.',
   },
+  en: {
+    eyebrow: 'Blog',
+    title: 'Security & Compliance Articles',
+    subtitle: 'Web security, UK GDPR/ISO 27001/PCI readiness and practical tips.',
+    empty: 'Coming soon in English.',
+    metaTitle: 'Blog — CyberTestify',
+    metaDesc: 'Articles on web security, UK GDPR/ISO 27001/PCI-DSS readiness and security pre-assessment.',
+  },
 } as const;
 
 export function generateMetadata({ params }: { params: { region: string } }): Metadata {
@@ -41,7 +49,7 @@ export function generateMetadata({ params }: { params: { region: string } }): Me
     description: t.metaDesc,
     alternates: {
       canonical: `/${params.region}/blog`,
-      languages: { tr: `${SITE}/tr/blog`, de: `${SITE}/de/blog` },
+      languages: { tr: `${SITE}/tr/blog`, de: `${SITE}/de/blog`, en: `${SITE}/en/blog` },
     },
     openGraph: { type: 'website', siteName: 'CyberTestify', url: `${SITE}/${params.region}/blog`, title: t.metaTitle, description: t.subtitle },
   };
@@ -62,7 +70,7 @@ export default async function BlogPage({ params }: { params: { region: string } 
   const lang = blogLang(params.region);
   const t = T[lang];
   const posts = await getPosts(lang);
-  const dateLocale = lang === 'de' ? 'de-DE' : 'tr-TR';
+  const dateLocale = lang === 'de' ? 'de-DE' : lang === 'en' ? 'en-GB' : 'tr-TR';
   const fmtDate = (d: string | null) =>
     d ? new Date(d).toLocaleDateString(dateLocale, { year: 'numeric', month: 'long', day: 'numeric' }) : '';
   return (

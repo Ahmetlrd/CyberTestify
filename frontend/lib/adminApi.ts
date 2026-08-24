@@ -85,9 +85,9 @@ export const adminApi = {
   // (SEO BLOG — çok-dilli: tr | de)
   blogList: () =>
     areq<{ posts: Array<{ id: string; title: string; slug: string; status: string; lang: string; createdAt: string; publishedAt: string | null }>; draftCount: number; publishedCount: number; lastPublishedAt: string | null }>('/admin/blog'),
-  blogBulk: (text: string, lang: 'tr' | 'de' = 'tr') =>
+  blogBulk: (text: string, lang: 'tr' | 'de' | 'en' = 'tr') =>
     areq<{ created: Array<{ title: string; slug: string }>; conflicts: string[]; errors: string[]; lang: string }>('/admin/blog/bulk', { method: 'POST', body: JSON.stringify({ text, lang }) }),
-  blogPublishNext: (lang?: 'tr' | 'de') =>
+  blogPublishNext: (lang?: 'tr' | 'de' | 'en') =>
     areq<{ ok: boolean; published: { slug: string; title: string } | null; message?: string }>('/admin/blog/publish-next', { method: 'POST', body: JSON.stringify(lang ? { lang } : {}) }),
   systemHealth: () => areq<any>('/admin/system-health'),
 

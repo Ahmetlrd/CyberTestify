@@ -23,17 +23,27 @@ const LEGAL_LINKS_DE: Array<[string, string]> = [
   ['Widerrufsbelehrung', '/legal/widerruf'],
 ];
 
+// (İngiltere) /en'de UK hukuki sayfa seti (TR/DE slug'larından AYRI).
+const LEGAL_LINKS_EN: Array<[string, string]> = [
+  ['Terms & Conditions', '/legal/terms'],
+  ['Privacy Policy', '/legal/privacy'],
+  ['Cancellation Rights', '/legal/cancellation'],
+  ['Business Information', '/legal/business-info'],
+];
+
 // (Almanya) Footer üst-link etiketleri de dile göre — /de'de Almanca + Künye → Impressum.
 const NAV_LINKS_DE = { about: 'Über uns', blog: 'Blog', openSource: 'Open Source', contact: 'Kontakt & Impressum →' };
 const NAV_LINKS_TR = { about: 'Hakkımızda', blog: 'Blog', openSource: 'Açık Kaynak', contact: 'İletişim & Künye →' };
+const NAV_LINKS_EN = { about: 'About', blog: 'Blog', openSource: 'Open Source', contact: 'Contact & Business Info →' };
 
 export function Footer({ region }: { region: RegionConfig }) {
   const d = getDict(region).footer;
   const isDe = region.lang === 'de';
-  const legalLinks = isDe ? LEGAL_LINKS_DE : LEGAL_LINKS_TR;
-  const nav = isDe ? NAV_LINKS_DE : NAV_LINKS_TR;
+  const isEn = region.lang === 'en';
+  const legalLinks = isDe ? LEGAL_LINKS_DE : isEn ? LEGAL_LINKS_EN : LEGAL_LINKS_TR;
+  const nav = isDe ? NAV_LINKS_DE : isEn ? NAV_LINKS_EN : NAV_LINKS_TR;
   // Künye/Impressum → /de'de Alman Impressum sayfası; TR'de mevcut /iletisim korunur.
-  const contactHref = isDe ? '/de/legal/impressum' : '/iletisim';
+  const contactHref = isDe ? '/de/legal/impressum' : isEn ? '/en/legal/business-info' : '/iletisim';
 
   return (
     <footer className="mt-24 bg-brand-deep text-white/80">

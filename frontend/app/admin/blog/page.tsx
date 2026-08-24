@@ -7,7 +7,7 @@ import { H1, Table, fmtDate } from '../../../components/admin/ui';
 export default function AdminBlog() {
   const [data, setData] = useState<any>(null);
   const [text, setText] = useState('');
-  const [lang, setLang] = useState<'tr' | 'de'>('tr'); // yeni yükleme/yayın hangi dile/bölgeye ait
+  const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr'); // yeni yükleme/yayın hangi dile/bölgeye ait
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ created: any[]; conflicts: string[]; errors: string[] } | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -69,9 +69,10 @@ export default function AdminBlog() {
         {/* (Çok-dilli) Bu yükleme hangi dile/bölgeye ait: tr → /tr/blog, de → /de/blog. Yalnız o rotada görünür. */}
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#cbd5e1', fontSize: 13, marginBottom: 8 }}>
           Dil / Bölge:
-          <select value={lang} onChange={(e) => setLang(e.target.value as 'tr' | 'de')} style={{ background: '#020617', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '4px 8px', fontSize: 13 }}>
+          <select value={lang} onChange={(e) => setLang(e.target.value as 'tr' | 'de' | 'en')} style={{ background: '#020617', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '4px 8px', fontSize: 13 }}>
             <option value="tr">🇹🇷 Türkçe (/tr/blog)</option>
             <option value="de">🇩🇪 Deutsch (/de/blog)</option>
+            <option value="en">🇬🇧 English (/en/blog)</option>
           </select>
           <span style={{ color: '#64748b', fontSize: 11 }}>Almanca yazılar otomatik günlük yayına GİRMEZ — elle “Şimdi yayınla”.</span>
         </label>

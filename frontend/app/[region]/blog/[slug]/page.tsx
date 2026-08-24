@@ -9,8 +9,8 @@ const SITE = 'https://cybertestify.com';
 
 type Post = { title: string; description: string; slug: string; contentHtml: string; publishedAt: string | null };
 
-function blogLang(region: string): 'tr' | 'de' {
-  return region === 'de' ? 'de' : 'tr';
+function blogLang(region: string): 'tr' | 'de' | 'en' {
+  return region === 'de' ? 'de' : region === 'en' ? 'en' : 'tr';
 }
 
 async function getPost(slug: string, lang: string): Promise<Post | null> {
@@ -26,14 +26,14 @@ async function getPost(slug: string, lang: string): Promise<Post | null> {
 export async function generateMetadata({ params }: { params: { region: string; slug: string } }): Promise<Metadata> {
   const lang = blogLang(params.region);
   const post = await getPost(params.slug, lang);
-  if (!post) return { title: lang === 'de' ? 'Artikel nicht gefunden — CyberTestify' : 'Yazı bulunamadı — CyberTestify' };
+  if (!post) return { title: lang === 'de' ? 'Artikel nicht gefunden — CyberTestify' : lang === 'en' ? 'Article not found — CyberTestify' : 'Yazı bulunamadı — CyberTestify' };
   const url = `${SITE}/${params.region}/blog/${post.slug}`;
   return {
     title: `${post.title} — CyberTestify`,
     description: post.description,
     alternates: {
       canonical: url,
-      languages: { tr: `${SITE}/tr/blog/${post.slug}`, de: `${SITE}/de/blog/${post.slug}` },
+      languages: { tr: `${SITE}/tr/blog/${post.slug}`, de: `${SITE}/de/blog/${post.slug}`, en: `${SITE}/en/blog/${post.slug}` },
     },
     openGraph: {
       title: post.title,
@@ -53,10 +53,10 @@ export default async function BlogPostPage({ params }: { params: { region: strin
   const post = await getPost(params.slug, lang);
   if (!post) notFound();
   const url = `${SITE}/${params.region}/blog/${post.slug}`;
-  const dateLocale = lang === 'de' ? 'de-DE' : 'tr-TR';
+  const dateLocale = lang === 'de' ? 'de-DE' : lang === 'en' ? 'en-GB' : 'tr-TR';
   const fmtDate = (d: string | null) =>
     d ? new Date(d).toLocaleDateString(dateLocale, { year: 'numeric', month: 'long', day: 'numeric' }) : '';
-  const backLabel = lang === 'de' ? '← Alle Artikel' : '← Tüm yazılar';
+  const backLabel = lang === 'de' ? '← Alle Artikel' : lang === 'en' ? '← All articles' : '← Tüm yazılar';
   const articleLd = {
     '@context': 'https://schema.org',
     '@type': 'Article',
