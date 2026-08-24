@@ -347,7 +347,7 @@ export async function generateAndStoreReport(flowId: string) {
       return null; // worker: null -> flow'u bitir, rapor-hazır maili GÖNDERME (login-fail maili zaten gitti).
     }
     try {
-      const built = await generateAuthenticatedReport(flow.order.domain.hostname, authRes.session);
+      const built = await generateAuthenticatedReport(flow.order.domain.hostname, authRes.session, locale);
       if (built) { findings = built.findings; fixText = built.fixText; console.log(`[report][FULL] ${flow.orderId}: authenticated (login'li) rapor DETERMINISTIK üretildi.`); }
       else console.warn(`[report][FULL] ${flow.orderId}: authenticated rapor üretilemedi (hedefe ulaşılamadı).`);
     } catch (err) {

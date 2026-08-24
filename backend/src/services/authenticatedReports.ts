@@ -26,7 +26,7 @@ import { suggestPricingForHost } from './pricingModel.js';
 import { logScanStep } from './scanLogger.js';
 import {
   buildActiveCheckReport, buildInjectionReport, buildIdorReport,
-  RISK_WORD, levelRank, extractLevel, headlineOf, detailOnly, type Level,
+  RISK_WORD, RISK_WORD_DE, SEV_DISP, levelRank, extractLevel, headlineOf, detailOnly, type Level,
 } from './activeVerifyReports.js';
 import type { AuthSession } from './authSession.js';
 
@@ -40,6 +40,15 @@ const COOKIE_CFG = {
   fixFound: ['Oturum çerezlerine **Secure + HttpOnly + SameSite=Strict/Lax** bayraklarını ekleyin.', 'HttpOnly, çerezin JavaScript ile (XSS) okunmasını engeller; Secure, düz HTTP’de sızmasını önler; SameSite CSRF’i azaltır.'],
   fixClean: ['Oturum çerezlerinde Secure/HttpOnly/SameSite bayraklarını proaktif olarak zorunlu kılın.'],
   cleanGenel: 'Oturum çerezlerinde eksik güvenlik bayrağı gözlemlenmedi (veya oturum çerez-tabanlı değil).',
+  whatCheckedDe: [
+    'Aus den nach dem Login beobachteten Cookies wurden nur echte **Server-Sitzungscookies** bewertet.',
+    'Für jedes Sitzungscookie wurden die Sicherheits-Flags **Secure / HttpOnly / SameSite** geprüft.',
+    'Analyse-/Drittanbieter-Cookies (_ga, _fbp, _clck usw.) gelten nicht als Sitzungscookies (HttpOnly ist bei ihnen unmöglich) — sie werden nicht bewertet.',
+  ],
+  fixTitleDe: 'Cookie-Sicherheit',
+  fixFoundDe: ['Fügen Sie Sitzungscookies die Flags **Secure + HttpOnly + SameSite=Strict/Lax** hinzu.', 'HttpOnly verhindert das Auslesen des Cookies per JavaScript (XSS); Secure verhindert die Preisgabe über einfaches HTTP; SameSite reduziert CSRF.'],
+  fixCleanDe: ['Erzwingen Sie bei Sitzungscookies proaktiv die Flags Secure/HttpOnly/SameSite.'],
+  cleanGenelDe: 'Bei den Sitzungscookies wurde kein fehlendes Sicherheits-Flag beobachtet (oder die Sitzung ist nicht cookie-basiert).',
 };
 const FIXATION_CFG = {
   title: 'Session Fixation', whatChecked: [
@@ -51,6 +60,15 @@ const FIXATION_CFG = {
   fixFound: ['Başarılı girişte oturum tanımlayıcısını **mutlaka yenileyin** (session regeneration); login öncesi verilen id’yi geçersiz kılın.'],
   fixClean: ['Girişte oturum id yenilemeyi (session regeneration) standart hale getirin.'],
   cleanGenel: 'Login sonrası oturum çerezi yenilendiği (veya oturum çerez-tabanlı olmadığı) için fixation göstergesi gözlemlenmedi.',
+  whatCheckedDe: [
+    'Der VOR dem Login (unauthentifiziert) von der Startseite bezogene Sitzungscookie-Wert wurde beobachtet.',
+    'Er wurde mit dem Sitzungscookie-Wert NACH dem Login **verglichen** (bei Gleichheit erneuert der Server die Sitzung nicht).',
+    'Nur ein einziges GET; es wurde kein Zustand geändert.',
+  ],
+  fixTitleDe: 'Session Fixation',
+  fixFoundDe: ['**Erneuern Sie** bei erfolgreichem Login unbedingt den Sitzungsbezeichner (Session Regeneration); machen Sie die vor dem Login vergebene ID ungültig.'],
+  fixCleanDe: ['Standardisieren Sie die Erneuerung der Sitzungs-ID beim Login (Session Regeneration).'],
+  cleanGenelDe: 'Da das Sitzungscookie nach dem Login erneuert wurde (oder die Sitzung nicht cookie-basiert ist), wurde kein Fixation-Indikator beobachtet.',
 };
 const LOGOUT_CFG = {
   title: 'Logout / Oturum Geçersizleştirme', whatChecked: [
@@ -62,6 +80,15 @@ const LOGOUT_CFG = {
   fixFound: ['Logout’ta oturum token’ını **sunucu tarafında geçersiz kılın** (revocation/expiry); istemci-tarafı token silme tek başına yeterli değildir.'],
   fixClean: ['Sunucu-taraflı oturum geçersizleştirme (revocation) uygulayın.'],
   cleanGenel: 'Logout sonrası oturum geçersizleştirildiği (veya sunucu-taraflı logout uç noktası olmadığı) için bulgu gözlemlenmedi.',
+  whatCheckedDe: [
+    'Ein geschützter Endpunkt (whoami/Profil), der mit der Sitzung 200 zurückgibt, wurde identifiziert.',
+    'Ein per GET aufrufbarer Logout-Endpunkt wurde erprobt (**kein POST** — kein Zustandswechsel).',
+    'Es wurde geprüft, ob NACH dem Logout mit DEMSELBEN Token erneut auf den geschützten Endpunkt zugegriffen werden kann.',
+  ],
+  fixTitleDe: 'Sitzungsinvalidierung',
+  fixFoundDe: ['**Machen Sie** das Sitzungs-Token beim Logout **serverseitig ungültig** (Revocation/Expiry); das clientseitige Löschen des Tokens allein genügt nicht.'],
+  fixCleanDe: ['Wenden Sie eine serverseitige Sitzungsinvalidierung (Revocation) an.'],
+  cleanGenelDe: 'Da die Sitzung nach dem Logout ungültig gemacht wurde (oder kein serverseitiger Logout-Endpunkt vorhanden ist), wurde kein Befund beobachtet.',
 };
 const FORCED_CFG = {
   title: 'Forced Browsing / Fonksiyon-Seviye Yetki', whatChecked: [
@@ -73,14 +100,27 @@ const FORCED_CFG = {
   fixFound: ['Her yönetim/hassas uç noktasında **sunucu-taraflı rol/yetki kontrolü** uygulayın; yalnız UI’da gizlemek yeterli değildir.'],
   fixClean: ['Yönetim uç noktalarını sunucu-taraflı rol kontrolüyle koruyun (proaktif).'],
   cleanGenel: 'Düşük yetkili oturumla erişilebilen bir admin/yönetim uç noktası gözlemlenmedi.',
+  whatCheckedDe: [
+    'An gängige Admin-/Verwaltungs-Endpunkte wurde mit der Sitzung des VORHANDENEN (vermutlich niedrig privilegierten) Testkontos eine **GET**-Anfrage gesendet.',
+    'Zur Vermeidung von Falsch-Positiven wurden nur 200er als Befund gewertet, die **ABWEICHENDEN** Inhalt/JSON gegenüber der Startseiten-Shell zurückgaben.',
+    'Ein einziger Versuch, nur GET, dem Schutzschalter unterworfen.',
+  ],
+  fixTitleDe: 'Funktionsebenen-Autorisierung',
+  fixFoundDe: ['Wenden Sie an jedem Verwaltungs-/sensiblen Endpunkt eine **serverseitige Rollen-/Berechtigungsprüfung** an; ein bloßes Ausblenden in der UI genügt nicht.'],
+  fixCleanDe: ['Schützen Sie Verwaltungs-Endpunkte durch serverseitige Rollenprüfung (proaktiv).'],
+  cleanGenelDe: 'Es wurde kein Admin-/Verwaltungs-Endpunkt beobachtet, der mit einer niedrig privilegierten Sitzung erreichbar war.',
 };
 
 // (İş A) NE KONTROL EDİLDİ ilk satırı advisor durumuna göre koşullu: KAPALI (varsayılan) -> deterministik dil;
 // AÇIK (AUTH_ADVISOR_HOSTS) -> AI-danışma dili. Tek 'agentStatus' bayrağından türer (rapor kendiyle çelişmez).
 const PRIVESC_WC_DET = 'Keşfedilen authenticated yüzeyde **deterministik olarak** yetki-alanı içeren form/API (kayıt/profil/ayar tipi) arandı.';
 const PRIVESC_WC_AI = 'Keşfedilen authenticated yüzeyden **Otonom Analiz Motoru** (yalnız JSON öneri; doğrudan HTTP atmaz) yetki-alanı içeren form/API seçti.';
+const PRIVESC_WC_DET_DE = 'Auf der entdeckten authentifizierten Oberfläche wurde **deterministisch** nach Formularen/APIs mit Berechtigungsbezug (Registrierung/Profil/Einstellung) gesucht.';
+const PRIVESC_WC_AI_DE = 'Aus der entdeckten authentifizierten Oberfläche wählte die **autonome Analyse-Engine** (nur JSON-Vorschlag; sendet keine direkten HTTP-Anfragen) Formulare/APIs mit Berechtigungsbezug aus.';
 const MULTISTEP_WC_DET = '**Deterministik olarak** çok-adımlı akış/fiyat-kupon alanı arandı; backend YALNIZ **GET-gözlem** yaptı.';
 const MULTISTEP_WC_AI = '**Otonom Analiz Motoru** (yalnız JSON öneri) çok-adımlı akış/fiyat-kupon alanı seçti; backend YALNIZ **GET-gözlem** yaptı.';
+const MULTISTEP_WC_DET_DE = '**Deterministisch** wurde nach mehrstufigen Abläufen/Preis-Coupon-Feldern gesucht; das Backend führte NUR **GET-Beobachtung** durch.';
+const MULTISTEP_WC_AI_DE = 'Die **autonome Analyse-Engine** (nur JSON-Vorschlag) wählte mehrstufige Abläufe/Preis-Coupon-Felder aus; das Backend führte NUR **GET-Beobachtung** durch.';
 const PRIVESC_CFG = {
   title: 'Yetki Yükseltme (Privilege Escalation)', whatChecked: [
     PRIVESC_WC_DET,
@@ -92,6 +132,16 @@ const PRIVESC_CFG = {
   fixFound: ['Model bağlamada **allowlist** ile yalnız izin verilen alanları bağlayın; `role/isAdmin` gibi alanları ASLA istemciden almayın.', 'Sunucu tarafında rol atamasını yalnız yetkili akışlarda yapın.'],
   fixClean: ['Mass-assignment koruması (alan allowlist) uygulayın; rol/yetki alanlarını istemciden kabul etmeyin (proaktif).'],
   cleanGenel: 'Uygun bir kayıt/profil formu bulunamadı veya `role/isAdmin` mass-assignment probu kabul edilmedi.',
+  whatCheckedDe: [
+    PRIVESC_WC_DET_DE,
+    'Falls eine sicher prüfbare Oberfläche gefunden wurde, wurde mit einer **sicheren, authenticated-light** Funktion EINE beobachtende Mass-Assignment-Sonde (`role/isAdmin`-Zusatzfeld) angewendet.',
+    '⚠️ Es wurde KEINE echte Ausweitung durchgeführt; es wurde nicht mit erhöhten Rechten erneut angemeldet; die Sitzung wurde nicht verlassen; auf konten-ändernde/Checkout-Ziele wurde **nicht geschrieben** (Blocklist auf Codeebene).',
+  ],
+  confidenceNoteDe: 'Der Mass-Assignment-Indikator wurde nur aus der ersten Antwort abgeleitet (geringe Konfidenz); eine sichere Verifizierung erfordert einen manuellen Test.',
+  fixTitleDe: 'Rechteausweitung / Mass-Assignment',
+  fixFoundDe: ['Binden Sie bei der Modellbindung per **Allowlist** nur erlaubte Felder; nehmen Sie Felder wie `role/isAdmin` NIEMALS vom Client entgegen.', 'Nehmen Sie die Rollenzuweisung serverseitig nur in autorisierten Abläufen vor.'],
+  fixCleanDe: ['Wenden Sie Mass-Assignment-Schutz (Feld-Allowlist) an; akzeptieren Sie Rollen-/Berechtigungsfelder nicht vom Client (proaktiv).'],
+  cleanGenelDe: 'Es wurde kein geeignetes Registrierungs-/Profilformular gefunden oder die `role/isAdmin`-Mass-Assignment-Sonde wurde nicht akzeptiert.',
 };
 const MULTISTEP_CFG = {
   title: 'Çok-Adımlı İş Mantığı', whatChecked: [
@@ -104,6 +154,16 @@ const MULTISTEP_CFG = {
   fixFound: ['Fiyat/miktar/indirim/kupon değerlerini **asla** istemciden gelenle işlemeyin; sunucuda yeniden hesaplayın/doğrulayın.', 'Çok-adımlı akışlarda her adımın ön koşulunu sunucu tarafında zorunlu kılın; kuponu tek-kullanımlık atomik tüketin.'],
   fixClean: ['Kritik değerleri sunucuda doğrulayın; adım sırası + kupon tekrar-kullanım kontrolü uygulayın (proaktif).'],
   cleanGenel: 'Gözlemlenebilir bir istemci-tarafı fiyat/kupon alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.',
+  whatCheckedDe: [
+    MULTISTEP_WC_DET_DE,
+    'Ein clientseitig veränderbares verstecktes Preis-/Mengen-/Coupon-Feld + ein ohne Vorbedingung erreichbarer „Bestätigungs"-Schritt wurden beobachtet.',
+    '⚠️ Nur bis zum Warenkorb/Formular; **Zahlung/Checkout NICHT abgeschlossen** (Blocklist auf Codeebene); es wurde keine Ressource verbraucht.',
+  ],
+  confidenceNoteDe: 'Geschäftslogik-Schwachstellen sind kontextspezifisch; diese Prüfung ist auf Oberflächen-/Indikatorebene.',
+  fixTitleDe: 'Mehrstufige Geschäftslogik',
+  fixFoundDe: ['Verarbeiten Sie Preis-/Mengen-/Rabatt-/Coupon-Werte **niemals** mit dem vom Client gelieferten Wert; berechnen/validieren Sie sie serverseitig neu.', 'Erzwingen Sie in mehrstufigen Abläufen die Vorbedingung jedes Schritts serverseitig; verbrauchen Sie Coupons atomar als Einmal-Gebrauch.'],
+  fixCleanDe: ['Validieren Sie kritische Werte serverseitig; wenden Sie eine Schrittreihenfolge- + Coupon-Wiederverwendungsprüfung an (proaktiv).'],
+  cleanGenelDe: 'Es wurde kein beobachtbares clientseitiges Preis-/Coupon-Feld oder ein direkt erreichbarer „Bestätigungs"-Schritt gefunden.',
 };
 
 const JWT_CFG = {
@@ -117,6 +177,16 @@ const JWT_CFG = {
   fixFound: ['İmza algoritmasını sunucuda **sabitleyin** (ör. yalnız RS256/HS256); `alg=none` ve istemci-seçimli alg’i REDDEDİN.', 'JWT imza sırrını **güçlü/rastgele** (256-bit+) yapın; sır/parola gibi hassas veriyi token gövdesine KOYMAYIN (JWT gövdesi şifreli değildir).', 'Token’a `exp` (kısa ömür) ekleyin; kritik yetki/rol kararlarını istemci claim’ine değil sunucu doğrulamasına dayandırın.'],
   fixClean: ['İmza algoritmasını sabitleyin, güçlü sır kullanın, `exp` ekleyin ve hassas claim taşımayın (proaktif).'],
   cleanGenel: 'JWT/token güvenlik göstergesi bulunamadı ya da oturum JWT taşımıyor.',
+  whatCheckedDe: [
+    'Trägt die Sitzung ein **JWT-Bearer**, wurde das Token OFFLINE dekodiert und analysiert: Signaturalgorithmus (**alg=none / unsigniert**), ob das Signaturgeheimnis **schwach/verbreitet** ist (OFFLINE-Verifizierung mit gängigen Geheimnissen) und **sensible/übermäßige Claims** im Token-Körper (Passwort/Geheimnis, Rolle/Berechtigung).',
+    'Zusätzlich eine EINZIGE, harmlose Beobachtung: Wird ein unsigniertes (alg=none) gefälschtes Token an einem geschützten Endpunkt AKZEPTIERT (nur Beobachtung; der Zugriff wurde nicht genutzt).',
+    '⚠️ KEINE echte Ausnutzung — keine Token-Übernahme/Rechteausweitung; nur der Sicherheitsindikator wurde berichtet.',
+  ],
+  confidenceNoteDe: 'Schwaches-Geheimnis- und alg=none-AKZEPTANZ-Indikatoren sind eindeutig (hohe Konfidenz); Claim-Beobachtungen sind informativ.',
+  fixTitleDe: 'JWT / Token-Sicherheit',
+  fixFoundDe: ['**Fixieren Sie** den Signaturalgorithmus serverseitig (z. B. nur RS256/HS256); LEHNEN Sie `alg=none` und clientseitig gewählte Algorithmen AB.', 'Machen Sie das JWT-Signaturgeheimnis **stark/zufällig** (256-Bit+); legen Sie sensible Daten wie Geheimnis/Passwort NICHT in den Token-Körper (der JWT-Körper ist nicht verschlüsselt).', 'Fügen Sie dem Token `exp` (kurze Lebensdauer) hinzu; stützen Sie kritische Berechtigungs-/Rollenentscheidungen auf serverseitige Validierung statt auf Client-Claims.'],
+  fixCleanDe: ['Fixieren Sie den Signaturalgorithmus, verwenden Sie ein starkes Geheimnis, fügen Sie `exp` hinzu und tragen Sie keine sensiblen Claims (proaktiv).'],
+  cleanGenelDe: 'Es wurde kein JWT/Token-Sicherheitsindikator gefunden oder die Sitzung trägt kein JWT.',
 };
 
 const LOGIN_BYPASS_CFG = {
@@ -130,12 +200,34 @@ const LOGIN_BYPASS_CFG = {
   fixFound: ['Kimlik doğrulama sorgularında **parametreli sorgu / hazırlanmış ifade (prepared statement)** kullanın; kullanıcı girdisini asla SQL’e doğrudan koymayın.', 'Girdi doğrulama + ORM güvenli API’leri; hatalı girişte tek-tip hata mesajı döndürün.'],
   fixClean: ['Parametreli sorgu + girdi doğrulama uygulayın (proaktif); kimlik doğrulama akışını SQLi’ye kapatın.'],
   cleanGenel: 'Giriş baypası (SQLi) göstergesi bulunamadı ya da test edilebilir bir login ucu yoktu.',
+  whatCheckedDe: [
+    'An den Login-Endpunkt wurden zuerst **ungültige Zugangsdaten** (Kontrolle) gesendet; anschließend wurden klassische SQLi-Payloads (`\' OR \'1\'=\'1` usw.) erprobt und beobachtet, ob — im Gegensatz zur Kontrolle — eine Sitzung/ein Erfolg (Token/2xx) zurückkam.',
+    'Der Login-POST ist bereits ein erlaubter Ablauf; es handelt sich um eine EINZIGE, harmlose Beobachtung.',
+    '⚠️ KEINE Sitzungsübernahme/Ausnutzung — nur die Beobachtung, „ob ein Indikator für eine Authentifizierungsumgehung vorliegt".',
+  ],
+  confidenceNoteDe: 'Der Indikator beruht auf dem Vergleich mit dem Kontrollversuch; eine sichere Verifizierung erfordert einen manuellen Test.',
+  fixTitleDe: 'Login-Bypass / SQL-Injektion',
+  fixFoundDe: ['Verwenden Sie in Authentifizierungsabfragen **parametrisierte Abfragen / Prepared Statements**; fügen Sie Benutzereingaben niemals direkt in SQL ein.', 'Eingabevalidierung + sichere ORM-APIs; geben Sie bei fehlerhaftem Login eine einheitliche Fehlermeldung zurück.'],
+  fixCleanDe: ['Wenden Sie parametrisierte Abfragen + Eingabevalidierung an (proaktiv); sichern Sie den Authentifizierungsablauf gegen SQLi ab.'],
+  cleanGenelDe: 'Es wurde kein Login-Bypass-(SQLi-)Indikator gefunden oder es gab keinen prüfbaren Login-Endpunkt.',
 };
 
 // (blocker fix — part 2) Aktif Doğrulama'nın (login'siz) şablonundan MİRAS kalan "kimlik doğrulaması
 // olmadan / kapsam dışı" cümlelerini authenticated bağlama çevirir. buildInjection/Idor/ActiveCheckReport
 // DİĞER paketlerde AYNEN kalır — bu yalnız authenticated raporu POST-İŞLER (kaynak şablonlara dokunmaz).
-function toAuthenticatedContext(md: string): string {
+function toAuthenticatedContext(md: string, de = false): string {
+  if (de) {
+    return md
+      .replace(
+        /(#{2,3}) GELTUNGSBEREICH \(WICHTIG\)[\s\S]*?\(\*\*Prüfung erforderlich \/ Außerhalb des Umfangs\*\*\)\.\n\n/,
+        '$1 GELTUNGSBEREICH (WICHTIG)\n\nDieser Abschnitt wurde mit der **Sitzung (angemeldet)** des von Ihnen bereitgestellten TEST-Kontos ausgeführt und prüft den unbefugten Zugriff auf die **eigenen** enumerierbaren Ressourcen des Kontos. Ein **Cross-Account**-Test (Zugriff auf die Daten eines anderen Benutzers) liegt außerhalb des Umfangs dieser Version (erfordert zwei separate Konten). Das Fehlen von Befunden beweist nicht, dass in allen authentifizierten Abläufen kein IDOR vorliegt.\n\n',
+      )
+      .replace(
+        /Bereiche, die eine Authentifizierung erfordern, sowie die interne Logik liegen außerhalb des Geltungsbereichs dieses Pakets\./g,
+        'Dieser Abschnitt wurde mit der Sitzung des von Ihnen bereitgestellten TEST-Kontos in einem authentifizierten (angemeldeten) Kontext ausgeführt; der Abschluss von Zahlung/Kontostatusänderung ist auf Codeebene gesperrt.',
+      )
+      .replace(/ohne Authentifizierung/g, 'mit authentifizierter Sitzung');
+  }
   return md
     .replace(
       /(#{2,3}) KAPSAM SINIRI \(ÖNEMLİ\)[\s\S]*?\(\*\*İnceleme gerekli \/ Kapsam Dışı\*\*\)\.\n\n/,
@@ -168,6 +260,22 @@ const JS_ANALYSIS_CFG = {
   ],
   fixClean: ['İstemci JS’inde sır bulundurmayın; source-map’leri üretimde yayımlamayın; kütüphaneleri güncel tutup bağımlılık taraması uygulayın (proaktif).'],
   cleanGenel: 'Çekilen JS bundle’larında gerçek sır, erişilebilir source-map veya bilinen-zafiyetli (sürümü okunabilen) kütüphane gözlemlenmedi. Public-by-design anahtarlar (varsa) yukarıda bilgilendirici olarak ayrılmıştır.',
+  whatCheckedDe: [
+    'Die von der Seite geladenen JS-Bundles (script-src + inline) wurden abgerufen und **statisch** analysiert — KEINE aktive Ausnutzung, nur Herunterladen + Lesen.',
+    '**A) Geheimnis-Scan:** Es wurde nach ECHTEN Geheimnissen wie privaten Schlüsseln, AWS/GCP-Anmeldedaten, Stripe **sk_live_**, GitHub/GitLab/Slack-Token, DB-Verbindungszeichenfolgen gesucht (Werte REDIGIERT).',
+    '**Public-by-Design-Unterscheidung:** Firebase apiKey, GTM/GA-Mess-ID, Google-Maps-Browser-Key, Stripe **pk_**, reCAPTCHA-Site-Key sind konstruktionsbedingt öffentlich → gelten NICHT als „Offenlegung/Geheimnis", werden nur informativ gelistet.',
+    '**B) Source-Map-Offenlegung:** `//# sourceMappingURL`-Kommentare + `.js.map`-Kandidaten wurden erprobt; eine erreichbare `.map` → Leck des Original-Quellcodes/-Baums.',
+    '**C) Bekannt anfällige Bibliothek:** Geladene Bibliotheken + VERSIONEN wurden erkannt und KONSERVATIV mit bekannten CVEs abgeglichen; ist die Version nicht sicher lesbar, wurde KEIN CVE-Abgleich vorgenommen (Sprache „Patch-Bestätigung erforderlich"; nicht „ausnutzbar").',
+  ],
+  confidenceNoteDe: 'Alles ist passiv/statisch; Bibliotheksbefunde sind versionsbasierte Indikatoren (Ihre Distribution könnte gepatcht/backportiert sein — Bestätigung empfohlen).',
+  fixTitleDe: 'Client-Side / JS-Sicherheit',
+  fixFoundDe: [
+    'Legen Sie KEINE echten Geheimnisse in Client-JS; **widerrufen/invalidieren** Sie erkannte sofort und nutzen Sie einen serverseitigen Proxy + Secret-Management (Secret Manager).',
+    'Veröffentlichen Sie in der Produktion keine Source-Maps (oder beschränken Sie den Zugriff); entfernen Sie `.map`-Dateien aus dem öffentlichen Verzeichnis.',
+    'Bringen Sie anfällige Bibliotheken auf eine aktuelle/gepatchte Version; ergänzen Sie SRI + Abhängigkeitsscans (retire.js/Dependabot).',
+  ],
+  fixCleanDe: ['Bewahren Sie keine Geheimnisse in Client-JS auf; veröffentlichen Sie keine Source-Maps in der Produktion; halten Sie Bibliotheken aktuell und wenden Sie Abhängigkeitsscans an (proaktiv).'],
+  cleanGenelDe: 'In den abgerufenen JS-Bundles wurde kein echtes Geheimnis, keine erreichbare Source-Map und keine bekannt anfällige (versionslesbare) Bibliothek beobachtet. Public-by-Design-Schlüssel (falls vorhanden) wurden oben informativ ausgewiesen.',
 };
 
 // (Faz 1-B) Client-Side Statik Analiz — 6 pasif kontrol (DOM-XSS gösterge / postMessage / storage /
@@ -194,6 +302,26 @@ const CLIENT_SIDE_CFG = {
   ],
   fixClean: ['DOM sink’lerini güvenli API + sanitizasyonla kullanın; postMessage origin doğrulayın; token’ı HttpOnly çerezde tutun; SRI + rel=noopener + redirect allowlist uygulayın (proaktif).'],
   cleanGenel: 'Statik ayrıştırmada belirgin bir DOM-XSS göstergesi, güvensiz message handler, hassas storage yazımı, eksik SRI, tabnabbing veya açık yönlendirme gözlemlenmedi.',
+  whatCheckedDe: [
+    'Auf demselben JS/HTML-Corpus wurden **statisch** (KEINE aktive Ausnutzung) 6 clientseitige Prüfungen durchgeführt.',
+    '**1) DOM-based XSS (Indikator):** Steht eine gefährliche Sink (innerHTML/document.write/eval/.html()/location=) mit einer benutzergesteuerten Quelle (location.hash/search, referrer, window.name) im SELBEN Ausdruck — **KEIN nachgewiesenes XSS**, ein Indikator geringer Konfidenz (dynamische Verifizierung erforderlich).',
+    '**2) postMessage:** Erfolgt in `message`-Event-Listenern eine **event.origin-Prüfung**.',
+    '**3) Browser-Storage:** Schreiben **sensibler Daten** (Token/JWT/Sitzung) in localStorage/sessionStorage (statisch; Wert REDIGIERT).',
+    '**4) Fehlendes SRI:** Haben externe script/style ein `integrity`-Attribut (Lieferkette).',
+    '**5) Reverse Tabnabbing:** Haben `target="_blank"`-Links `rel="noopener/noreferrer"`.',
+    '**6) Open Redirect:** **eine einzige sichere Sonde** an im HTML BEOBACHTETE Weiterleitungsparameter — eine harmlose externe URL wurde gesendet und Location beobachtet; **Redirect wurde NICHT verfolgt**.',
+  ],
+  confidenceNoteDe: 'DOM-XSS-Befunde sind STATISCHE Indikatoren (hohes Falsch-Positiv-Potenzial; dynamische Verifizierung erforderlich). Die übrigen sind deterministische Beobachtungen.',
+  fixTitleDe: 'Client-Side-Statiksicherheit',
+  fixFoundDe: [
+    'DOM-XSS: Verarbeiten Sie benutzergesteuerte Daten statt mit innerHTML/eval/document.write mit textContent + sicherer API; sanitisieren Sie bei Bedarf mit DOMPurify.',
+    'postMessage: Validieren Sie in jedem `message`-Handler `event.origin` per Allowlist.',
+    'Storage: Bewahren Sie das Sitzungs-Token statt im localStorage in einem **HttpOnly + Secure Cookie** auf.',
+    'SRI: Fügen Sie externen script/style `integrity` + `crossorigin` hinzu. Tabnabbing: `rel="noopener noreferrer"` an `target="_blank"`-Links.',
+    'Open Redirect: Beschränken Sie Weiterleitungsziele serverseitig per **Allowlist**; leiten Sie nicht auf externe absolute URLs weiter.',
+  ],
+  fixCleanDe: ['Verwenden Sie DOM-Sinks mit sicherer API + Sanitisierung; validieren Sie postMessage-Origin; bewahren Sie das Token in einem HttpOnly-Cookie auf; wenden Sie SRI + rel=noopener + Redirect-Allowlist an (proaktiv).'],
+  cleanGenelDe: 'Bei der statischen Analyse wurde kein eindeutiger DOM-XSS-Indikator, kein unsicherer Message-Handler, kein Schreiben sensibler Daten in Storage, kein fehlendes SRI, kein Tabnabbing und keine offene Weiterleitung beobachtet.',
 };
 
 // (Faz 2-A) Kimlik-Doğrulama Derinliği — 9 kontrol. Güvenlik kuralları kod-seviyesinde (gerçek hesap
@@ -220,6 +348,26 @@ const AUTH_DEPTH_CFG = {
   ],
   fixClean: ['Tek-tip auth yanıtları, varsayılan-hesap yok, lockout/rate-limit + CAPTCHA, token-tabanlı reset, güçlü parola politikası, HTTPS-only login, no-store cache, MFA (proaktif).'],
   cleanGenel: 'Kimlik-doğrulama derinlik kontrollerinde belirgin bir enumerasyon, varsayılan-kimlik, zayıf-lockout, zayıf-reset veya şifresiz-kanal göstergesi gözlemlenmedi.',
+  whatCheckedDe: [
+    '9 Authentifizierungstiefen-Prüfungen (WSTG-ATHN/IDNT) — **sicher, geringes Volumen**; KEIN Brute-Force/DoS.',
+    '**1) Konto-Enumeration:** Antwortunterschied bei gültigem (Testkonto) vs. ungültigem (zufälligem) Benutzer — je ein FEHLGESCHLAGENER Versuch; erstellt kein Konto.',
+    '**2) Standard-Zugangsdaten:** kleine feste Liste (admin/admin usw.) — nur fehlgeschlagener Login; bei Annahme wird die Sitzung NICHT genutzt.',
+    '**3) Schwaches Lockout/Rate-Limit:** einige Fehlversuche mit einem THROWAWAY-(zufälligen)-Benutzer — **ein echtes Konto wird NIEMALS gesperrt**.',
+    '**4) Passwort-Reset:** Mechanismus-Beobachtung (Sicherheitsfrage/Token) — **es wird KEINE echte Reset-E-Mail AUSGELÖST** (nicht existierende E-Mail).',
+    '**5) Passwort-/Registrierungsrichtlinie:** nur clientseitige Beobachtung — **es wird KEINE echte Registrierung durchgeführt**.',
+    '**6) „Angemeldet bleiben"-Cookie · 7) Cache authentifizierter Seiten (Cache-Control) · 8) MFA-Vorhandensein (informativ) · 9) Anmeldedaten über unverschlüsselten Kanal (HTTP).**',
+  ],
+  confidenceNoteDe: 'Enumeration/Lockout/Reset-Befunde sind „Indikatoren" (Verifizierung erforderlich). Sicherheit: kein echtes Konto gesperrt, keine Reset-E-Mail gesendet, keine Registrierung durchgeführt, selbst bei erfolgreichem Login wurde die Sitzung nicht genutzt.',
+  fixTitleDe: 'Authentifizierungs-Härtung',
+  fixFoundDe: [
+    'Enumeration: Geben Sie bei login/reset/register **einheitliche** Antwort/Nachricht/Zeit zurück (verraten Sie nicht, ob ein Benutzer existiert).',
+    'Standard-Zugangsdaten: Entfernen Sie alle Standardkonten / erzwingen Sie eine Passwortänderung.',
+    'Lockout: Wenden Sie bei aufeinanderfolgenden Fehlversuchen ein **konto- + IP-basiertes Rate-Limit / eine temporäre Sperre** an; fügen Sie CAPTCHA hinzu.',
+    'Passwort-Reset: **Token-basiert** (Einmal-Gebrauch, kurze Lebensdauer), vermeiden Sie Sicherheitsfragen; verwenden Sie den Host-Header nicht im Reset-Link.',
+    'Passwortrichtlinie: serverseitig **min. 8+ / Komplexität**; unverschlüsselter Kanal: führen Sie den Login **nur über HTTPS** durch; `Cache-Control: no-store` für sensible Seiten; bieten Sie **MFA** an.',
+  ],
+  fixCleanDe: ['Einheitliche Auth-Antworten, keine Standardkonten, Lockout/Rate-Limit + CAPTCHA, token-basierter Reset, starke Passwortrichtlinie, HTTPS-only-Login, no-store-Cache, MFA (proaktiv).'],
+  cleanGenelDe: 'In den Authentifizierungstiefen-Prüfungen wurde kein eindeutiger Indikator für Enumeration, Standard-Zugangsdaten, schwaches Lockout, schwachen Reset oder unverschlüsselten Kanal beobachtet.',
 };
 
 // (Faz 2-B) Oturum Güvenliği Derinliği — 5 kontrol (CSRF/SameSite, session-id entropi, oturum-URL,
@@ -244,6 +392,24 @@ const SESSION_DEPTH_CFG = {
   ],
   fixClean: ['Oturum çerezine SameSite + __Host- prefix, 128-bit rastgele session-id, URL\'de oturum taşımama, anti-CSRF token, makul timeout (proaktif).'],
   cleanGenel: 'Sunucu oturum çerezi gözlemlendi ancak belirgin bir CSRF/SameSite eksiği, zayıf session-id, URL-ifşa veya prefix eksikliği göstergesi bulunamadı.',
+  whatCheckedDe: [
+    'FALLS ein ECHTES serverseitiges Sitzungscookie (Set-Cookie session) vorhanden ist, 5 Sitzungsverwaltungsprüfungen — alle **read-only/beobachtend** (KEINE zustandsändernde Übermittlung / kein echter CSRF-Angriff). Bei Bearer/JWT/token-basierten Zielen liegt dieser Abschnitt **außerhalb des Umfangs**.',
+    '**1) CSRF (SESS-05):** Beobachtung von SameSite im Sitzungscookie + Anti-CSRF-Token im zustandsändernden POST-Formular (statisch; Formular NICHT abgesendet).',
+    '**2) Session-ID-Entropie (SESS-01):** strukturelle Analyse der Sitzungs-ID (Länge/Charset/Entropie) — KEIN Brute; bei JWT einem separaten Abschnitt überlassen.',
+    '**3) Sitzung in URL (SESS-04):** Wird die Session-ID in URL/Query (jsessionid/sid usw.) offengelegt.',
+    '**4) Timeout / gleichzeitige Sitzungen (SESS-07/11):** beobachtender Indikator (sicherer Test manuell).',
+    '**5) Cookie-Prefix (SESS-02):** Fehlt dem Sitzungscookie ein __Host-/__Secure--Prefix.',
+  ],
+  confidenceNoteDe: 'Die Befunde sind „Indikatoren" (kein echter CSRF-Angriff/Brute durchgeführt; Token/Sitzung REDIGIERT). Ohne serverseitiges Sitzungscookie liegen die Prüfungen außerhalb des Umfangs (Token/JWT-Sicherheit in separatem Abschnitt).',
+  fixTitleDe: 'Sitzungssicherheits-Härtung',
+  fixFoundDe: [
+    'CSRF: Fügen Sie dem Sitzungscookie **SameSite=Lax/Strict** hinzu; erzwingen Sie bei zustandsändernden Anfragen ein **Anti-CSRF-Token** (Double-Submit / Synchronizer).',
+    'Session-ID: Verwenden Sie eine mindestens **128-Bit zufällige** (CSPRNG) Sitzungs-ID; keine vorhersehbaren/sequenziellen Werte.',
+    'Sitzung in URL: Tragen Sie die Session-ID **niemals in URL/Query** — nur im HttpOnly + Secure Cookie.',
+    'Prefix: Setzen Sie das Sitzungscookie mit dem **`__Host-`**-Prefix (Secure + Path=/ + kein Domain). Timeout: angemessenes Idle-/Absolute-Timeout + serverseitige Invalidierung.',
+  ],
+  fixCleanDe: ['Sitzungscookie mit SameSite + __Host--Prefix, 128-Bit zufällige Session-ID, keine Sitzung in der URL, Anti-CSRF-Token, angemessenes Timeout (proaktiv).'],
+  cleanGenelDe: 'Ein serverseitiges Sitzungscookie wurde beobachtet, jedoch kein eindeutiger Indikator für fehlendes CSRF/SameSite, schwache Session-ID, URL-Offenlegung oder fehlenden Prefix gefunden.',
 };
 
 // (Faz 3-A) Girdi & Header + Yapılandırma & İfşa derinliği — 10 kontrol (güvenli GET/OPTIONS/TRACE +
@@ -268,6 +434,24 @@ const INPUT_HEADER_CFG = {
   ],
   fixClean: ['Host allowlist, TRACE kapalı, tüm kaynaklar HTTPS, kalıcı girdilerde çıktı-kodlama/sanitizasyon, parametre tekilleştirme (proaktif).'],
   cleanGenel: 'Girdi/header kontrollerinde belirgin bir Host-injection, açık TRACE, mixed-content veya HPP göstergesi bulunamadı.',
+  whatCheckedDe: [
+    'Sichere/read-only Eingabe- & Header-Prüfungen (nur GET/OPTIONS/TRACE — KEINE zustandsändernde/destruktive Anfrage).',
+    '**D1 Host-Header-Injection:** Ein gefälschter `X-Forwarded-Host` wurde gesendet und die Reflexion in der Antwort beobachtet (Indikator).',
+    '**D2 HTTP Parameter Pollution:** Derselbe Parameter wurde wiederholt und der Verarbeitungsunterschied beobachtet (beobachtend).',
+    '**D3 HTTP-Methoden / TRACE:** Erkennung erlaubter Methoden per OPTIONS + TRACE-Beobachtung — **kein PUT/DELETE GESENDET**.',
+    '**D4 Mixed Content:** statische Erkennung von HTTP-Ressourcen (script/img/iframe) auf einer HTTPS-Seite.',
+    '**D5 Stored-XSS-Eingabepunkt:** KANDIDATEN-Felder, die in einen persistenten Kontext reflektiert werden könnten, wurden markiert — **es wurden KEINE Daten GESENDET/gespeichert** (geringe Konfidenz, dynamische Verifizierung erforderlich).',
+  ],
+  confidenceNoteDe: 'Host-Injection/HPP/D5 sind „Indikator/Kandidat" (kein echter Angriff/keine Übermittlung durchgeführt). TRACE/Mixed-Content sind deterministische Beobachtungen.',
+  fixTitleDe: 'Eingabe- & Header-Härtung',
+  fixFoundDe: [
+    'Host-Header: Fixieren Sie in der Anwendung den Host/X-Forwarded-Host-Wert per **Allowlist**; verwenden Sie ihn nicht zur Erzeugung absoluter URLs.',
+    'HTTP-Methoden: Deaktivieren Sie **TRACE**; erzwingen Sie bei zustandsändernden Methoden serverseitige Autorisierung.',
+    'Mixed Content: Verlagern Sie alle Ressourcen auf **HTTPS** (upgrade-insecure-requests / CSP).',
+    'Stored-XSS: Wenden Sie in persistenten Feldern Ausgabe-Kodierung + Sanitisierung (DOMPurify) an; verarbeiten Sie Parameter gegen HPP als Einzelwert.',
+  ],
+  fixCleanDe: ['Host-Allowlist, TRACE deaktiviert, alle Ressourcen HTTPS, Ausgabe-Kodierung/Sanitisierung bei persistenten Eingaben, Parameter-Deduplizierung (proaktiv).'],
+  cleanGenelDe: 'In den Eingabe-/Header-Prüfungen wurde kein eindeutiger Indikator für Host-Injection, offenes TRACE, Mixed Content oder HPP gefunden.',
 };
 const CONFIG_EXPOSURE_CFG = {
   title: 'Yapılandırma & İfşa Derinliği',
@@ -289,6 +473,24 @@ const CONFIG_EXPOSURE_CFG = {
   ],
   fixClean: ['Yedek/.git/.env dizin dışında, admin arayüzü kimlik/ağ arkasında, bucket private/list-kapalı, cache Vary doğru, üretimde yorum/metadata temiz (proaktif).'],
   cleanGenel: 'Erişilebilir yedek/eski dosya, açık admin arayüzü, listelenebilir bucket, cache-poisoning göstergesi veya belirgin yorum/metadata sızıntısı gözlemlenmedi.',
+  whatCheckedDe: [
+    'Sichere GET + statische Konfigurations-/Expositionsprüfungen. Als **SPA-catch-all 200 (Startseiten-Shell)** zurückgegebene erratene Pfade gelten NICHT als echt — nur tatsächlich erreichbare, UNTERSCHEIDBARE Antworten erzeugen einen Befund (Provenienz Spalte 0).',
+    '**E1 Backup-/Altdatei:** `.env/.bak/.sql/.git/config` usw. per sicherem GET (Shell-200 herausgefiltert).',
+    '**E2 Admin-Oberfläche:** Sind gängige Verwaltungspfade von außen erreichbar (gleiche Provenienz).',
+    '**E3 Cloud-Storage:** Public-S3/GCS/Azure-Bucket-Referenz in HTML/JS + ist sie **auflistbar**.',
+    '**E4 Cache-/Poisoning-Indikator:** Cache-Control/Vary + Reflexion ungekeyter Header (KEIN Poisoning durchgeführt).',
+    '**E5 Kommentar- & Metadaten-Leck:** Dev-Kommentar / interne IP-Hostname / Server-Dateipfad (statisch).',
+  ],
+  confidenceNoteDe: 'Backup-/Admin-Befunde werden nur für tatsächlich erreichbare, NICHT-SPA-Shell-Antworten erzeugt. Cache-/Host-Indikatoren sind „Indikatoren"; Inhalt/sensible Daten REDIGIERT.',
+  fixTitleDe: 'Konfigurations- & Expositions-Härtung',
+  fixFoundDe: [
+    'Entfernen Sie Backup-/Alt-/`.git`/`.env`-Dateien aus dem öffentlichen Verzeichnis; sperren Sie den Zugriff am Webserver.',
+    'Stellen Sie Verwaltungsoberflächen hinter Netzwerk (IP-Allowlist/VPN) + Authentifizierung; öffnen Sie sie nicht nach außen.',
+    'Cloud-Bucket: **Deaktivieren Sie die Auflistungsberechtigung**, machen Sie sensible Objekte privat (public nur für tatsächlich öffentliche Assets).',
+    'Cache: Reflektieren Sie ungekeyte Eingaben nicht oder fügen Sie sie `Vary` hinzu. Kommentare: Belassen Sie im Produktions-Build keine Dev-Kommentare/internen Informationen.',
+  ],
+  fixCleanDe: ['Backup/.git/.env außerhalb des Verzeichnisses, Admin-Oberfläche hinter Auth/Netzwerk, Bucket privat/Auflistung deaktiviert, Cache Vary korrekt, in der Produktion Kommentar/Metadaten sauber (proaktiv).'],
+  cleanGenelDe: 'Es wurde keine erreichbare Backup-/Altdatei, keine offene Admin-Oberfläche, kein auflistbarer Bucket, kein Cache-Poisoning-Indikator und kein eindeutiges Kommentar-/Metadaten-Leck beobachtet.',
 };
 
 // (Faz 3-B) API Güvenliği Derinliği — OWASP API Top 10. Yalnız GERÇEK keşfedilmiş (JSON, SPA-shell
@@ -313,6 +515,24 @@ const API_SECURITY_CFG = {
   ],
   fixClean: ['Nesne/fonksiyon yetkisi sunucuda, yanıt DTO-allowlist, rate-limit+kota, eski sürümler kapalı, GraphQL introspection kapalı (proaktif).'],
   cleanGenel: 'Keşfedilen API uçlarında belirgin bir aşırı-veri ifşası, rate-limit eksikliği, gölge-sürüm veya açık GraphQL introspection göstergesi bulunamadı.',
+  whatCheckedDe: [
+    'An ECHTEN, aus Same-Origin-JS/HTML entdeckten API-Endpunkten, die JSON (NICHT SPA-catch-all-Shell) zurückgeben, 5 Prüfungen — alle read-only. Ohne echte API (Firebase/Client-SDK/SPA) liegt dieser Abschnitt **außerhalb des Umfangs**.',
+    '**F1 BOLA/BFLA (API1/API5):** Objekt-/Funktionsebenen-Autorisierung — in den Abschnitten **Authentifizierte IDOR** + **Forced Browsing** bewertet (zur Vermeidung von Doppelbefunden hier nicht erneut sondiert).',
+    '**F2 Übermäßige Datenoffenlegung / BOPLA (API3):** sensibles/übermäßiges Feld in der API-Antwort (Passwort-Hash/Rolle/interne ID) — Wert REDIGIERT.',
+    '**F3 Rate-Limit (API4):** Erscheint nach einem MODERATEN Burst (KEIN DoS) ein 429/Rate-Limit-Header — das Ziel wurde nicht ermüdet.',
+    '**F4 Shadow/veraltete Version (API9):** Sind Versions-Endpunkte wie /v1,/v2,/api/v1 erreichbar (SPA-Shell herausgefiltert).',
+    '**F5 GraphQL-Introspection (APIT-99):** Ist bei vorhandenem GraphQL-Endpunkt die Introspection aktiv — **read-only-Abfrage; KEINE Mutation**.',
+  ],
+  confidenceNoteDe: 'Die Befunde sind „Indikatoren"; nur an tatsächlich beobachteten (JSON, NICHT-SPA-Shell) Endpunkten. Sensible Daten REDIGIERT; keine Mutation/Datenänderung/DoS durchgeführt.',
+  fixTitleDe: 'API-Sicherheits-Härtung',
+  fixFoundDe: [
+    'BOLA/BFLA: Erzwingen Sie bei jeder API-Anfrage serverseitig die Objekteigentums- + Funktionsrollenprüfung (ID-Gültigkeit genügt nicht).',
+    'Übermäßige Daten: Beschränken Sie Antworten per **Feld-Allowlist (DTO)**; senden Sie Passwort-Hash/Geheimnis/interne ID/Rolle nicht an den Client.',
+    'Rate-Limit: **Rate-Limit + Kontingent** je Konto+IP+Endpunkt; kostenbasierte Grenze für schwere Endpunkte.',
+    'Version: Deaktivieren Sie ungenutzte/alte API-Versionen. GraphQL: **Deaktivieren Sie in der Produktion die Introspection**; fügen Sie ein Abfragetiefen-/Komplexitätslimit hinzu.',
+  ],
+  fixCleanDe: ['Objekt-/Funktionsberechtigung serverseitig, Antwort-DTO-Allowlist, Rate-Limit+Kontingent, alte Versionen deaktiviert, GraphQL-Introspection deaktiviert (proaktiv).'],
+  cleanGenelDe: 'An den entdeckten API-Endpunkten wurde kein eindeutiger Indikator für übermäßige Datenoffenlegung, fehlendes Rate-Limit, Shadow-Version oder offene GraphQL-Introspection gefunden.',
 };
 
 // (Faz 3-C) E-posta & DNS Derinliği — anti-spoofing + DNS bütünlüğü. Pasif DNS/TXT + tek MTA-STS GET.
@@ -336,6 +556,24 @@ const EMAIL_DNS_CFG = {
   ],
   fixClean: ['DMARC p=reject, SPF -all, DKIM 2048-bit, MTA-STS enforce, TLS-RPT, DNSSEC, CAA — anti-spoofing/DNS bütünlüğü güçlü (proaktif).'],
   cleanGenel: 'Sorgulanan org-alanın e-posta/DNS kayıtlarında belirgin bir anti-spoofing zayıflığı (eksik/gevşek DMARC-SPF, açık +all, imzasız DNSSEC vb.) göstergesi bulunamadı.',
+  whatCheckedDe: [
+    'Nur aus der ECHTEN Org-Domain gelesene DNS-Einträge; alle PASSIV DNS/TXT + ein einziges sicheres MTA-STS-GET (kein Angriff/keine Zustandsänderung). Für Subdomains wird DMARC auf der Ebene der **organisatorischen Domain** bewertet.',
+    '**G1 DMARC** Richtlinienstärke (p=none/quarantine/reject, pct, sp Subdomain, adkim/aspf, rua).',
+    '**G2 SPF** Tiefe (-all/~all/?all/+all + Anzahl der Top-Level-DNS-Lookups, RFC 7208).',
+    '**G3 DKIM** Erkennung gängiger Selektoren (default/google/selector1…) + Schlüssellänge (~1024/2048) + Widerruf (p= leer).',
+    '**G4 MTA-STS** (_mta-sts TXT + Richtlinie: enforce/testing/none) · **G5 TLS-RPT** Reporting.',
+    '**G6 DNSSEC** (Signatur/Validierung — AD-Flag, nur Beobachtung) · **G7 CAA** (Beschränkung der Zertifikatsausstellung) + **BIMI** (informativ).',
+  ],
+  confidenceNoteDe: 'Nachweis = der tatsächlich vom DNS zurückgegebene öffentliche Eintrag (keine Redaktion nötig). Sprache „Indikator"; bei einer Domain, die keine E-Mails versendet (kein MX), wird der Schweregrad fehlender DMARC/SPF gesenkt. Keine erfundenen/geratenen Einträge.',
+  fixTitleDe: 'E-Mail- & DNS-Härtung',
+  fixFoundDe: [
+    'DMARC: Verschärfen Sie schrittweise \`p=none\`→\`quarantine\`→\`reject\` (pct=100); aktivieren Sie das Reporting mit \`rua=\`; für Subdomains \`sp=reject\`.',
+    'SPF: Verwenden Sie \`-all\` (Hardfail); vermeiden Sie \`+all\`/\`?all\`; halten Sie die Anzahl der DNS-Lookups ≤10 (PermError).',
+    'DKIM: 2048-Bit-Schlüssel, entfernen Sie widerrufene Selektoren. MTA-STS: \`mode=enforce\`. Fügen Sie TLS-RPT hinzu.',
+    'Aktivieren Sie DNSSEC (DS+RRSIG). Beschränken Sie mit CAA die autorisierten CAs.',
+  ],
+  fixCleanDe: ['DMARC p=reject, SPF -all, DKIM 2048-Bit, MTA-STS enforce, TLS-RPT, DNSSEC, CAA — Anti-Spoofing/DNS-Integrität stark (proaktiv).'],
+  cleanGenelDe: 'In den E-Mail-/DNS-Einträgen der abgefragten Org-Domain wurde kein eindeutiger Indikator für eine Anti-Spoofing-Schwäche (fehlendes/lockeres DMARC-SPF, offenes +all, unsigniertes DNSSEC usw.) gefunden.',
 };
 
 // (Faz 5) Taşıma Katmanı, CORS & Güvenlik Başlığı Derinliği — H1/H3/H4. Read-only/pasif.
@@ -358,6 +596,23 @@ const TRANSPORT_CFG = {
   ],
   fixClean: ['CORS sıkı (allowlist, credentials\'sız), yalnız TLS 1.2/1.3 + modern cipher, HSTS/clickjacking/CSP/başlıklar tam — taşıma & tarayıcı-taraflı savunma güçlü (proaktif).'],
   cleanGenel: 'Taşıma katmanı (CORS/TLS) ve güvenlik başlıklarında belirgin bir yanlış yapılandırma veya sertleştirme boşluğu göstergesi bulunamadı.',
+  whatCheckedDe: [
+    'Alles read-only/passive Beobachtung — KEINE Datenänderung, kein DoS, keine Cipher-Ausnutzung.',
+    '**H1 CORS:** eine einzige Anfrage mit fiktivem `Origin` an entdeckte ECHTE Endpunkte — ACAO-Reflexion + ACAC=true (Leck mit Anmeldedaten → Hoch), reine Reflexion (Mittel, „kann beabsichtigt sein"), `*` (informativ), `null`-Akzeptanz (Indikator).',
+    '**H3 TLS-Protokoll/Cipher:** 1 sicherer Handshake pro Protokoll — TLS 1.0/1.1 (veraltet, Indikator), schwache Cipher (RC4/3DES/NULL/EXPORT). Zertifikatsgültigkeit/Hostname/Kette nur bei ECHTEM Problem als Befund (kein Doppel-CT).',
+    '**H4 Security-Header-Tiefe:** HSTS (Vorhandensein + max-age-Angemessenheit + preload), Clickjacking (X-Frame-Options **oder** CSP frame-ancestors Doppelmechanismus), CSP-Schwäche (unsafe-inline/eval/*), Referrer-Policy / Permissions-Policy / X-Content-Type-Options.',
+    'Die grundlegende Header-VORHANDENSEIN-Prüfung verbleibt in anderen Paketen; dieser Abschnitt fügt TIEFE hinzu (nicht kopiert).',
+  ],
+  confidenceNoteDe: 'Die Befunde beruhen auf echter Beobachtung („Indikator, Verifizierung erforderlich"); reflektiertes CORS + Credentials ist EINDEUTIG schlecht (Hoch), Reflexion ohne Credentials kann beabsichtigt sein (Mittel). Deterministisch (gleicher Host → gleiches Protokoll/Header).',
+  fixTitleDe: 'Transportschicht- & Header-Härtung',
+  fixFoundDe: [
+    'CORS: Setzen Sie Origins auf eine Allowlist; verwenden Sie mit `credentials` kein Wildcard/keine Reflexion; akzeptieren Sie keinen `null`-Origin.',
+    'TLS: Belassen Sie nur TLS 1.2/1.3; deaktivieren Sie RC4/3DES/NULL/EXPORT-Cipher; modernes AEAD (ECDHE+AES-GCM/CHACHA20).',
+    'HSTS `max-age≥15768000; includeSubDomains; preload`; gegen Clickjacking X-Frame-Options **und/oder** CSP frame-ancestors.',
+    'Entfernen Sie unsafe-inline/unsafe-eval aus CSP (nonce/hash); fügen Sie Referrer-Policy/Permissions-Policy/X-Content-Type-Options hinzu.',
+  ],
+  fixCleanDe: ['CORS streng (Allowlist, ohne Credentials), nur TLS 1.2/1.3 + moderne Cipher, HSTS/Clickjacking/CSP/Header vollständig — Transport- & browserseitige Verteidigung stark (proaktiv).'],
+  cleanGenelDe: 'In der Transportschicht (CORS/TLS) und den Security-Headern wurde kein eindeutiger Indikator für eine Fehlkonfiguration oder Härtungslücke gefunden.',
 };
 // (Faz 5) Subdomain Takeover — recon/DNS. Yalnız DNS çözümü + tek güvenli GET (parmak-izi); claim YOK.
 const TAKEOVER_CFG = {
@@ -375,6 +630,19 @@ const TAKEOVER_CFG = {
   ],
   fixClean: ['Alt-alan CNAME envanteri temiz; boşta/dangling kayıt yok (proaktif).'],
   cleanGenel: 'Keşfedilen alt-alanlarda devralınabilir (dangling) CNAME + sahiplenilmemiş parmak-izi göstergesi bulunamadı.',
+  whatCheckedDe: [
+    'CNAME-Auflösung bei ECHTEN, über Certificate Transparency (crt.sh/certSpotter) entdeckten Subdomains.',
+    'Zeigt der CNAME auf einen bekannten 3P-Dienst (S3/GitHub Pages/Heroku/Azure/Netlify/Fastly/Shopify/… umfassende Liste) **UND** kommt ein „nicht beanspruchter" Fingerabdruck (NoSuchBucket / „There isn\'t a GitHub Pages site here" / NXDOMAIN usw.) zurück → MÖGLICHES Takeover.',
+    'Nur DNS-Auflösung + ein einziges sicheres GET (Fingerabdruck-Beobachtung) — es wird KEINE Registrierung/Beanspruchung durchgeführt. Keine erfundenen Subdomains.',
+  ],
+  confidenceNoteDe: 'Ein Befund nur bei Übereinstimmung von Dangling + Fingerabdruck; ein aktiver/beanspruchter CNAME ist informativ. Ist die CT-Quelle nicht erreichbar, „nicht prüfbar" (nicht sauber).',
+  fixTitleDe: 'Subdomain-Takeover',
+  fixFoundDe: [
+    'Entfernen Sie ungenutzte/verwaiste CNAME-Einträge aus dem DNS (löschen Sie den DNS-Eintrag, BEVOR Sie die Cloud-Ressource löschen).',
+    'Führen Sie ein Subdomain-Inventar; prüfen Sie verlassene 3P-Dienst-Einträge regelmäßig.',
+  ],
+  fixCleanDe: ['Subdomain-CNAME-Inventar sauber; kein verwaister/dangling Eintrag (proaktiv).'],
+  cleanGenelDe: 'In den entdeckten Subdomains wurde kein Indikator für einen übernehmbaren (dangling) CNAME + nicht beanspruchten Fingerabdruck gefunden.',
 };
 
 // (Faz 8) Authenticated Güvenli Aktif Göstergeler — Faz 6 modülü login-sonrası yüzeyde. Read-only.
@@ -395,12 +663,58 @@ const AUTH_INDICATORS_CFG = {
   ],
   fixClean: ['Login-sonrası parametrelerde dosya-yolu/şablon/yönlendirme hedefine doğrudan girdi konmuyor (proaktif).'],
   cleanGenel: 'Login-sonrası erişilen parametrelerde LFI imzası, açık yönlendirme, HTTP parametre kirliliği veya SSTI göstergesi bulunamadı.',
+  whatCheckedDe: [
+    'Sichere aktive Indikatoren aus Phase 6 auf **nach dem Login** (TEST-Sitzung) erreichten GET-Parametern + Phase-7-SPA-Entdeckungs-/auth-gesperrten Endpunkten — alle read-only (KEIN Schreiben/Hochladen/Befehl/zeitbasiert).',
+    '**B1 LFI/Path-Traversal:** abgestufte Sonde; nur Datei-SIGNATUR=Befund (Hoch), Inhalt **REDIGIERT**.',
+    '**B2 Open Redirect:** harmloser Canary (Redirect wird NICHT verfolgt). **B3 HPP:** wiederholter Parameter (reine Beobachtung).',
+    '**B5 SSTI:** nur arithmetisch `{{1234*3}}`→`3702` (KEIN Code/Befehl).',
+    '**B4 boolean-SQLi** → im Abschnitt Authentifizierte Injektion (SQLi/XSS); **B6 Datei-Upload** → Konfigurationsbeobachtung (KEIN echter Upload). Querverweis zur Vermeidung von Doppel-CT.',
+  ],
+  confidenceNoteDe: 'Die Oberfläche nach dem Login unterscheidet sich von der vor dem Login (Begründung für den Superset-Charakter des Pakets). „Indikator, Verifizierung erforderlich"; nur auf beobachteten Parametern. Bei einem gut konfigurierten authentifizierten Backend ist ein sauberer/geringer Befund das ERWARTETE Ergebnis.',
+  fixTitleDe: 'Authentifizierte sichere aktive Indikatoren',
+  fixFoundDe: [
+    'LFI: Legen Sie Eingaben nicht in den Dateipfad; Allowlist + `basename` + Wurzelverzeichnis-Beschränkung. Open Redirect: Ziele serverseitig per Allowlist.',
+    'HPP: Normalisieren Sie Parameter auf einen Einzelwert. SSTI: Interpolieren Sie Eingaben nicht in Templates (logikfrei + Escaping + Sandbox).',
+  ],
+  fixCleanDe: ['In den Parametern nach dem Login wird keine Eingabe direkt in Dateipfad/Template/Weiterleitungsziel gelegt (proaktiv).'],
+  cleanGenelDe: 'In den nach dem Login erreichten Parametern wurde kein Indikator für LFI-Signatur, Open Redirect, HTTP Parameter Pollution oder SSTI gefunden.',
+};
+
+// (Çok-bölge) run başlıkları hem `## <title>` bölüm başlığı hem tablo/özet etiketi olarak AYNEN kullanılır.
+// Almanca karşılıkları; T(tr) yalnız de=true iken çevirir, yoksa TR AYNEN kalır.
+const AUTH_TITLE_DE: Record<string, string> = {
+  'Oturum Çerezi Bayrakları': 'Sitzungs-Cookie-Flags',
+  'Session Fixation': 'Session Fixation',
+  'Logout / Oturum Geçersizleştirme': 'Logout / Sitzungsinvalidierung',
+  'Forced Browsing / Fonksiyon-Seviye Yetki': 'Forced Browsing / Funktionsebenen-Autorisierung',
+  'Authenticated Enjeksiyon (SQLi/XSS)': 'Authentifizierte Injektion (SQLi/XSS)',
+  'Authenticated IDOR (kendi kaynakları)': 'Authentifizierte IDOR (eigene Ressourcen)',
+  'Yetki Yükseltme (Privilege Escalation)': 'Rechteausweitung (Privilege Escalation)',
+  'Çok-Adımlı İş Mantığı': 'Mehrstufige Geschäftslogik',
+  'JWT / Token Güvenliği': 'JWT / Token-Sicherheit',
+  'Giriş Baypası (SQLi Göstergesi)': 'Login-Bypass (SQLi-Indikator)',
+  'Client-Side / JS Analizi': 'Client-Side / JS-Analyse',
+  'Client-Side Statik Analiz': 'Client-Side-Statikanalyse',
+  'Kimlik-Doğrulama Derinliği': 'Authentifizierungstiefe',
+  'Oturum Güvenliği Derinliği': 'Sitzungssicherheit (Tiefe)',
+  'Girdi & Header Derinliği': 'Eingabe- & Header-Tiefe',
+  'Yapılandırma & İfşa Derinliği': 'Konfiguration & Exposition (Tiefe)',
+  'API Güvenliği Derinliği (OWASP API Top 10)': 'API-Sicherheit (Tiefe, OWASP API Top 10)',
+  'E-posta & DNS Derinliği (Anti-Spoofing)': 'E-Mail & DNS (Tiefe, Anti-Spoofing)',
+  'Taşıma Katmanı, CORS & Güvenlik Başlığı Derinliği': 'Transportschicht, CORS & Security-Header (Tiefe)',
+  'Subdomain Takeover (Dangling DNS)': 'Subdomain-Takeover (Dangling DNS)',
+  'Authenticated Güvenli Aktif Göstergeler (LFI/Redirect/HPP/SSTI)': 'Authentifizierte sichere aktive Indikatoren (LFI/Redirect/HPP/SSTI)',
 };
 
 type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
-export async function generateAuthenticatedReport(host: string, session: AuthSession): Promise<{ findings: string; fixText: string } | null> {
+export async function generateAuthenticatedReport(host: string, session: AuthSession, locale: string = 'tr'): Promise<{ findings: string; fixText: string } | null> {
+  const de = locale === 'de';
+  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const rw = (l: Level) => (de ? RISK_WORD_DE[l] : RISK_WORD[l]);
+  const T = (tr: string) => (de ? (AUTH_TITLE_DE[tr] ?? tr) : tr);
+  void SEV_DISP;
   // (Faz 4 / Bölüm 2) DİNAMİK FİYAT ÖNERİSİ — yalnız 6. paket; pasif sinyallerden deterministik skor.
   // Müşteri PDF'ine GİRMEZ (satış sinyali); admin/panel için log'a yazılır. Ekstra tarama yapmaz (cache'li corpus).
   try {
@@ -410,66 +724,66 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
 
   const runs: Run[] = [];
   const cookieEv = collectCookieFlagsEvidence(session);
-  runs.push({ title: 'Oturum Çerezi Bayrakları', conf: 'Yüksek', rep: buildActiveCheckReport(cookieEv, COOKIE_CFG), inputs: cookieEv.inputsFound, probes: cookieEv.probesSent, fc: cookieEv.findings.length });
+  runs.push({ title: T('Oturum Çerezi Bayrakları'), conf: 'Yüksek', rep: buildActiveCheckReport(cookieEv, COOKIE_CFG, de), inputs: cookieEv.inputsFound, probes: cookieEv.probesSent, fc: cookieEv.findings.length });
   const fixEv = await collectSessionFixationEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Session Fixation', conf: 'Orta', rep: fixEv ? buildActiveCheckReport(fixEv, FIXATION_CFG) : null, inputs: fixEv?.inputsFound ?? 0, probes: fixEv?.probesSent ?? 0, fc: fixEv?.findings.length ?? 0 });
+  runs.push({ title: T('Session Fixation'), conf: 'Orta', rep: fixEv ? buildActiveCheckReport(fixEv, FIXATION_CFG, de) : null, inputs: fixEv?.inputsFound ?? 0, probes: fixEv?.probesSent ?? 0, fc: fixEv?.findings.length ?? 0 });
   const logoutEv = await collectLogoutEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Logout / Oturum Geçersizleştirme', conf: 'Orta', rep: logoutEv ? buildActiveCheckReport(logoutEv, LOGOUT_CFG) : null, inputs: logoutEv?.inputsFound ?? 0, probes: logoutEv?.probesSent ?? 0, fc: logoutEv?.findings.length ?? 0 });
+  runs.push({ title: T('Logout / Oturum Geçersizleştirme'), conf: 'Orta', rep: logoutEv ? buildActiveCheckReport(logoutEv, LOGOUT_CFG, de) : null, inputs: logoutEv?.inputsFound ?? 0, probes: logoutEv?.probesSent ?? 0, fc: logoutEv?.findings.length ?? 0 });
   const forcedEv = await collectForcedBrowsingEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Forced Browsing / Fonksiyon-Seviye Yetki', conf: 'Orta', rep: forcedEv ? buildActiveCheckReport(forcedEv, FORCED_CFG) : null, inputs: forcedEv?.inputsFound ?? 0, probes: forcedEv?.probesSent ?? 0, fc: forcedEv?.findings.length ?? 0 });
+  runs.push({ title: T('Forced Browsing / Fonksiyon-Seviye Yetki'), conf: 'Orta', rep: forcedEv ? buildActiveCheckReport(forcedEv, FORCED_CFG, de) : null, inputs: forcedEv?.inputsFound ?? 0, probes: forcedEv?.probesSent ?? 0, fc: forcedEv?.findings.length ?? 0 });
   const injEv = await collectInjectionEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Authenticated Enjeksiyon (SQLi/XSS)', conf: 'Yüksek', rep: injEv ? buildInjectionReport(injEv) : null, inputs: injEv?.inputsFound ?? 0, probes: injEv?.probesSent ?? 0, fc: injEv?.findings.length ?? 0 });
+  runs.push({ title: T('Authenticated Enjeksiyon (SQLi/XSS)'), conf: 'Yüksek', rep: injEv ? buildInjectionReport(injEv, de) : null, inputs: injEv?.inputsFound ?? 0, probes: injEv?.probesSent ?? 0, fc: injEv?.findings.length ?? 0 });
   const idorEv = await collectIdorEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Authenticated IDOR (kendi kaynakları)', conf: 'Orta', rep: idorEv ? buildIdorReport(idorEv) : null, inputs: idorEv?.candidates ?? 0, probes: idorEv?.probesSent ?? 0, fc: idorEv?.findings.length ?? 0, enumerableSurface: idorEv?.enumerableSurface ?? null });
+  runs.push({ title: T('Authenticated IDOR (kendi kaynakları)'), conf: 'Orta', rep: idorEv ? buildIdorReport(idorEv, de) : null, inputs: idorEv?.candidates ?? 0, probes: idorEv?.probesSent ?? 0, fc: idorEv?.findings.length ?? 0, enumerableSurface: idorEv?.enumerableSurface ?? null });
   // (FAZ D) SINIRLI/KONTROLLÜ AJAN KATMANI — priv-esc + çok-adımlı iş mantığı (ajan öneri, backend uygular).
   const privEv = await collectPrivilegeEscalationEvidence(host, session).catch(() => null);
   // (İş A) advisor AÇIK (analyzed) ise AI-danışma dili; KAPALI (varsayılan) ise deterministik dil.
-  const privCfg = privEv?.agentStatus === 'analyzed' ? { ...PRIVESC_CFG, whatChecked: [PRIVESC_WC_AI, ...PRIVESC_CFG.whatChecked.slice(1)] } : PRIVESC_CFG;
-  runs.push({ title: 'Yetki Yükseltme (Privilege Escalation)', conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, privCfg) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0, agentCheck: true, agentUsed: privEv?.agentUsed ?? false, agentStatus: privEv?.agentStatus });
+  const privCfg = privEv?.agentStatus === 'analyzed' ? { ...PRIVESC_CFG, whatChecked: [PRIVESC_WC_AI, ...PRIVESC_CFG.whatChecked.slice(1)], whatCheckedDe: [PRIVESC_WC_AI_DE, ...(PRIVESC_CFG.whatCheckedDe ?? []).slice(1)] } : PRIVESC_CFG;
+  runs.push({ title: T('Yetki Yükseltme (Privilege Escalation)'), conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, privCfg, de) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0, agentCheck: true, agentUsed: privEv?.agentUsed ?? false, agentStatus: privEv?.agentStatus });
   const multiEv = await collectMultiStepBusinessLogicEvidence(host, session).catch(() => null);
-  const multiCfg = multiEv?.agentStatus === 'analyzed' ? { ...MULTISTEP_CFG, whatChecked: [MULTISTEP_WC_AI, ...MULTISTEP_CFG.whatChecked.slice(1)] } : MULTISTEP_CFG;
-  runs.push({ title: 'Çok-Adımlı İş Mantığı', conf: 'Düşük', rep: multiEv ? buildActiveCheckReport(multiEv, multiCfg) : null, inputs: multiEv?.inputsFound ?? 0, probes: multiEv?.probesSent ?? 0, fc: multiEv?.findings.length ?? 0, agentCheck: true, agentUsed: multiEv?.agentUsed ?? false, agentStatus: multiEv?.agentStatus });
+  const multiCfg = multiEv?.agentStatus === 'analyzed' ? { ...MULTISTEP_CFG, whatChecked: [MULTISTEP_WC_AI, ...MULTISTEP_CFG.whatChecked.slice(1)], whatCheckedDe: [MULTISTEP_WC_AI_DE, ...(MULTISTEP_CFG.whatCheckedDe ?? []).slice(1)] } : MULTISTEP_CFG;
+  runs.push({ title: T('Çok-Adımlı İş Mantığı'), conf: 'Düşük', rep: multiEv ? buildActiveCheckReport(multiEv, multiCfg, de) : null, inputs: multiEv?.inputsFound ?? 0, probes: multiEv?.probesSent ?? 0, fc: multiEv?.findings.length ?? 0, agentCheck: true, agentUsed: multiEv?.agentUsed ?? false, agentStatus: multiEv?.agentStatus });
   const advisorActive = privEv?.agentStatus === 'analyzed' || multiEv?.agentStatus === 'analyzed'; // (İş A) tek bayrak
   // (İŞ 3) JWT/token güvenliği + giriş baypası (SQLi göstergesi) — deterministik, gözlemsel.
   const jwtEv = await collectJwtAnalysis(host, session).catch(() => null);
-  runs.push({ title: 'JWT / Token Güvenliği', conf: 'Yüksek', rep: jwtEv ? buildActiveCheckReport(jwtEv, JWT_CFG) : null, inputs: jwtEv?.inputsFound ?? 0, probes: jwtEv?.probesSent ?? 0, fc: jwtEv?.findings.length ?? 0 });
+  runs.push({ title: T('JWT / Token Güvenliği'), conf: 'Yüksek', rep: jwtEv ? buildActiveCheckReport(jwtEv, JWT_CFG, de) : null, inputs: jwtEv?.inputsFound ?? 0, probes: jwtEv?.probesSent ?? 0, fc: jwtEv?.findings.length ?? 0 });
   const loginBypassEv = await collectLoginBypassEvidence(host, session.loginUrl).catch(() => null);
-  runs.push({ title: 'Giriş Baypası (SQLi Göstergesi)', conf: 'Yüksek', rep: loginBypassEv ? buildActiveCheckReport(loginBypassEv, LOGIN_BYPASS_CFG) : null, inputs: loginBypassEv?.inputsFound ?? 0, probes: loginBypassEv?.probesSent ?? 0, fc: loginBypassEv?.findings.length ?? 0 });
+  runs.push({ title: T('Giriş Baypası (SQLi Göstergesi)'), conf: 'Yüksek', rep: loginBypassEv ? buildActiveCheckReport(loginBypassEv, LOGIN_BYPASS_CFG, de) : null, inputs: loginBypassEv?.inputsFound ?? 0, probes: loginBypassEv?.probesSent ?? 0, fc: loginBypassEv?.findings.length ?? 0 });
 
   // (YENİ — 6. pakete özel) Client-Side / JS Analizi: pasif JS bundle sır + source-map + zafiyetli-kütüphane.
   const jsEv = await collectJsAnalysisEvidence(host).catch(() => null);
-  runs.push({ title: 'Client-Side / JS Analizi', conf: 'Yüksek', rep: jsEv ? buildActiveCheckReport(jsEv, JS_ANALYSIS_CFG) : null, inputs: jsEv?.inputsFound ?? 0, probes: jsEv?.probesSent ?? 0, fc: jsEv?.findings.length ?? 0 });
+  runs.push({ title: T('Client-Side / JS Analizi'), conf: 'Yüksek', rep: jsEv ? buildActiveCheckReport(jsEv, JS_ANALYSIS_CFG, de) : null, inputs: jsEv?.inputsFound ?? 0, probes: jsEv?.probesSent ?? 0, fc: jsEv?.findings.length ?? 0 });
 
   // (YENİ — Faz 1-B) Client-Side Statik Analiz: DOM-XSS gösterge / postMessage / storage / SRI / tabnabbing / open-redirect.
   const csEv = await collectClientSideEvidence(host).catch(() => null);
-  runs.push({ title: 'Client-Side Statik Analiz', conf: 'Orta', rep: csEv ? buildActiveCheckReport(csEv, CLIENT_SIDE_CFG) : null, inputs: csEv?.inputsFound ?? 0, probes: csEv?.probesSent ?? 0, fc: csEv?.findings.length ?? 0 });
+  runs.push({ title: T('Client-Side Statik Analiz'), conf: 'Orta', rep: csEv ? buildActiveCheckReport(csEv, CLIENT_SIDE_CFG, de) : null, inputs: csEv?.inputsFound ?? 0, probes: csEv?.probesSent ?? 0, fc: csEv?.findings.length ?? 0 });
 
   // (YENİ — Faz 2-A) Kimlik-Doğrulama Derinliği: enum/varsayılan-kimlik/lockout/reset/politika/cache/MFA/HTTP.
   const adEv = await collectAuthDepthEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Kimlik-Doğrulama Derinliği', conf: 'Yüksek', rep: adEv ? buildActiveCheckReport(adEv, AUTH_DEPTH_CFG) : null, inputs: adEv?.inputsFound ?? 0, probes: adEv?.probesSent ?? 0, fc: adEv?.findings.length ?? 0 });
+  runs.push({ title: T('Kimlik-Doğrulama Derinliği'), conf: 'Yüksek', rep: adEv ? buildActiveCheckReport(adEv, AUTH_DEPTH_CFG, de) : null, inputs: adEv?.inputsFound ?? 0, probes: adEv?.probesSent ?? 0, fc: adEv?.findings.length ?? 0 });
 
   // (YENİ — Faz 2-B) Oturum Güvenliği Derinliği: CSRF/SameSite, session-id entropi, oturum-URL, prefix, timeout.
   const sdEv = await collectSessionDepthEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Oturum Güvenliği Derinliği', conf: 'Orta', rep: sdEv ? buildActiveCheckReport(sdEv, SESSION_DEPTH_CFG) : null, inputs: sdEv?.inputsFound ?? 0, probes: sdEv?.probesSent ?? 0, fc: sdEv?.findings.length ?? 0 });
+  runs.push({ title: T('Oturum Güvenliği Derinliği'), conf: 'Orta', rep: sdEv ? buildActiveCheckReport(sdEv, SESSION_DEPTH_CFG, de) : null, inputs: sdEv?.inputsFound ?? 0, probes: sdEv?.probesSent ?? 0, fc: sdEv?.findings.length ?? 0 });
 
   // (YENİ — Faz 3-A) Girdi & Header + Yapılandırma & İfşa derinliği (güvenli GET/OPTIONS/TRACE + statik).
   const ihEv = await collectInputHeaderEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Girdi & Header Derinliği', conf: 'Orta', rep: ihEv ? buildActiveCheckReport(ihEv, INPUT_HEADER_CFG) : null, inputs: ihEv?.inputsFound ?? 0, probes: ihEv?.probesSent ?? 0, fc: ihEv?.findings.length ?? 0 });
+  runs.push({ title: T('Girdi & Header Derinliği'), conf: 'Orta', rep: ihEv ? buildActiveCheckReport(ihEv, INPUT_HEADER_CFG, de) : null, inputs: ihEv?.inputsFound ?? 0, probes: ihEv?.probesSent ?? 0, fc: ihEv?.findings.length ?? 0 });
   const ceEv = await collectConfigExposureEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Yapılandırma & İfşa Derinliği', conf: 'Yüksek', rep: ceEv ? buildActiveCheckReport(ceEv, CONFIG_EXPOSURE_CFG) : null, inputs: ceEv?.inputsFound ?? 0, probes: ceEv?.probesSent ?? 0, fc: ceEv?.findings.length ?? 0 });
+  runs.push({ title: T('Yapılandırma & İfşa Derinliği'), conf: 'Yüksek', rep: ceEv ? buildActiveCheckReport(ceEv, CONFIG_EXPOSURE_CFG, de) : null, inputs: ceEv?.inputsFound ?? 0, probes: ceEv?.probesSent ?? 0, fc: ceEv?.findings.length ?? 0 });
   const apiEv = await collectApiSecurityEvidence(host, session).catch(() => null);
-  runs.push({ title: 'API Güvenliği Derinliği (OWASP API Top 10)', conf: 'Orta', rep: apiEv ? buildActiveCheckReport(apiEv, API_SECURITY_CFG) : null, inputs: apiEv?.inputsFound ?? 0, probes: apiEv?.probesSent ?? 0, fc: apiEv?.findings.length ?? 0 });
+  runs.push({ title: T('API Güvenliği Derinliği (OWASP API Top 10)'), conf: 'Orta', rep: apiEv ? buildActiveCheckReport(apiEv, API_SECURITY_CFG, de) : null, inputs: apiEv?.inputsFound ?? 0, probes: apiEv?.probesSent ?? 0, fc: apiEv?.findings.length ?? 0 });
   const edEv = await collectEmailDnsEvidence(host).catch(() => null);
-  runs.push({ title: 'E-posta & DNS Derinliği (Anti-Spoofing)', conf: 'Orta', rep: edEv ? buildActiveCheckReport(edEv, EMAIL_DNS_CFG) : null, inputs: edEv?.inputsFound ?? 0, probes: edEv?.probesSent ?? 0, fc: edEv?.findings.length ?? 0 });
+  runs.push({ title: T('E-posta & DNS Derinliği (Anti-Spoofing)'), conf: 'Orta', rep: edEv ? buildActiveCheckReport(edEv, EMAIL_DNS_CFG, de) : null, inputs: edEv?.inputsFound ?? 0, probes: edEv?.probesSent ?? 0, fc: edEv?.findings.length ?? 0 });
   const tsEv = await collectTransportSecurityEvidence(host).catch(() => null);
-  runs.push({ title: 'Taşıma Katmanı, CORS & Güvenlik Başlığı Derinliği', conf: 'Orta', rep: tsEv ? buildActiveCheckReport(tsEv, TRANSPORT_CFG) : null, inputs: tsEv?.inputsFound ?? 0, probes: tsEv?.probesSent ?? 0, fc: tsEv?.findings.length ?? 0 });
+  runs.push({ title: T('Taşıma Katmanı, CORS & Güvenlik Başlığı Derinliği'), conf: 'Orta', rep: tsEv ? buildActiveCheckReport(tsEv, TRANSPORT_CFG, de) : null, inputs: tsEv?.inputsFound ?? 0, probes: tsEv?.probesSent ?? 0, fc: tsEv?.findings.length ?? 0 });
   const stkEv = await collectSubdomainTakeoverEvidence(host).catch(() => null);
-  runs.push({ title: 'Subdomain Takeover (Dangling DNS)', conf: 'Orta', rep: stkEv ? buildActiveCheckReport(stkEv, TAKEOVER_CFG) : null, inputs: stkEv?.inputsFound ?? 0, probes: stkEv?.probesSent ?? 0, fc: stkEv?.findings.length ?? 0 });
+  runs.push({ title: T('Subdomain Takeover (Dangling DNS)'), conf: 'Orta', rep: stkEv ? buildActiveCheckReport(stkEv, TAKEOVER_CFG, de) : null, inputs: stkEv?.inputsFound ?? 0, probes: stkEv?.probesSent ?? 0, fc: stkEv?.findings.length ?? 0 });
   const aiEv = await collectActiveIndicatorsEvidence(host, session).catch(() => null);
-  runs.push({ title: 'Authenticated Güvenli Aktif Göstergeler (LFI/Redirect/HPP/SSTI)', conf: 'Orta', rep: aiEv ? buildActiveCheckReport(aiEv, AUTH_INDICATORS_CFG) : null, inputs: aiEv?.inputsFound ?? 0, probes: aiEv?.probesSent ?? 0, fc: aiEv?.findings.length ?? 0 });
+  runs.push({ title: T('Authenticated Güvenli Aktif Göstergeler (LFI/Redirect/HPP/SSTI)'), conf: 'Orta', rep: aiEv ? buildActiveCheckReport(aiEv, AUTH_INDICATORS_CFG, de) : null, inputs: aiEv?.inputsFound ?? 0, probes: aiEv?.probesSent ?? 0, fc: aiEv?.findings.length ?? 0 });
 
   // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
-  if (runs.every((r) => !r.rep)) return unscannableReport(host, 'kimlik-doğrulamalı kontroller');
+  if (runs.every((r) => !r.rep)) return unscannableReport(host, t('kimlik-doğrulamalı kontroller', 'authentifizierte Kontrollen'), de);
 
   const levels: Array<Level | null> = runs.map((r) => (r.rep ? extractLevel(r.rep.findings) : null));
   const ranked = levels.map((lv, i) => ({ lv, i })).filter((x): x is { lv: Level; i: number } => x.lv !== null).sort((a, b) => levelRank(b.lv) - levelRank(a.lv));
@@ -479,8 +793,13 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   const totalProbes = runs.reduce((s, r) => s + r.probes, 0);
   const dataOk = runs.filter((r) => r.rep).length;
 
-  const box =
-    `> ### Değerlendirme Özeti (Authenticated)\n` +
+  const box = de
+    ? `> ### Bewertungszusammenfassung (Authentifiziert)\n` +
+      `> **Dieser Scan wurde mit der Sitzung des bereitgestellten TEST-Kontos in einem AUTHENTIFIZIERTEN (angemeldeten) Kontext durchgeführt.** ` +
+      `${runs.length} authentifizierte Kontrollen wurden bewertet; insgesamt **${totalProbes}** Anfragen. ` +
+      (anyFinding ? `Das höchste Risiko liegt im Bereich **${worstTitle}** (unten detailliert).` : `Es trat keine bestätigte kritische/hohe Schwachstelle hervor.`) +
+      `\n>\n> _Das Passwort wurde zu keinem Zeitpunkt nach außen/an einen Drittdienst gesendet; das Backend führte einen deterministischen Login durch und nutzte nur die Sitzung (Cookie/Token)._`
+    : `> ### Değerlendirme Özeti (Authenticated)\n` +
     `> **Bu tarama, verilen TEST hesabının oturumuyla KİMLİK-DOĞRULAMALI (login’li) bağlamda yapılmıştır.** ` +
     `${runs.length} authenticated kontrol değerlendirildi; toplam **${totalProbes}** istek. ` +
     (anyFinding ? `En yüksek risk **${worstTitle}** alanında (aşağıda detaylı).` : `Doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`) +
@@ -490,88 +809,95 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   // 'analyzed' = advisory GERÇEKTEN çalıştı (bulgu varsa gösterge, yoksa "AI analiz etti, vektör yok");
   // 'no_candidate' = pasif keşifle aday yoktu, advisory çağrılmadı (gerçek "kapsam dışı"). Böylece
   // "AI çalıştı ama temiz" ile "hiç uygulanamadı" birbirine KARIŞMAZ.
+  const confWord = (c: string) => (de ? (c === 'Yüksek' ? 'Hoch' : c === 'Orta' ? 'Mittel' : c === 'Düşük' ? 'Niedrig' : c) : c);
   const statusOf = (r: Run, lv: Level | null): string => {
-    if (!r.rep) return 'Veri toplanamadı';
-    if (r.fc > 0 && lv === 'high') return '⚠ Zafiyet göstergesi';
-    if (r.fc > 0) return '⚠ Sınırlı gösterge';
+    if (!r.rep) return t('Veri toplanamadı', 'Keine Daten erhoben');
+    if (r.fc > 0 && lv === 'high') return t('⚠ Zafiyet göstergesi', '⚠ Schwachstellenindikator');
+    if (r.fc > 0) return t('⚠ Sınırlı gösterge', '⚠ Begrenzter Indikator');
     if (r.agentCheck) {
       // (Deney) advisory VARSAYILAN KAPALI -> bu kontrol deterministik çalışır; sonucu deterministik durumdan türet.
-      if (r.agentStatus === 'disabled') return r.inputs === 0 ? 'İncelenemedi — güvenli test edilebilir yüzey yok' : '✓ Zafiyet kanıtı yok';
-      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return 'Ajan analizi tamamlanamadı (deterministik göstergeyle sınırlı)';
-      if (r.agentStatus === 'analyzed') return '✓ AI advisory analiz etti — vektör yok';
-      return 'Uygulanabilir giriş noktası yok (advisory çalıştırılmadı)'; // no_candidate
+      if (r.agentStatus === 'disabled') return r.inputs === 0 ? t('İncelenemedi — güvenli test edilebilir yüzey yok', 'Nicht prüfbar — keine sicher prüfbare Oberfläche') : t('✓ Zafiyet kanıtı yok', '✓ Kein Schwachstellennachweis');
+      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return t('Ajan analizi tamamlanamadı (deterministik göstergeyle sınırlı)', 'Agentenanalyse nicht abgeschlossen (auf deterministischen Indikator beschränkt)');
+      if (r.agentStatus === 'analyzed') return t('✓ AI advisory analiz etti — vektör yok', '✓ KI-Advisory hat analysiert — kein Vektor');
+      return t('Uygulanabilir giriş noktası yok (advisory çalıştırılmadı)', 'Kein anwendbarer Eingabepunkt (Advisory nicht ausgeführt)'); // no_candidate
     }
     // (İş 2 tutarlılık) Numaralandırılabilir yüzey BULUNDU ama cross-account testi kapsam dışı olduğundan
     // komşu-ID probu BİLİNÇLİ çalıştırılmadı -> "temiz" DEĞİL; detay bölümüyle tutarlı ayrı durum.
-    if (r.enumerableSurface && r.fc === 0) return '⚠ Yüzey bulundu — cross-account testi kapsam dışı';
-    if (r.inputs === 0) return 'Uygulanabilir giriş noktası yok (Kapsam dışı)';
-    return '✓ Zafiyet kanıtı yok';
+    if (r.enumerableSurface && r.fc === 0) return t('⚠ Yüzey bulundu — cross-account testi kapsam dışı', '⚠ Oberfläche gefunden — Cross-Account-Test außerhalb des Umfangs');
+    if (r.inputs === 0) return t('Uygulanabilir giriş noktası yok (Kapsam dışı)', 'Kein anwendbarer Eingabepunkt (Außerhalb des Umfangs)');
+    return t('✓ Zafiyet kanıtı yok', '✓ Kein Schwachstellennachweis');
   };
   const confCell = (r: Run): string => {
-    if (!r.rep) return 'Kapsam dışı';
+    if (!r.rep) return t('Kapsam dışı', 'Außerhalb des Umfangs');
     if (r.agentCheck) {
-      if (r.agentStatus === 'disabled') return r.inputs > 0 || r.fc > 0 ? r.conf : 'Kapsam dışı';
-      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return 'Sınırlı';
-      if (r.agentStatus === 'analyzed') return r.conf; // AI gerçekten çalıştı -> güven göster
-      return 'Kapsam dışı'; // no_candidate
+      if (r.agentStatus === 'disabled') return r.inputs > 0 || r.fc > 0 ? confWord(r.conf) : t('Kapsam dışı', 'Außerhalb des Umfangs');
+      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return t('Sınırlı', 'Begrenzt');
+      if (r.agentStatus === 'analyzed') return confWord(r.conf); // AI gerçekten çalıştı -> güven göster
+      return t('Kapsam dışı', 'Außerhalb des Umfangs'); // no_candidate
     }
-    if (r.enumerableSurface && r.fc === 0) return 'Kapsam dışı'; // yüzey var ama test çalıştırılmadı -> güven yok
-    return r.inputs > 0 ? r.conf : 'Kapsam dışı';
+    if (r.enumerableSurface && r.fc === 0) return t('Kapsam dışı', 'Außerhalb des Umfangs'); // yüzey var ama test çalıştırılmadı -> güven yok
+    return r.inputs > 0 ? confWord(r.conf) : t('Kapsam dışı', 'Außerhalb des Umfangs');
   };
   // (blocker fix) YÖNETİCİ ÖZETİ satırı, KONTROL ÖZETİ tablosuyla AYNI kaynaktan/mantıktan türer —
   // ayrı statik "Düşük — bulunamadı" şablonu YOK. statusOf ile birebir tutarlı (her satır tek doğru durum).
   const statusSummary = (r: Run, lv: Level | null): string => {
-    if (!r.rep || !lv) return 'veri toplanamadı';
+    if (!r.rep || !lv) return t('veri toplanamadı', 'keine Daten erhoben');
     const hl = headlineOf(r.rep.findings);
-    if (r.fc > 0) return `${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`;                       // bulgu var -> seviye + başlık
+    if (r.fc > 0) return `${rw(lv)}${hl ? ` — ${hl}` : ''}`;                       // bulgu var -> seviye + başlık
     if (r.agentCheck) {
-      if (r.agentStatus === 'disabled') return r.inputs === 0 ? 'İncelenemedi — güvenle test edilebilir yüzey bulunamadı (deterministik kontrol)' : `${RISK_WORD[lv]} — deterministik kontrol, göstergesi yok`;
-      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return 'Ajan analizi tamamlanamadı — deterministik göstergeyle sınırlı';
-      if (r.agentStatus === 'analyzed') return 'Yapay zekâ destekli advisory analiz etti — uygulanabilir vektör tespit edilmedi';
-      return 'Kapsam dışı — pasif keşifle uygulanabilir giriş noktası yok (advisory çalıştırılmadı)'; // no_candidate
+      if (r.agentStatus === 'disabled') return r.inputs === 0 ? t('İncelenemedi — güvenle test edilebilir yüzey bulunamadı (deterministik kontrol)', 'Nicht prüfbar — keine sicher prüfbare Oberfläche gefunden (deterministische Kontrolle)') : `${rw(lv)} — ${t('deterministik kontrol, göstergesi yok', 'deterministische Kontrolle, kein Indikator')}`;
+      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return t('Ajan analizi tamamlanamadı — deterministik göstergeyle sınırlı', 'Agentenanalyse nicht abgeschlossen — auf deterministischen Indikator beschränkt');
+      if (r.agentStatus === 'analyzed') return t('Yapay zekâ destekli advisory analiz etti — uygulanabilir vektör tespit edilmedi', 'KI-gestütztes Advisory hat analysiert — kein anwendbarer Vektor festgestellt');
+      return t('Kapsam dışı — pasif keşifle uygulanabilir giriş noktası yok (advisory çalıştırılmadı)', 'Außerhalb des Umfangs — durch passive Entdeckung kein anwendbarer Eingabepunkt (Advisory nicht ausgeführt)'); // no_candidate
     }
-    if (r.enumerableSurface && r.fc === 0) return `Numaralandırılabilir yüzey bulundu (${r.enumerableSurface.count} değer) — kendi kaynağına erişim yetkili; cross-account IDOR kapsam dışı (komşu-ID bilinçli çalıştırılmadı)`;
-    if (r.inputs === 0) return 'Kapsam dışı — uygulanabilir giriş noktası yok';
-    return `${RISK_WORD[lv]}${hl ? ` — ${hl}` : ''}`;                                      // temiz çalıştı -> seviye + başlık
+    if (r.enumerableSurface && r.fc === 0) return de
+      ? `Enumerierbare Oberfläche gefunden (${r.enumerableSurface.count} Werte) — Zugriff auf eigene Ressource berechtigt; Cross-Account-IDOR außerhalb des Umfangs (benachbarte ID bewusst nicht ausgeführt)`
+      : `Numaralandırılabilir yüzey bulundu (${r.enumerableSurface.count} değer) — kendi kaynağına erişim yetkili; cross-account IDOR kapsam dışı (komşu-ID bilinçli çalıştırılmadı)`;
+    if (r.inputs === 0) return t('Kapsam dışı — uygulanabilir giriş noktası yok', 'Außerhalb des Umfangs — kein anwendbarer Eingabepunkt');
+    return `${rw(lv)}${hl ? ` — ${hl}` : ''}`;                                      // temiz çalıştı -> seviye + başlık
   };
   const tableRows = runs.map((r, i) => `| ${r.title} | ${statusOf(r, levels[i])} | ${confCell(r)} |`).join('\n');
-  const controlTable = `## KONTROL ÖZETİ\n\n| Kontrol | Sonuç | Güven |\n|---------|-------|-------|\n${tableRows}\n\n> Güven yalnızca gerçekten uygulanabilen (giriş/çerez/uç bulunan) kontroller için gösterilir; uygulanamayan kontroller **Kapsam dışı**dır (ör. çerez yerine token kullanan oturumda çerez-bayrağı/fixation).\n`;
+  const controlTable = de
+    ? `## KONTROLLÜBERSICHT\n\n| Kontrolle | Ergebnis | Konfidenz |\n|---------|-------|-------|\n${tableRows}\n\n> Konfidenz wird nur für tatsächlich anwendbare (Eingabe/Cookie/Endpunkt gefunden) Kontrollen angezeigt; nicht anwendbare Kontrollen sind **außerhalb des Umfangs** (z. B. Cookie-Flag/Fixation bei einer Sitzung, die statt Cookies ein Token nutzt).\n`
+    : `## KONTROL ÖZETİ\n\n| Kontrol | Sonuç | Güven |\n|---------|-------|-------|\n${tableRows}\n\n> Güven yalnızca gerçekten uygulanabilen (giriş/çerez/uç bulunan) kontroller için gösterilir; uygulanamayan kontroller **Kapsam dışı**dır (ör. çerez yerine token kullanan oturumda çerez-bayrağı/fixation).\n`;
 
   const summary: string[] = [];
   summary.push(
     worst === 'low'
-      ? `- **Genel risk seviyesi: Düşük** — ${runs.length} authenticated kontrol değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`
-      : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — en yüksek risk **${worstTitle}** alanında.`,
+      ? t(`- **Genel risk seviyesi: Düşük** — ${runs.length} authenticated kontrol değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`, `- **Gesamtrisikostufe: Niedrig** — ${runs.length} authentifizierte Kontrollen wurden bewertet; es trat keine bestätigte kritische/hohe Schwachstelle hervor.`)
+      : t(`- **Genel risk seviyesi: ${RISK_WORD[worst]}** — en yüksek risk **${worstTitle}** alanında.`, `- **Gesamtrisikostufe: ${RISK_WORD_DE[worst]}** — das höchste Risiko liegt im Bereich **${worstTitle}**.`),
   );
   summary.push(
-    `- **Kapsam:** Bu bölüm **kimlik-doğrulamalı (login’li)** bağlamda çalışır; çerez/oturum/yetki, authenticated enjeksiyon/IDOR ve ${advisorActive ? 'isteğe bağlı bir **yapay zekâ danışma katmanı** destekli' : '**deterministik güvenlik kontrolleriyle**'} yetki yükseltme + çok-adımlı iş mantığı göstergelerini kapsar (backend güvenli uygular; ödeme/hesap-değişikliği tamamlama YOK). Cross-account (başka kullanıcının verisi) IDOR bu sürümün kapsamı dışındadır.`,
+    de
+      ? `- **Umfang:** Dieser Abschnitt arbeitet in einem **authentifizierten (angemeldeten)** Kontext; er umfasst Cookie/Sitzung/Berechtigung, authentifizierte Injektion/IDOR sowie Indikatoren für Rechteausweitung + mehrstufige Geschäftslogik ${advisorActive ? 'unterstützt durch eine optionale **KI-Beratungsschicht**' : 'mit **deterministischen Sicherheitskontrollen**'} (das Backend führt dies sicher aus; KEIN Abschluss von Zahlung/Kontoänderung). Cross-Account-IDOR (Daten eines anderen Benutzers) liegt außerhalb des Umfangs dieser Version.`
+      : `- **Kapsam:** Bu bölüm **kimlik-doğrulamalı (login’li)** bağlamda çalışır; çerez/oturum/yetki, authenticated enjeksiyon/IDOR ve ${advisorActive ? 'isteğe bağlı bir **yapay zekâ danışma katmanı** destekli' : '**deterministik güvenlik kontrolleriyle**'} yetki yükseltme + çok-adımlı iş mantığı göstergelerini kapsar (backend güvenli uygular; ödeme/hesap-değişikliği tamamlama YOK). Cross-account (başka kullanıcının verisi) IDOR bu sürümün kapsamı dışındadır.`,
   );
   runs.forEach((r, i) => {
     summary.push(`- **${r.title}:** ${statusSummary(r, levels[i])}`);
   });
-  summary.push('- **Önerilen ilk adım:** Çalıştırılan kontrollerdeki bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.');
+  summary.push(t('- **Önerilen ilk adım:** Çalıştırılan kontrollerdeki bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.', '- **Empfohlener erster Schritt:** Beheben Sie die Befunde der ausgeführten Kontrollen; fertige Schritte im Abschnitt „KI-Lösungsvorschläge".'));
 
   const genel =
     (worst === 'low'
-      ? `${runs.length} authenticated doğrulama kontrolü değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`
-      : `Çalıştırılan authenticated kontrollerde en yüksek risk **${worstTitle}** alanında tespit edildi; öncelikli olarak giderilmesi/doğrulanması önerilir.`) +
-    ` Tüm kontroller GET-only/gözlemseldir; state-değiştiren istek gönderilmemiştir. Şifre dışarı/üçüncü bir servise gönderilmemiş, backend login yapıp yalnız oturumu kullanmıştır.`;
+      ? t(`${runs.length} authenticated doğrulama kontrolü değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`, `${runs.length} authentifizierte Verifizierungskontrollen wurden bewertet; es trat keine bestätigte kritische/hohe Schwachstelle hervor.`)
+      : t(`Çalıştırılan authenticated kontrollerde en yüksek risk **${worstTitle}** alanında tespit edildi; öncelikli olarak giderilmesi/doğrulanması önerilir.`, `In den ausgeführten authentifizierten Kontrollen wurde das höchste Risiko im Bereich **${worstTitle}** festgestellt; eine vorrangige Behebung/Verifizierung wird empfohlen.`)) +
+    t(` Tüm kontroller GET-only/gözlemseldir; state-değiştiren istek gönderilmemiştir. Şifre dışarı/üçüncü bir servise gönderilmemiş, backend login yapıp yalnız oturumu kullanmıştır.`, ` Alle Kontrollen sind GET-only/beobachtend; es wurde keine zustandsändernde Anfrage gesendet. Das Passwort wurde nicht nach außen/an einen Drittdienst gesendet; das Backend führte den Login durch und nutzte nur die Sitzung.`);
 
   const sections = runs.map((r) => {
-    if (!r.rep) return `## ${r.title}\n\n> Bu kontrol için veri toplanamadı.\n`;
+    if (!r.rep) return `## ${r.title}\n\n> ${t('Bu kontrol için veri toplanamadı.', 'Für diese Kontrolle konnten keine Daten erhoben werden.')}\n`;
     return `## ${r.title}\n\n${detailOnly(r.rep.findings)}\n`;
   }).join('\n');
 
   const findingsRaw =
     `${box}\n\n` +
-    `## YÖNETİCİ ÖZETİ\n\n${summary.join('\n')}\n\n` +
-    `## GENEL DEĞERLENDİRME\n\n**Risk Seviyesi: ${RISK_WORD[worst]}**\n\n${genel}\n\n` +
+    `## ${t('YÖNETİCİ ÖZETİ', 'MANAGEMENTZUSAMMENFASSUNG')}\n\n${summary.join('\n')}\n\n` +
+    `## ${t('GENEL DEĞERLENDİRME', 'GESAMTBEWERTUNG')}\n\n**${t('Risk Seviyesi', 'Risikostufe')}: ${rw(worst)}**\n\n${genel}\n\n` +
     `${controlTable}\n${sections}`;
 
   const fixParts = runs.map((r) => (r.rep && r.rep.fixText.trim() ? `### ${r.title}\n\n${r.rep.fixText.trim()}` : '')).filter(Boolean);
-  const fixTextRaw = `Bu bölüm, çalıştırılan authenticated kontrollerde tespit edilen bulgular için düzeltme önerileri içerir.\n\n${fixParts.join('\n\n')}`;
+  const fixTextRaw = t(`Bu bölüm, çalıştırılan authenticated kontrollerde tespit edilen bulgular için düzeltme önerileri içerir.\n\n${fixParts.join('\n\n')}`, `Dieser Abschnitt enthält Behebungsvorschläge für die in den ausgeführten authentifizierten Kontrollen festgestellten Befunde.\n\n${fixParts.join('\n\n')}`);
 
   void dataOk;
   // (part 2) MİRAS login'siz cümleleri authenticated bağlama çevir (kaynak şablonlara dokunmadan).
-  return { findings: toAuthenticatedContext(findingsRaw), fixText: toAuthenticatedContext(fixTextRaw) };
+  return { findings: toAuthenticatedContext(findingsRaw, de), fixText: toAuthenticatedContext(fixTextRaw, de) };
 }
