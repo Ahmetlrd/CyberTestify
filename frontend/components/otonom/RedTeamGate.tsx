@@ -173,7 +173,7 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-xl font-bold text-ink">Otonom AI Red Team — Satın Al</h3>
-          <p className="mt-1 text-sm text-ink-soft">Hedefinizi girin, karmaşıklık-bazlı fiyatı görün, ödeyin. Tarama bitince raporunuz önce ekibimizce gözden geçirilir, sonra size açılır.</p>
+          <p className="mt-1 text-sm text-ink-soft">Hedefinizi girin, karmaşıklık-bazlı fiyatı görün, ödeyin ve taramayı başlatın.</p>
         </div>
         <button type="button" onClick={() => { window.localStorage.removeItem(BETA_TOKEN_KEY); onLock(); }} className="btn btn-ghost shrink-0 text-xs">✕</button>
       </div>
@@ -183,7 +183,7 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
         <legend className="label">Seviye</legend>
         <div className="grid gap-2 sm:grid-cols-3">
           <div className="rounded-card border-2 border-brand bg-brand-50 p-3">
-            <div className="flex items-center gap-2"><span className="text-sm font-bold text-ink">S1</span><span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold uppercase text-white">Beta</span></div>
+            <div className="flex items-center gap-2"><span className="text-sm font-bold text-ink">S1</span><span className="rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold uppercase text-white">Açık</span></div>
             <div className="text-[11px] text-ink-muted">Pasif + hafif-aktif · deneysel</div>
           </div>
           {(['S2', 'S3'] as const).map((lv) => (
@@ -228,7 +228,7 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
           <a href="/legal/kvkk-aydinlatma" target="_blank" rel="noopener noreferrer" className="font-semibold text-accent-600 underline">KVKK Aydınlatma Metni</a>’ni okudum, kabul ediyorum. Bunun <strong>DENEYSEL</strong>, deterministik-olmayan bir tarama olduğunu ve resmî bir sızma testi/denetim yerine geçmediğini kabul ediyorum.
         </>)}
         {chk(gAck, setGAck, <>
-          <strong>Cayma hakkı & yurt dışı AI:</strong> Hizmetin cayma süresi dolmadan <strong>onayımla derhal başlatılmasını</strong> istiyorum ve <strong>cayma hakkımı kaybedeceğimi</strong> kabul ediyorum; ayrıca tarama verilerimin analiz için <strong>yurt dışında yerleşik bir yapay zekâ hizmetine</strong> aktarılmasına açık rıza gösteriyorum (KVKK m.9).
+          <strong>Cayma hakkı</strong> Hizmetin cayma süresi dolmadan <strong>onayımla derhal başlatılmasını</strong> istiyorum ve <strong>cayma hakkımı kaybedeceğimi</strong> kabul ediyorum.
         </>)}
       </div>
 

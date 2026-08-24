@@ -14,7 +14,7 @@ const LINES: Array<{ t: string; c: string }> = [
   { t: '⊙ Ham istek/yanıt kanıta bağlandı  [req#0231]', c: '#8b93a5' },
   { t: '✗ Hayalet iddia elendi: kanıt izi yok  [claim#7]', c: '#a595c2' },
   { t: '✓ Sınıflandırma: 2 Kanıtlı · 1 Belirsiz · 1 Elenen', c: '#34d399' },
-  { t: '🔒 Rapor şifreleniyor · ekip onayı bekleniyor…', c: '#c9d6d1' },
+  { t: '🔒 Rapor şifreleniyor…', c: '#c9d6d1' },
 ];
 
 export function LiveTerminal() {

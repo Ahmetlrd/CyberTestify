@@ -30,7 +30,7 @@ const PHASE_SETS: Record<string, string[]> = {
     'Hedef inceleniyor ve saldırı yüzeyi keşfediliyor',
     'Otonom ajan güvenlik tekniklerini deniyor',
     'Bulgular ham kanıta bağlanıyor ve doğrulanıyor',
-    'Rapor hazırlanıyor ve gözden geçiriliyor',
+    'Rapor hazırlanıyor',
   ],
   basit_tarama: [
     'Hedef erişilebilirliği kontrol ediliyor',

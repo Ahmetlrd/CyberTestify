@@ -55,14 +55,14 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
       <section style={{ position: 'relative', overflow: 'hidden', borderBottom: `1px solid ${C.border}` }}>
         <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse 900px 500px at 75% 20%, ${C.amberSoftBg}, transparent 65%)`, pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px)', backgroundSize: '56px 56px', maskImage: 'radial-gradient(ellipse 70% 60% at 50% 30%, black, transparent)', WebkitMaskImage: 'radial-gradient(ellipse 70% 60% at 50% 30%, black, transparent)', pointerEvents: 'none' }} />
-        <div className="container-page" style={{ position: 'relative', padding: '80px 0 64px' }}>
-          <div className="grid items-center gap-16 lg:grid-cols-[1.1fr_.9fr]">
+        <div className="container-page" style={{ position: 'relative', padding: 'clamp(48px,9vw,80px) 0 clamp(40px,7vw,64px)' }}>
+          <div className="grid items-center gap-10 lg:gap-16 lg:grid-cols-[1.1fr_.9fr]">
             <div>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: `1px solid ${C.amberSoftBorder}`, background: C.amberSoftBg, color: C.amber, fontFamily: C.mono, fontSize: 12, padding: '6px 14px', borderRadius: 100, marginBottom: 24 }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.amber, animation: 'rtPulseDot 1.6s infinite' }} />
-                {d.eyebrow.toLocaleUpperCase('tr')} · SINIRLI ERİŞİM
+                {d.eyebrow.toLocaleUpperCase('tr')}
               </div>
-              <h1 className="text-balance" style={{ fontSize: 52, lineHeight: 1.06, letterSpacing: '-.03em', fontWeight: 800, margin: '0 0 20px' }}>{d.title}</h1>
+              <h1 className="text-balance" style={{ fontSize: 'clamp(32px, 8vw, 52px)', lineHeight: 1.08, letterSpacing: '-.03em', fontWeight: 800, margin: '0 0 20px' }}>{d.title}</h1>
               <p className="text-pretty" style={{ fontSize: 18, lineHeight: 1.65, color: C.textSoft, margin: '0 0 26px', maxWidth: 520 }}>{d.subtitle}</p>
               <div style={{ display: 'flex', gap: 10, marginBottom: 30, flexWrap: 'wrap' }}>
                 {d.badges.map((b) => (
@@ -70,7 +70,7 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
                 ))}
               </div>
               <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 24, flexWrap: 'wrap' }}>
-                <a href="#panel" style={{ background: C.amber, color: '#0a1c18', padding: '14px 30px', borderRadius: 10, fontWeight: 700, fontSize: 16, boxShadow: `0 0 32px ${C.amberGlow}` }}>{d.heroCtaPrimary} — Beta</a>
+                <a href="#panel" style={{ background: C.amber, color: '#0a1c18', padding: '14px 30px', borderRadius: 10, fontWeight: 700, fontSize: 16, boxShadow: `0 0 32px ${C.amberGlow}` }}>{d.heroCtaPrimary}</a>
                 <a href="#how" style={{ color: C.text, padding: '14px 26px', borderRadius: 10, border: `1px solid ${C.border}`, fontWeight: 600, fontSize: 15 }}>{d.heroCtaSecondary}</a>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: C.textMuted, fontFamily: C.mono }}>
@@ -84,16 +84,14 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
 
       {/* ————————————————————————— NE / KİME ————————————————————————— */}
       <section style={{ borderBottom: `1px solid ${C.border}` }}>
-        <div className="container-page" style={{ padding: '64px 0' }}>
+        <div className="container-page" style={{ padding: 'clamp(44px,7vw,64px) 0' }}>
           <div className="grid gap-12 lg:grid-cols-2">
             <div>
-              <div style={{ fontFamily: C.mono, fontSize: 12, color: C.amber, letterSpacing: '.14em', marginBottom: 14 }}>// NE YAPAR</div>
-              <h2 style={{ fontSize: 26, letterSpacing: '-.02em', margin: '0 0 14px', fontWeight: 700 }}>{d.whatTitle}</h2>
+              <h2 style={{ fontSize: 'clamp(22px, 4.5vw, 26px)', letterSpacing: '-.02em', margin: '0 0 14px', fontWeight: 700 }}>{d.whatTitle}</h2>
               <p className="text-pretty" style={{ color: C.textSoft, lineHeight: 1.7, margin: 0 }}>{d.whatBody}</p>
             </div>
             <div>
-              <div style={{ fontFamily: C.mono, fontSize: 12, color: C.amber, letterSpacing: '.14em', marginBottom: 14 }}>// KİMLER İÇİN</div>
-              <h2 style={{ fontSize: 26, letterSpacing: '-.02em', margin: '0 0 14px', fontWeight: 700 }}>Deneysel doğayı kabul eden ekipler</h2>
+              <h2 style={{ fontSize: 'clamp(22px, 4.5vw, 26px)', letterSpacing: '-.02em', margin: '0 0 14px', fontWeight: 700 }}>Deneysel doğayı kabul eden ekipler</h2>
               <p className="text-pretty" style={{ color: C.textSoft, lineHeight: 1.7, margin: 0 }}>{d.whatFor}</p>
             </div>
           </div>
@@ -102,10 +100,9 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
 
       {/* ————————————————————————— S1 / S2 / S3 ————————————————————————— */}
       <section style={{ borderBottom: `1px solid ${C.border}`, background: `linear-gradient(${C.bg}, ${C.bgAlt})` }}>
-        <div className="container-page" style={{ padding: '72px 0' }}>
+        <div className="container-page" style={{ padding: 'clamp(48px,8vw,72px) 0' }}>
           <div style={{ textAlign: 'center', marginBottom: 44 }}>
-            <div style={{ fontFamily: C.mono, fontSize: 12, color: C.amber, letterSpacing: '.14em', marginBottom: 14 }}>// RİSK SEVİYELERİ</div>
-            <h2 style={{ fontSize: 34, letterSpacing: '-.025em', margin: '0 0 12px', fontWeight: 700 }}>{d.levelsTitle}</h2>
+            <h2 style={{ fontSize: 'clamp(24px, 5vw, 34px)', letterSpacing: '-.025em', margin: '0 0 12px', fontWeight: 700 }}>{d.levelsTitle}</h2>
             <p style={{ color: C.textSoft, fontSize: 16, margin: 0 }}>{d.levelsSubtitle}</p>
           </div>
           <div className="grid items-stretch gap-5 lg:grid-cols-3">
@@ -147,13 +144,12 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
 
       {/* ————————————————————————— NASIL ÇALIŞIR ————————————————————————— */}
       <section id="how" style={{ borderBottom: `1px solid ${C.border}`, scrollMarginTop: 80 }}>
-        <div className="container-page" style={{ padding: '72px 0' }}>
-          <div style={{ fontFamily: C.mono, fontSize: 12, color: C.amber, letterSpacing: '.14em', marginBottom: 14 }}>// NASIL ÇALIŞIR</div>
-          <h2 style={{ fontSize: 34, letterSpacing: '-.025em', margin: '0 0 40px', fontWeight: 700 }}>{d.howTitle}</h2>
+        <div className="container-page" style={{ padding: 'clamp(48px,8vw,72px) 0' }}>
+          <h2 style={{ fontSize: 'clamp(24px, 5vw, 34px)', letterSpacing: '-.025em', margin: '0 0 40px', fontWeight: 700 }}>{d.howTitle}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" style={{ border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
             {d.howSteps.map((s, i) => (
               <div key={s.t} style={{ padding: '32px 26px', borderRight: i < d.howSteps.length - 1 ? `1px solid ${C.border}` : undefined, background: C.surface2 }}>
-                <div style={{ fontFamily: C.mono, fontSize: 36, fontWeight: 600, color: C.border, marginBottom: 16 }}>{String(i + 1).padStart(2, '0')}</div>
+                <div style={{ fontFamily: C.mono, fontSize: 36, fontWeight: 700, color: C.amber, marginBottom: 16 }}>{String(i + 1).padStart(2, '0')}</div>
                 <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>{s.t}</div>
                 <div style={{ fontSize: 14, color: C.textSoft, lineHeight: 1.65 }}>{s.d}</div>
               </div>
@@ -164,10 +160,9 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
 
       {/* ————————————————————————— KANIT KATMANLARI ————————————————————————— */}
       <section style={{ borderBottom: `1px solid ${C.border}`, background: C.bgAlt }}>
-        <div className="container-page" style={{ padding: '72px 0' }}>
+        <div className="container-page" style={{ padding: 'clamp(48px,8vw,72px) 0' }}>
           <div style={{ textAlign: 'center', marginBottom: 44 }}>
-            <div style={{ fontFamily: C.mono, fontSize: 12, color: C.amber, letterSpacing: '.14em', marginBottom: 14 }}>// KANIT-BAĞLAMA</div>
-            <h2 style={{ fontSize: 34, letterSpacing: '-.025em', margin: '0 0 12px', fontWeight: 700 }}>{d.evTitle}</h2>
+            <h2 style={{ fontSize: 'clamp(24px, 5vw, 34px)', letterSpacing: '-.025em', margin: '0 0 12px', fontWeight: 700 }}>{d.evTitle}</h2>
             <p className="text-pretty" style={{ color: C.textSoft, fontSize: 16, margin: '0 auto', maxWidth: 560 }}>{d.principleBody}</p>
           </div>
           <div className="grid gap-5 sm:grid-cols-3">
@@ -180,23 +175,25 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
 
       {/* ————————————————————————— FARK TABLOSU ————————————————————————— */}
       <section style={{ borderBottom: `1px solid ${C.border}` }}>
-        <div className="container-page" style={{ padding: '72px 0', maxWidth: 1000 }}>
-          <div style={{ fontFamily: C.mono, fontSize: 12, color: C.amber, letterSpacing: '.14em', marginBottom: 14 }}>// 6 PAKETTEN FARKI</div>
-          <h2 style={{ fontSize: 34, letterSpacing: '-.025em', margin: '0 0 16px', fontWeight: 700 }}>{d.compareTitle}</h2>
+        <div className="container-page" style={{ padding: 'clamp(48px,8vw,72px) 0', maxWidth: 1000 }}>
+          <h2 style={{ fontSize: 'clamp(24px, 5vw, 34px)', letterSpacing: '-.025em', margin: '0 0 16px', fontWeight: 700 }}>{d.compareTitle}</h2>
           <p className="text-pretty" style={{ color: C.textSoft, lineHeight: 1.7, margin: '0 0 32px', maxWidth: 640 }}>{d.diffBody}</p>
-          <div style={{ border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
-            <div className="grid grid-cols-[1fr_1.2fr_1.2fr]" style={{ background: C.surface, fontFamily: C.mono, fontSize: 12, color: C.textMuted, letterSpacing: '.06em' }}>
-              <div style={{ padding: '16px 22px' }} />
-              <div style={{ padding: '16px 22px', borderLeft: `1px solid ${C.border}` }}>{d.compareCol1.toLocaleUpperCase('tr')}</div>
-              <div style={{ padding: '16px 22px', borderLeft: `1px solid ${C.border}`, color: C.amber }}>{d.compareCol2.toLocaleUpperCase('tr')}</div>
-            </div>
-            {d.compareRows.map((r) => (
-              <div key={r.k} className="grid grid-cols-[1fr_1.2fr_1.2fr]" style={{ borderTop: `1px solid ${C.border}`, fontSize: 14 }}>
-                <div style={{ padding: '16px 22px', color: C.textMuted, fontWeight: 600 }}>{r.k}</div>
-                <div style={{ padding: '16px 22px', borderLeft: `1px solid ${C.border}`, color: C.textSoft }}>{r.a}</div>
-                <div style={{ padding: '16px 22px', borderLeft: `1px solid ${C.border}`, color: C.text, background: C.amberSoftBg }}>{r.b}</div>
+          {/* MOBİL: dar ekranda tablo yatay kaydırılır (kırılıp üst üste binmez) */}
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ minWidth: 520, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}>
+              <div className="grid grid-cols-[1fr_1.2fr_1.2fr]" style={{ background: C.surface, fontFamily: C.mono, fontSize: 12, color: C.textMuted, letterSpacing: '.06em' }}>
+                <div style={{ padding: '16px 22px' }} />
+                <div style={{ padding: '16px 22px', borderLeft: `1px solid ${C.border}` }}>{d.compareCol1.toLocaleUpperCase('tr')}</div>
+                <div style={{ padding: '16px 22px', borderLeft: `1px solid ${C.border}`, color: C.amber }}>{d.compareCol2.toLocaleUpperCase('tr')}</div>
               </div>
-            ))}
+              {d.compareRows.map((r) => (
+                <div key={r.k} className="grid grid-cols-[1fr_1.2fr_1.2fr]" style={{ borderTop: `1px solid ${C.border}`, fontSize: 14 }}>
+                  <div style={{ padding: '16px 22px', color: C.textMuted, fontWeight: 600 }}>{r.k}</div>
+                  <div style={{ padding: '16px 22px', borderLeft: `1px solid ${C.border}`, color: C.textSoft }}>{r.a}</div>
+                  <div style={{ padding: '16px 22px', borderLeft: `1px solid ${C.border}`, color: C.text, background: C.amberSoftBg }}>{r.b}</div>
+                </div>
+              ))}
+            </div>
           </div>
           <div style={{ marginTop: 20 }}>
             <Link href={packagesHref} style={{ fontSize: 14, fontWeight: 600, color: C.amber }}>{d.compareLink}</Link>
@@ -206,7 +203,7 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
 
       {/* ————————————————————————— UYARILAR ————————————————————————— */}
       <section style={{ borderBottom: `1px solid ${C.border}`, background: `linear-gradient(${C.bg}, ${C.bgAlt})` }}>
-        <div className="container-page" style={{ padding: '72px 0' }}>
+        <div className="container-page" style={{ padding: 'clamp(48px,8vw,72px) 0' }}>
           <div style={{ maxWidth: 800, margin: '0 auto', border: `1px solid ${C.amberSoftBorder}`, borderRadius: 16, background: C.amberSoftBg, padding: '36px 40px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22 }}>
               <span style={{ fontSize: 22, color: C.amber }}>⚠</span>
@@ -227,10 +224,9 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
 
       {/* ————————————————————————— SATIN ALMA PANELİ ————————————————————————— */}
       <section id="panel" style={{ borderBottom: `1px solid ${C.border}`, scrollMarginTop: 80 }}>
-        <div className="container-page" style={{ padding: '72px 0' }}>
+        <div className="container-page" style={{ padding: 'clamp(48px,8vw,72px) 0' }}>
           <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <div style={{ fontFamily: C.mono, fontSize: 12, color: C.amber, letterSpacing: '.14em', marginBottom: 12 }}>// SATIN AL</div>
-            <h2 style={{ fontSize: 30, letterSpacing: '-.025em', margin: 0, fontWeight: 700 }}>{d.principleTitle}</h2>
+            <h2 style={{ fontSize: 'clamp(22px, 5vw, 30px)', letterSpacing: '-.025em', margin: 0, fontWeight: 700 }}>{d.principleTitle}</h2>
           </div>
           <div className="mx-auto max-w-2xl">
             <RedTeamGate d={d} />
@@ -241,9 +237,8 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
       {/* ————————————————————————— SON CTA ————————————————————————— */}
       <section style={{ position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse 700px 360px at 50% 100%, ${C.amberSoftBg}, transparent 70%)`, pointerEvents: 'none' }} />
-        <div className="container-page" style={{ position: 'relative', padding: '88px 0', textAlign: 'center' }}>
-          <div style={{ fontFamily: C.mono, fontSize: 12, color: C.amber, letterSpacing: '.14em', marginBottom: 16 }}>// SINIRLI ERİŞİM</div>
-          <h2 className="text-balance" style={{ fontSize: 38, letterSpacing: '-.025em', margin: '0 auto 14px', fontWeight: 700, maxWidth: 640 }}>{d.ctaBandTitle}</h2>
+        <div className="container-page" style={{ position: 'relative', padding: 'clamp(56px,10vw,88px) 0', textAlign: 'center' }}>
+          <h2 className="text-balance" style={{ fontSize: 'clamp(26px, 6vw, 38px)', letterSpacing: '-.025em', margin: '0 auto 14px', fontWeight: 700, maxWidth: 640 }}>{d.ctaBandTitle}</h2>
           <p style={{ color: C.textSoft, fontSize: 16, margin: '0 0 30px' }}>{d.levels[0].price} · {d.levels[0].name}</p>
           <a href="#panel" style={{ display: 'inline-block', background: C.amber, color: '#0a1c18', padding: '16px 44px', borderRadius: 12, fontWeight: 700, fontSize: 17, boxShadow: `0 0 48px ${C.amberGlow}` }}>{d.ctaBandBtn}</a>
         </div>
