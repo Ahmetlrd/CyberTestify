@@ -30,7 +30,9 @@ const AUTH_BUNDLE_KEY = 'bundle_full_pentest';
 
 // Deterministik (kod-yazimi) rapor ureten paketler: key -> uretici(hostname).
 // Hepsi { findings, fixText } | null doner (null -> ajan/ham-kanit fallback).
-const DETERMINISTIC_GENERATORS: Record<string, ((host: string) => Promise<{ findings: string; fixText: string } | null>) | undefined> = {
+// (Çok-bölge) generator'lar artık locale alır (Almanca rapor gövdesi için). Henüz çevrilmemiş
+// generator'lar `(host)=>` imzalı kalabilir (daha az param atanabilir) → geçişli çevrilebilir.
+const DETERMINISTIC_GENERATORS: Record<string, ((host: string, locale: Locale) => Promise<{ findings: string; fixText: string } | null>) | undefined> = {
   basit_tarama: generateBasitReport,
   ssl_tls: generateSslTlsReport,
   header_leak: generateHeaderLeakReport,
@@ -358,7 +360,7 @@ export async function generateAndStoreReport(flowId: string) {
     logScanStep({ step: 'Rapor üretimi', summary: `paket=${flow.order.package.key} · deterministik üretici başladı (hedef=${flow.order.domain.hostname})` });
     const _tGen = Date.now();
     try {
-      const built = await detGen(flow.order.domain.hostname);
+      const built = await detGen(flow.order.domain.hostname, locale);
       if (built) {
         findings = built.findings;
         fixText = built.fixText;

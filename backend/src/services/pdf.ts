@@ -189,19 +189,19 @@ export function assessBasit(
   // (0) TARANAMADI/İNCELENEMEDİ: hedefe hiç ulaşılamadıysa bu "temiz/düşük" DEĞİLDİR. Nötr bir
   //     "İncelenemedi" rozeti göster (amber; ASLA yeşil-düşük). "Güvenli" imasından kaçınır.
   // NOT: Türkçe "İ" (U+0130) JS'te /i flag'iyle "i"ye eşlenmez -> önce tr-locale ile küçült.
-  if (/risk\s*seviyesi\s*[:：]\s*\*{0,2}\s*incelenemedi|tarama\s*(yap[ıi]lamad|y[uü]r[uü]t[uü]lemed)|ula[şs][ıi]lamad[ıi][ğg][ıi] i[çc]in kontrol/.test(md.slice(0, 1500).toLocaleLowerCase('tr'))) {
+  if (/risk\s*seviyesi\s*[:：]\s*\*{0,2}\s*incelenemedi|risikostufe\s*[:：]\s*\*{0,2}\s*nicht\s*pr[üu]fbar|tarama\s*(yap[ıi]lamad|y[uü]r[uü]t[uü]lemed)|ula[şs][ıi]lamad[ıi][ğg][ıi] i[çc]in kontrol/.test(md.slice(0, 1500).toLocaleLowerCase('tr'))) {
     return { level: 'medium', label: p3(locale, 'İncelenemedi', 'Not scanned', 'Nicht geprüft'), sentence: p3(locale, 'Hedefe ulaşılamadığı için tarama yürütülemedi; bu sonuç sitenin GÜVENLİ olduğu anlamına GELMEZ. Erişim sağlanınca yeniden taranmalıdır.', 'The scan could not run because the target was unreachable; this result does NOT mean the site is SECURE. It should be re-scanned once reachable.', 'Der Scan konnte nicht ausgeführt werden, da das Ziel nicht erreichbar war; dieses Ergebnis bedeutet NICHT, dass die Website SICHER ist. Sie sollte erneut gescannt werden, sobald sie erreichbar ist.') };
   }
 
   // (1) Rapor KOD-yazimi oldugundan GENEL DEĞERLENDİRME'deki ACIK "Risk Seviyesi: X"i oku —
   //     tek dogruluk kaynagi; rozet ile metin GARANTI tutarli. "Orta-Yüksek" ONCE eslesmeli.
-  const m = md.slice(0, 1500).match(/risk\s*seviyesi\s*[:：]\s*\**\s*(orta[-\s]?y[uü]ksek|kr[iİ]t[iİ]k|y[uü]ksek|orta|d[uü][sş][uü]k)/i);
+  const m = md.slice(0, 1500).match(/(?:risk\s*seviyesi|risikostufe)\s*[:：]\s*\**\s*(orta[-\s]?y[uü]ksek|kr[iİ]t[iİ]k|y[uü]ksek|orta|d[uü][sş][uü]k|mittel[-\s]?hoch|kritisch|hoch|mittel|niedrig)/i);
   if (m) {
     const kw = m[1].toLocaleLowerCase('tr');
-    if (/orta[-\s]?y[uü]ksek/.test(kw)) return mk('medium-high');
-    if (/kr[iı]t[iı]k|y[uü]ksek/.test(kw)) return mk('high');
-    if (/orta/.test(kw)) return mk('medium');
-    if (/d[uü][sş][uü]k/.test(kw)) return mk('low');
+    if (/orta[-\s]?y[uü]ksek|mittel[-\s]?hoch/.test(kw)) return mk('medium-high');
+    if (/kr[iı]t[iı]k|y[uü]ksek|kritisch|hoch/.test(kw)) return mk('high');
+    if (/^orta$|^mittel$/.test(kw)) return mk('medium');
+    if (/d[uü][sş][uü]k|niedrig/.test(kw)) return mk('low');
   }
 
   // (2) Acik ifade yoksa (eski/ajan raporu): HTTP baslik tablosundan turet.
@@ -296,10 +296,10 @@ export type Sev = 'critical' | 'high' | 'medium' | 'low';
 export type Finding = { title: string; sev: Sev; type?: FindingType; endpoint?: string; evidence?: string; confidence?: string };
 function normSev(s: string): Sev | null {
   const x = s.toLocaleLowerCase('tr');
-  if (/krit[iı]k|critical/.test(x)) return 'critical';
-  if (/y[üu]ksek|high/.test(x)) return 'high';
-  if (/orta|medium/.test(x)) return 'medium';
-  if (/d[üu][şs][üu]k|low/.test(x)) return 'low';
+  if (/krit[iı]k|critical|kritisch/.test(x)) return 'critical';
+  if (/y[üu]ksek|high|hoch/.test(x)) return 'high';
+  if (/orta|medium|mittel/.test(x)) return 'medium';
+  if (/d[üu][şs][üu]k|low|niedrig/.test(x)) return 'low';
   return null;
 }
 function stripMd(s: string): string {
@@ -377,17 +377,17 @@ export function parseFindings(md: string, locale: 'tr' | 'en' | 'de'): { rows: F
     if (block.length < 2) continue;
     const cells = (r: string) => r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
     const header = cells(block[0]).map((h) => h.toLocaleLowerCase('tr'));
-    const sevCol = header.findIndex((h) => /[şs]iddet|severity|ciddiyet/.test(h));
+    const sevCol = header.findIndex((h) => /[şs]iddet|severity|ciddiyet|schweregrad/.test(h));
     if (sevCol === -1) continue; // şiddet kolonu yoksa bulgu tablosu değil
-    const techCol = header.findIndex((h) => /teknik|technique|t[üu]r\b|tip\b|\btype\b/.test(h));
-    const endpointCol = header.findIndex((h) => /giri[şs]|u[çc] nokta|endpoint|uc nokta|yol\b|path/.test(h));
-    let titleCol = header.findIndex((h) => /bulgu|ba[şs]l[ıi]k|title|finding/.test(h));
+    const techCol = header.findIndex((h) => /teknik|technique|technik|t[üu]r\b|tip\b|\btype\b|\btyp\b/.test(h));
+    const endpointCol = header.findIndex((h) => /giri[şs]|u[çc] nokta|endpoint|uc nokta|yol\b|path|endpunkt|pfad/.test(h));
+    let titleCol = header.findIndex((h) => /bulgu|ba[şs]l[ıi]k|title|finding|befund/.test(h));
     if (titleCol === -1) titleCol = endpointCol;
     if (titleCol === -1) titleCol = header.findIndex((h, idx) => idx !== sevCol && !/^#|^no$|^s[ıi]ra/.test(h));
     if (titleCol === -1) titleCol = 0;
     const nameCol = techCol !== -1 ? techCol : titleCol;
     // Kanıt/açıklama kolonu — kartın "Nasıl Tespit Edildi"/açıklama için GERÇEK veri.
-    const evidCol = header.findIndex((h) => /kan[ıi]t|evidence|k[ıi]sa a[çc][ıi]klama|a[çc][ıi]klama|not\b/.test(h));
+    const evidCol = header.findIndex((h) => /kan[ıi]t|evidence|k[ıi]sa a[çc][ıi]klama|a[çc][ıi]klama|not\b|nachweis|beschreibung|erl[äa]uterung/.test(h));
     const confCol = header.findIndex((h) => /g[üu]ven\b|confidence/.test(h)); // güven kolonu (varsa)
     for (let r = 1; r < block.length; r++) {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue; // ayraç satırı
@@ -837,7 +837,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     // bulgu. Boylece kutu <-> YÖNETİCİ ÖZETİ/GENEL DEĞERLENDİRME HER ZAMAN tutarli. (Yalniz
     // bundle_surface; basit_tarama ve digerleri DEGISMEZ.)
     if (BUNDLE_COMBINED_PKGS.has(meta.packageKey ?? '')) {
-      const g = effectiveMd.match(/##\s*GENEL DEĞERLENDİRME\s*\n+\*\*Risk Seviyesi:[^\n]*\*\*\s*\n+([^\n]+)/);
+      const g = effectiveMd.match(/##\s*(?:GENEL DEĞERLENDİRME|GESAMTBEWERTUNG)\s*\n+\*\*(?:Risk Seviyesi|Risikostufe):[^\n]*\*\*\s*\n+([^\n]+)/);
       if (g) risk.sentence = g[1].trim().replace(/\*\*/g, ''); // kutu duz metin — markdown ** temizle
     }
     // (ROZET TUTARLILIĞI) Severity'li AKTİF bulgu YOK (master "Temiz") ama rozet Yüksek diyorsa
@@ -875,7 +875,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   // (parsed/isCompliance yukarıda hesaplandı — rozet tutarlılığı için.)
   // (DÜRÜSTLÜK) Hedefe ulaşılamadı/tarama yürütülemedi -> master "Temiz" DEĞİL "İncelenemedi",
   // dağılımdaki 0'lar "temiz" değil "incelenemedi" olarak işaretlenir. (assessBasit rozeti zaten nötr yapıyor.)
-  const unscannable = /risk\s*seviyesi\s*[:：]\s*\*{0,2}\s*incelenemedi|tarama\s*(yap[ıi]lamad|y[uü]r[uü]t[uü]lemed)|ula[şs][ıi]lamad[ıi][ğg][ıi] i[çc]in kontrol/.test(effectiveMd.slice(0, 2000).toLocaleLowerCase('tr'));
+  const unscannable = /risk\s*seviyesi\s*[:：]\s*\*{0,2}\s*incelenemedi|risikostufe\s*[:：]\s*\*{0,2}\s*nicht\s*pr[üu]fbar|tarama\s*(yap[ıi]lamad|y[uü]r[uü]t[uü]lemed)|ula[şs][ıi]lamad[ıi][ğg][ıi] i[çc]in kontrol/.test(effectiveMd.slice(0, 2000).toLocaleLowerCase('tr'));
   const distMasterHtml = parsed ? buildDistribution(parsed.counts, loc, unscannable) + buildMasterTable(parsed.rows, loc, unscannable) : '';
   // 2.3 Detaylı Bulgular (İş Etkisi + CWE) yalnız GERÇEK raporlarda; örneklerde (assessOverride) kendi var.
   const detailedHtml = parsed && !opts.assessOverride ? buildDetailedFindings(parsed.rows, loc) : '';
@@ -883,8 +883,8 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   const isPremium = ['bundle_active_verify', 'bundle_full_pentest'].includes(meta.packageKey ?? '');
   const assuranceHtml = isPremium && !opts.assessOverride ? buildPositiveAssurance(effectiveMd, loc) : '';
   const glossaryHtml = buildGlossary(effectiveMd, loc);
-  const notCert = loc === 'tr' ? 'Bu rapor resmi sızma testi / sertifikasyon değildir.' : 'This report is not a formal penetration test / certification.';
-  const sealTitle = loc === 'tr' ? 'CyberTestify Güvenlik Taraması — Tamamlandı' : 'CyberTestify Security Scan — Completed';
+  const notCert = p3(loc, 'Bu rapor resmi sızma testi / sertifikasyon değildir.', 'This report is not a formal penetration test / certification.', 'Dieser Bericht ist kein formeller Penetrationstest / keine Zertifizierung.');
+  const sealTitle = p3(loc, 'CyberTestify Güvenlik Taraması — Tamamlandı', 'CyberTestify Security Scan — Completed', 'CyberTestify-Sicherheitsscan — Abgeschlossen');
 
   // (TEK YAPI) effectiveMd'yi ## bölümlerine ayır; İÇERİK SİLİNMEZ, DOĞRU bölüme TAŞINIR:
   // - "YÖNETİCİ ÖZETİ" -> 1. Yönetici Özeti (öne alınır)
@@ -899,16 +899,16 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     const tt = hm ? stripMd(hm[1]).toLocaleLowerCase('tr') : '';
     if (!tt) { if (chunk.trim()) detailParts.push(chunk.replace(/^###\s/gm, '#### ').replace(/^##\s/gm, '### ')); continue; }
     if (/^bulgular$/.test(tt)) continue; // boş "## Bulgular" wrapper
-    if (/y[öo]netici [öo]zeti|executive summary/.test(tt)) { hasExec = true; summaryParts.push(chunk.replace(/^##[^\n]*\n?/, '').trim()); continue; }
-    if (/genel de[ğg]erlendirme|overall assessment/.test(tt)) continue; // MÜKERRER -> at
-    if (/[öo]ncelikli aksiyonlar|priority actions|iyile[şs]tirme [öo]ncelik/.test(tt)) { summaryParts.push(chunk.replace(/^###\s/gm, '#### ').replace(/^##\s/gm, '### ')); continue; }
+    if (/y[öo]netici [öo]zeti|executive summary|managementzusammenfassung/.test(tt)) { hasExec = true; summaryParts.push(chunk.replace(/^##[^\n]*\n?/, '').trim()); continue; }
+    if (/genel de[ğg]erlendirme|overall assessment|gesamtbewertung/.test(tt)) continue; // MÜKERRER -> at
+    if (/[öo]ncelikli aksiyonlar|priority actions|iyile[şs]tirme [öo]ncelik|priorisierte (aktionen|ma[ßs]nahmen)/.test(tt)) { summaryParts.push(chunk.replace(/^###\s/gm, '#### ').replace(/^##\s/gm, '### ')); continue; }
     detailParts.push(chunk.replace(/^###\s/gm, '#### ').replace(/^##\s/gm, '### ')); // detay -> H3
   }
   const reorganize = hasExec && !opts.assessOverride;
   // (ORNEK PDF) Uyari afisi — yalnizca sampleNotice verildiginde; belirgin amber kutu, raporun basinda.
   const sampleNoticeHtml = opts.sampleNotice && opts.sampleNotice.trim()
     ? `<div class="sample-notice">⚠️ ${escapeHtml(opts.sampleNotice.trim())}</div>` : '';
-  const H2 = (id: string, tr: string, en: string) => `<h2 id="${id}">${escapeHtml(loc === 'tr' ? tr : en)}</h2>`;
+  const H2 = (id: string, tr: string, en: string, deS?: string) => `<h2 id="${id}">${escapeHtml(loc === 'de' ? (deS ?? en) : loc === 'tr' ? tr : en)}</h2>`;
 
   let contentInner0: string;
   if (reorganize) {
@@ -929,9 +929,11 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
       return true;
     });
     const scopeNote = scopeOut.length
-      ? `<div class="scope-note"><strong>${loc === 'tr' ? 'İnceleme Notu' : 'Review Note'}:</strong> ${loc === 'tr'
+      ? `<div class="scope-note"><strong>${p3(loc, 'İnceleme Notu', 'Review Note', 'Prüfhinweis')}:</strong> ${loc === 'tr'
           ? `Şu kontroller, hedefin mimarisine uygulanabilir bir giriş noktası bulunmadığından mimari gereği kapsam dışı bırakılmıştır (Kontrol Özeti tablosunda da işaretlidir): ${escapeHtml(scopeOut.join(', '))}.`
-          : `The following controls were excluded as no applicable entry point exists for the target architecture (also marked in the Control Summary): ${escapeHtml(scopeOut.join(', '))}.`}</div>`
+          : loc === 'de'
+            ? `Die folgenden Kontrollen wurden ausgeschlossen, da für die Zielarchitektur kein anwendbarer Einstiegspunkt existiert (auch in der Kontrollübersicht markiert): ${escapeHtml(scopeOut.join(', '))}.`
+            : `The following controls were excluded as no applicable entry point exists for the target architecture (also marked in the Control Summary): ${escapeHtml(scopeOut.join(', '))}.`}</div>`
       : '';
     // (YÖNETİCİ ÖZETİ KISALTMA) Bulgusu olan raporlarda özetteki uzun per-kontrol madde listesini AT
     // (bilgi §3 KONTROL ÖZETİ tablosunda AYNEN durur — veri kaybı yok, tekrar önlenir) + türetilmiş
@@ -951,7 +953,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     const summaryBody = dedupeBlockquotes(md.render(execMd)) + (hasVuln ? buildPriorities(parsed!.rows, loc) : '');
     const detailBody = scopeNote + dedupeBlockquotes(md.render(keptDetail.join('\n\n')));
     const hasFindings = !!(distMasterHtml || detailedHtml);
-    const findingsSection = hasFindings ? H2('s-findings', '2. Bulgular', '2. Findings') + distMasterHtml + detailedHtml + assuranceHtml : '';
+    const findingsSection = hasFindings ? H2('s-findings', '2. Bulgular', '2. Findings', '2. Befunde') + distMasterHtml + detailedHtml + assuranceHtml : '';
     const cn = hasFindings ? 3 : 2; // bulgu bölümü yoksa (uyum) numara boşluğu olmasın
     // AI ve Ekler bölümlerini de numarala (TOC tek-numara okur) — kilit emojisi korunur.
     const fixNum = fixHtml.replace(/<h2 id="s-ai">(🔒 )?/, (_m, lock) => `<h2 id="s-ai">${lock ?? ''}${cn + 1}. `);
@@ -960,9 +962,9 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     // h3'e indir ki TOC'ta ayrı numarasız satır olarak görünüp numaralandırmayı bozmasın.
     const extrasSub = extrasHtml.replace(/<h2\b/g, '<h3').replace(/<\/h2>/g, '</h3>');
     contentInner0 =
-      H2('s-summary', '1. Yönetici Özeti', '1. Executive Summary') + sampleNoticeHtml + assessBox + (parsed ? buildManagementDecision(parsed.counts, loc) : '') + summaryBody +
+      H2('s-summary', '1. Yönetici Özeti', '1. Executive Summary', '1. Managementzusammenfassung') + sampleNoticeHtml + assessBox + (parsed ? buildManagementDecision(parsed.counts, loc) : '') + summaryBody +
       findingsSection +
-      H2('s-controls', `${cn}. Kontrol Özeti ve Metodoloji`, `${cn}. Controls & Methodology`) + detailBody + (parsed ? buildMethodologyTables(loc) : '') +
+      H2('s-controls', `${cn}. Kontrol Özeti ve Metodoloji`, `${cn}. Controls & Methodology`, `${cn}. Kontrollübersicht & Methodik`) + detailBody + (parsed ? buildMethodologyTables(loc) : '') +
       extrasSub + fixNum + glossNum;
   } else {
     // Yapısız gövde / örnek PDF: mevcut akış (assessBox + dağılım/master + gövde + AI + sözlük).

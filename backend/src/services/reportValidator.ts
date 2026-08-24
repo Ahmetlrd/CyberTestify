@@ -82,7 +82,7 @@ export function validateAndRepairReport(
   if (!isCompliance) {
     const t = { riskHigh: 'Yüksek Risk', riskMedium: 'Orta Risk', riskMediumHigh: 'Orta-Yüksek Risk', riskLow: 'Düşük Risk', assessHigh: '', assessMedium: '', assessLow: '' };
     const badge = assessBasit(md, t, loc);
-    const isIncelenemedi = /incelenemedi/i.test(badge.label.toLocaleLowerCase('tr'));
+    const isIncelenemedi = /incelenemedi|nicht gepr[üu]ft|not scanned/i.test(badge.label.toLocaleLowerCase('tr'));
     if (!isIncelenemedi) {
       const masterMax = parsed2.rows.reduce((m, r) => Math.max(m, rank[r.sev] ?? 0), 0);
       const badgeRank = badge.level === 'high' ? 3 : badge.level === 'medium-high' ? 2 : badge.level === 'medium' ? 2 : 1;
@@ -95,7 +95,7 @@ export function validateAndRepairReport(
   }
 
   // --- R5: Devre kesici / erken durma şeffaflığı (exec-özette görünmeli) ---
-  const execSeg = md.split(/##\s*GENEL DE[ĞG]ERLEND[İI]RME/i)[0] ?? md.slice(0, 2500);
+  const execSeg = md.split(/##\s*(?:GENEL DE[ĞG]ERLEND[İI]RME|GESAMTBEWERTUNG)/i)[0] ?? md.slice(0, 2500);
   const bodySeg = md.slice(execSeg.length);
   // DİKKAT: SCOPE_NOTE "devre kesici (art arda 5xx / WAF) UYGULANIR" der (mekanizma AÇIKLAMASI) —
   // bu bir TETİKLEME değildir. GERÇEK tetikleme ProbeCtx.stopped mesajlarıdır; hepsi "otomatik
@@ -104,10 +104,12 @@ export function validateAndRepairReport(
   if (triggered.test(bodySeg) && !triggered.test(execSeg)) {
     const note = loc === 'tr'
       ? '\n- ⚠️ **Erken durdurma:** Bir/birkaç kontrol, hedef-sağlığı devre kesici (art arda 5xx / aşırı yavaşlama / WAF) nedeniyle erken sonlandırıldı; ilgili sonuçlar eksik olabilir (aşağıda ilgili kontrolde belirtilmiştir).'
-      : '\n- ⚠️ **Early stop:** One or more checks were halted early by the target-health circuit breaker; related results may be incomplete.';
+      : loc === 'de'
+        ? '\n- ⚠️ **Vorzeitiger Stopp:** Eine oder mehrere Kontrollen wurden durch den Ziel-Gesundheits-Schutzschalter (aufeinanderfolgende 5xx / starke Verlangsamung / WAF) vorzeitig beendet; die zugehörigen Ergebnisse können unvollständig sein (bei der jeweiligen Kontrolle unten vermerkt).'
+        : '\n- ⚠️ **Early stop:** One or more checks were halted early by the target-health circuit breaker; related results may be incomplete.';
     // YÖNETİCİ ÖZETİ bölümünün sonuna ekle (varsa), yoksa exec segment sonuna.
-    if (/##\s*Y[ÖO]NET[İI]C[İI] [ÖO]ZET[İI]/i.test(md)) {
-      md = md.replace(/(##\s*Y[ÖO]NET[İI]C[İI] [ÖO]ZET[İI][\s\S]*?)(\n##\s|\n---\n|$)/i, (m, body, tail) => `${body}${note}${tail}`);
+    if (/##\s*(?:Y[ÖO]NET[İI]C[İI] [ÖO]ZET[İI]|MANAGEMENTZUSAMMENFASSUNG)/i.test(md)) {
+      md = md.replace(/(##\s*(?:Y[ÖO]NET[İI]C[İI] [ÖO]ZET[İI]|MANAGEMENTZUSAMMENFASSUNG)[\s\S]*?)(\n##\s|\n---\n|$)/i, (m, body, tail) => `${body}${note}${tail}`);
       issues.push({ rule: 'R5', level: 'fix', message: 'Devre kesici tetiklendi ama Yönetici Özeti\'nde belirtilmemiş.', action: 'exec-özete şeffaflık notu eklendi' });
     } else {
       issues.push({ rule: 'R5', level: 'warn', message: 'Devre kesici tetiklendi ama Yönetici Özeti bölümü bulunamadı.', action: 'log-only' });

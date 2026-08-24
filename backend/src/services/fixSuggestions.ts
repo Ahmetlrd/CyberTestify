@@ -25,9 +25,9 @@ const HEADER_MATCH: Array<{ key: HeaderKey; re: RegExp }> = [
 ];
 
 function statusFrom(chunk: string): 'present' | 'absent' | null {
-  const ABSENT = /(yok|eksik|absent|missing|❌|✗|✘|bulunmuyor|bulunma|mevcut de[ğg]il|tan[ıi]ml[ıi] de[ğg]il|ayarlanmam)/i;
-  const PRESENT = /(var\b|mevcut|present|✅|✓|✔|ayarlanm[ıi][şs]|tan[ıi]ml[ıi]\b|set\b)/i;
-  const m = chunk.match(/durum\s*[:：]\s*([^\n|]{0,24})/i);
+  const ABSENT = /(yok|eksik|absent|missing|❌|✗|✘|bulunmuyor|bulunma|mevcut de[ğg]il|tan[ıi]ml[ıi] de[ğg]il|ayarlanmam|fehlt|nicht vorhanden|nicht gesetzt)/i;
+  const PRESENT = /(var\b|mevcut|present|✅|✓|✔|ayarlanm[ıi][şs]|tan[ıi]ml[ıi]\b|set\b|vorhanden|gesetzt)/i;
+  const m = chunk.match(/(?:durum|status)\s*[:：]\s*([^\n|]{0,24})/i);
   const probe = m ? m[1] : chunk;
   if (ABSENT.test(probe)) return 'absent';
   if (PRESENT.test(probe)) return 'present';
@@ -101,6 +101,54 @@ const REMEDIATION: Record<HeaderKey, { title: string; body: string }> = {
   },
 };
 
+// Almanca remediation metinleri (kod ornekleri AYNI; yalniz aciklama/baslik cevrildi).
+const REMEDIATION_DE: Record<HeaderKey, { title: string; body: string }> = {
+  csp: {
+    title: 'Content-Security-Policy (CSP) hinzufügen',
+    body:
+      'Die wirksamste Browser-Verteidigung gegen XSS und Content-Injection. Beginnen Sie mit einer zur Website passenden Basisrichtlinie und verschärfen Sie sie mit der Zeit:\n\n' +
+      '```nginx\nadd_header Content-Security-Policy "default-src \'self\'; img-src \'self\' data:; script-src \'self\'; style-src \'self\' \'unsafe-inline\'; frame-ancestors \'self\'" always;\n```\n\n' +
+      'Wenn Sie Drittanbieter-Skripte verwenden (GTM, Analytics, Pixel), fügen Sie die entsprechenden Domains zu `script-src`/`connect-src` hinzu.',
+  },
+  xfo: {
+    title: 'X-Frame-Options hinzufügen',
+    body:
+      'Verhindert, dass Ihre Seite in das iframe einer fremden Website eingebettet und für Clickjacking missbraucht wird:\n\n' +
+      '```nginx\nadd_header X-Frame-Options "SAMEORIGIN" always;\n```\n\n' +
+      'Als moderne Alternative bietet CSP `frame-ancestors \'self\'` denselben Schutz.',
+  },
+  xcto: {
+    title: 'X-Content-Type-Options hinzufügen',
+    body:
+      'Verhindert, dass der Browser per MIME-Type-Sniffing Inhalte falsch interpretiert (und das damit verbundene XSS-Risiko):\n\n' +
+      '```nginx\nadd_header X-Content-Type-Options "nosniff" always;\n```',
+  },
+  hsts: {
+    title: 'Strict-Transport-Security (HSTS) hinzufügen',
+    body:
+      'Erzwingt HTTPS und erschwert SSL-Stripping-/MITM-Angriffe. (Nur anwenden, wenn Ihre Website vollständig über HTTPS läuft.)\n\n' +
+      '```nginx\nadd_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;\n```',
+  },
+  referrer: {
+    title: 'Referrer-Policy hinzufügen',
+    body:
+      'Reduziert den Informationsabfluss über den `Referer`-Header bei externen Links:\n\n' +
+      '```nginx\nadd_header Referrer-Policy "strict-origin-when-cross-origin" always;\n```',
+  },
+  permissions: {
+    title: 'Permissions-Policy hinzufügen',
+    body:
+      'Schränkt Browser-APIs (Kamera, Mikrofon, Standort usw.) ein; verhindert unerwünschte Zugriffe durch Drittanbieter-iframes:\n\n' +
+      '```nginx\nadd_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;\n```',
+  },
+  xxss: {
+    title: 'X-XSS-Protection (Defense-in-Depth)',
+    body:
+      'Ein historischer Header für ältere Browser; der eigentliche Schutz liegt in der CSP. Kann optional ergänzt werden:\n\n' +
+      '```nginx\nadd_header X-XSS-Protection "1; mode=block" always;\n```',
+  },
+};
+
 // Eksik basliklarin varsayilan onceligi (rapora yazim sirasi).
 const ORDER: HeaderKey[] = ['csp', 'xfo', 'xcto', 'hsts', 'referrer', 'permissions', 'xxss'];
 
@@ -110,7 +158,9 @@ const ORDER: HeaderKey[] = ['csp', 'xfo', 'xcto', 'hsts', 'referrer', 'permissio
  * (parse hicbir sey bulamazsa onerilen temel baslik setini yazar) — boylece bolum her zaman
  * satin alinip indirilebilir.
  */
-export function buildHeaderFixSuggestions(findingsMd: string, hostname: string): string {
+export function buildHeaderFixSuggestions(findingsMd: string, hostname: string, locale: string = 'tr'): string {
+  const de = locale === 'de';
+  const R = de ? REMEDIATION_DE : REMEDIATION;
   const { present, absent } = parseSecurityHeaders(findingsMd);
   // Ele alinacaklar: acikca "Yok" isaretliler; hicbiri yoksa "present degil" olan onerilenler;
   // o da yoksa (parse bos) tum onerilen temel set.
@@ -119,7 +169,7 @@ export function buildHeaderFixSuggestions(findingsMd: string, hostname: string):
   if (targets.length === 0) targets = ['csp', 'xfo', 'xcto', 'referrer', 'permissions'];
 
   const items = targets
-    .map((k, i) => `### ${i + 1}. ${REMEDIATION[k].title}\n\n${REMEDIATION[k].body}`)
+    .map((k, i) => `### ${i + 1}. ${R[k].title}\n\n${R[k].body}`)
     .join('\n\n');
 
   // Kanonik baslik adi + degeri (tum platform ornekleri bundan uretilir — tek kaynak).
@@ -145,14 +195,21 @@ export function buildHeaderFixSuggestions(findingsMd: string, hostname: string):
   const iis = keys.map((k) => `      <add name="${HV[k].name}" value="${HV[k].value}" />`).join('\n');
 
   return (
-    `Aşağıdaki öneriler, ${hostname} ana sayfasında tespit edilen eksik güvenlik başlıklarını gidermeye yöneliktir. ` +
-    `Her başlık için önce kısa açıklama, ardından Nginx örneği verilmiştir; en sonda Nginx dışı platformlar (Firebase, Vercel, Next.js, Apache) için hazır bloklar bulabilirsiniz. Kendi sunucunuza uygun olanı kopyalayın.\n\n` +
+    (de
+      ? `Die folgenden Empfehlungen dienen der Behebung der auf der Startseite von ${hostname} festgestellten fehlenden Sicherheits-Header. ` +
+        `Zu jedem Header folgt zuerst eine kurze Erläuterung, dann ein Nginx-Beispiel; am Ende finden Sie fertige Blöcke für andere Plattformen (Firebase, Vercel, Next.js, Apache). Kopieren Sie den zu Ihrem Server passenden Block.\n\n`
+      : `Aşağıdaki öneriler, ${hostname} ana sayfasında tespit edilen eksik güvenlik başlıklarını gidermeye yöneliktir. ` +
+        `Her başlık için önce kısa açıklama, ardından Nginx örneği verilmiştir; en sonda Nginx dışı platformlar (Firebase, Vercel, Next.js, Apache) için hazır bloklar bulabilirsiniz. Kendi sunucunuza uygun olanı kopyalayın.\n\n`) +
     `${items}\n\n` +
-    `### Tümünü birleştiren yapılandırma — Nginx\n\n` +
-    `Sunucu bloğunuza (server { ... }) ekleyip \`nginx -t\` ile doğrulayın, ardından \`systemctl reload nginx\` ile yeniden yükleyin:\n\n` +
+    (de ? `### Kombinierte Konfiguration — Nginx\n\n` : `### Tümünü birleştiren yapılandırma — Nginx\n\n`) +
+    (de
+      ? `In Ihren Server-Block (server { ... }) einfügen, mit \`nginx -t\` prüfen und anschließend mit \`systemctl reload nginx\` neu laden:\n\n`
+      : `Sunucu bloğunuza (server { ... }) ekleyip \`nginx -t\` ile doğrulayın, ardından \`systemctl reload nginx\` ile yeniden yükleyin:\n\n`) +
     '```nginx\n' + `${combined}\n` + '```\n\n' +
-    `### Diğer platformlar için hazır yapılandırma\n\n` +
-    `Aynı başlıkları, sunucunuz Nginx değilse aşağıdaki hazır bloklardan uygun olanıyla ekleyebilirsiniz.\n\n` +
+    (de ? `### Fertige Konfiguration für andere Plattformen\n\n` : `### Diğer platformlar için hazır yapılandırma\n\n`) +
+    (de
+      ? `Falls Ihr Server nicht Nginx ist, können Sie dieselben Header mit einem der folgenden fertigen Blöcke hinzufügen.\n\n`
+      : `Aynı başlıkları, sunucunuz Nginx değilse aşağıdaki hazır bloklardan uygun olanıyla ekleyebilirsiniz.\n\n`) +
     `**Firebase Hosting — \`firebase.json\`:**\n\n` +
     '```json\n' +
     `{\n  "hosting": {\n    "headers": [\n      {\n        "source": "**",\n        "headers": [\n${jsonHeaders}\n        ]\n      }\n    ]\n  }\n}\n` +
@@ -169,6 +226,8 @@ export function buildHeaderFixSuggestions(findingsMd: string, hostname: string):
     '```apache\n' + `${apache}\n` + '```\n\n' +
     `**IIS / ASP.NET — \`web.config\`:**\n\n` +
     '```xml\n' + `<configuration>\n  <system.webServer>\n    <httpProtocol>\n      <customHeaders>\n${iis}\n      </customHeaders>\n    </httpProtocol>\n  </system.webServer>\n</configuration>\n` + '```\n\n' +
-    `Değişikliklerden sonra tarayıcı geliştirici araçları (Network sekmesi) veya \`curl -I https://${hostname}\` ile başlıkların yanıta eklendiğini doğrulayın.`
+    (de
+      ? `Prüfen Sie nach den Änderungen mit den Browser-Entwicklertools (Tab „Network") oder mit \`curl -I https://${hostname}\`, dass die Header in der Antwort enthalten sind.`
+      : `Değişikliklerden sonra tarayıcı geliştirici araçları (Network sekmesi) veya \`curl -I https://${hostname}\` ile başlıkların yanıta eklendiğini doğrulayın.`)
   );
 }
