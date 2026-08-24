@@ -14,7 +14,7 @@ export type RegionCode = (typeof REGION_CODES)[number];
 
 export const DEFAULT_REGION: RegionCode = 'tr';
 
-export type Lang = 'tr' | 'en';
+export type Lang = 'tr' | 'en' | 'de';
 
 export interface RegionConfig {
   code: RegionCode;
@@ -86,7 +86,7 @@ export const REGIONS: Record<RegionCode, RegionConfig> = {
     label: 'Deutschland',
     flag: '🇩🇪',
     locale: 'de-DE',
-    lang: 'en', // GEÇİCİ (Faz 2'de 'de'); Almanca Dict hazır olana kadar İngilizce fallback (Türkçe DEĞİL)
+    lang: 'de', // Almanca Dict hazır (i18n.ts DICTS.de) → site kabuğu/landing/paketler Almanca
     dir: 'ltr',
     currency: 'EUR',
     paymentProvider: 'iyzico', // kullanıcı kararı: /de → iyzico + EUR (Paddle/Stripe değil)

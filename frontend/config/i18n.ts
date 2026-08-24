@@ -450,7 +450,96 @@ const en: Dict = {
   },
 };
 
-const DICTS: Record<Lang, Dict> = { tr, en };
+// (Almanya /de) Almanca sözlük. TASLAK — profesyonel Almanca; kullanıcı/dil kontrolü önerilir.
+// `otonom` bölümü /de'de HİÇ gösterilmez (P3: S1 gizli) → İngilizce değerler spread edilir (boşa çeviri yok).
+const de: Dict = {
+  nav: { how: 'So funktioniert’s', why: 'Warum wir', packages: 'Preise', login: 'Anmelden', cta: 'Kostenlos prüfen', panel: 'Mein Bereich', logout: 'Abmelden', profile: 'Profil', otonom: 'Autonomes AI Red Team' },
+  hero: {
+    badge: 'KI-gestützte Automatisierung · Kein Warten auf einen menschlichen Pentester',
+    titleA: 'Testen Sie die Sicherheit Ihrer Website mit',
+    titleHi: 'KI-gestütztem Scanning',
+    titleB: 'in wenigen Minuten',
+    subtitle:
+      'KI-gestützte, schnelle und günstige Sicherheits-Vorabbewertung für Ihre Website. Kein Ersatz für einen formellen Pentest/Audit; sie erstellt in Minuten einen umsetzbaren Bericht. Domain verifizieren, Paket wählen, verschlüsselten Bericht erhalten.',
+    ctaPrimary: 'Kostenlos prüfen & starten',
+    ctaSecondary: 'So funktioniert’s',
+    trust: ['Datenschutz zuerst', 'Ende-zu-Ende-verschlüsselter Bericht', 'Nur verifizierte Domains'],
+  },
+  auto: {
+    eyebrow: 'KI-gestützte Automatisierung · Unser echter Unterschied',
+    titleA: 'Warten Sie nicht wochenlang.',
+    titleHi: 'Starten Sie in Minuten.',
+    titleB: '',
+    subtitle:
+      'Wettbewerber setzen auf menschliche Pentester-Teams — dadurch sind sie teuer und langsam. Wir sind eine vollautomatische, KI-gestützte Plattform: deutlich günstiger und schneller.',
+    tradTitle: 'Klassischer Pentest',
+    trad: ['2–4 Wochen Vorlaufzeit', '2.000 – 6.000 € Kosten', 'Terminabstimmung mit einem Team', 'Nur 1–2 Mal pro Jahr'],
+    oursTitle: 'CyberTestify',
+    ours: ['Startet in Minuten', 'Fertig in Stunden', 'KI-gestützte automatisierte Prüfungen', 'Jederzeit, unbegrenzte Wiederholungen'],
+    ribbon: 'FÜR SIE',
+    demo: 'In Echtzeit — der Scan bei der Arbeit:',
+  },
+  steps: {
+    eyebrow: 'So funktioniert’s',
+    title: 'Vier Schritte, von Anfang bis Ende',
+    stepWord: 'SCHRITT',
+    items: [
+      { t: 'Domain verifizieren', d: 'Weisen Sie den Besitz mit einem DNS-TXT-Eintrag nach — in Minuten erledigt.' },
+      { t: 'Paket wählen', d: 'Fester Umfang, fester Preis. Keine Überraschungskosten.' },
+      { t: 'Automatisierter Sicherheitsscan', d: 'Der KI-gestützte Scan startet in Sekunden und läuft im Hintergrund.' },
+      { t: 'Verschlüsselten Bericht herunterladen', d: 'Ende-zu-Ende-verschlüsselt, geöffnet mit Ihrem Einmal-Code.' },
+    ],
+  },
+  why: {
+    eyebrow: 'Warum wir',
+    title: 'Keine Behauptung — eine technische Kontrolle',
+    subtitle: 'Die meisten Wettbewerber sagen, sie seien sicher. Wir haben es in den Code eingebaut.',
+    items: [
+      { t: 'Scope-Sperre', d: 'Unsere Scans erreichen nur die von Ihnen verifizierte Domain — technisch unmöglich, ein anderes Ziel zu berühren.' },
+      { t: 'Schutz personenbezogener Daten', d: 'Während eines Scans angetroffene personenbezogene Daten werden automatisch maskiert, bevor sie die KI erreichen.' },
+      { t: 'Verschlüsselte Einmal-Zustellung', d: 'Ihr Bericht ist Ende-zu-Ende-verschlüsselt und wird nur mit einem für Sie einmaligen Code geöffnet.' },
+    ],
+  },
+  finalCta: {
+    title: 'Bereit, Ihre Website zu testen?',
+    subtitle: 'Die Verifizierung ist kostenlos. Sie zahlen erst, wenn Sie einen Scan starten.',
+    primary: 'Kostenlos prüfen & starten',
+    secondary: 'Preise ansehen →',
+  },
+  footer: {
+    tagline:
+      'Eine KI-gestützte, automatisierte Sicherheits-Vorabbewertung, ausgeführt nur gegen eine von Ihnen verifizierte Domain. Kein Ersatz für ein formelles Audit / eine Zertifizierung.',
+    questions: 'Fragen?',
+    legal: 'Rechtliches',
+    disclaimer: 'Dienst zur Sicherheits-Vorabbewertung.',
+  },
+  pkg: {
+    metaTitle: 'Preise — Website-Sicherheitsscan-Pakete | CyberTestify',
+    metaDesc:
+      'Fester Umfang, fester Preis, keine Überraschungskosten. KI-gestützte automatisierte Website-Sicherheitsscan-Pakete und Preise.',
+    eyebrow: 'Preise',
+    title: 'Transparente, feste Preise',
+    subtitle: 'Fester Umfang, fester Preis, keine Überraschungskosten.',
+    trust: ['⚡ KI-gestützte Automatisierung', '💬 Schneller Support', '🧾 Mit Rechnung', '🔒 Ende-zu-Ende-verschlüsselter Bericht'],
+    popular: 'Beliebt',
+    perScan: '/ Scan',
+    taxIncl: 'inkl. MwSt.',
+    selectCta: 'Jetzt kaufen',
+    byokBadge: 'Für fortgeschrittene Nutzer',
+    byokTitle: 'Bring Your Own Key (BYOK)',
+    byokDesc: 'Ein breiterer Scan mit Ihrem eigenen API-Schlüssel. Für technische Nutzer; die Kostenkontrolle liegt bei Ihnen.',
+    soon: 'Bald',
+    freeTitle: 'Die Verifizierung ist kostenlos',
+    freeSubtitle: 'Sie zahlen erst, wenn Sie einen Scan starten. Beginnen Sie mit der Verifizierung Ihrer Domain.',
+    freeCta: 'Kostenlos prüfen & starten',
+    loadError: 'Pakete konnten momentan nicht geladen werden.',
+    startAnyway: 'Trotzdem starten →',
+  },
+  // (P3) otonom /de'de gösterilmiyor — İngilizce değerlerle tip doldurulur (asla render edilmez).
+  otonom: en.otonom,
+};
+
+const DICTS: Record<Lang, Dict> = { tr, en, de };
 
 export function getDict(region: RegionConfig): Dict {
   return DICTS[region.lang];

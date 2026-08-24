@@ -28,6 +28,17 @@ const LINES: Record<Lang, Line[]> = {
     { t: '🔒 Encrypting report end-to-end…', tone: 'lock' },
     { t: '✓ Report ready · 3m 12s · 0 out-of-scope access', tone: 'ok' },
   ],
+  de: [
+    { t: '$ cybertestify scan beispiel.de', tone: 'muted' },
+    { t: '✓ Domain-Inhaberschaft verifiziert', tone: 'ok' },
+    { t: '→ Ziel wird gescannt…', tone: 'run' },
+    { t: '→ HTTP-Sicherheitsheader werden geprüft…', tone: 'run' },
+    { t: '→ TLS-Konfiguration wird geprüft…', tone: 'run' },
+    { t: '⚠ Befund: fehlender Content-Security-Policy-Header', tone: 'warn' },
+    { t: '→ Befunde werden nach Schweregrad priorisiert…', tone: 'run' },
+    { t: '🔒 Bericht wird Ende-zu-Ende verschlüsselt…', tone: 'lock' },
+    { t: '✓ Bericht fertig · 3 Min. 12 Sek. · 0 Zugriffe außerhalb des Scope', tone: 'ok' },
+  ],
 };
 
 const TONE: Record<Line['tone'], string> = {
