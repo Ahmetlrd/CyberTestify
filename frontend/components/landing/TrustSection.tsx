@@ -31,6 +31,7 @@ function Icon({ name, className }: { name: string; className?: string }) {
 
 export function TrustSection({ region }: { region: RegionConfig }) {
   const tr = region.lang === 'tr';
+  const de = region.lang === 'de'; // /de: tam Almanca (Sie-form); tr/en mevcut haliyle korunur.
 
   // D2 — somut, SAVUNULABİLİR metrikler (uydurma yüzde YOK; mimari/olgusal ifadeler)
   const metrics = tr
@@ -39,6 +40,13 @@ export function TrustSection({ region }: { region: RegionConfig }) {
         { icon: 'layers', big: '3 Katmanlı', label: 'Hibrit AI + deterministik doğrulama (Kanıtlı / Belirsiz / Hayalet)' },
         { icon: 'clock', big: '< 15 dk', label: 'Ortalama kapsamlı tarama ve rapor üretim süresi' },
         { icon: 'checks', big: '100+', label: 'OWASP Top 10, yanlış-yapılandırma ve mantık-hatası kontrolü' },
+      ]
+    : de
+    ? [
+        { icon: 'scale', big: 'Nachweisgebunden', label: 'Nur bestätigte Funde werden gemeldet — Fehlalarme werden eliminiert' },
+        { icon: 'layers', big: '3-Schichten', label: 'Hybride KI + deterministische Verifizierung (Belegt / Unsicher / Phantom)' },
+        { icon: 'clock', big: '< 15 Min', label: 'Durchschnittliche Zeit für Scan und Berichterstellung' },
+        { icon: 'checks', big: '100+', label: 'OWASP Top 10, Fehlkonfigurations- und Logikfehler-Prüfungen' },
       ]
     : [
         { icon: 'scale', big: 'Evidence-Bound', label: 'Only confirmed findings are reported — false-positives eliminated' },
@@ -55,6 +63,13 @@ export function TrustSection({ region }: { region: RegionConfig }) {
         { icon: 'shieldCheck', t: 'KVKK / GDPR Uyumlu', s: 'Yapısal PII maskeleme; veri işleme uyum-odaklı' },
         { icon: 'card', t: 'Güvenli Ödeme', s: 'iyzico · 3D Secure · kart bilgisi bizde saklanmaz' },
       ]
+    : de
+    ? [
+        { icon: 'box', t: 'Isolierte Sandbox / Kurzlebiger Droplet', s: 'Egress standardmäßig blockiert; jeder Lauf in einer isolierten Einweg-Umgebung' },
+        { icon: 'lock', t: '256-Bit-Verschlüsselung', s: 'Berichte Ende-zu-Ende verschlüsselt; mit einem Einmalcode geöffnet' },
+        { icon: 'shieldCheck', t: 'DSGVO-konform', s: 'Strukturelle PII-Maskierung; compliance-orientierte Verarbeitung' },
+        { icon: 'card', t: 'Sichere Zahlung', s: 'iyzico · 3D Secure · Kartendaten werden bei uns nie gespeichert' },
+      ]
     : [
         { icon: 'box', t: 'Isolated Sandbox / Ephemeral Droplet', s: 'Default-deny egress; each run in a single-use isolated env' },
         { icon: 'lock', t: '256-Bit Encryption', s: 'Reports end-to-end encrypted; opened with a one-time code' },
@@ -69,14 +84,16 @@ export function TrustSection({ region }: { region: RegionConfig }) {
       <div className="container-page">
         {/* D2 — Metrik kartları */}
         <div className="mx-auto max-w-2xl text-center">
-          <p className="eyebrow">{tr ? 'Neden güvenebilirsiniz' : 'Why you can trust it'}</p>
+          <p className="eyebrow">{tr ? 'Neden güvenebilirsiniz' : de ? 'Warum Sie darauf vertrauen können' : 'Why you can trust it'}</p>
           <h2 className="mt-3 text-3xl font-extrabold leading-tight text-brand">
-            {tr ? 'Kanıta dayalı, ' : 'Evidence-driven, '}
-            <span className="text-accent-600">{tr ? 'şeffaf doğrulama' : 'transparent verification'}</span>
+            {tr ? 'Kanıta dayalı, ' : de ? 'Nachweisbasierte, ' : 'Evidence-driven, '}
+            <span className="text-accent-600">{tr ? 'şeffaf doğrulama' : de ? 'transparente Verifizierung' : 'transparent verification'}</span>
           </h2>
           <p className="mt-4 text-lg text-ink-soft">
             {tr
               ? 'Her bulgu, ajanın sözüne değil saklanan HAM istek/yanıt kanıtına bağlanır. Teyit edilmeyen hiçbir şey rapora girmez.'
+              : de
+              ? 'Jeder Fund ist an gespeicherte ROHE Anfrage-/Antwort-Nachweise gebunden — nicht an den Fließtext des Agenten. Nichts Unbestätigtes gelangt in den Bericht.'
               : 'Every finding is bound to stored RAW request/response evidence — not the agent’s prose. Nothing unconfirmed reaches the report.'}
           </p>
         </div>
@@ -99,10 +116,12 @@ export function TrustSection({ region }: { region: RegionConfig }) {
                 <Icon name="doc" className="h-7 w-7" />
               </span>
               <div>
-                <h3 className="text-xl font-bold text-brand">{tr ? 'Gerçek bir örnek raporu inceleyin' : 'Explore a real sample report'}</h3>
+                <h3 className="text-xl font-bold text-brand">{tr ? 'Gerçek bir örnek raporu inceleyin' : de ? 'Sehen Sie sich einen echten Beispielbericht an' : 'Explore a real sample report'}</h3>
                 <p className="mt-1.5 max-w-xl text-sm text-ink-soft">
                   {tr
                     ? 'Platformun ürettiği teknik derinliği, ham kanıt kesitlerini, yönetici özetini ve hazır düzeltme önerilerini kayıt veya ödeme yapmadan somut olarak görün.'
+                    : de
+                    ? 'Sehen Sie konkret die technische Tiefe, rohe Nachweisauszüge, die Management-Zusammenfassung und die anwendungsbereiten Korrekturen, die die Plattform erzeugt — ohne Registrierung oder Zahlung.'
                     : 'See the technical depth, raw evidence excerpts, executive summary and ready-to-apply fixes the platform produces — no signup or payment required.'}
                 </p>
               </div>
@@ -113,7 +132,7 @@ export function TrustSection({ region }: { region: RegionConfig }) {
               rel="noopener noreferrer"
               className="btn-primary shrink-0 whitespace-nowrap"
             >
-              {tr ? 'Örnek Raporu Aç (PDF)' : 'Open Sample Report (PDF)'}
+              {tr ? 'Örnek Raporu Aç (PDF)' : de ? 'Beispielbericht öffnen (PDF)' : 'Open Sample Report (PDF)'}
             </a>
           </div>
         </div>
@@ -134,6 +153,8 @@ export function TrustSection({ region }: { region: RegionConfig }) {
         <p className="mx-auto mt-8 max-w-3xl text-center text-xs text-ink-muted">
           {tr
             ? 'Sonuçlar deneysel/otomatik ön-değerlendirmedir; resmi denetim veya sertifikasyon yerine geçmez. Metrikler platformun mimari özelliklerini yansıtır.'
+            : de
+            ? 'Die Ergebnisse sind eine experimentelle/automatisierte Vorabbewertung; sie ersetzen keine formale Prüfung oder Zertifizierung. Die Kennzahlen spiegeln die architektonischen Eigenschaften der Plattform wider.'
             : 'Results are an experimental/automated pre-assessment; not a substitute for a formal audit or certification. Metrics reflect the platform’s architectural properties.'}
         </p>
       </div>

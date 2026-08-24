@@ -23,9 +23,17 @@ const LEGAL_LINKS_DE: Array<[string, string]> = [
   ['Widerrufsbelehrung', '/legal/widerruf'],
 ];
 
+// (Almanya) Footer üst-link etiketleri de dile göre — /de'de Almanca + Künye → Impressum.
+const NAV_LINKS_DE = { about: 'Über uns', blog: 'Blog', openSource: 'Open Source', contact: 'Kontakt & Impressum →' };
+const NAV_LINKS_TR = { about: 'Hakkımızda', blog: 'Blog', openSource: 'Açık Kaynak', contact: 'İletişim & Künye →' };
+
 export function Footer({ region }: { region: RegionConfig }) {
   const d = getDict(region).footer;
-  const legalLinks = region.lang === 'de' ? LEGAL_LINKS_DE : LEGAL_LINKS_TR;
+  const isDe = region.lang === 'de';
+  const legalLinks = isDe ? LEGAL_LINKS_DE : LEGAL_LINKS_TR;
+  const nav = isDe ? NAV_LINKS_DE : NAV_LINKS_TR;
+  // Künye/Impressum → /de'de Alman Impressum sayfası; TR'de mevcut /iletisim korunur.
+  const contactHref = isDe ? '/de/legal/impressum' : '/iletisim';
 
   return (
     <footer className="mt-24 bg-brand-deep text-white/80">
@@ -46,16 +54,16 @@ export function Footer({ region }: { region: RegionConfig }) {
             </p>
             <p className="mt-2 flex flex-wrap gap-x-4 text-sm">
               <Link href="/hakkimizda" className="font-medium text-white/80 hover:text-white hover:underline">
-                Hakkımızda
+                {nav.about}
               </Link>
               <Link href={`/${region.code}/blog`} className="font-medium text-white/80 hover:text-white hover:underline">
-                Blog
+                {nav.blog}
               </Link>
               <Link href="/acik-kaynak" className="font-medium text-white/80 hover:text-white hover:underline">
-                Açık Kaynak
+                {nav.openSource}
               </Link>
-              <Link href="/iletisim" className="font-medium text-white/80 hover:text-white hover:underline">
-                İletişim &amp; Künye →
+              <Link href={contactHref} className="font-medium text-white/80 hover:text-white hover:underline">
+                {nav.contact}
               </Link>
             </p>
           </div>

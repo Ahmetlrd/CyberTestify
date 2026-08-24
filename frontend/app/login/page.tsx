@@ -13,6 +13,7 @@ import { getRegion } from '../../config/regions';
 const T = {
   tr: {
     title: 'Giriş Yap', subtitle: 'Hesabınıza erişin ve taramanızı yönetin.',
+    google: 'Google ile devam et',
     googleError: 'Google ile giriş tamamlanamadı. Lütfen tekrar deneyin.',
     or: 'veya', email: 'E-posta', password: 'Şifre', forgot: 'Şifremi unuttum',
     submitting: 'Giriş yapılıyor…', submit: 'Giriş yap',
@@ -20,6 +21,7 @@ const T = {
   },
   de: {
     title: 'Anmelden', subtitle: 'Greifen Sie auf Ihr Konto zu und verwalten Sie Ihren Scan.',
+    google: 'Mit Google fortfahren',
     googleError: 'Die Anmeldung mit Google konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.',
     or: 'oder', email: 'E-Mail', password: 'Passwort', forgot: 'Passwort vergessen',
     submitting: 'Anmeldung läuft…', submit: 'Anmelden',
@@ -71,7 +73,7 @@ export default function LoginPage() {
           </p>
         )}
         <div className="mt-6">
-          <GoogleButton next={next} />
+          <GoogleButton next={next} label={t.google} />
         </div>
         <div className="my-5 flex items-center gap-3 text-xs text-ink-muted">
           <span className="h-px flex-1 bg-line" /> {t.or} <span className="h-px flex-1 bg-line" />

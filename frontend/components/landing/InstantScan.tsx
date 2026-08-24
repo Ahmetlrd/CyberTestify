@@ -4,6 +4,30 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api, type InstantScanResult } from '../../lib/api';
 import { Turnstile, type TurnstileHandle } from '../Turnstile';
+import { readRegionCookie } from '../../lib/region';
+import { getRegion } from '../../config/regions';
+
+// (Çok-bölge) Hero teaser metinleri tr/de. /de'de hero CTA + form Almanca (Sie-form). TR birebir korunur.
+const IS = {
+  tr: {
+    heading: 'Sitenizi ücretsiz, anında tarayın',
+    sub: 'Saniyeler içinde bir güvenlik skoru ve öne çıkan eksikleri görün — kart/kayıt gerekmez.',
+    scan: 'Ücretsiz Tara', waiting: 'Doğrulama bekleniyor…',
+    errDomain: 'Bir alan adı girin (ör. example.com).',
+    errToken: 'Lütfen önce doğrulama kutusunu tamamlayın.',
+    errScan: 'Tarama şu an tamamlanamadı. Lütfen tekrar deneyin.',
+    aria: 'Taranacak alan adı',
+  },
+  de: {
+    heading: 'Scannen Sie Ihre Website kostenlos und sofort',
+    sub: 'Sehen Sie in Sekunden einen Sicherheits-Score und die wichtigsten Schwachstellen — ohne Karte oder Registrierung.',
+    scan: 'Kostenlos scannen', waiting: 'Verifizierung ausstehend…',
+    errDomain: 'Geben Sie eine Domain ein (z. B. example.com).',
+    errToken: 'Bitte schließen Sie zuerst die Verifizierung ab.',
+    errScan: 'Der Scan konnte derzeit nicht abgeschlossen werden. Bitte versuchen Sie es erneut.',
+    aria: 'Zu scannende Domain',
+  },
+} as const;
 
 const SEV_LABEL: Record<'high' | 'medium' | 'low', string> = { high: 'Yüksek', medium: 'Orta', low: 'Düşük' };
 const SEV_STYLE: Record<'high' | 'medium' | 'low', { box: string; chip: string }> = {
@@ -70,12 +94,15 @@ export function InstantScan() {
   const [result, setResult] = useState<InstantScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const turnstile = useRef<TurnstileHandle>(null);
+  const [lang, setLang] = useState<'tr' | 'de'>('tr');
+  useEffect(() => { setLang(getRegion(readRegionCookie()).lang === 'de' ? 'de' : 'tr'); }, []);
+  const L = IS[lang];
 
   async function onScan(e: React.FormEvent) {
     e.preventDefault();
     setError(null); setResult(null); setReachFail(false); setPhase(-1);
-    if (!url.trim()) { setError('Bir alan adı girin (ör. example.com).'); return; }
-    if (!token) { setError('Lütfen önce doğrulama kutusunu tamamlayın.'); return; }
+    if (!url.trim()) { setError(L.errDomain); return; }
+    if (!token) { setError(L.errToken); return; }
     setState('scanning');
     try {
       const r = await api.instantScan(url.trim(), token, website);
@@ -90,7 +117,7 @@ export function InstantScan() {
       }
       setResult(r); setState('done');
     } catch (err: any) {
-      setError(err?.message || 'Tarama şu an tamamlanamadı. Lütfen tekrar deneyin.');
+      setError(err?.message || L.errScan);
       setState('error');
     } finally {
       setToken(null); turnstile.current?.reset();
@@ -120,20 +147,20 @@ export function InstantScan() {
         <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent-soft text-accent-600">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" strokeLinecap="round" /></svg>
         </span>
-        <h2 className="text-lg font-extrabold text-brand sm:text-xl">Sitenizi ücretsiz, anında tarayın</h2>
+        <h2 className="text-lg font-extrabold text-brand sm:text-xl">{L.heading}</h2>
       </div>
-      <p className="mt-1.5 text-sm text-ink-soft">Saniyeler içinde bir güvenlik skoru ve öne çıkan eksikleri görün — kart/kayıt gerekmez.</p>
+      <p className="mt-1.5 text-sm text-ink-soft">{L.sub}</p>
 
       {(state === 'idle' || state === 'error') && (
         <form onSubmit={onScan} className="mt-4">
           <div className="flex flex-col gap-2.5 sm:flex-row">
             <div className="relative flex-1">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-muted">https://</span>
-              <input type="text" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="example.com" className="field w-full pl-[68px]" aria-label="Taranacak alan adı" />
+              <input type="text" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="example.com" className="field w-full pl-[68px]" aria-label={L.aria} />
             </div>
             <input type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} className="hidden" aria-hidden />
             <button type="submit" disabled={!token || !url.trim()} className="btn-primary shrink-0 justify-center disabled:cursor-not-allowed disabled:opacity-60">
-              {token ? 'Ücretsiz Tara' : 'Doğrulama bekleniyor…'}
+              {token ? L.scan : L.waiting}
             </button>
           </div>
           <div className="mt-3"><Turnstile ref={turnstile} onToken={setToken} action="instant-scan" /></div>

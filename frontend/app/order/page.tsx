@@ -132,6 +132,7 @@ const ORD = {
     errUnreachAck: 'Hedefe erişilemiyor — devam etmek için uyarıyı onaylamalısınız.',
     // Trust strip
     trustSSL: '256-bit SSL · iyzico güvenli ödeme', trustCard: 'Kart bilgileri iyzico’da işlenir, bizde saklanmaz', trustKvkk: 'KVKK’ya uygun · veriler şifreli saklanır',
+    payAlt: 'iyzico ile Öde',
     // Mobile bar
     noPackage: 'Paket seçilmedi', mobileVerify: 'Doğrula',
     // Consents (gruplu)
@@ -239,6 +240,7 @@ const ORD = {
     errLowScopeAck: 'Zum Fortfahren müssen Sie den Vorabprüfungs-Hinweis bestätigen.',
     errUnreachAck: 'Ziel nicht erreichbar — zum Fortfahren müssen Sie den Hinweis bestätigen.',
     trustSSL: '256-Bit-SSL · sichere Zahlung über iyzico', trustCard: 'Kartendaten werden bei iyzico verarbeitet, nicht bei uns gespeichert', trustKvkk: 'DSGVO-konform · Daten werden verschlüsselt gespeichert',
+    payAlt: 'Mit iyzico bezahlen',
     noPackage: 'Kein Paket gewählt', mobileVerify: 'Bestätigen',
     cGenStrong: 'Ich habe gelesen und stimme zu:', cGenOwn1: 'Ich bin Inhaber/Berechtigter dieser Domain', cGenOwn2: 'und ihrer Infrastruktur', cGenOwn3: 'und willige ein, dass an diesem Ziel',
     cGenActive: 'ein aktiv-leichter Verifizierungstest', cGenPassive: 'ein passiver', cGenScan: 'Scan', cGenConsent: 'durchgeführt wird;',
@@ -1104,7 +1106,7 @@ export default function OrderPage() {
               disabled={promoBusy || !promoInput.trim()}
               className="btn-dark disabled:opacity-50"
             >
-              {promoBusy ? '…' : 'Uygula'}
+              {promoBusy ? '…' : L.apply}
             </button>
           </div>
           {promo && !promo.valid && <p className="mt-2 text-xs text-red-600">{promo.error}</p>}
@@ -1254,7 +1256,7 @@ export default function OrderPage() {
                 </li>
               </ul>
               <div className="mt-3 flex flex-wrap items-center gap-3">
-                <img src="/iyzico/iyzico_ile_ode_colored_horizontal.svg" alt="iyzico ile Öde" className="h-5 w-auto" width={175} height={26} />
+                <img src="/iyzico/iyzico_ile_ode_colored_horizontal.svg" alt={L.payAlt} className="h-5 w-auto" width={175} height={26} />
                 <img src="/iyzico/logo_band_colored.svg" alt="Visa, Mastercard, Troy" className="h-4 w-auto max-w-full" width={228} height={16} />
               </div>
             </div>

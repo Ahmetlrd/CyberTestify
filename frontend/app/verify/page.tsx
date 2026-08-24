@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '../../lib/api';
 import { isActivePackageKey } from '../../lib/packages';
+import { readRegionCookie } from '../../lib/region';
+import { getRegion, type RegionCode } from '../../config/regions';
 
 type Domain = {
   id: string;
@@ -25,22 +27,166 @@ type Order = {
   invoiceStatus?: 'requested' | 'issued' | 'sent' | null;
 };
 
-const ORDER_STATUS_LABEL: Record<string, string> = {
-  awaiting_payment: 'Ödeme bekleniyor',
-  awaiting_domain_verification: 'Alan adı doğrulaması bekleniyor',
-  paid: 'Sıraya alınıyor',
-  scan_queued: 'Başlatılıyor',
-  scan_running: 'Taranıyor',
-  // (Savunma) İç kalite kapısı durumu backend'de zaten 'scan_running'e maskelenir; yine de
-  // hiçbir koşulda ham enum sızmasın diye burada da "Taranıyor" gösterilir.
-  awaiting_admin_review: 'Taranıyor',
-  scan_completed: 'Rapor hazır',
-  report_delivered: 'Rapor hazır',
-  scan_failed: 'Başarısız',
-  scope_violation: 'Durduruldu (kapsam dışı)',
-  report_purged: 'Süresi doldu',
-  refunded: 'İade edildi',
+// (Savunma) awaiting_admin_review backend'de zaten 'scan_running'e maskelenir; yine de hiçbir koşulda
+// ham enum sızmasın diye burada da "Taranıyor"/"Wird gescannt" gösterilir.
+const ORDER_STATUS_LABEL: Record<'tr' | 'de', Record<string, string>> = {
+  tr: {
+    awaiting_payment: 'Ödeme bekleniyor',
+    awaiting_domain_verification: 'Alan adı doğrulaması bekleniyor',
+    paid: 'Sıraya alınıyor',
+    scan_queued: 'Başlatılıyor',
+    scan_running: 'Taranıyor',
+    awaiting_admin_review: 'Taranıyor',
+    scan_completed: 'Rapor hazır',
+    report_delivered: 'Rapor hazır',
+    scan_failed: 'Başarısız',
+    scope_violation: 'Durduruldu (kapsam dışı)',
+    report_purged: 'Süresi doldu',
+    refunded: 'İade edildi',
+  },
+  de: {
+    awaiting_payment: 'Zahlung ausstehend',
+    awaiting_domain_verification: 'Domain-Verifizierung ausstehend',
+    paid: 'Wird eingereiht',
+    scan_queued: 'Wird gestartet',
+    scan_running: 'Wird gescannt',
+    awaiting_admin_review: 'Wird gescannt',
+    scan_completed: 'Bericht bereit',
+    report_delivered: 'Bericht bereit',
+    scan_failed: 'Fehlgeschlagen',
+    scope_violation: 'Gestoppt (außerhalb des Geltungsbereichs)',
+    report_purged: 'Abgelaufen',
+    refunded: 'Erstattet',
+  },
 };
+
+// (Çok-bölge) /verify panel metinleri — /de tamamen Almanca (Sie-Form, „…" tırnak).
+const VER_T = {
+  tr: {
+    verifiedDomains: 'Doğrulanmış alan adların',
+    verifiedValid: 'Doğrulandı · geçerli',
+    continueWithDomain: 'Bu alan adı ile devam et',
+    startScan: 'Taramayı Başlat',
+    delete: 'Sil',
+    pendingVerification: 'Doğrulama bekleyen',
+    expiredReverify: 'Süresi doldu — yeniden doğrula',
+    notVerifiedYet: 'Henüz doğrulanmadı',
+    passiveHint: 'Pasif paketler için doğrulama gerekmez. Aktif paketler DNS doğrulaması ister.',
+    continue: 'Devam et',
+    hide: 'Gizle',
+    verify: 'Doğrula',
+    txtIntro1: 'DNS panelinize aşağıdaki',
+    txtIntro2: 'kaydını ekleyin:',
+    nameLabel: 'Ad:',
+    valueLabel: 'Değer:',
+    checking: 'Kontrol ediliyor…',
+    checkVerification: 'Doğrulamayı kontrol et',
+    addNewDomain: '+ Yeni alan adı ekle',
+    deleteAll: 'Tümünü sil',
+    newDomain: 'Yeni alan adı',
+    adding: 'Ekleniyor…',
+    addAndContinue: 'Ekle ve devam et',
+    add: 'Ekle',
+    domainPlaceholder: 'ornek.com',
+    willBeAdded: 'Şu alan adı eklenecek:',
+    stripNote1: 've yol kısımları otomatik atılır.',
+    noDomains: 'Henüz alan adın yok. Başlamak için bir alan adı ekleyip doğrula.',
+    invoiceSent: 'Fatura gönderildi',
+    invoiceRequested: 'Fatura talebi ✓',
+    requestInvoice: 'Fatura talep et',
+    unarchive: 'Arşivden çıkar',
+    archive: 'Arşivle',
+    myPanel: 'Panelim',
+    selectDomain: 'Alan adı seçin',
+    startScanning: 'Taramaya Başla',
+    activeNotice1: 'Aktif güvenlik testlerini başlatabilmemiz için alan adının size ait olduğunu',
+    activeNoticeStrong: 'DNS TXT kaydıyla',
+    activeNotice2: 'doğrulamanız gerekiyor.',
+    passiveTitle: 'Bu paket için doğrulama gerekmez',
+    passiveBody1: 'Pasif tarama yalnızca dışarıdan gözlem yapar (güvenlik başlıkları, TLS, yapılandırma).',
+    passiveBody2: 'Alan adınızı ekleyip',
+    passiveBodyStrong: 'hemen devam edebilirsiniz',
+    passiveBody3: '— DNS kaydı eklemenize gerek yok.',
+    tabMyScans: 'Taramalarım',
+    tabDomains: 'Alan Adları',
+    tabScheduled: 'Zamanlanmış ↗',
+    myScans: 'Taramalarım',
+    hideArchived: 'Arşivlenenleri gizle',
+    archived: 'Arşivlenenler',
+    showLess: 'Daha az göster',
+    showAll: (n: number) => `Tümünü gör (${n})`,
+    noArchivedScans: 'Arşivlenmiş tarama yok.',
+    noScansYet: 'Henüz bir taramanız yok. “Alan Adları” sekmesinden bir tarama başlatın.',
+    confirmDeleteDomain: 'Bu alan adını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+    confirmDeleteAll: 'Taraması olmayan tüm alan adları silinsin mi?',
+    confirmDeleteReport: 'Bu raporu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+    dnsNotVisible: 'Kayıt henüz görünmüyor. DNS yayılımı biraz sürebilir; birazdan tekrar deneyin.',
+    alreadyVerified: (h: string) => `“${h}” zaten ekli ve doğrulanmış.`,
+    bulkDeleted: (d: number, k: number) => `${d} alan adı silindi; taraması olan ${k} tanesi korundu.`,
+  },
+  de: {
+    verifiedDomains: 'Ihre verifizierten Domains',
+    verifiedValid: 'Verifiziert · gültig',
+    continueWithDomain: 'Mit dieser Domain fortfahren',
+    startScan: 'Scan starten',
+    delete: 'Löschen',
+    pendingVerification: 'Verifizierung ausstehend',
+    expiredReverify: 'Abgelaufen — erneut verifizieren',
+    notVerifiedYet: 'Noch nicht verifiziert',
+    passiveHint: 'Für passive Pakete ist keine Verifizierung erforderlich. Aktive Pakete erfordern eine DNS-Verifizierung.',
+    continue: 'Fortfahren',
+    hide: 'Ausblenden',
+    verify: 'Verifizieren',
+    txtIntro1: 'Fügen Sie in Ihrem DNS-Panel den folgenden',
+    txtIntro2: 'Eintrag hinzu:',
+    nameLabel: 'Name:',
+    valueLabel: 'Wert:',
+    checking: 'Wird geprüft…',
+    checkVerification: 'Verifizierung prüfen',
+    addNewDomain: '+ Neue Domain hinzufügen',
+    deleteAll: 'Alle löschen',
+    newDomain: 'Neue Domain',
+    adding: 'Wird hinzugefügt…',
+    addAndContinue: 'Hinzufügen und fortfahren',
+    add: 'Hinzufügen',
+    domainPlaceholder: 'beispiel.de',
+    willBeAdded: 'Folgende Domain wird hinzugefügt:',
+    stripNote1: 'und Pfadangaben werden automatisch entfernt.',
+    noDomains: 'Sie haben noch keine Domain. Fügen Sie eine Domain hinzu und verifizieren Sie sie, um zu beginnen.',
+    invoiceSent: 'Rechnung gesendet',
+    invoiceRequested: 'Rechnung angefordert ✓',
+    requestInvoice: 'Rechnung anfordern',
+    unarchive: 'Aus Archiv entfernen',
+    archive: 'Archivieren',
+    myPanel: 'Mein Bereich',
+    selectDomain: 'Domain auswählen',
+    startScanning: 'Scan starten',
+    activeNotice1: 'Damit wir aktive Sicherheitstests starten können, müssen Sie mit einem',
+    activeNoticeStrong: 'DNS-TXT-Eintrag',
+    activeNotice2: 'nachweisen, dass die Domain Ihnen gehört.',
+    passiveTitle: 'Für dieses Paket ist keine Verifizierung erforderlich',
+    passiveBody1: 'Der passive Scan beobachtet nur von außen (Sicherheitsheader, TLS, Konfiguration).',
+    passiveBody2: 'Fügen Sie Ihre Domain hinzu und',
+    passiveBodyStrong: 'fahren Sie sofort fort',
+    passiveBody3: '— Sie müssen keinen DNS-Eintrag hinzufügen.',
+    tabMyScans: 'Meine Scans',
+    tabDomains: 'Domains',
+    tabScheduled: 'Geplant ↗',
+    myScans: 'Meine Scans',
+    hideArchived: 'Archivierte ausblenden',
+    archived: 'Archivierte',
+    showLess: 'Weniger anzeigen',
+    showAll: (n: number) => `Alle anzeigen (${n})`,
+    noArchivedScans: 'Keine archivierten Scans.',
+    noScansYet: 'Sie haben noch keine Scans. Starten Sie einen Scan über den Tab „Domains“.',
+    confirmDeleteDomain: 'Möchten Sie diese Domain wirklich löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.',
+    confirmDeleteAll: 'Sollen alle Domains ohne Scans gelöscht werden?',
+    confirmDeleteReport: 'Möchten Sie diesen Bericht wirklich löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.',
+    dnsNotVisible: 'Der Eintrag ist noch nicht sichtbar. Die DNS-Verbreitung kann etwas dauern; bitte versuchen Sie es gleich erneut.',
+    alreadyVerified: (h: string) => `„${h}“ ist bereits hinzugefügt und verifiziert.`,
+    bulkDeleted: (d: number, k: number) => `${d} Domain(s) gelöscht; ${k} mit Scans wurden beibehalten.`,
+  },
+} as const;
 
 const HISTORY_PREVIEW = 3;
 
@@ -95,6 +241,11 @@ export default function VerifyHub() {
   const [notice, setNotice] = useState<string | null>(null);
   // (İŞ 2) Panel sekmeleri — dağınık iç içe bölümler yerine net ayrım.
   const [tab, setTab] = useState<'domains' | 'history'>('domains');
+  // (Çok-bölge) Dil + locale: region cookie'sinden. de → Almanca metin + Alman tarih biçimi.
+  const [region, setRegion] = useState<RegionCode>('tr');
+  const lang: 'tr' | 'de' = getRegion(region).lang === 'de' ? 'de' : 'tr';
+  const T = VER_T[lang];
+  const dateLocale = getRegion(region).locale;
 
   const refresh = useCallback(async () => {
     const [list, ord] = await Promise.all([api.listDomains(), api.listOrders(false)]);
@@ -105,6 +256,7 @@ export default function VerifyHub() {
   }, [showArchived]);
 
   useEffect(() => {
+    setRegion(readRegionCookie());
     if (typeof window !== 'undefined' && !window.localStorage.getItem('token')) {
       // Satın-alma niyeti korunsun: login sonrası aynı URL'e dön.
       const next = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/verify';
@@ -156,7 +308,7 @@ export default function VerifyHub() {
       await refresh();
       setOpenId(res.domainId);
       // Zaten ekli + doğrulanmışsa: onaylı kayıt KORUNUR (yeniden DNS doğrulama yok) + net bilgi.
-      if (res.alreadyVerified) setNotice(res.message || `“${res.hostname}” zaten ekli ve doğrulanmış.`);
+      if (res.alreadyVerified) setNotice(res.message || T.alreadyVerified(res.hostname));
     } catch (e: any) {
       setBulkMsg(e.message);
     } finally {
@@ -172,7 +324,7 @@ export default function VerifyHub() {
       const { verified } = await api.verifyDomain(id);
       await refresh();
       if (verified) goToOrder(id);
-      else setCheckMsg('Kayıt henüz görünmüyor. DNS yayılımı biraz sürebilir; birazdan tekrar deneyin.');
+      else setCheckMsg(T.dnsNotVisible);
     } catch (e: any) {
       setCheckMsg(e.message);
     } finally {
@@ -181,7 +333,7 @@ export default function VerifyHub() {
   }
 
   async function del(id: string) {
-    if (!window.confirm('Bu alan adını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return;
+    if (!window.confirm(T.confirmDeleteDomain)) return;
     setDomainMsg(null);
     try {
       await api.deleteDomain(id);
@@ -192,12 +344,12 @@ export default function VerifyHub() {
   }
 
   async function delAll() {
-    if (!window.confirm('Taraması olmayan tüm alan adları silinsin mi?')) return;
+    if (!window.confirm(T.confirmDeleteAll)) return;
     setBulkMsg(null);
     try {
       const r = await api.deleteAllDomains();
       await refresh();
-      if (r.kept > 0) setBulkMsg(`${r.deleted} alan adı silindi; taraması olan ${r.kept} tanesi korundu.`);
+      if (r.kept > 0) setBulkMsg(T.bulkDeleted(r.deleted, r.kept));
     } catch (e: any) {
       setBulkMsg(e.message);
     }
@@ -214,7 +366,7 @@ export default function VerifyHub() {
   }
 
   async function deleteOrder(id: string) {
-    if (!window.confirm('Bu raporu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return;
+    if (!window.confirm(T.confirmDeleteReport)) return;
     setOrderMsg(null);
     try {
       await api.deleteOrder(id);
@@ -245,7 +397,7 @@ export default function VerifyHub() {
     <>
       {validDomains.length > 0 && (
         <section className="mt-8">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">Doğrulanmış alan adların</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">{T.verifiedDomains}</h2>
           <div className="mt-3 space-y-2.5">
             {validDomains.map((d) => (
               <div key={d.id} className="card p-4">
@@ -253,16 +405,16 @@ export default function VerifyHub() {
                   <div className="min-w-0">
                     <div className="truncate font-semibold text-ink">{d.hostname}</div>
                     <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Doğrulandı · geçerli
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> {T.verifiedValid}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                     <button onClick={() => goToOrder(d.id)} className="btn-primary">
-                      {purchaseMode ? 'Bu alan adı ile devam et' : 'Taramayı Başlat'}
+                      {purchaseMode ? T.continueWithDomain : T.startScan}
                     </button>
                     {!purchaseMode && (
                       <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
-                        Sil
+                        {T.delete}
                       </button>
                     )}
                   </div>
@@ -278,7 +430,7 @@ export default function VerifyHub() {
 
       {pendingDomains.length > 0 && (
         <section className="mt-8">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">Doğrulama bekleyen</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">{T.pendingVerification}</h2>
           <div className="mt-3 space-y-2.5">
             {pendingDomains.map((d) => {
               const expired = d.status === 'verified' && !d.valid;
@@ -289,11 +441,11 @@ export default function VerifyHub() {
                     <div className="min-w-0">
                       <div className="truncate font-semibold text-ink">{d.hostname}</div>
                       <span className={`mt-0.5 block text-xs font-medium ${expired ? 'text-red-600' : 'text-amber-600'}`}>
-                        {expired ? 'Süresi doldu — yeniden doğrula' : 'Henüz doğrulanmadı'}
+                        {expired ? T.expiredReverify : T.notVerifiedYet}
                       </span>
                       {!purchaseMode && (
                         <span className="mt-0.5 block text-[11px] text-ink-muted">
-                          Pasif paketler için doğrulama gerekmez. Aktif paketler DNS doğrulaması ister.
+                          {T.passiveHint}
                         </span>
                       )}
                     </div>
@@ -301,39 +453,39 @@ export default function VerifyHub() {
                       {/* PASİF satın-alma: doğrulama gerekmez → tek tıkla devam. Aktifte bu buton YOK. */}
                       {purchaseMode && !activePurchase && (
                         <button onClick={() => goToOrder(d.id)} className="btn-primary text-sm">
-                          Devam et
+                          {T.continue}
                         </button>
                       )}
                       {/* NORMAL panel: doğrulanmamış alan adı için de "Taramayı Başlat" — pasif 4 paket
                           doğrulama gerektirmez. Aktif paket seçilirse /order doğrulamaya yönlendirir. */}
                       {!purchaseMode && (
                         <button onClick={() => goToOrder(d.id)} className="btn-primary text-sm">
-                          Taramayı Başlat
+                          {T.startScan}
                         </button>
                       )}
                       <button onClick={() => { setCheckMsg(null); setOpenId(open ? null : d.id); }} className="btn-outline text-sm">
-                        {open ? 'Gizle' : 'Doğrula'}
+                        {open ? T.hide : T.verify}
                       </button>
                       <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
-                        Sil
+                        {T.delete}
                       </button>
                     </div>
                   </div>
                   {open && (
                     <div className="mt-4 border-t border-line pt-4">
-                      <p className="text-sm text-ink-soft">DNS panelinize aşağıdaki <strong>TXT</strong> kaydını ekleyin:</p>
+                      <p className="text-sm text-ink-soft">{T.txtIntro1} <strong>TXT</strong> {T.txtIntro2}</p>
                       <div className="mt-2 space-y-2 rounded-card bg-brand-deep p-3.5 font-mono text-xs text-white/90">
                         <div>
-                          <span className="text-white/45">Ad:</span>{' '}
+                          <span className="text-white/45">{T.nameLabel}</span>{' '}
                           <span className="break-all text-emerald-300">{d.instructions.recordName}</span>
                         </div>
                         <div>
-                          <span className="text-white/45">Değer:</span>{' '}
+                          <span className="text-white/45">{T.valueLabel}</span>{' '}
                           <span className="break-all text-accent">{d.instructions.recordValue}</span>
                         </div>
                       </div>
                       <button onClick={() => check(d.id)} disabled={busy} className="btn-primary mt-3 disabled:opacity-60">
-                        {busy ? 'Kontrol ediliyor…' : 'Doğrulamayı kontrol et'}
+                        {busy ? T.checking : T.checkVerification}
                       </button>
                       {checkMsg && (
                         <p className="mt-2 rounded-card border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -356,27 +508,27 @@ export default function VerifyHub() {
         {!showAdd ? (
           <div className="flex flex-wrap items-center gap-3">
             <button onClick={() => setShowAdd(true)} className="btn-outline">
-              + Yeni alan adı ekle
+              {T.addNewDomain}
             </button>
             {!purchaseMode && domains.length > 0 && (
               <button onClick={delAll} className="btn-ghost text-sm text-red-600">
-                Tümünü sil
+                {T.deleteAll}
               </button>
             )}
           </div>
         ) : (
           <form onSubmit={addDomain} className="card p-5">
-            <label className="label">Yeni alan adı</label>
+            <label className="label">{T.newDomain}</label>
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 required
-                placeholder="ornek.com"
+                placeholder={T.domainPlaceholder}
                 className="field flex-1"
                 value={newHostname}
                 onChange={(e) => setNewHostname(e.target.value)}
               />
               <button type="submit" disabled={busy} className="btn-primary disabled:opacity-60">
-                {busy ? 'Ekleniyor…' : purchaseMode && !activePurchase ? 'Ekle ve devam et' : 'Ekle'}
+                {busy ? T.adding : purchaseMode && !activePurchase ? T.addAndContinue : T.add}
               </button>
             </div>
             {(() => {
@@ -387,10 +539,10 @@ export default function VerifyHub() {
               if (host && raw.toLowerCase() !== host) {
                 return (
                   <p className="mt-2 text-xs text-ink-muted">
-                    Şu alan adı eklenecek: <span className="font-mono font-semibold text-ink">{host}</span>
+                    {T.willBeAdded} <span className="font-mono font-semibold text-ink">{host}</span>
                     <br />
                     <span className="text-ink-muted">
-                      (<code>https://</code>, <code>www.</code> ve yol kısımları otomatik atılır.)
+                      (<code>https://</code>, <code>www.</code> {T.stripNote1})
                     </span>
                   </p>
                 );
@@ -410,7 +562,7 @@ export default function VerifyHub() {
 
       {domains.length === 0 && !showAdd && (
         <p className="mt-4 text-sm text-ink-muted">
-          Henüz alan adın yok. Başlamak için bir alan adı ekleyip doğrula.
+          {T.noDomains}
         </p>
       )}
     </>
@@ -424,28 +576,28 @@ export default function VerifyHub() {
         <button onClick={() => router.push(`/dashboard/${o.id}`)} className="min-w-0 text-left sm:flex-1">
           <div className="truncate font-semibold text-ink">{o.hostname}</div>
           <div className="mt-0.5 text-xs text-ink-muted">
-            {o.packageName} · {new Date(o.createdAt).toLocaleDateString('tr-TR')}
+            {o.packageName} · {new Date(o.createdAt).toLocaleDateString(dateLocale)}
           </div>
         </button>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:shrink-0">
-          <span className="badge">{ORDER_STATUS_LABEL[o.status] ?? o.status}</span>
+          <span className="badge">{ORDER_STATUS_LABEL[lang][o.status] ?? o.status}</span>
           {/* (Fatura talebi) ödemesi tamamlanmış siparişte talep/durum — form dashboard'ta (#fatura). */}
           {o.paid && (
             <button onClick={() => router.push(`/dashboard/${o.id}#fatura`)} className="btn-ghost text-xs text-accent-700">
-              {o.invoiceStatus === 'sent' ? 'Fatura gönderildi' : o.invoiceStatus ? 'Fatura talebi ✓' : 'Fatura talep et'}
+              {o.invoiceStatus === 'sent' ? T.invoiceSent : o.invoiceStatus ? T.invoiceRequested : T.requestInvoice}
             </button>
           )}
           {isArchived ? (
             <button onClick={() => archiveOrder(o.id, false)} className="btn-ghost text-xs">
-              Arşivden çıkar
+              {T.unarchive}
             </button>
           ) : (
             <>
               <button onClick={() => archiveOrder(o.id, true)} className="btn-ghost text-xs">
-                Arşivle
+                {T.archive}
               </button>
               <button onClick={() => deleteOrder(o.id)} className="btn-ghost text-xs text-red-600">
-                Sil
+                {T.delete}
               </button>
             </>
           )}
@@ -460,9 +612,9 @@ export default function VerifyHub() {
   return (
     <main className="container-page max-w-2xl py-14">
       <div>
-        <p className="eyebrow">Panelim</p>
+        <p className="eyebrow">{T.myPanel}</p>
         <h1 className="mt-1 text-2xl font-extrabold text-brand">
-          {purchaseMode ? 'Alan adı seçin' : 'Taramaya Başla'}
+          {purchaseMode ? T.selectDomain : T.startScanning}
         </h1>
       </div>
 
@@ -478,17 +630,16 @@ export default function VerifyHub() {
             /* AKTİF paket — DNS doğrulaması ZORUNLU (çelik kapı / yasal). */
             <div className="mt-6 rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900/90">
               <p className="leading-relaxed">
-                Aktif güvenlik testlerini başlatabilmemiz için alan adının size ait olduğunu <strong>DNS TXT
-                kaydıyla</strong> doğrulamanız gerekiyor.
+                {T.activeNotice1} <strong>{T.activeNoticeStrong}</strong> {T.activeNotice2}
               </p>
             </div>
           ) : (
             /* PASİF paket — doğrulama gerekmez, sürtünmesiz. */
             <div className="mt-6 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900/90">
-              <p className="font-bold text-emerald-900">Bu paket için doğrulama gerekmez</p>
+              <p className="font-bold text-emerald-900">{T.passiveTitle}</p>
               <p className="mt-1 leading-relaxed">
-                Pasif tarama yalnızca dışarıdan gözlem yapar (güvenlik başlıkları, TLS, yapılandırma).
-                Alan adınızı ekleyip <strong>hemen devam edebilirsiniz</strong> — DNS kaydı eklemenize gerek yok.
+                {T.passiveBody1}{' '}
+                {T.passiveBody2} <strong>{T.passiveBodyStrong}</strong> {T.passiveBody3}
               </p>
             </div>
           )}
@@ -499,8 +650,8 @@ export default function VerifyHub() {
           {/* (İŞ 2) SEKME NAVİGASYONU — Taramalarım · Alan Adları · Zamanlanmış (net ayrım). */}
           <nav className="mt-6 flex flex-wrap gap-1.5 border-b border-line">
             {([
-              ['history', 'Taramalarım', orders.length],
-              ['domains', 'Alan Adları', validDomains.length],
+              ['history', T.tabMyScans, orders.length],
+              ['domains', T.tabDomains, validDomains.length],
             ] as const).map(([key, label, count]) => (
               <button
                 key={key}
@@ -517,7 +668,7 @@ export default function VerifyHub() {
               href="/schedules"
               className="-mb-px rounded-t-card border-b-2 border-transparent px-3.5 py-2 text-sm font-semibold text-ink-muted transition hover:text-ink"
             >
-              Zamanlanmış ↗
+              {T.tabScheduled}
             </a>
           </nav>
 
@@ -527,9 +678,9 @@ export default function VerifyHub() {
             orders.length > 0 ? (
               <section className="mt-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">Taramalarım</h2>
+                  <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">{T.myScans}</h2>
                   <button onClick={toggleArchived} className="text-xs font-medium text-accent-600 hover:underline">
-                    {showArchived ? 'Arşivlenenleri gizle' : 'Arşivlenenler'}
+                    {showArchived ? T.hideArchived : T.archived}
                     {archivedOrders && archivedOrders.length > 0 ? ` (${archivedOrders.length})` : ''}
                   </button>
                 </div>
@@ -539,23 +690,23 @@ export default function VerifyHub() {
                     onClick={() => setShowAllHistory((v) => !v)}
                     className="mt-3 text-sm font-medium text-accent-600 hover:underline"
                   >
-                    {showAllHistory ? 'Daha az göster' : `Tümünü gör (${orders.length})`}
+                    {showAllHistory ? T.showLess : T.showAll(orders.length)}
                   </button>
                 )}
 
                 {showArchived && (
                   <div className="mt-6 border-t border-line pt-6">
-                    <h3 className="text-xs font-bold uppercase tracking-wide text-ink-muted">Arşivlenenler</h3>
+                    <h3 className="text-xs font-bold uppercase tracking-wide text-ink-muted">{T.archived}</h3>
                     {archivedOrders && archivedOrders.length > 0 ? (
                       <div className="mt-2 space-y-2.5">{archivedOrders.map((o) => orderCard(o, true))}</div>
                     ) : (
-                      <p className="mt-2 text-sm text-ink-muted">Arşivlenmiş tarama yok.</p>
+                      <p className="mt-2 text-sm text-ink-muted">{T.noArchivedScans}</p>
                     )}
                   </div>
                 )}
               </section>
             ) : (
-              <p className="mt-8 text-sm text-ink-muted">Henüz bir taramanız yok. “Alan Adları” sekmesinden bir tarama başlatın.</p>
+              <p className="mt-8 text-sm text-ink-muted">{T.noScansYet}</p>
             )
           )}
         </>

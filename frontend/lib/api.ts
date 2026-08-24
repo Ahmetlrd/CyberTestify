@@ -1,3 +1,5 @@
+import { readRegionCookie } from './region';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 // (ÜCRETSİZ ANLIK ÖN-TARAMA) sonuç tipi — üç-durum + skor + ≤3 bulgu başlığı.
@@ -300,7 +302,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ accessSecret }),
     });
-    if (!res.ok) throw new Error('Rapor indirilemedi. Erişim şifresini kontrol edin.');
+    if (!res.ok) throw new Error(
+      readRegionCookie() === 'de'
+        ? 'Bericht konnte nicht heruntergeladen werden. Bitte prüfen Sie das Zugriffspasswort.'
+        : 'Rapor indirilemedi. Erişim şifresini kontrol edin.',
+    );
     return res.blob();
   },
   // (3) AI Cozum Onerileri eklentisi: satin al (unlock) + indir.
@@ -316,7 +322,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ accessSecret }),
     });
-    if (!res.ok) throw new Error('Çözüm önerileri indirilemedi. Erişim şifresini/kilit durumunu kontrol edin.');
+    if (!res.ok) throw new Error(
+      readRegionCookie() === 'de'
+        ? 'Lösungsvorschläge konnten nicht heruntergeladen werden. Bitte prüfen Sie das Zugriffspasswort/den Freischaltstatus.'
+        : 'Çözüm önerileri indirilemedi. Erişim şifresini/kilit durumunu kontrol edin.',
+    );
     return res.blob();
   },
 };
