@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
-import { COMPANY } from '../lib/company';
 import { getRegion } from '../config/regions';
 
 /**
@@ -42,9 +41,6 @@ export function LegalArticle({ title, children }: { title: string; children: Rea
         </Link>
       </p>
       <h1 className="text-2xl font-extrabold text-brand">{title}</h1>
-      <p className="mt-1 text-sm text-ink-muted">
-        Son güncelleme: {COMPANY.lastUpdated} · Sürüm: {COMPANY.legalVersion}
-      </p>
       <div className="legal-body">{children}</div>
     </main>
   );
