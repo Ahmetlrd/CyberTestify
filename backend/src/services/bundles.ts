@@ -17,6 +17,7 @@ export interface ComboBundle {
   displayNameDe: string;
   description: string; // TR
   descriptionEn: string;
+  descriptionDe: string;
   category: 'passive' | 'active-light' | 'compliance';
   discountPct: number;
   /**
@@ -63,6 +64,8 @@ export const COMBO_BUNDLES: ComboBundle[] = [
       'Dış yüzeyinizin yapılandırma güvenliğini birlikte inceleyen paket: SSL/TLS, güvenlik başlıkları, DNS/e-posta, CORS ve CSP. Tekil toplamdan indirimli.',
     descriptionEn:
       'Reviews your external configuration posture together: SSL/TLS, security headers, DNS/email, CORS and CSP. Discounted vs buying separately.',
+    descriptionDe:
+      'Prüft die Konfigurationssicherheit Ihrer externen Angriffsfläche gemeinsam: SSL/TLS, Sicherheits-Header, DNS/E-Mail, CORS und CSP. Günstiger als der Einzelkauf.',
     category: 'passive',
     discountPct: 22,
     finalPriceMinorUnitTr: 399900, // 3.999 TL (Vedat — nihai indirimli, yuvarlak)
@@ -79,6 +82,8 @@ export const COMBO_BUNDLES: ComboBundle[] = [
       'Dış saldırı yüzeyinizi haritalayan ve sahipsiz/ifşa olmuş varlıkları tespit eden derin keşif paketi.',
     descriptionEn:
       'A deep discovery bundle that maps your external attack surface and detects abandoned/exposed assets.',
+    descriptionDe:
+      'Ein tiefes Reconnaissance-Paket, das Ihre externe Angriffsfläche kartiert und verwaiste/offengelegte Assets erkennt.',
     category: 'passive',
     discountPct: 20,
     finalPriceMinorUnitTr: 449900, // 4.499 TL (Vedat — nihai, yuvarlak)
@@ -94,6 +99,8 @@ export const COMBO_BUNDLES: ComboBundle[] = [
       'KVKK, PCI-DSS ve ISO 27001 ön-uyum kontrollerinin üçü birden tek pakette. Dışarıdan gözlemlenebilir hazırlık eksiklerini ilgili ilkelerle eşler (resmî denetim/uyum beyanı değildir). Tekil toplamdan indirimli.',
     descriptionEn:
       'PCI-DSS and ISO 27001 readiness checks together in one package (KVKK included in Turkey). Maps externally observable gaps to the relevant principles (not an official audit or statement of compliance). Discounted vs the single-item total.',
+    descriptionDe:
+      'PCI-DSS- und ISO-27001-Bereitschaftsprüfungen gemeinsam in einem Paket. Ordnet von außen beobachtbare Lücken den relevanten Grundsätzen zu (keine offizielle Auditierung oder Compliance-Erklärung). Günstiger als die Summe der Einzelpositionen.',
     category: 'compliance',
     discountPct: 20,
     finalPriceMinorUnitTr: 799900, // 7.999 TL (Vedat — nihai, yuvarlak; TR = 3 modul dahil)
@@ -113,6 +120,9 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     descriptionEn:
       'All seven active-light verification checks in one bundle: Injection, IDOR, SSRF, File Upload, Business Logic, Race/Mass-Assignment and RCE. Proves presence, never exploits; a single authorization declaration covers all. Strongly discounted vs buying separately. ' +
       'Scope: this bundle tests the unauthenticated (no-login) surface. Deep authorization/business-logic vulnerabilities that only appear after login are out of scope; results depend on the target’s structure.',
+    descriptionDe:
+      'Alle sieben aktiv-leichten Verifikationsprüfungen in einem Paket: Injektion, IDOR, SSRF, Datei-Upload, Geschäftslogik, Race/Mass-Assignment und RCE. Weist das Vorhandensein nach, nutzt es nie aus; eine einzige Autorisierungserklärung deckt alle ab. Deutlich günstiger als der Einzelkauf. ' +
+      'Umfang: Dieses Paket testet die nicht authentifizierte (Login-freie) Oberfläche. Tiefe Autorisierungs-/Geschäftslogik-Schwachstellen, die erst nach dem Login auftreten, sind außerhalb des Umfangs; die Ergebnisse hängen von der Struktur des Ziels ab.',
     category: 'active-light',
     discountPct: 25,
     finalPriceMinorUnitTr: 999900,        // 9.999 TL (Vedat — indirildi; uye order tutarlari buna bolunur)
@@ -137,6 +147,8 @@ export const COMBO_BUNDLES: ComboBundle[] = [
       'Sağladığınız **TEST hesabıyla login sonrası derin, deterministik güvenlik taraması**: authenticated enjeksiyon/IDOR, yetki & oturum, client-side/JS, API (OWASP API Top 10), CORS & güvenlik başlıkları, TLS, yapılandırma ifşaları ve e-posta/DNS. **İstismar edilmez**; sonuçlar hedefin yüzeyine göre değişir.',
     descriptionEn:
       'A **deep, deterministic security scan after login** with a TEST account you provide: authenticated injection/IDOR, authorization & session, client-side/JS, API (OWASP API Top 10), CORS & security headers, TLS, configuration exposure and email/DNS. **No exploitation**; results vary with the target’s surface.',
+    descriptionDe:
+      'Ein **tiefer, deterministischer Sicherheitsscan nach dem Login** mit einem von Ihnen bereitgestellten TEST-Konto: authentifizierte Injektion/IDOR, Autorisierung & Sitzung, Client-Side/JS, API (OWASP API Top 10), CORS & Sicherheits-Header, TLS, Konfigurationsoffenlegung und E-Mail/DNS. **Keine Ausnutzung**; die Ergebnisse variieren je nach Oberfläche des Ziels.',
     category: 'active-light',
     discountPct: 20,
     finalPriceMinorUnitTr: 2299900, // 22.999 TL (FAZ E — nihai sabit fiyat; üye order tutarları buna bölünür)
@@ -162,6 +174,11 @@ export const COMBO_BUNDLES: ComboBundle[] = [
       '**“Prove, don’t exploit” principle:** weaknesses are proven; your data is never extracted and your system is never damaged or disrupted. ' +
       '**Authorized, human-approved** engagement: scope and authorization are agreed in advance. ' +
       '**Pricing:** custom enterprise quote (not self-service).',
+    descriptionDe:
+      'Findet und beweist jede Sicherheitsschwäche Ihrer Website/Anwendung — die tiefste, umfassendste Bewertung, bevor es ein echter Angreifer tut; der autonome KI-Agent (PentAGI) läuft mit voller Kapazität. ' +
+      '**Prinzip „nachweisen, nicht ausnutzen“:** Schwächen werden nachgewiesen; Ihre Daten werden nie extrahiert und Ihr System nie beschädigt oder gestört. ' +
+      '**Autorisierte, menschlich freigegebene** Bewertung: Umfang und Autorisierung werden vorab gemeinsam festgelegt. ' +
+      '**Preisgestaltung:** individuelles Unternehmensangebot (kein Self-Service).',
     category: 'active-light',
     discountPct: 0,
     comingSoon: true,               // VITRIN — satin ALINAMAZ

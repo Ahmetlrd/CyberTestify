@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { renderReportPdf } from './pdf.js';
-import { getPackageDef } from './scanPackages.js';
+import { getPackageDef, localizedPackage } from './scanPackages.js';
 import { getBundle } from './bundles.js';
 import { config } from '../config.js';
 
@@ -185,10 +185,27 @@ function sampleKeyFor(packageKey: string): string {
   return SAMPLE_KEYS.includes(packageKey) ? packageKey : DEFAULT_SAMPLE;
 }
 
-export async function getSampleReportPdf(packageKey: string): Promise<Buffer> {
-  // Istenen anahtar (paket veya bundle) bazinda cache — ayni ornek md'yi paylassalar bile
-  // baslik (packageName) farkli olabilir, o yuzden REQUEST anahtariyla cache'leriz.
-  const cached = pdfCache.get(packageKey);
+// (de LANSMANI) Almanca örnek gövde: <fileKey>.de.md varsa onu OKU; yoksa TR gövdeye düş
+// (chrome yine Almanca render edilir). Böylece Almanca sample .md dosyaları eklendikçe otomatik devreye girer.
+function readSampleMd(fileKey: string, de: boolean): string {
+  if (de) {
+    try { return readFileSync(join(SAMPLES_DIR, `${fileKey}.de.md`), 'utf-8'); } catch { /* yok -> TR fallback */ }
+  }
+  return readFileSync(join(SAMPLES_DIR, `${fileKey}.md`), 'utf-8');
+}
+function readSampleFixMd(fileKey: string, de: boolean): string {
+  if (de) {
+    try { return readFileSync(join(SAMPLES_DIR, `${fileKey}_fix.de.md`), 'utf-8'); } catch { /* yok -> TR fallback */ }
+  }
+  return readFileSync(join(SAMPLES_DIR, `${fileKey}_fix.md`), 'utf-8');
+}
+
+export async function getSampleReportPdf(packageKey: string, locale: 'tr' | 'en' | 'de' = 'tr'): Promise<Buffer> {
+  const de = locale === 'de';
+  // Istenen anahtar (paket veya bundle) + locale bazinda cache — ayni ornek md'yi paylassalar bile
+  // baslik (packageName) farkli olabilir, o yuzden REQUEST anahtari+locale ile cache'leriz.
+  const cacheKey = `${packageKey}|${locale}`;
+  const cached = pdfCache.get(cacheKey);
   if (cached) return cached;
 
   // (GERÇEK ÇIKTI ÖRNEKLERİ) Bu paketlerin örneği, deterministik motorun GERÇEK bir taramadan
@@ -206,22 +223,22 @@ export async function getSampleReportPdf(packageKey: string): Promise<Buffer> {
   let metaPackageKey: string | undefined;
 
   if (real) {
-    md = readFileSync(join(SAMPLES_DIR, `${real.fileKey}.md`), 'utf-8');
+    md = readSampleMd(real.fileKey, de);
     packageName = bundle
-      ? bundle.displayName
-      : getPackageDef(real.fileKey as Parameters<typeof getPackageDef>[0]).displayName;
+      ? (de ? bundle.displayNameDe : bundle.displayName)
+      : localizedPackage(getPackageDef(real.fileKey as Parameters<typeof getPackageDef>[0]), locale).displayName;
     fixMarkdown = config.aiFixFreeCampaign
-      ? readFileSync(join(SAMPLES_DIR, `${real.fileKey}_fix.md`), 'utf-8')
+      ? readSampleFixMd(real.fileKey, de)
       : null;
     assessOverride = undefined; // gerçek gövde -> risk zaten parse edilir
     hostname = real.hostname;
     metaPackageKey = packageKey;
   } else {
     const sampleKey = bundle ? BUNDLE_SAMPLE[packageKey] ?? DEFAULT_SAMPLE : sampleKeyFor(packageKey);
-    md = readFileSync(join(SAMPLES_DIR, `${sampleKey}.md`), 'utf-8');
+    md = readSampleMd(sampleKey, de);
     packageName = bundle
-      ? bundle.displayName
-      : getPackageDef(sampleKey as Parameters<typeof getPackageDef>[0]).displayName;
+      ? (de ? bundle.displayNameDe : bundle.displayName)
+      : localizedPackage(getPackageDef(sampleKey as Parameters<typeof getPackageDef>[0]), locale).displayName;
     // (LANSMAN KAMPANYASI) örnek raporda AI Çözüm Önerileri bölümü AÇIK (temsili içerik). Kapanınca kilitli.
     fixMarkdown = config.aiFixFreeCampaign ? (SAMPLE_FIX_MD[sampleKey] ?? SAMPLE_FIX_MD[DEFAULT_SAMPLE]) : null;
     // (issue #4) Üst "Genel Değerlendirme" kutusu = GÖVDEDEKİ gerçek risk. Statik örnek gövdesinin
@@ -239,7 +256,9 @@ export async function getSampleReportPdf(packageKey: string): Promise<Buffer> {
   // (ORNEK PDF — DÜRÜSTLÜK) Tam Kapsamlı örneği, BİLEREK zafiyetli bırakılmış bir test uygulamasından
   // alınmıştır (bulgu sayısı/şiddeti gerçek sitelerde çok değişir) — bunu raporun başında açıkça belirt.
   const sampleNotice = packageKey === 'bundle_full_pentest'
-    ? 'Bu örnek rapor, bilerek zafiyetli bırakılmış bir test uygulamasından alınmıştır. Gerçek sitelerde bulgu sayısı ve şiddeti hedefin mimarisine göre önemli ölçüde değişir.'
+    ? (de
+        ? 'Dieser Beispielbericht stammt aus einer absichtlich verwundbar belassenen Testanwendung. Bei echten Websites variieren Anzahl und Schweregrad der Befunde je nach Architektur des Ziels erheblich.'
+        : 'Bu örnek rapor, bilerek zafiyetli bırakılmış bir test uygulamasından alınmıştır. Gerçek sitelerde bulgu sayısı ve şiddeti hedefin mimarisine göre önemli ölçüde değişir.')
     : null;
   const pdf = await renderReportPdf(
     md,
@@ -247,11 +266,11 @@ export async function getSampleReportPdf(packageKey: string): Promise<Buffer> {
       hostname,
       packageName,
       createdAt: sampleCreatedAt, // sabit ornek zamani (stabil cikti; PDF'te tarih GOSTERILMEZ)
-      locale: 'tr',
+      locale,
       packageKey: metaPackageKey,
     },
     { fixMarkdown, assessOverride, hideDate: true, sampleNotice }, // (ORNEK PDF) tarih HIC gosterilmez
   );
-  pdfCache.set(packageKey, pdf);
+  pdfCache.set(cacheKey, pdf);
   return pdf;
 }

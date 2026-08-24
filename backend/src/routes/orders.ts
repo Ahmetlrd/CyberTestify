@@ -120,8 +120,8 @@ ordersRouter.get('/bundles', async (req, res) => {
         });
       return {
         key: b.key,
-        displayName: locale === 'en' ? b.displayNameEn : b.displayName,
-        description: locale === 'en' ? b.descriptionEn : b.description,
+        displayName: locale === 'de' ? b.displayNameDe : locale === 'en' ? b.displayNameEn : b.displayName,
+        description: locale === 'de' ? b.descriptionDe : locale === 'en' ? b.descriptionEn : b.description,
         category: b.category,
         discountPct: price.discountPct, // GERCEK indirim (nihai fiyattan turetildi)
         popular: b.popular ?? false,
@@ -148,7 +148,8 @@ ordersRouter.get('/bundles', async (req, res) => {
 // (1) ORNEK RAPOR — PUBLIC (satin almadan once onizleme). Statik/anonim, cache'li PDF.
 ordersRouter.get('/sample-report/:packageKey', async (req, res) => {
   try {
-    const pdf = await getSampleReportPdf(req.params.packageKey);
+    const sampleRegion = typeof req.query.region === 'string' ? req.query.region : 'tr';
+    const pdf = await getSampleReportPdf(req.params.packageKey, localeFor(sampleRegion));
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="cybertestify-ornek-rapor.pdf"');
     // Kampanya (AI bölümü açık/kapalı) örnek içeriği değiştirebildiğinden uzun süreli
@@ -762,22 +763,26 @@ ordersRouter.get('/', requireAuth, async (req, res) => {
     orderBy: { createdAt: 'desc' },
     include: {
       domain: { select: { hostname: true } },
-      package: { select: { displayName: true } },
+      package: { select: { key: true, displayName: true } },
       invoiceRequest: { select: { status: true } },
     },
   });
   res.json(
-    orders.map((o) => ({
+    orders.map((o) => {
+      const lPkgDef = getPackageDef(o.package.key);
+      const lLocale = o.locale === 'de' ? 'de' : o.locale === 'en' ? 'en' : 'tr';
+      return {
       id: o.id,
       hostname: o.domain.hostname,
-      packageName: o.package.displayName,
+      packageName: lPkgDef ? localizedPackage(lPkgDef, lLocale).displayName : o.package.displayName,
       status: customerFacingStatus(o.status),
       createdAt: o.createdAt,
       archived: o.archived,
       // (Fatura talebi) müşteri geçmiş siparişten de talep edebilsin: ödendi mi + mevcut talep durumu.
       paid: o.paidAt != null,
       invoiceStatus: o.invoiceRequest?.status ?? null,
-    })),
+      };
+    }),
   );
 });
 
@@ -916,7 +921,10 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
   // packageName + packageKey (GA event / fatura / canlı-tarama faz metinleri); ham package objesi gönderilmez.
   // (Canlı tarama) "Alan adı sahipliği doğrulandı" satırı YALNIZ DNS-doğrulaması yapılmış paketlerde
   // (aktif paketler) gösterilsin diye domainVerified sinyali eklenir (pasif paketlerde doğrulama yok).
-  res.json({ ...order, status: customerStatus, flow: customerFlow, package: undefined, packageName: order.package.displayName, packageKey: order.package.key, domainVerified: order.domain.verifiedAt != null, report: customerReport, queue });
+  const oPkgDef = getPackageDef(order.package.key);
+  const oPkgLocale = order.locale === 'de' ? 'de' : order.locale === 'en' ? 'en' : 'tr';
+  const oPkgName = oPkgDef ? localizedPackage(oPkgDef, oPkgLocale).displayName : order.package.displayName;
+  res.json({ ...order, status: customerStatus, flow: customerFlow, package: undefined, packageName: oPkgName, packageKey: order.package.key, domainVerified: order.domain.verifiedAt != null, report: customerReport, queue });
 });
 
 // ============================================================================
