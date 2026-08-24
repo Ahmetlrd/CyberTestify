@@ -376,7 +376,7 @@ export default function VerifyHub() {
                 onChange={(e) => setNewHostname(e.target.value)}
               />
               <button type="submit" disabled={busy} className="btn-primary disabled:opacity-60">
-                {busy ? 'Ekleniyor…' : purchaseMode && !activePurchase ? 'Ekle ve devam et' : 'Ekle ve doğrula'}
+                {busy ? 'Ekleniyor…' : purchaseMode && !activePurchase ? 'Ekle ve devam et' : 'Ekle'}
               </button>
             </div>
             {(() => {
