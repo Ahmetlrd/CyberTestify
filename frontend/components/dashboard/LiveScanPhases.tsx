@@ -90,6 +90,25 @@ export function phasesFor(key?: string | null): string[] {
   return (key && PHASE_SETS[key]) || DEFAULT_PHASES;
 }
 
+// (SENKRON) Tek kaynak: hem terminal LOG satırı hem ilerleme çubuğu/halkası BURADAN beslenir → aynı
+// faz index'i → aynı %. % FAZ-bazlıdır (zaman-sabitli DEĞİL): log ilerledikçe çubuk da ilerler, log bir
+// fazda beklerken (ör. login gate) çubuk da bekler. Böylece "log duruyor ama çubuk artıyor" karışıklığı biter.
+export function computeScanProgress(opts: { packageKey?: string | null; startedAt?: string | null; authConfirmedAt?: string | null; now: number; perPhase?: number }): { phases: string[]; idx: number; pct: number; current: string } {
+  const phases = phasesFor(opts.packageKey);
+  const per = opts.perPhase && opts.perPhase > 0 ? opts.perPhase : SECONDS_PER_PHASE;
+  const startMs = opts.startedAt ? new Date(opts.startedAt).getTime() : opts.now;
+  const elapsed = Math.max(0, (opts.now - startMs) / 1000);
+  const rawIdx = Math.min(Math.floor(elapsed / per), phases.length - 1);
+  const gateIdx = opts.packageKey ? AUTH_GATE_IDX[opts.packageKey] : undefined;
+  let idx = rawIdx;
+  if (gateIdx != null) {
+    if (!opts.authConfirmedAt) idx = Math.min(rawIdx, gateIdx);
+    else { const sinceConfirm = Math.max(0, (opts.now - new Date(opts.authConfirmedAt).getTime()) / 1000); idx = Math.min(gateIdx + 1 + Math.floor(sinceConfirm / per), phases.length - 1); }
+  }
+  const pct = Math.min(97, Math.max(5, Math.round(((idx + 0.5) / phases.length) * 100)));
+  return { phases, idx, pct, current: phases[idx] };
+}
+
 // (MANTIK TUTARLILIĞI) Test hesabıyla giriş İÇEREN paketlerde, "oturum açılıyor" fazı SAHTE zamanlayıcıyla
 // GEÇİLMEZ — yanlış kimlik bilgisiyle her şey ✓ görünüp sonra "giriş yapılamadı" demek müşteri için
 // mantıksızdı (bkz support isyanı). Bu index'e ULAŞTIKTAN sonra backend'in GERÇEK authConfirmedAt
@@ -133,24 +152,9 @@ export function LiveScanPhases({
     );
   }
 
-  const PHASES = phasesFor(packageKey);
-  const startMs = startedAt ? new Date(startedAt).getTime() : now;
-  const elapsed = Math.max(0, (now - startMs) / 1000); // sn — YENİLEMEDEN bağımsız (gerçek başlangıçtan)
-  const rawIdx = Math.min(Math.floor(elapsed / perPhase), PHASES.length - 1);
-  // (MANTIK TUTARLILIĞI) Login-fazlı paket: gate index'ine ULAŞINCA, backend'in GERÇEK authConfirmedAt
-  // damgası gelmeden ÖTESİNE SAHTE zamanlayıcıyla GEÇİLMEZ — orada bekler (spinner). Damga gelince
-  // KALAN fazlar o GERÇEK andan itibaren ilerler (hâlâ tahmini süre ama artık gerçek bir olaya bağlı).
-  const gateIdx = packageKey ? AUTH_GATE_IDX[packageKey] : undefined;
-  let idx = rawIdx;
-  if (gateIdx != null) {
-    if (!authConfirmedAt) {
-      idx = Math.min(rawIdx, gateIdx);
-    } else {
-      const sinceConfirm = Math.max(0, (now - new Date(authConfirmedAt).getTime()) / 1000);
-      idx = Math.min(gateIdx + 1 + Math.floor(sinceConfirm / SECONDS_PER_PHASE), PHASES.length - 1);
-    }
-  }
-  const pct = Math.min(92, Math.max(6, Math.round(100 * (1 - Math.exp(-elapsed / 55))))); // ~%92'ye yumuşak yaklaşır
+  // (SENKRON) idx + pct TEK kaynaktan (computeScanProgress) — ScanRunningView halkası da aynı fonksiyonu
+  // kullanır → terminal log satırı, alt çubuk ve üst halka HEP birlikte ilerler.
+  const { phases: PHASES, idx, pct } = computeScanProgress({ packageKey, startedAt, authConfirmedAt, now, perPhase });
 
   return (
     <div className="min-h-[180px] p-5 font-mono text-[13px] leading-7">

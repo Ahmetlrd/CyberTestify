@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { LiveScanPhases, phasesFor } from './LiveScanPhases';
+import { LiveScanPhases, computeScanProgress } from './LiveScanPhases';
 
 /**
  * (Tasarım: Scan Status Page v2) MÜŞTERİ tarama-durumu görünümü — 2 kolon: adım şeridi + otomatik-not
@@ -33,14 +33,10 @@ export function ScanRunningView({ hostname, packageKey, packageName, startedAt, 
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
 
   const isS1 = packageKey === 'redteam_s1';
-  const PHASES = phasesFor(packageKey);
-  const perPhase = secondsPerPhase && secondsPerPhase > 0 ? secondsPerPhase : 9;
-  const startMs = startedAt ? new Date(startedAt).getTime() : now;
-  const elapsed = Math.max(0, (now - startMs) / 1000);
-  const phaseIdx = notStarted ? 0 : Math.min(Math.floor(elapsed / perPhase), PHASES.length - 1);
-  // İlerleme % — FAZ ilerlemesinden (süre-sabitli değil) → S1'in uzun koşusunda yavaş ilerler.
-  const pct = notStarted ? 4 : Math.min(95, Math.max(6, Math.round(((phaseIdx + 0.6) / PHASES.length) * 100)));
-  const currentPhase = notStarted ? 'İzole ortam hazırlanıyor' : PHASES[phaseIdx];
+  // (SENKRON) LiveScanPhases ile AYNI fonksiyon → halka, üst çubuk ve terminal LOG satırı HEP birlikte ilerler.
+  const prog = computeScanProgress({ packageKey, startedAt, authConfirmedAt, now, perPhase: secondsPerPhase });
+  const pct = notStarted ? 4 : prog.pct;
+  const currentPhase = notStarted ? 'İzole ortam hazırlanıyor' : prog.current;
 
   // 4 adımlı üst-düzey şerit (StatusTracker ile aynı anlam): tarama sürerken adım 2 aktif.
   const STEPS = [

@@ -128,13 +128,43 @@ export async function resumeVerifiedDomainOrders(domainId: string): Promise<void
 // (S1) Ödeme sonrası Otonom Red Team dispatch: Order'a 1:1 bağlı RedTeamJob oluştur + runner'ı arka
 // planda tetikle. İdempotent (orderId @unique + idempotencyKey). runner import'u DİNAMİK — orchestrator↔
 // redteam/runner döngüsel bağımlılığını önler. Aşama 2'de runner tamamlanınca Order awaiting_admin_review'e alınır.
-async function dispatchRedTeamS1Order(o: { id: string; customerId: string | null; hostname: string; consentIp: string | null }): Promise<void> {
+async function dispatchRedTeamS1Order(o: { id: string; customerId: string | null; hostname: string; consentIp: string | null; testMode?: boolean }): Promise<void> {
   const existing = await prisma.redTeamJob.findUnique({ where: { orderId: o.id }, select: { id: true } });
   if (existing) {
     console.log(`[redteam-s1] order ${o.id} için RedTeamJob zaten var (${existing.id}) — tekrar tetiklenmedi (idempotent)`);
     return;
   }
   const now = new Date();
+
+  // (TEST MODU) Promo (₺0) S1 siparişi → GERÇEK droplet açılMAZ; ~45sn "taranıyor" gösterip ÖRNEK rapor
+  // üretir + onay kuyruğuna alır. Ödemeli gerçek S1 siparişleri her zaman gerçek koşu yapar. Böylece uçtan
+  // uca akış (satın al → tarama ekranı → rapor → admin onay → indirme) para/zaman/kill-switch olmadan test edilir.
+  if (o.testMode) {
+    const job = await prisma.redTeamJob.create({
+      data: {
+        idempotencyKey: `redteam-order-${o.id}`, orderId: o.id, customerId: o.customerId, domain: o.hostname,
+        level: 'S1', environment: 'prod', ownershipConfirmed: true, riskAccepted: true, prodElevatedAccepted: false,
+        consentIp: o.consentIp, status: 'running', startedAt: now,
+        log: [{ at: now.toISOString(), phase: 'queued', message: `TEST MODU (promo/₺0) — örnek rapor üretilecek, gerçek droplet açılmadı — order ${o.id}` }],
+      },
+    });
+    await prisma.order.update({ where: { id: o.id }, data: { status: 'scan_running' } });
+    setTimeout(() => {
+      void (async () => {
+        try {
+          const { sampleRedTeamReport } = await import('../redteam/sampleReport.js');
+          const { storeRedTeamCustomerReport } = await import('./redteamOrderReport.js');
+          const report = sampleRedTeamReport(o.hostname, new Date().toISOString());
+          await prisma.redTeamJob.update({ where: { id: job.id }, data: { status: 'completed', phase: 'report', finishedAt: new Date(), reportJson: report as any } });
+          await storeRedTeamCustomerReport(o.id, report, { incomplete: false });
+          console.log(`[redteam-s1][TEST] order ${o.id} → örnek rapor + awaiting_admin_review`);
+        } catch (e) { console.error('[redteam-s1][TEST] örnek rapor hatası:', (e as Error).message); }
+      })();
+    }, 45_000);
+    console.log(`[redteam-s1][TEST] order ${o.id} → TEST MODU (gerçek droplet YOK); ~45sn sonra örnek rapor`);
+    return;
+  }
+
   const job = await prisma.redTeamJob.create({
     data: {
       idempotencyKey: `redteam-order-${o.id}`,
@@ -177,7 +207,8 @@ export async function startScanForOrder(orderId: string) {
   // (ownershipConfirmed+riskAccepted) + runner guard'larıyla (pin/egress-deny/watchdog D1-D5) korunur.
   // Koşu tamamlanınca runner Order'ı awaiting_admin_review'e alır (Aşama 2 — mevcut onay kapısı).
   if (order.package.key === 'redteam_s1') {
-    await dispatchRedTeamS1Order({ id: order.id, customerId: order.customerId, hostname: order.domain.hostname, consentIp: null });
+    // Promo (₺0) ile ödenen S1 → TEST MODU (gerçek droplet açmadan örnek rapor). Gerçek ödemeli → gerçek koşu.
+    await dispatchRedTeamS1Order({ id: order.id, customerId: order.customerId, hostname: order.domain.hostname, consentIp: null, testMode: order.paymentProvider === 'promo' });
     return null;
   }
 
