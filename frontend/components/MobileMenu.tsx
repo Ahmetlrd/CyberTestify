@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { RegionSelector } from './RegionSelector';
+import type { RegionCode } from '../config/regions';
 
 /**
  * Mobil (md altı) gezinme menüsü. Nav linkleri desktop'ta `md:flex` ile görünür;
@@ -14,9 +16,11 @@ import Link from 'next/link';
 export function MobileMenu({
   links,
   authLabels,
+  regionCode,
 }: {
   links: Array<[string, string]>;
   authLabels: { login: string; cta: string; panel: string; profile: string };
+  regionCode?: RegionCode; // (çok-bölge) bölge seçici için; >1 görünür bölge olunca RegionSelector belirir
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -80,6 +84,11 @@ export function MobileMenu({
                   </>
                 )}
               </div>
+              {regionCode && (
+                <div className="mt-2 border-t border-line/70 pt-3">
+                  <RegionSelector current={regionCode} />
+                </div>
+              )}
             </div>
           </div>
         </>

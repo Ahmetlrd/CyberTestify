@@ -42,7 +42,7 @@ export function Nav({ region }: { region: RegionConfig }) {
           <div className="hidden items-center gap-2 sm:gap-3 md:flex">
             <AuthNav labels={{ login: d.login, cta: d.cta, panel: d.panel, logout: d.logout, profile: d.profile }} />
           </div>
-          <MobileMenu links={links} authLabels={{ login: d.login, cta: d.cta, panel: d.panel, profile: d.profile }} />
+          <MobileMenu links={links} authLabels={{ login: d.login, cta: d.cta, panel: d.panel, profile: d.profile }} regionCode={region.code} />
         </div>
       </nav>
     </header>
