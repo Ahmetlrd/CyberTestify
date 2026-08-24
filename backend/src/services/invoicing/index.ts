@@ -46,12 +46,22 @@ const deVat: InvoicingProvider = {
   },
 };
 
+// (İngiltere/UK lansmanı — P4) GBP faturalandırma iskeleti; para/tarih İngiliz formatında
+// (Intl 'en-GB': £1,234.56, gün/ay/yıl). Gerçek £ tutarları ve UK VAT oranı iş kararı — uydurulmaz.
+const ukVat: InvoicingProvider = {
+  method: 'uk_vat',
+  async generateInvoice(orderId) {
+    console.log(`[invoicing:uk_vat] (iskelet) Sipariş ${orderId} için UK VAT faturası (GBP, en-GB format) — placeholder.`);
+  },
+};
+
 // Para birimi -> faturalandırma yöntemi (tek yerde; dağıtık if YOK).
 const BY_CURRENCY: Record<string, InvoicingProvider> = {
   TRY: earsiv,
   USD: usReceipt,
   AED: uaeVat,
   EUR: deVat,
+  GBP: ukVat,
 };
 
 export function getInvoicingProvider(currency: string): InvoicingProvider {

@@ -6,7 +6,7 @@ import { SCAN_PACKAGES } from './scanPackages.js';
  * placeholder — gercek pazar kalibrasyonu Vedat tarafindan yapilacak (bkz HANDOFF).
  * Yeni bolge = REGION_CURRENCY + ESTIMATED'e satir eklemek yeterli.
  */
-export const REGION_CURRENCY: Record<string, string> = { tr: 'TRY', us: 'USD', ae: 'AED', de: 'EUR' };
+export const REGION_CURRENCY: Record<string, string> = { tr: 'TRY', us: 'USD', ae: 'AED', de: 'EUR', en: 'GBP' };
 
 /**
  * GECICI TEST OVERRIDE — env TEST_PRICE_OVERRIDE_MINOR set ise TUM fiyatlar (tekil paket,
@@ -75,6 +75,21 @@ const EUR_CENTS: Record<string, number> = {
   autonomous_pentest: 12900, // €129 (hafif advisory — düşük etiket)
 };
 
+// ============================================================================
+// !!! PLACEHOLDER_KULLANICI_ONAYI_GEREKLI — GBP fiyatları (İngiltere/UK lansmanı) !!!
+// ----------------------------------------------------------------------------
+// Bu £ tutarları GERÇEK/NİHAİ DEĞİLDİR. EUR_CENTS'ten YAKLAŞIK ~0.86 GBP/EUR oranıyla
+// türetilip tam-pound'a yuvarlanmış TAHMİNİ değerlerdir (kur türevi bir mekanizma DEĞİL,
+// yalnız otonom-ilerleme için makul başlangıç). Vedat nihai £ rakamlarını girip
+// `npm run seed` çalıştırana kadar bunlar PLACEHOLDER'dır. /en gizli olduğu sürece
+// (VISIBLE_REGION_CODES'ta 'en' YOK) canlı müşteriye ulaşmaz. Nihai fiyatları buraya
+// açıkça girin (kur çevrimiyle DEĞİL). Uyum paketi üyeleri (kvkk/pci/iso) ve S1 /en'de
+// gizli olduğundan dahil edilmedi.
+const GBP_PER_EUR_PLACEHOLDER = 0.86; // PLACEHOLDER kur — yalnız tahmini türetme için
+const GBP_CENTS: Record<string, number> = Object.fromEntries(
+  Object.entries(EUR_CENTS).map(([key, eur]) => [key, Math.round((eur * GBP_PER_EUR_PLACEHOLDER) / 100) * 100]),
+);
+
 const TRY_PER_USD = 47.5; // yaklasik kur — USD turetimi icin
 const AED_PER_USD = 3.67; // sabit (BAE dirhemi USD'ye peg)
 
@@ -90,7 +105,10 @@ export const REGIONAL_PRICING: Record<string, Record<string, number>> = Object.f
     // de: yalnız EUR_CENTS'te AÇIKÇA girilmişse konur (kur türevi YOK); girilmemişse undefined →
     // getPricing TR tutarına düşer (yalnız /de gizliyken geçerli placeholder).
     const de = EUR_CENTS[p.key];
-    return [p.key, { tr: p.priceMinorUnit, us, ae: Math.round(us * AED_PER_USD), ...(de != null ? { de } : {}) }];
+    // en (UK/GBP): PLACEHOLDER — yalnız EUR_CENTS'te açıkça girilmiş paketler için türetilir;
+    // girilmemişse undefined → getPricing TR tutarına düşer (yalnız /en gizliyken geçerli placeholder).
+    const en = GBP_CENTS[p.key];
+    return [p.key, { tr: p.priceMinorUnit, us, ae: Math.round(us * AED_PER_USD), ...(de != null ? { de } : {}), ...(en != null ? { en } : {}) }];
   }),
 );
 

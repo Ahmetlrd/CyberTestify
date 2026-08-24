@@ -75,7 +75,7 @@ export function parseArticles(text: string): { articles: ParsedArticle[]; errors
 
 // --- Dil normalize (cok-dilli blog) -------------------------------------------
 // Desteklenen blog dilleri: tr (varsayilan) ve de. Bilinmeyen -> tr.
-export const BLOG_LANGS = ['tr', 'de'] as const;
+export const BLOG_LANGS = ['tr', 'de', 'en'] as const;
 export function normalizeBlogLang(v: unknown): string {
   return typeof v === 'string' && (BLOG_LANGS as readonly string[]).includes(v) ? v : 'tr';
 }

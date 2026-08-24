@@ -110,7 +110,7 @@ ordersRouter.get('/bundles', async (req, res) => {
     // olarak içeriyor; GDPR içeriği yazılana kadar /de'de yayınlanmaz (P3). Veri SİLİNMEZ, yalnız
     // görünürlük kapalı — /tr'de tam işlevsel kalır. Gelecekte GDPR içeriği gelince buradan kaldırılır.
     COMBO_BUNDLES.filter((b) => b.key !== 'bundle_elite_autonomous')
-      .filter((b) => !(region === 'de' && b.key === 'bundle_compliance'))
+      .filter((b) => !((region === 'de' || region === 'en') && b.key === 'bundle_compliance'))
       .map((b) => {
       const price = bundlePrice(b, region);
       const memberInfo = (keys: string[]) =>
@@ -223,7 +223,7 @@ const createOrderSchema = z.object({
   // disina gitmedigi icin bu riza GEREKMEZ (opsiyonel).
   crossBorderTransfer: z.boolean().optional(),
   // Bolge (fiyat + para birimi). Yoksa tr.
-  region: z.enum(['tr', 'us', 'ae', 'de']).optional().default('tr'),
+  region: z.enum(['tr', 'us', 'ae', 'de', 'en']).optional().default('tr'),
   // (Is 2) true ise odeme yerine hesap kredisinden dus (yeterliyse). Yoksa normal odeme.
   // Promosyon/indirim kodu (opsiyonel). Gecerliyse fiyat dusurulur; %100 -> odeme atlanir.
   promoCode: z.string().trim().max(64).optional(),
@@ -498,7 +498,7 @@ const bundleOrderSchema = z.object({
   withdrawalWaived: z.literal(true),
   // KVKK m.9: yalniz yurt disi AI kullanan bundle'da ZORUNLU (handler'da denetlenir); digerinde opsiyonel.
   crossBorderTransfer: z.boolean().optional(),
-  region: z.enum(['tr', 'us', 'ae', 'de']).optional().default('tr'),
+  region: z.enum(['tr', 'us', 'ae', 'de', 'en']).optional().default('tr'),
   // (FAZ A/E) kimlik-doğrulamalı bundle (bundle_full_pentest) için 3 EK onay da taşınır (yoksa Zod
   // bilinmeyen alanları kırpar -> backend "credentialSharingAccepted yok" der; canlı bug buydu).
   activeTestConsent: z.object({
@@ -829,7 +829,7 @@ const promoPreviewSchema = z.object({
   code: z.string().trim().min(1).max(64),
   packageKey: z.enum(SCAN_PACKAGES.map((p) => p.key) as [string, ...string[]]).optional(),
   bundleKey: z.string().optional(),
-  region: z.enum(['tr', 'us', 'ae', 'de']).optional().default('tr'),
+  region: z.enum(['tr', 'us', 'ae', 'de', 'en']).optional().default('tr'),
 });
 ordersRouter.post('/promo/preview', requireAuth, async (req, res) => {
   const parsed = promoPreviewSchema.safeParse(req.body);

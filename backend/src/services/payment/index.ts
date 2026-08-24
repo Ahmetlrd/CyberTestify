@@ -23,5 +23,8 @@ export function getPaymentProvider(region: string): PaymentProvider {
   // göre order.currency'den EUR işler (bkz iyzico.ts iyziCurrency). NOT: iyzico MoR olmadığından
   // AB-KDV beyanı satıcıya aittir — bilinçli iş kararı.
   if (region === 'de') return iyzicoProvider;
+  // (İngiltere/UK lansmanı — P4) /en → iyzico + GBP (iyzico order.currency'den GBP işler; iyziCurrency).
+  // MoR değil → UK VAT beyanı satıcıya aittir (bilinçli iş kararı).
+  if (region === 'en') return iyzicoProvider;
   return intlProvider();
 }

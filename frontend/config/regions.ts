@@ -9,7 +9,7 @@
  * (bkz HANDOFF.md → çok-bölge notu).
  */
 
-export const REGION_CODES = ['tr', 'us', 'ae', 'de'] as const;
+export const REGION_CODES = ['tr', 'us', 'ae', 'de', 'en'] as const;
 export type RegionCode = (typeof REGION_CODES)[number];
 
 export const DEFAULT_REGION: RegionCode = 'tr';
@@ -94,6 +94,24 @@ export const REGIONS: Record<RegionCode, RegionConfig> = {
     supportEmail: 'support@cybertestify.com',
     companyLegalName: '[Impressum — DE: kullanıcı sağlayacak]',
     legalReady: true, // Almanca yasal TASLAKLAR yayında (Impressum/Datenschutz/AGB/Widerruf) — avukat onayı önerilir
+  },
+  // (İngiltere/UK lansmanı) Altyapı hazır ama /en GÖRÜNMEZ (VISIBLE_REGION_CODES'a EKLENMEDİ) —
+  // kullanıcı sabah cookie region=en ile test edip PDF/ekran doğrulaması sonrası ayrıca public açacak.
+  // lang:'en' → İngilizce sözlük (DICTS.en, zaten us/ae için var). locale:'en-GB' → £1,234.56 + dd/mm/yyyy.
+  // Ödeme: iyzico + GBP (P4). companyLegalName Companies Act 2006 bilgisiyle doldurulacak (kullanıcıdan gerçek bilgi).
+  en: {
+    code: 'en',
+    label: 'United Kingdom',
+    flag: '🇬🇧',
+    locale: 'en-GB',
+    lang: 'en',
+    dir: 'ltr',
+    currency: 'GBP',
+    paymentProvider: 'iyzico', // (P4) /en → iyzico + GBP
+    invoicingMethod: 'uk_vat',
+    supportEmail: 'support@cybertestify.com',
+    companyLegalName: '[UK Legal Entity — kullanıcı sağlayacak (Companies Act 2006)]',
+    legalReady: true, // İngilizce yasal TASLAKLAR (T&C/Privacy/Cancellation/Business Info) — avukat onayı önerilir
   },
 };
 
