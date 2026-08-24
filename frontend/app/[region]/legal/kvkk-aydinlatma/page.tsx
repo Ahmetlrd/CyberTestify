@@ -1,5 +1,5 @@
-import { LegalArticle } from '../../../components/LegalArticle';
-import { COMPANY } from '../../../lib/company';
+import { LegalArticle } from '../../../../components/LegalArticle';
+import { COMPANY } from '../../../../lib/company';
 
 export const metadata = { title: 'KVKK Aydınlatma Metni — CyberTestify', alternates: { canonical: '/legal/kvkk-aydinlatma' } };
 

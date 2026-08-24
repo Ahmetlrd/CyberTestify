@@ -1,4 +1,4 @@
-import { LegalArticle } from '../../../components/LegalArticle';
+import { LegalArticle } from '../../../../components/LegalArticle';
 
 export const metadata = { title: 'Çerez Politikası — CyberTestify', alternates: { canonical: '/legal/cerez' } };
 

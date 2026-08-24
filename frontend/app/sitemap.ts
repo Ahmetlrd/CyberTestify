@@ -31,7 +31,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // canonical veriyorlardı → GSC "kopya" diyordu). Sitemap'e ekleyerek keşif/indeks sinyali güçlenir.
   const legalSlugs = ['kullanim-kosullari', 'gizlilik', 'kvkk-aydinlatma', 'cerez', 'mesafeli-satis', 'on-bilgilendirme', 'iptal-iade', 'sorumluluk-reddi'];
   const legalRoutes: MetadataRoute.Sitemap = legalSlugs.map((slug) => ({
-    url: `${SITE}/legal/${slug}`, lastModified: now, changeFrequency: 'yearly', priority: 0.3,
+    url: `${SITE}/tr/legal/${slug}`, lastModified: now, changeFrequency: 'yearly', priority: 0.3,
   }));
 
   const blogRoutes: MetadataRoute.Sitemap = posts.map((p) => ({

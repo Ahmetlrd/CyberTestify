@@ -62,6 +62,11 @@ export function middleware(req: NextRequest) {
   if (pathname === '/packages') {
     return NextResponse.redirect(new URL(`/${region}/packages`, req.url));
   }
+  // (COK-BOLGE) Legal sayfalar artik bolge-onekli (/{bolge}/legal/...). Eski cıplak /legal/* linkleri
+  // (mail/bookmark/eski iç link) KIRILMASIN diye uygun bolgeye yonlendirilir.
+  if (pathname === '/legal' || pathname.startsWith('/legal/')) {
+    return NextResponse.redirect(new URL(`/${region}${pathname}`, req.url));
+  }
 
   // Uygulama/hukuki/statik/admin rotalar bölge-bağımsız — dokunma.
   return pass();

@@ -58,7 +58,7 @@ export function Footer({ region }: { region: RegionConfig }) {
               <ul className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 {LEGAL_LINKS.map(([label, href]) => (
                   <li key={href}>
-                    <Link href={href} className="text-sm text-white/70 transition hover:text-white">
+                    <Link href={`/${region.code}${href}`} className="text-sm text-white/70 transition hover:text-white">
                       {label}
                     </Link>
                   </li>

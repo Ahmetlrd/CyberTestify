@@ -1,4 +1,4 @@
-import { LegalArticle } from '../../../components/LegalArticle';
+import { LegalArticle } from '../../../../components/LegalArticle';
 
 export const metadata = { title: 'Sorumluluk Reddi — CyberTestify', alternates: { canonical: '/legal/sorumluluk-reddi' } };
 
