@@ -394,7 +394,7 @@ ordersRouter.post('/', createLimiter, requireAuth, async (req, res) => {
         data: {
           customerId: req.customerId!, domainId: domain.id, packageId: packageDb.id,
           amountMinorUnit: 0, currency, status: 'paid', paymentProvider: 'promo', paidAt: new Date(),
-          locale: localeFor(region), ...consent,
+          locale: localeFor(region), region, ...consent,
         },
       });
       await recordPromoUsage(tx, {
@@ -421,6 +421,7 @@ ordersRouter.post('/', createLimiter, requireAuth, async (req, res) => {
       currency,
       status: 'awaiting_payment',
       locale: localeFor(region), // (2) cikti dili bolgeden turetilir
+      region, // (cok-bolge) siparisin geldigi bolge etiketi
       ...consent,
     },
   });
@@ -624,6 +625,7 @@ ordersRouter.post('/bundle', createLimiter, requireAuth, async (req, res) => {
         paymentProvider: promoFree ? 'promo' : 'bundle-placeholder',
         paidAt: promoFree ? new Date() : null,
         locale: localeFor(region),
+        region, // (cok-bolge) siparisin geldigi bolge etiketi
         // (Aktif Doğrulama Paketi) düşük-kapsam uyarısı onayı — ispat için sakla.
         lowScopeWarningShown: parsed.data.lowScopeAcknowledged === true,
         lowScopeWarningAcknowledgedAt: parsed.data.lowScopeAcknowledged === true ? new Date() : null,
@@ -672,6 +674,7 @@ ordersRouter.post('/bundle', createLimiter, requireAuth, async (req, res) => {
           paymentProvider: promoFree ? 'promo' : 'bundle-placeholder',
           paidAt: promoFree ? new Date() : null,
           locale: localeFor(region),
+          region, // (cok-bolge) siparisin geldigi bolge etiketi
           ...consent,
         },
       });

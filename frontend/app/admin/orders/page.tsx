@@ -96,7 +96,14 @@ export default function AdminOrders() {
               columns={['Müşteri', 'Hedef', 'Paket', 'Durum', 'Not', 'Tarih', 'İşlem']}
               rows={data.items.map((o: any) => [
                 o.customerEmail,
-                o.hostname,
+                <span key="h" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {o.hostname}
+                  {o.region && (
+                    <span title={`Bölge: ${o.region}`} style={{ background: '#1e293b', color: '#93c5fd', fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      {o.region}
+                    </span>
+                  )}
+                </span>,
                 o.packageName,
                 <span key="s" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                   <StatusBadge status={o.status} />

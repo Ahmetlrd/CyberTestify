@@ -152,6 +152,7 @@ adminRouter.get('/orders', async (req, res) => {
       where, skip, take, orderBy: { createdAt: 'desc' },
       select: {
         id: true, status: true, amountMinorUnit: true, currency: true, createdAt: true, paidAt: true,
+        region: true,
         failureReason: true, attemptCount: true, refundRequestedAt: true, refundRequestReason: true,
         customer: { select: { email: true } },
         domain: { select: { hostname: true } },
@@ -168,7 +169,7 @@ adminRouter.get('/orders', async (req, res) => {
     page, pageSize, total, statusFilter: status ?? null, refundRequestsPending, reportReviewsPending,
     items: rows.map((o) => ({
       id: o.id, status: o.status, amountMinorUnit: o.amountMinorUnit, currency: o.currency,
-      createdAt: o.createdAt, paidAt: o.paidAt,
+      createdAt: o.createdAt, paidAt: o.paidAt, region: o.region,
       failureReason: o.failureReason, attemptCount: o.attemptCount,
       refundRequestedAt: o.refundRequestedAt, refundRequestReason: o.refundRequestReason,
       customerEmail: o.customer.email, hostname: o.domain.hostname,
