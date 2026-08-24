@@ -44,7 +44,7 @@ const rank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 }
 
 export function validateAndRepairReport(
   markdown: string,
-  opts: { packageKey?: string; locale?: 'tr' | 'en'; fixText?: string; hostname?: string },
+  opts: { packageKey?: string; locale?: 'tr' | 'en' | 'de'; fixText?: string; hostname?: string },
 ): QaResult {
   const loc = opts.locale ?? 'tr';
   const issues: QaIssue[] = [];

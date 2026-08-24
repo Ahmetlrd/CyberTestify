@@ -25,7 +25,7 @@ export interface ReportPdfMeta {
   packageName: string;
   packageKey?: string; // (KVKK pilotu) pakete-ozel render dallanmasi icin
   createdAt: Date;
-  locale: 'tr' | 'en';
+  locale: 'tr' | 'en' | 'de';
 }
 
 export interface ReportPdfOptions {
@@ -84,8 +84,8 @@ const L = {
 // NEGASYON-FARKINDA: "KRITIK: Tespit edilmemistir" gibi "yok" ifadeleri sayilmaz;
 // oncelikle etiketli bulgu siddeti ("Siddet: Orta" / "Severity: High") aranir, yoksa
 // negasyonla-elenen bolum basliklari. applicability ("Uygulanabilirlik: YUKSEK") sayilmaz.
-function assessRisk(md: string, locale: 'tr' | 'en'): { level: 'high' | 'medium' | 'low'; label: string; sentence: string } {
-  const t = L[locale];
+function assessRisk(md: string, locale: 'tr' | 'en' | 'de'): { level: 'high' | 'medium' | 'low'; label: string; sentence: string } {
+  const t = L[locale === 'de' ? 'en' : locale];
   // (a) etiketli bulgu siddeti: "Siddet/Şiddet/Severity: <kw>" — en guvenilir sinyal.
   const labeled = (kw: string) => new RegExp(`(ş|s)iddet\\s*[:：]\\s*[*_> ]*(${kw})|severity\\s*[:：]\\s*[*_> ]*(${kw})`, 'i');
   // (b) bolum basligi "<kw> SEVIYE" / "<kw> (..)" — ama yakininda "yok/tespit edilmemis/none" varsa SAYMA.
@@ -344,7 +344,7 @@ function cleanTitle(raw: string): string {
   return t;
 }
 
-export function parseFindings(md: string, locale: 'tr' | 'en'): { rows: Finding[]; counts: Record<Sev, number> } {
+export function parseFindings(md: string, locale: 'tr' | 'en' | 'de'): { rows: Finding[]; counts: Record<Sev, number> } {
   const counts: Record<Sev, number> = { critical: 0, high: 0, medium: 0, low: 0 };
   const rows: Finding[] = [];
   const seen = new Set<string>();
@@ -389,7 +389,7 @@ export function parseFindings(md: string, locale: 'tr' | 'en'): { rows: Finding[
       // Kanıt en sona bırakılır: başlık/bölümden sınıflanan bulgular (ör. "CSP eksik") kanıttaki
       // yabancı kelimeden (XSS) etkilenmez; yalnız hiç sınıflanamayan satırlar kanıta düşer.
       const fullRowText = c.filter((_, idx) => idx !== sevCol && idx !== confCol).map(stripMd).join(' ');
-      const info = lookupFinding(classifyText, locale) ?? lookupFinding(curSection, locale) ?? lookupFinding(fullRowText, locale);
+      const info = lookupFinding(classifyText, locale === 'de' ? 'en' : locale) ?? lookupFinding(curSection, locale === 'de' ? 'en' : locale) ?? lookupFinding(fullRowText, locale === 'de' ? 'en' : locale);
       const title = info ? info.label : (cleanTitle(rawName) || cleanTitle(curSection) || rawName);
       // Uç nokta: entry kolonundan (nameCol'dan farklıysa). "GET /rest/..." gibi.
       let endpoint = endpointCol !== -1 && endpointCol !== nameCol ? stripMd(c[endpointCol] ?? '') : '';
@@ -431,7 +431,7 @@ const SEV_META: Record<Sev, { tr: string; en: string; cls: string }> = {
 };
 
 // 2.1 Zafiyet Dağılımı — gerçek sayılardan bar grafiği + sayı tablosu (0'lar da çizilir, dürüst).
-function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en', unscannable = false): string {
+function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en' | 'de', unscannable = false): string {
   const order: Sev[] = ['critical', 'high', 'medium', 'low'];
   const max = Math.max(1, ...order.map((s) => counts[s]));
   const total = order.reduce((a, s) => a + counts[s], 0);
@@ -451,7 +451,7 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en', uns
 }
 
 // 2.2 Master Bulgu Tablosu — ID (CT-N) + Başlık + Durum + Şiddet. Boşsa dürüst "temiz" satırı.
-function buildMasterTable(rows: Finding[], locale: 'tr' | 'en', unscannable = false): string {
+function buildMasterTable(rows: Finding[], locale: 'tr' | 'en' | 'de', unscannable = false): string {
   const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const sorted = [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]);
   const head = locale === 'tr' ? ['ID', 'Başlık', 'Durum', 'Şiddet'] : ['ID', 'Title', 'State', 'Severity'];
@@ -482,7 +482,7 @@ function buildMasterTable(rows: Finding[], locale: 'tr' | 'en', unscannable = fa
 // Referans (CWE/OWASP). İş Etkisi/CWE deterministik eşlemeden (findingTaxonomy); eşleme yoksa blok
 // ATLANIR (UYDURMA YOK). Sadece GERÇEK raporlarda (örneklerin kendi İş Etkisi bölümleri zaten var).
 // (Faz 9 — SUNUM) Yönetim Kararı call-out: master COUNTS'tan türer (yeni veri/severity YOK).
-function buildManagementDecision(counts: Record<Sev, number>, locale: 'tr' | 'en'): string {
+function buildManagementDecision(counts: Record<Sev, number>, locale: 'tr' | 'en' | 'de'): string {
   const hi = counts.critical + counts.high;
   const title = locale === 'tr' ? 'Yönetim Kararı' : 'Management Decision';
   let body: string;
@@ -499,7 +499,7 @@ function buildManagementDecision(counts: Record<Sev, number>, locale: 'tr' | 'en
 }
 
 // (Faz 9 — SUNUM) Statik/deterministik Metodoloji + Risk Derecelendirme Kriterleri tabloları (yeni veri YOK).
-function buildMethodologyTables(locale: 'tr' | 'en'): string {
+function buildMethodologyTables(locale: 'tr' | 'en' | 'de'): string {
   const tr = locale === 'tr';
   const mRows = (tr
     ? [['Keşif', 'Hedefin dış yüzeyi, sayfaları ve (SPA ise) JS bundle\'ından gerçek uç/parametreler çıkarılır.'],
@@ -530,7 +530,7 @@ function buildMethodologyTables(locale: 'tr' | 'en'): string {
     <p class="pres-note">${tr ? 'Şiddet yalnız bant etiketidir (sayısal CVSS skoru kullanılmaz); tüm bulgular “gösterge, doğrulama gerekir” çerçevesindedir.' : 'Severity is a band label only (no numeric CVSS score); all findings are framed as “indicator, verification required”.'}</p>`;
 }
 
-function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en'): string {
+function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en' | 'de'): string {
   const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const sorted = [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]);
   const blocks: string[] = [];
@@ -539,8 +539,8 @@ function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en'): string {
     : { state: 'State: Open', ep: 'Affected point', desc: 'Description', how: 'How it was detected', impact: 'Business Impact', fix: 'Recommended Fix', ref: 'Reference' };
   sorted.forEach((f, idx) => {
     if (!f.type) return; // UYDURMA YOK — sınıflanmadıysa kart yazma (bulgu 2.2'de yine görünür)
-    const info = lookupByType(f.type, locale);
-    const det = findingDetail(f.type, locale);
+    const info = lookupByType(f.type, locale === 'de' ? 'en' : locale);
+    const det = findingDetail(f.type, locale === 'de' ? 'en' : locale);
     const sm = SEV_META[f.sev];
     // Açıklama = türe-özgü tanım + (varsa) GERÇEK uç nokta. NASIL TESPİT = önce GERÇEK kanıt (taranan
     // veriden), yoksa türe-özgü zararsız-gösterge yedeği. ÇALIŞAN EXPLOIT YOK — yalnız gösterge.
@@ -565,7 +565,7 @@ function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en'): string {
 // En Acil (yüksek/kritik, config-dışı) · Hızlı Kazanım (sunucu/config, 1-2 gün) · Orta Vadeli (süreç/
 // kod/manuel). UYDURMA YOK — bulgu yoksa madde yok. Yönetici "ne yapmalıyım"ı 30 saniyede alır.
 const CONFIG_TYPES = new Set<FindingType>(['clickjacking', 'mime_sniffing', 'csp_missing', 'referrer_policy', 'hsts_missing', 'weak_tls', 'weak_key', 'cert', 'version_disclosure', 'spf', 'dmarc', 'dkim', 'dnssec', 'cors', 'cookie_flags', 'exposed_files', 'exposed_api_docs']);
-function buildPriorities(rows: Finding[], locale: 'tr' | 'en'): string {
+function buildPriorities(rows: Finding[], locale: 'tr' | 'en' | 'de'): string {
   if (!rows.length) return '';
   const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const urgent: string[] = [], quick: string[] = [], process: string[] = [];
@@ -586,7 +586,7 @@ function buildPriorities(rows: Finding[], locale: 'tr' | 'en'): string {
 // (PREMIUM) Pozitif Güvence — "KONTROL ÖZETİ" tablosunda TEMİZ (✓ / kanıt yok / gösterge yok /
 // vektör yok) çıkan kontrolleri tek blokta toplar. UYDURMA YOK: yalnız gerçekten çalıştırılıp temiz
 // çıkanlar; kapsam-dışı olanlar hariç. Müşteri "neyin GÜVENLİ olduğunu" da görür.
-function buildPositiveAssurance(md: string, locale: 'tr' | 'en'): string {
+function buildPositiveAssurance(md: string, locale: 'tr' | 'en' | 'de'): string {
   const lines = md.split('\n');
   const clean: string[] = [];
   const seen = new Set<string>();
@@ -641,7 +641,7 @@ const GLOSSARY_TERMS: Array<{ re: RegExp; term: string; tr: string; en: string }
   { re: /clickjacking|X-Frame-Options/i, term: 'Clickjacking', tr: 'Sayfanın görünmez iframe içine alınıp kullanıcı tıklamalarının kandırılması.', en: 'Tricking clicks via invisible framing.' },
   { re: /forced browsing|yetki y[üu]kseltme/i, term: 'Forced Browsing', tr: 'Menüde olmayan (ör. yönetici) uç noktalara URL bilerek erişme.', en: 'Accessing hidden endpoints by guessing URLs.' },
 ];
-function buildGlossary(md: string, locale: 'tr' | 'en'): string {
+function buildGlossary(md: string, locale: 'tr' | 'en' | 'de'): string {
   const hits = GLOSSARY_TERMS.filter((g) => g.re.test(md));
   if (hits.length === 0) return '';
   const rows = hits.map((g) => `<tr><td><strong>${escapeHtml(g.term)}</strong></td><td>${escapeHtml(locale === 'tr' ? g.tr : g.en)}</td></tr>`).join('');
@@ -666,7 +666,7 @@ function injectTocIds(html: string): { html: string; entries: { id: string; text
 // TOC: temiz bölüm listesi (numaralı). Sayfa no YAZMIYORUZ — Chromium target-counter'ı
 // desteklemiyor ve Y-tahmini sayfa sınırlarında ±1 sapıyor; YANLIŞ sayfa no yazmak "uydurma
 // sayı yasağı"na aykırı olurdu. Bölüm adları + tıklanır bağlantı (PDF içi) verilir.
-function buildTocPage(entries: { id: string; text: string }[], locale: 'tr' | 'en'): string {
+function buildTocPage(entries: { id: string; text: string }[], locale: 'tr' | 'en' | 'de'): string {
   // TEK numaralandırma: başlık metnindeki manuel "1./2./2.1" ön-eki kullanılır (otomatik <ol> sayacı
   // EKLENMEZ -> "1. 1. Yönetici Özeti" çakışması biter). "N.N" alt bölümler girintili gösterilir.
   const rows = entries.map((e) => {
@@ -720,7 +720,7 @@ function scopeOutControlsFromTable(md: string): Set<string> {
 }
 
 export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions): string {
-  const t = L[meta.locale];
+  const t = L[meta.locale === 'de' ? 'en' : meta.locale];
   const dateStr = meta.createdAt.toLocaleDateString(meta.locale === 'tr' ? 'tr-TR' : 'en-GB', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
@@ -1169,7 +1169,7 @@ export async function renderReportPdf(
   opts: ReportPdfOptions = {},
 ): Promise<Buffer> {
   const html = buildHtml(bodyMarkdown, meta, opts);
-  const t = L[meta.locale];
+  const t = L[meta.locale === 'de' ? 'en' : meta.locale];
   const { reportNo } = reportIdentifiers(meta.hostname, meta.createdAt, opts.hideDate);
   const confidential = meta.locale === 'tr' ? 'Gizli' : 'Confidential';
 

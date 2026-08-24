@@ -57,7 +57,7 @@ export function isDeterministicPackage(key: string): boolean {
   return DETERMINISTIC_GENERATORS[key] !== undefined || key === AUTH_BUNDLE_KEY;
 }
 
-type Locale = 'tr' | 'en';
+type Locale = 'tr' | 'en' | 'de';
 
 /**
  * Ajanin GERCEK bulgularini (tamamlama raporlarini) toplar.
@@ -293,7 +293,9 @@ async function buildRawEvidenceFallback(pentagiFlowId: string, locale: Locale): 
       return `**${i + 1}.** \`${cmd || '(komut)'}\`\n\n\`\`\`\n${out || '(çıktı yok)'}\n\`\`\``;
     });
     const header =
-      locale === 'en'
+      locale === 'de'
+        ? '## Automatisch zusammengestellte Rohnachweise\n\n> Der Scan erreichte den finalen Berichtsschritt nicht (Budget/vorzeitiger Stopp). Nachfolgend die während des Scans gesammelten Rohnachweise (Befehle und Ausgaben) zu Ihrer Information. **Dies ist kein aufbereiteter Kundenbericht**; da es sich um technische Rohdaten handelt, kann er englische Überschriften/Fragmente enthalten. Für eine abschließende Bewertung wird empfohlen, den Scan erneut auszuführen oder diese Daten von einem Experten auswerten zu lassen.'
+        : locale === 'en'
         ? '## Automatically Compiled Raw Evidence\n\n> The scan did not reach the final report-writing step (budget/early stop). Below is the raw evidence (commands and outputs) collected during the scan, for your reference. This is not a polished report; it may contain technical/English fragments.'
         : '## Otomatik Derlenmiş Ham Kanıtlar\n\n> Tarama, nihai rapor-yazma adımına ulaşamadı (bütçe/erken duruş). Aşağıda tarama sırasında toplanan ham kanıtlar (komutlar ve çıktılar) referans için verilmiştir. **Bu, düzenlenmiş bir müşteri raporu değildir**; ham teknik veri olduğu için İngilizce başlıklar/parçalar (ör. HTTP çıktıları, aracın kendi iç notları) içerebilir. Nihai değerlendirme için taramanın yeniden çalıştırılması veya bu verinin bir uzmanca yorumlanması önerilir.';
     return `${header}\n\n${items.join('\n\n')}`;
@@ -316,7 +318,7 @@ export async function generateAndStoreReport(flowId: string) {
   const logs = noPentagi
     ? ({ tasks: [], messageLogs: [], screenshots: [] } as pentagi.FlowLogs)
     : await pentagi.getFlowLogs(flow.pentagiFlowId);
-  const locale: Locale = flow.order.locale === 'en' ? 'en' : 'tr';
+  const locale: Locale = flow.order.locale === 'de' ? 'de' : flow.order.locale === 'en' ? 'en' : 'tr';
 
   // (3) Cozum onerilerini bulgulardan AYIR (ayni akista uretildi, ekstra maliyet yok).
   const split = splitFixSuggestions(collectFindings(logs));
@@ -529,6 +531,18 @@ const T = {
     ],
     fixTitle: 'AI Fix Suggestions', fixNote: 'This section is remediation guidance only; it contains no exploit code.',
   },
+  de: {
+    title: 'Sicherheits-Scan-Bericht', target: 'Ziel', pkg: 'Paket', created: 'Erstellt am',
+    findings: 'Befunde', noFindings: '_In diesem Scan konnten keine berichtsfähigen Befunde erzeugt werden._',
+    screenshots: 'Screenshots', none: '_Keine_', legalTitle: 'Rechtlicher Hinweis & Umfang',
+    legal: [
+      '**KI-generiert:** Dieser Bericht wurde von einem autonomen KI-Agenten erstellt; sachliche Aussagen müssen vor dem Handeln unabhängig überprüft werden.',
+      '**Umfang:** Der Scan ist auf das inhaberschaftsgeprüfte Ziel und ausschließlich **passive** Methoden beschränkt; internes Netzwerk, authentifizierte Tests und Penetrationstests sind AUSSERHALB DES SCOPE.',
+      '**Nicht amtlich:** Dieser Bericht ersetzt kein offizielles Compliance-Audit / keine Zertifizierung (ASV/QSA usw.).',
+      '**Verantwortung:** Die Überprüfung und Behebung der Befunde liegt in der Verantwortung des Kunden.',
+    ],
+    fixTitle: 'KI-Lösungsempfehlungen', fixNote: 'Dieser Abschnitt dient nur der Behebung; er enthält keinen Exploit-Code.',
+  },
 } as const;
 
 // (KVKK PILOTU) KVKK raporunda ajan KENDI yapisini uretir (## Yönetici Özeti + ## Bulgular)
@@ -553,6 +567,12 @@ const FULL_PENTEST_LEGAL_EN = [
   '**Scope:** This scan was performed in an **authenticated (logged-in)** context using the TEST account you provided, with a **limited/controlled autonomous agent** analysis. Real data modification, account-state changes, payment/order completion, and access to third-party accounts are **OUT OF SCOPE and blocked at the code level**.',
   '**Not official:** This report is not a substitute for an official penetration test / compliance audit (ASV/QSA, etc.).',
   '**Responsibility:** Verifying and remediating findings is the customer’s responsibility.',
+];
+const FULL_PENTEST_LEGAL_DE = [
+  '**KI-gestützt:** Dieser Bericht wurde mit deterministischen Backend-Prüfungen plus einer begrenzten/kontrollierten autonomen Agenten-Analyse erstellt; sachliche Aussagen müssen vor dem Handeln unabhängig überprüft werden.',
+  '**Umfang:** Dieser Scan wurde in einem **authentifizierten (angemeldeten)** Kontext mit dem von Ihnen bereitgestellten TEST-Konto durchgeführt. Echte Datenänderungen, Kontostatus-Änderungen, Zahlungs-/Bestellabschluss und der Zugriff auf Drittkonten sind **AUSSERHALB DES SCOPE und auf Code-Ebene blockiert**.',
+  '**Nicht amtlich:** Dieser Bericht ersetzt keinen offiziellen Penetrationstest / kein Compliance-Audit (ASV/QSA usw.).',
+  '**Verantwortung:** Die Überprüfung und Behebung der Befunde liegt in der Verantwortung des Kunden.',
 ];
 
 // (KALİTE) TÜM raporlara EKLEMELİ (mevcut gövdeyi BOZMADAN) — hiçbir generator'da OLMAYAN iki
@@ -586,6 +606,21 @@ function buildCommonSections(packageKey: string | undefined, locale: Locale): st
       authenticated: '1. Prioritise High-severity findings first (authorization/session).\n2. Copy-paste-ready fixes are in the **AI Fix Suggestions** section.\n3. A re-test after remediation is recommended.',
     };
     return `\n\n---\n\n## Methodology & Approach\n\n${METH_EN[kind]}\n\n## Next Steps\n\n${NEXT_EN[kind]}`;
+  }
+  if (locale === 'de') {
+    const METH_DE: Record<string, string> = {
+      passive: 'Dieser Scan verwendet ausschließlich **passive, wenig-invasive** Techniken: Die öffentlichen Antworten des Ziels werden per GET/HEAD/OPTIONS abgerufen, und TLS-Handshakes, DNS-Einträge und HTTP-Header werden auf Code-Ebene ausgewertet. Es werden keine Eingaben injiziert, keine Anmeldung durchgeführt und keine Daten verändert. Die beobachtete Konfiguration wird mit OWASP-/Branchen-Best-Practices verglichen.\n\n**Einschränkungen:** Keine Authentifizierung (login-geschützte Bereiche sind außerhalb des Scope); Anfragen sind timeout-/ratenbegrenzt geschützt; keine Out-of-Band-Kanäle. Die Befunde spiegeln die Antworten zum Scan-Zeitpunkt wider.',
+      compliance: 'Diese Vorabbewertung prüft die öffentlichen Seiten des Ziels passiv, um die **von außen beobachtbaren Bereitschaftsindikatoren** des betreffenden Frameworks zusammenzustellen. Es wird kein endgültiges Compliance-Urteil gefällt; es werden neutrale Statuslabel (Beobachtet / Nicht beobachtet / Zu prüfen) verwendet.\n\n**Einschränkungen:** Nur externe Beobachtung — interne Prozesse, Richtlinien und Verträge sind außerhalb des Scope. Keine Authentifizierung. Dies ist keine Rechtsberatung und kein offizielles Audit.',
+      active: 'Nach dem Prinzip **„nachweisen — nicht ausnutzen“** werden aktive, wenig-invasive Verifizierungsprüfungen ausgeführt: Jeder Eingabepunkt erhält zuerst eine harmlose Basisanfrage, dann eine einzelne unterscheidende Indikator-Prüfung; aus der Antwort-/Timing-Differenz wird ein Schwachstellen-**Indikator** abgeleitet. Schwachstellen werden nicht ausgenutzt, und es werden keine Daten gelesen oder verändert.\n\n**Einschränkungen:** Ein Schutzschalter stoppt die Prüfung bei wiederholten 5xx-/WAF-Antworten. Destruktive Methoden (DELETE/datenschreibendes PUT, echte Befehlsausführung, Exfiltration, DoS) sind auf Code-Ebene blockiert. Keine Authentifizierung. Das Fehlen von Befunden BEWEIST nicht das Fehlen einer Schwachstelle.',
+      authenticated: 'Dieser Scan läuft in einem **authentifizierten (angemeldeten)** Kontext mit dem von Ihnen bereitgestellten TEST-Konto. Autorisierung, Session-Verwaltung, Forced-Browsing und authentifizierte Eingabeprüfungen folgen dem Prinzip **„nachweisen — nicht ausnutzen“**. Ihr Passwort wird niemals an den Agenten/PentAGI gesendet; es wird nur in der deterministischen Session des Backends verwendet.\n\n**Einschränkungen:** Anfragen sind beobachtend/GET-lastig; echte Datenänderung, Kontostatus-Änderungen, Zahlungs-/Bestellabschluss und Cross-Account-Zugriff sind AUSSERHALB DES SCOPE und auf Code-Ebene blockiert.',
+    };
+    const NEXT_DE: Record<string, string> = {
+      passive: '1. Beheben Sie die Punkte unter **„Befunde / Erkannte Risiken“** nach Schweregrad.\n2. Für jeden Befund finden Sie einsatzbereite Fixes im Abschnitt **KI-Lösungsempfehlungen**.\n3. Scannen Sie nach der Behebung mit demselben Paket erneut zur Überprüfung.',
+      compliance: '1. Wenden Sie zuerst die Quick Wins unter **„Prioritäre Maßnahmen“** an.\n2. Ziehen Sie für die abschließende Bewertung den passenden Fachexperten hinzu.\n3. Prüfen Sie nach der Behebung erneut.',
+      active: '1. Reproduzieren und beheben Sie die Indikatoren mit hohem/mittlerem Schweregrad in Ihrer eigenen Umgebung.\n2. Einsatzbereite Fixes finden Sie im Abschnitt **KI-Lösungsempfehlungen**.\n3. Ein Retest nach der Behebung wird empfohlen.',
+      authenticated: '1. Priorisieren Sie zuerst Befunde mit hohem Schweregrad (Autorisierung/Session).\n2. Einsatzbereite Fixes finden Sie im Abschnitt **KI-Lösungsempfehlungen**.\n3. Ein Retest nach der Behebung wird empfohlen.',
+    };
+    return `\n\n---\n\n## Methodik & Ansatz\n\n${METH_DE[kind]}\n\n## Nächste Schritte\n\n${NEXT_DE[kind]}`;
   }
   const METH_TR: Record<string, string> = {
     passive: 'Bu tarama YALNIZCA **pasif ve düşük-etkili** tekniklerle yürütülür: hedefin herkese açık yanıtları GET/HEAD/OPTIONS ile alınır; TLS el sıkışması, DNS kayıtları ve HTTP başlıkları kod düzeyinde çözümlenir. Hiçbir girdi enjekte edilmez, oturum açılmaz, veri değiştirilmez. Gözlemlenen yapılandırma OWASP/endüstri en iyi uygulamalarıyla karşılaştırılır.\n\n**Sınırlamalar:** Kimlik doğrulama yapılmadı (giriş gerektiren alanlar kapsam dışı); istekler zaman aşımı/oran sınırıyla korunur; bant-dışı (out-of-band) kanal kullanılmaz. Bulgular tarama anındaki yanıtları yansıtır.',
@@ -626,7 +661,7 @@ export function renderReportMarkdown(
   const isFullPentest = packageKey === 'bundle_full_pentest';
   const legalTitle = isKvkk ? 'Yasal Uyarı ve Kapsam' : t.legalTitle;
   // (Tam Kapsamlı Pentest) AYRI, DOĞRU disclaimer (authenticated); diğer paketlerin metni DEĞİŞMEZ.
-  const legal = isFullPentest ? (locale === 'en' ? FULL_PENTEST_LEGAL_EN : FULL_PENTEST_LEGAL_TR) : isKvkk ? KVKK_LEGAL : t.legal;
+  const legal = isFullPentest ? (locale === 'de' ? FULL_PENTEST_LEGAL_DE : locale === 'en' ? FULL_PENTEST_LEGAL_EN : FULL_PENTEST_LEGAL_TR) : isKvkk ? KVKK_LEGAL : t.legal;
   // (KALİTE) Ortak bölümler gövdenin ARKASINA, legal'in ÖNÜNE eklenir; ilk sayfa/özet DEĞİŞMEZ.
   const commonBlock = buildCommonSections(packageKey, locale);
   return `# ${isKvkk ? 'KVKK Ön Uyum Kontrol Raporu' : t.title}
