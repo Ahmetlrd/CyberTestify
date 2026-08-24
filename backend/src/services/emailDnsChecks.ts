@@ -78,7 +78,8 @@ export function parseSpf(record: string): { all?: '-' | '~' | '?' | '+'; lookups
 
 const DKIM_SELECTORS = ['default', 'google', 'selector1', 'selector2', 'k1', 'mail', 'dkim', 's1', 's2', 'mandrill', 'mxvault'];
 
-export async function collectEmailDnsEvidence(host: string): Promise<ActiveCheckEvidence> {
+export async function collectEmailDnsEvidence(host: string, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const findings: VFinding[] = []; const notes: string[] = [];
   const org = getOrgDomain(host);
   let queries = 0;
@@ -93,18 +94,18 @@ export async function collectEmailDnsEvidence(host: string): Promise<ActiveCheck
   let dmarcRec = ''; let dmarcLevel = '';
   const subDmarc = host !== org ? await txt(`_dmarc.${host}`) : []; queries++;
   const subHit = subDmarc.find((r) => /v=dmarc1/i.test(r));
-  if (subHit) { dmarcRec = subHit; dmarcLevel = `alt-alan (${host})`; }
-  else { const orgD = await txt(`_dmarc.${org}`); queries++; const oh = orgD.find((r) => /v=dmarc1/i.test(r)); if (oh) { dmarcRec = oh; dmarcLevel = `org-alan (${org})`; } }
+  if (subHit) { dmarcRec = subHit; dmarcLevel = t(`alt-alan (${host})`, `Subdomain (${host})`); }
+  else { const orgD = await txt(`_dmarc.${org}`); queries++; const oh = orgD.find((r) => /v=dmarc1/i.test(r)); if (oh) { dmarcRec = oh; dmarcLevel = t(`org-alan (${org})`, `Organisationsdomäne (${org})`); } }
   if (!dmarcRec) {
     push({ check: 'dmarc_missing', severity: dl('medium'), evidence: `\`${org}\` için DMARC kaydı (_dmarc TXT) **gözlenmedi** — alan adına yapılan e-posta spoofing'i alıcıda politikayla reddedilemez (gösterge)${mailNuance}. En az \`p=quarantine\`/\`reject\` önerilir.` });
   } else {
     const d = parseDmarc(dmarcRec);
     notes.push(`DMARC ${dmarcLevel}: \`${dmarcRec}\``);
-    if (d.p === 'reject' && (d.pct === undefined || d.pct === 100)) notes.push('DMARC **p=reject + pct=100** — güçlü anti-spoofing politikası (olumlu).');
+    if (d.p === 'reject' && (d.pct === undefined || d.pct === 100)) notes.push(t('DMARC **p=reject + pct=100** — güçlü anti-spoofing politikası (olumlu).', 'DMARC **p=reject + pct=100** — starke Anti-Spoofing-Richtlinie (positiv).'));
     else if (d.p === 'none') push({ check: 'dmarc_policy_weak', severity: dl('medium'), evidence: `DMARC **p=none** (${dmarcLevel}) — yalnız izleme; spoofing e-postaları alıcıda engellenmiyor (gösterge)${mailNuance}. \`p=quarantine\`→\`reject\` kademeli sıkılaştırma önerilir.` });
     else if (d.p === 'quarantine' || (d.pct !== undefined && d.pct < 100)) push({ check: 'dmarc_policy_partial', severity: 'low', evidence: `DMARC **p=${d.p ?? '?'}${d.pct !== undefined ? `, pct=${d.pct}` : ''}** (${dmarcLevel}) — kısmi uygulama; \`p=reject, pct=100\`'e yükseltilebilir (gösterge).` });
     if (host !== org && d.sp === 'none') push({ check: 'dmarc_subdomain_open', severity: dl('medium'), evidence: `Org-alan DMARC **sp=none** — alt-alanlar (\`${host}\` dahil) DMARC korumasız (gösterge)${mailNuance}.` });
-    if (!d.hasRua) notes.push('DMARC \`rua=\` raporlaması yok — spoofing denemeleri görünmez (olgunluk göstergesi).');
+    if (!d.hasRua) notes.push(t('DMARC \`rua=\` raporlaması yok — spoofing denemeleri görünmez (olgunluk göstergesi).', 'Keine DMARC-\`rua=\`-Berichterstattung — Spoofing-Versuche bleiben unsichtbar (Reifegrad-Indikator).'));
   }
 
   // ---- G2: SPF derinliği ----
@@ -115,8 +116,8 @@ export async function collectEmailDnsEvidence(host: string): Promise<ActiveCheck
     const s = parseSpf(spfRec); notes.push(`SPF: \`${spfRec}\``);
     if (s.all === '+') push({ check: 'spf_permissive', severity: 'high', evidence: `SPF **+all** — HERKES bu alan adına e-posta gönderebilir (spoofing'e tamamen açık). \`-all\` (hardfail) olmalı.` });
     else if (s.all === '?') push({ check: 'spf_neutral', severity: dl('medium'), evidence: `SPF **?all** (neutral) — yetkisiz göndereni açıkça reddetmiyor (gösterge)${mailNuance}. \`-all\` önerilir.` });
-    else if (s.all === '~') notes.push('SPF **~all** (softfail) — kabul edilebilir; kesin koruma için \`-all\` düşünülebilir.');
-    else if (s.all === '-') notes.push('SPF **-all** (hardfail) — güçlü SPF politikası (olumlu).');
+    else if (s.all === '~') notes.push(t('SPF **~all** (softfail) — kabul edilebilir; kesin koruma için \`-all\` düşünülebilir.', 'SPF **~all** (softfail) — akzeptabel; für strikten Schutz kann \`-all\` erwogen werden.'));
+    else if (s.all === '-') notes.push(t('SPF **-all** (hardfail) — güçlü SPF politikası (olumlu).', 'SPF **-all** (hardfail) — starke SPF-Richtlinie (positiv).'));
     if (s.lookups > 10) push({ check: 'spf_too_many_lookups', severity: 'medium', evidence: `SPF üst-seviye DNS-arama mekanizması sayısı **${s.lookups}** — RFC 7208 sınırı 10; aşımda **PermError** ile SPF geçersiz kalabilir (gösterge; tam özyineli genişletme yapılmadı).` });
   }
 
@@ -130,16 +131,16 @@ export async function collectEmailDnsEvidence(host: string): Promise<ActiveCheck
     if (pm && pm[1].trim() === '') revoked = true;
     else if (pm && pm[1].length < 250) weakKey = true; // ~1024-bit RSA (yaklaşık)
   }
-  if (foundSelectors.length === 0) notes.push('DKIM: yaygın seçicilerde (default/google/selector1…) kayıt **gözlenmedi** — kesin yokluk DEĞİL; özel seçici kullanılıyor olabilir (dürüst).');
+  if (foundSelectors.length === 0) notes.push(t('DKIM: yaygın seçicilerde (default/google/selector1…) kayıt **gözlenmedi** — kesin yokluk DEĞİL; özel seçici kullanılıyor olabilir (dürüst).', 'DKIM: Bei den gängigen Selektoren (default/google/selector1…) wurde **kein Eintrag beobachtet** — KEIN sicheres Fehlen; möglicherweise wird ein eigener Selektor verwendet (ehrlich).'));
   else {
-    notes.push(`DKIM seçici bulundu: **${foundSelectors.join(', ')}** (${foundSelectors.length}).`);
+    notes.push(t(`DKIM seçici bulundu: **${foundSelectors.join(', ')}** (${foundSelectors.length}).`, `DKIM-Selektor(en) gefunden: **${foundSelectors.join(', ')}** (${foundSelectors.length}).`));
     if (revoked) push({ check: 'dkim_revoked', severity: 'low', evidence: `Bir DKIM seçicisinde \`p=\` **boş** — iptal edilmiş/devre-dışı anahtar (gösterge).` });
     if (weakKey) push({ check: 'dkim_weak_key', severity: 'low', evidence: `Bir DKIM seçicisinde anahtar **~1024-bit** görünüyor (yaklaşık) — 2048-bit önerilir (gösterge).` });
   }
 
   // ---- G4: MTA-STS (TXT + tek güvenli GET) ----
   const stsTxt = (await txt(`_mta-sts.${org}`)).find((r) => /v=stsv1/i.test(r)); queries++;
-  if (!stsTxt) notes.push('MTA-STS: \`_mta-sts\` TXT gözlenmedi — SMTP MITM/downgrade koruması yok (düşük/olgunluk göstergesi).');
+  if (!stsTxt) notes.push(t('MTA-STS: \`_mta-sts\` TXT gözlenmedi — SMTP MITM/downgrade koruması yok (düşük/olgunluk göstergesi).', 'MTA-STS: \`_mta-sts\`-TXT nicht beobachtet — kein Schutz gegen SMTP-MITM/Downgrade (niedrig/Reifegrad-Indikator).'));
   else {
     let mode = ''; const url = `https://mta-sts.${org}/.well-known/mta-sts.txt`;
     try {
@@ -149,27 +150,27 @@ export async function collectEmailDnsEvidence(host: string): Promise<ActiveCheck
       logScanStep({ step: 'E-posta & DNS Derinliği', method: 'GET', url, status: res.status, durationMs: Date.now() - t0 });
       const mm = body.match(/mode\s*:\s*(enforce|testing|none)/i); mode = mm ? mm[1].toLowerCase() : '';
     } catch { logScanStep({ step: 'E-posta & DNS Derinliği', method: 'GET', url, status: 0, level: 'warn' }); }
-    if (mode === 'enforce') notes.push('MTA-STS **mode=enforce** — SMTP downgrade koruması etkin (olumlu).');
+    if (mode === 'enforce') notes.push(t('MTA-STS **mode=enforce** — SMTP downgrade koruması etkin (olumlu).', 'MTA-STS **mode=enforce** — Schutz gegen SMTP-Downgrade aktiv (positiv).'));
     else push({ check: 'mta_sts_weak', severity: 'low', evidence: `MTA-STS politikası **mode=${mode || 'okunamadı/none'}** — \`enforce\` değil; SMTP MITM/downgrade'e karşı zorlayıcı koruma yok (gösterge).` });
   }
 
   // ---- G5: TLS-RPT ----
   const tlsRpt = (await txt(`_smtp._tls.${org}`)).find((r) => /v=tlsrptv1/i.test(r)); queries++;
-  if (tlsRpt) notes.push('TLS-RPT etkin — SMTP TLS hataları raporlanıyor (olumlu/olgunluk).');
-  else notes.push('TLS-RPT (\`_smtp._tls\` TXT) gözlenmedi — SMTP TLS teslim sorunları raporlanmıyor (bilgilendirici).');
+  if (tlsRpt) notes.push(t('TLS-RPT etkin — SMTP TLS hataları raporlanıyor (olumlu/olgunluk).', 'TLS-RPT aktiv — SMTP-TLS-Fehler werden gemeldet (positiv/Reifegrad).'));
+  else notes.push(t('TLS-RPT (\`_smtp._tls\` TXT) gözlenmedi — SMTP TLS teslim sorunları raporlanmıyor (bilgilendirici).', 'TLS-RPT (\`_smtp._tls\`-TXT) nicht beobachtet — SMTP-TLS-Zustellungsprobleme werden nicht gemeldet (informativ).'));
 
   // ---- G6: DNSSEC (yalnız gözlem — AD bayrağı) ----
   const sec = await queryDnssec(org); queries++;
-  if (sec.ok && sec.ad && sec.answers > 0) notes.push('DNSSEC: alan **imzalı ve doğrulandı** (AD bayrağı) — DNS bütünlüğü korumalı (olumlu).');
+  if (sec.ok && sec.ad && sec.answers > 0) notes.push(t('DNSSEC: alan **imzalı ve doğrulandı** (AD bayrağı) — DNS bütünlüğü korumalı (olumlu).', 'DNSSEC: Die Domäne ist **signiert und validiert** (AD-Flag) — DNS-Integrität geschützt (positiv).'));
   else push({ check: 'dnssec_missing', severity: 'low', evidence: `DNSSEC gözlenmedi (\`${org}\` imzasız/doğrulanamadı — AD bayrağı yok) — DNS-spoofing/cache-poisoning'e karşı imzasız (gösterge; yalnız gözlem, çözümleyici saldırısı yapılmadı).` });
 
   // ---- G7: CAA + BIMI (bilgilendirici) ----
   let caa: any[] = []; try { caa = await dns.resolveCaa(org); } catch { caa = []; } queries++;
   if (caa.length === 0) push({ check: 'caa_missing', severity: 'low', evidence: `CAA kaydı **gözlenmedi** — herhangi bir CA \`${org}\` için sertifika verebilir (yanlış-verilme riski göstergesi). CAA ile yetkili CA'lar kısıtlanabilir.` });
-  else notes.push(`CAA kaydı mevcut (${caa.length}) — sertifika verme kısıtlı (olumlu).`);
+  else notes.push(t(`CAA kaydı mevcut (${caa.length}) — sertifika verme kısıtlı (olumlu).`, `CAA-Eintrag vorhanden (${caa.length}) — Zertifikatsausstellung eingeschränkt (positiv).`));
   const bimi = (await txt(`default._bimi.${org}`)).find((r) => /v=bimi1/i.test(r)); queries++;
-  notes.push(bimi ? 'BIMI kaydı mevcut — marka göstergesi (olgunluk).' : 'BIMI (\`default._bimi\` TXT) gözlenmedi — bilgilendirici, güvenlik etkisi yok.');
+  notes.push(bimi ? t('BIMI kaydı mevcut — marka göstergesi (olgunluk).', 'BIMI-Eintrag vorhanden — Marken-Indikator (Reifegrad).') : t('BIMI (\`default._bimi\` TXT) gözlenmedi — bilgilendirici, güvenlik etkisi yok.', 'BIMI (\`default._bimi\`-TXT) nicht beobachtet — informativ, keine Sicherheitsauswirkung.'));
 
-  notes.push(`Sorgulanan org-alan: **${org}**${host !== org ? ` (hedef alt-alan: ${host})` : ''}. Toplam **${queries}** pasif DNS sorgusu + en fazla 1 güvenli MTA-STS GET. Saldırı/state-değişimi/çözümleyici-saldırısı YOK.`);
+  notes.push(t(`Sorgulanan org-alan: **${org}**${host !== org ? ` (hedef alt-alan: ${host})` : ''}. Toplam **${queries}** pasif DNS sorgusu + en fazla 1 güvenli MTA-STS GET. Saldırı/state-değişimi/çözümleyici-saldırısı YOK.`, `Abgefragte Organisationsdomäne: **${org}**${host !== org ? ` (Ziel-Subdomain: ${host})` : ''}. Insgesamt **${queries}** passive DNS-Abfragen + höchstens 1 sicherer MTA-STS-GET. KEIN Angriff/Zustandsänderung/Resolver-Angriff.`));
   return { ok: true, pagesScanned: 0, inputsFound: queries, probesSent: queries, findings, stopped: null, notes };
 }

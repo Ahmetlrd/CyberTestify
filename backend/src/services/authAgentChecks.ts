@@ -26,14 +26,15 @@ const DOMFORM_PRIV_NAME_RE = /^(role|roles|isadmin|is[_-]?admin|admin|privilege|
 const DOMFORM_PRICE_NAME_RE = /^(price|amount|total|cost|fiyat|tutar|qty|quantity|adet|discount|indirim|coupon|kupon|miktar|balance|credit|bakiye)$/i;
 
 /** (İŞ 2) domForm'da istemciye AÇIĞA ÇIKMIŞ bir yetki alanı (role/isAdmin/...) var mı? SALT-OKUNUR gözlem. */
-function domFormPrivObservation(dom: { url: string; fields: string[]; interesting: string[] }): VFinding | null {
+function domFormPrivObservation(dom: { url: string; fields: string[]; interesting: string[] }, de: boolean = false): VFinding | null {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const priv = dom.interesting.filter((f) => DOMFORM_PRIV_NAME_RE.test(f));
   if (!priv.length) return null; // yetki alanı DOM'da açığa çıkmamış -> gösterge yok (dürüst)
   let ip = dom.url; try { const u = new URL(dom.url); ip = `${u.pathname}${u.hash}` || dom.url; } catch { /* yoksay */ }
   return {
     check: 'privilege_escalation', inputPoint: ip, vulnerable: true,
     technique: `client-exposed privilege field (${priv.join(', ')})`,
-    evidence: `Kayıt/profil formunda istemciye açık bir yetki alanı gözlemlendi: \`${priv.join('`, `')}\`. Sunucu bu alanı yok saymıyorsa mass-assignment ile yetki yükseltme riski. **Form SUBMIT EDİLMEDİ** — bu salt-okunur bir DOM gözlemidir; kesin doğrulama manuel test gerektirir.`,
+    evidence: t(`Kayıt/profil formunda istemciye açık bir yetki alanı gözlemlendi: \`${priv.join('`, `')}\`. Sunucu bu alanı yok saymıyorsa mass-assignment ile yetki yükseltme riski. **Form SUBMIT EDİLMEDİ** — bu salt-okunur bir DOM gözlemidir; kesin doğrulama manuel test gerektirir.`, `In einem Registrierungs-/Profilformular wurde ein clientseitig offengelegtes Berechtigungsfeld beobachtet: \`${priv.join('`, `')}\`. Wenn der Server dieses Feld nicht ignoriert, besteht die Gefahr einer Rechteausweitung per Mass-Assignment. **Das Formular wurde NICHT abgesendet** — dies ist eine schreibgeschützte DOM-Beobachtung; eine eindeutige Bestätigung erfordert einen manuellen Test.`),
     confidence: 'low', severity: 'medium', sideEffectRisk: 'none',
   };
 }
@@ -81,7 +82,8 @@ function deriveAgentStatus(surf: Surface, scenarios: AuthAgentSuggestion[] | nul
 // ======================================================================================
 // D.1 — YETKİ YÜKSELTME (privilege escalation) DOĞRULAMA
 // ======================================================================================
-async function massAssignObservation(ctx: ProbeCtx, host: string, action: string, fields: string[]): Promise<VFinding | null> {
+async function massAssignObservation(ctx: ProbeCtx, host: string, action: string, fields: string[], de: boolean = false): Promise<VFinding | null> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   // BACKEND-BİRİNCİL GUARD: hesap-değiştiren/checkout hedefine ASLA yazma.
   if (AUTH_WRITE_BLOCKLIST_RE.test(action)) return null;
   // (İş 3) Aktif Doğrulama'daki formCategory sınıflandırıcısıyla AYNI kapı: YASAK tür (kayıt/iletişim/
@@ -96,17 +98,18 @@ async function massAssignObservation(ctx: ProbeCtx, host: string, action: string
   if (r && (r.status === 200 || r.status === 201 || r.status === 302) && !/(error|hata|invalid|geçersiz|reddedil|not allowed|zorunlu|required)/i.test(r.text.slice(0, 3000))) {
     return {
       check: 'privilege_escalation', inputPoint: new URL(action).pathname, vulnerable: true,
-      technique: 'mass-assignment (role/isAdmin ek alan)',
-      evidence: `Kayıt/profil benzeri forma fazladan \`role/isAdmin\` alanları eklendiğinde istek açık bir reddedilme olmadan kabul edildi (HTTP ${r.status}). Yetki yükseltme GÖSTERGESİ; gerçek yükseltme DOĞRULANMADI (tamamlama yapılmadı, yükseltilmiş yetkiyle tekrar giriş yapılmadı, oturum dışına çıkılmadı).`,
+      technique: t('mass-assignment (role/isAdmin ek alan)', 'Mass-Assignment (Zusatzfeld role/isAdmin)'),
+      evidence: t(`Kayıt/profil benzeri forma fazladan \`role/isAdmin\` alanları eklendiğinde istek açık bir reddedilme olmadan kabul edildi (HTTP ${r.status}). Yetki yükseltme GÖSTERGESİ; gerçek yükseltme DOĞRULANMADI (tamamlama yapılmadı, yükseltilmiş yetkiyle tekrar giriş yapılmadı, oturum dışına çıkılmadı).`, `Als einem registrierungs-/profilähnlichen Formular zusätzliche \`role/isAdmin\`-Felder hinzugefügt wurden, wurde die Anfrage ohne ausdrückliche Ablehnung akzeptiert (HTTP ${r.status}). INDIKATOR für Rechteausweitung; eine tatsächliche Ausweitung wurde NICHT bestätigt (kein Abschluss durchgeführt, keine erneute Anmeldung mit erhöhter Berechtigung, kein Verlassen der Sitzung).`),
       confidence: 'low', severity: 'medium', sideEffectRisk: 'possible',
     };
   }
   return null;
 }
 
-export async function collectPrivilegeEscalationEvidence(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+export async function collectPrivilegeEscalationEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const surf = await discoverSurface(host, session);
-  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.')] };
   const ctx = new ProbeCtx();
   ctx.authHeaders = applyAuthHeaders({}, session);
   const findings: VFinding[] = [];
@@ -121,12 +124,12 @@ export async function collectPrivilegeEscalationEvidence(host: string, session: 
     const { action, fields } = surf.massAssignForm;
     let p = action; try { p = new URL(action).pathname; } catch { /* ham */ }
     const forb = forbiddenFormReason(action, fields); const cat = formCategory(action, fields);
-    if (forb) notes.push(`Mass-assignment adayı form (${p}) YASAK türe girdiğinden gerçek POST'tan hariç tutuldu: ${forb}. Bu kontrol için güvenle test edilebilir bir yetki formu değildir.`);
-    else if (cat === 'login' || cat === 'search') notes.push(`Aday form (${p}, ${cat}) yetki-yükseltme/over-posting hedefi değildir — atlandı.`);
-    else { detProbed = true; probedActions.add(action); const f = await massAssignObservation(ctx, host, action, fields); if (f) findings.push(f); }
+    if (forb) notes.push(t(`Mass-assignment adayı form (${p}) YASAK türe girdiğinden gerçek POST'tan hariç tutuldu: ${forb}. Bu kontrol için güvenle test edilebilir bir yetki formu değildir.`, `Das Mass-Assignment-Kandidatenformular (${p}) wurde vom tatsächlichen POST ausgeschlossen, da es zu einem VERBOTENEN Typ gehört: ${forb}. Für diese Prüfung ist es kein sicher testbares Berechtigungsformular.`));
+    else if (cat === 'login' || cat === 'search') notes.push(t(`Aday form (${p}, ${cat}) yetki-yükseltme/over-posting hedefi değildir — atlandı.`, `Das Kandidatenformular (${p}, ${cat}) ist kein Ziel für Rechteausweitung/Over-Posting — übersprungen.`));
+    else { detProbed = true; probedActions.add(action); const f = await massAssignObservation(ctx, host, action, fields, de); if (f) findings.push(f); }
   }
   //  (b) DOM'da açığa çıkmış yetki alanları (salt-okunur gözlem; İSTEK YOK) — her zaman.
-  for (const dom of surf.domForms) { const f = domFormPrivObservation(dom); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) { findings.push(f); detProbed = true; } }
+  for (const dom of surf.domForms) { const f = domFormPrivObservation(dom, de); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) { findings.push(f); detProbed = true; } }
 
   // (YARDIMCI/İKİNCİL) advisory — ek aday seçerse deterministik güvenli probe'dan geçirilir. Kanıt DEĞİL.
   const advisorOn = authAdvisorAllowed(host); // (deney) advisory VARSAYILAN KAPALI — yalnız izin verilen hedeflerde
@@ -137,23 +140,23 @@ export async function collectPrivilegeEscalationEvidence(host: string, session: 
     for (const s of scenarios.filter((x) => x.check === 'privilege_escalation').slice(0, 3)) {
       if (ctx.stopped) break;
       const dom = surf.domForms.find((d) => s.inputPoint.includes(d.url));
-      if (dom) { const f = domFormPrivObservation(dom); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) { findings.push(f); detProbed = true; } continue; }
+      if (dom) { const f = domFormPrivObservation(dom, de); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) { findings.push(f); detProbed = true; } continue; }
       const action = absUrl(host, s.inputPoint.replace(/^\w+\s+/, '').split('?')[0]);
       if (!action || probedActions.has(action)) continue;
       const fields = surf.massAssignForm && surf.massAssignForm.action === action ? surf.massAssignForm.fields : ['email', 'username'];
       probedActions.add(action);
-      const f = await massAssignObservation(ctx, host, action, fields); // içi YASAK/login/arama guard'lı
-      if (f) { f.technique = 'AI advisory seçti + backend güvenli uyguladı: ' + f.technique; findings.push(f); detProbed = true; }
+      const f = await massAssignObservation(ctx, host, action, fields, de); // içi YASAK/login/arama guard'lı
+      if (f) { f.technique = t('AI advisory seçti + backend güvenli uyguladı: ', 'Von KI-Advisory ausgewählt + vom Backend sicher ausgeführt: ') + f.technique; findings.push(f); detProbed = true; }
     }
   }
 
   // (DÜRÜSTLÜK) "denedi, temiz" ≠ "uygun yüzey yok". Advisory tek başına kanıt sayılmaz.
   if (!detProbed) {
-    notes.push('Yetki-yükseltme için GÜVENLE test edilebilir (YASAK olmayan; kayıt/profil/ayar tipi) bir form/uç bu hedefte bulunamadı — bu kontrol **İncelenemedi** (deterministik prob için uygun authenticated yüzey yok). Not: bazı açıklar (API’de gizli `role` kabulü vb.) UI/DOM’da görünmez; kesin sonuç manuel test gerektirir.');
+    notes.push(t('Yetki-yükseltme için GÜVENLE test edilebilir (YASAK olmayan; kayıt/profil/ayar tipi) bir form/uç bu hedefte bulunamadı — bu kontrol **İncelenemedi** (deterministik prob için uygun authenticated yüzey yok). Not: bazı açıklar (API’de gizli `role` kabulü vb.) UI/DOM’da görünmez; kesin sonuç manuel test gerektirir.', 'Ein für Rechteausweitung SICHER testbares Formular/Endpunkt (nicht verboten; Typ Registrierung/Profil/Einstellungen) wurde bei diesem Ziel nicht gefunden — diese Prüfung wurde **nicht durchgeführt** (keine geeignete authentifizierte Oberfläche für den deterministischen Prob). Hinweis: Einige Schwachstellen (z. B. verstecktes Akzeptieren von `role` in der API) sind in UI/DOM nicht sichtbar; ein eindeutiges Ergebnis erfordert einen manuellen Test.'));
   } else if (!findings.length) {
-    notes.push('Keşfedilen authenticated form(lar)a gözlemsel mass-assignment probu (`role/isAdmin` ek alan) gönderildi; sunucu açık bir reddetme ile karşıladı — yetki-yükseltme göstergesi **bulunamadı** (deterministik sonuç — advisory değil, gerçek gözlem).');
+    notes.push(t('Keşfedilen authenticated form(lar)a gözlemsel mass-assignment probu (`role/isAdmin` ek alan) gönderildi; sunucu açık bir reddetme ile karşıladı — yetki-yükseltme göstergesi **bulunamadı** (deterministik sonuç — advisory değil, gerçek gözlem).', 'An das/die entdeckte(n) authentifizierte(n) Formular(e) wurde ein beobachtender Mass-Assignment-Prob (Zusatzfeld `role/isAdmin`) gesendet; der Server antwortete mit einer ausdrücklichen Ablehnung — es wurde **kein** Indikator für Rechteausweitung gefunden (deterministisches Ergebnis — keine Advisory, sondern eine tatsächliche Beobachtung).'));
   }
-  if (scenarios !== null && agentStatus === 'analyzed') notes.push('AI advisory bu yüzeyi ayrıca analiz etti (yardımcı bağlam; nihai karar deterministik prob/gözleme dayanır — advisory tek başına kanıt sunulmaz).');
+  if (scenarios !== null && agentStatus === 'analyzed') notes.push(t('AI advisory bu yüzeyi ayrıca analiz etti (yardımcı bağlam; nihai karar deterministik prob/gözleme dayanır — advisory tek başına kanıt sunulmaz).', 'Die KI-Advisory hat diese Oberfläche zusätzlich analysiert (unterstützender Kontext; die endgültige Bewertung beruht auf dem deterministischen Prob/der Beobachtung — die Advisory allein wird nicht als Nachweis vorgelegt).'));
   if (ctx.stopped) notes.push(ctx.stopped);
   // (DÜRÜSTLÜK) inputsFound = GERÇEKTEN deterministik test edilen yüzey. detProbed yoksa 0 -> rapor "İncelenemedi".
   const inputsFound = detProbed ? ((surf.massAssignForm ? 1 : 0) + surf.domForms.length) : 0;
@@ -163,9 +166,10 @@ export async function collectPrivilegeEscalationEvidence(host: string, session: 
 // ======================================================================================
 // D.2 — ÇOK-ADIMLI İŞ MANTIĞI (GET-only gözlem; ödeme/checkout TAMAMLAMA YOK)
 // ======================================================================================
-export async function collectMultiStepBusinessLogicEvidence(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+export async function collectMultiStepBusinessLogicEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const surf = await discoverSurface(host, session);
-  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: ['Hedef ana sayfası çekilemedi.'] };
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.')] };
   const ctx = new ProbeCtx();
   ctx.authHeaders = applyAuthHeaders({}, session);
   const findings: VFinding[] = [];
@@ -175,7 +179,7 @@ export async function collectMultiStepBusinessLogicEvidence(host: string, sessio
   const html = surf.homeHtml;
   const hiddenPrice = html.match(new RegExp(`<input[^>]*type=["']hidden["'][^>]*${PRICE_FIELD_RE.source}`, 'i')) || html.match(new RegExp(`<input[^>]*${PRICE_FIELD_RE.source}[^>]*type=["']hidden["']`, 'i'));
   if (hiddenPrice) {
-    findings.push({ check: 'business_logic_multistep', inputPoint: 'form (hidden price/qty/coupon)', vulnerable: true, technique: 'observation (client-controllable amount)', evidence: 'Formda gizli (hidden) bir fiyat/miktar/kupon alanı gözlemlendi; istemci tarafında değiştirilebilir. Sunucu-taraflı doğrulama yoksa fiyat manipülasyonu riski (kesin doğrulama sepet/ödeme adımı gerektirir — TAMAMLANMADI).', confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
+    findings.push({ check: 'business_logic_multistep', inputPoint: 'form (hidden price/qty/coupon)', vulnerable: true, technique: 'observation (client-controllable amount)', evidence: t('Formda gizli (hidden) bir fiyat/miktar/kupon alanı gözlemlendi; istemci tarafında değiştirilebilir. Sunucu-taraflı doğrulama yoksa fiyat manipülasyonu riski (kesin doğrulama sepet/ödeme adımı gerektirir — TAMAMLANMADI).', 'Im Formular wurde ein verstecktes (hidden) Preis-/Mengen-/Gutscheinfeld beobachtet; es ist clientseitig veränderbar. Ohne serverseitige Validierung besteht die Gefahr einer Preismanipulation (eine eindeutige Bestätigung erfordert den Warenkorb-/Zahlungsschritt — NICHT abgeschlossen).'), confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
   }
   // (İŞ 2) SALT-OKUNUR DOM'da açığa çıkan fiyat/miktar/kupon alanı (SPA formları — submit YOK).
   const seenPriceIp = new Set<string>();
@@ -184,7 +188,7 @@ export async function collectMultiStepBusinessLogicEvidence(host: string, sessio
     if (!price.length) continue;
     let ip = dom.url; try { const u = new URL(dom.url); ip = `${u.pathname}${u.hash}` || dom.url; } catch { /* yoksay */ }
     if (seenPriceIp.has(ip)) continue; seenPriceIp.add(ip);
-    findings.push({ check: 'business_logic_multistep', inputPoint: ip, vulnerable: true, technique: `client-exposed amount field (${price.join(', ')})`, evidence: `Formda istemciye açık bir fiyat/miktar/kupon alanı gözlemlendi: \`${price.join('`, `')}\`. İstemci tarafında değiştirilebilir; sunucu-taraflı doğrulama yoksa fiyat manipülasyonu riski. **Form SUBMIT EDİLMEDİ** — salt-okunur DOM gözlemi.`, confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
+    findings.push({ check: 'business_logic_multistep', inputPoint: ip, vulnerable: true, technique: `client-exposed amount field (${price.join(', ')})`, evidence: t(`Formda istemciye açık bir fiyat/miktar/kupon alanı gözlemlendi: \`${price.join('`, `')}\`. İstemci tarafında değiştirilebilir; sunucu-taraflı doğrulama yoksa fiyat manipülasyonu riski. **Form SUBMIT EDİLMEDİ** — salt-okunur DOM gözlemi.`, `Im Formular wurde ein clientseitig offengelegtes Preis-/Mengen-/Gutscheinfeld beobachtet: \`${price.join('`, `')}\`. Es ist clientseitig veränderbar; ohne serverseitige Validierung besteht die Gefahr einer Preismanipulation. **Das Formular wurde NICHT abgesendet** — schreibgeschützte DOM-Beobachtung.`), confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
   }
 
   // (b) Adım-atlama adayları (success/confirm sayfaları) + ajan seçimi.
@@ -203,14 +207,14 @@ export async function collectMultiStepBusinessLogicEvidence(host: string, sessio
       if (a && !AUTH_WRITE_BLOCKLIST_RE.test(a)) agentPicks.push(a);
     }
     if (agentStatus === 'analyzed') {
-      notes.push('Bu kontrol, keşfedilen authenticated yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnız JSON öneri üretir; backend YALNIZ GET-gözlem yapar; ödeme/checkout TAMAMLANMAZ; advisory doğrudan HTTP atmaz).');
+      notes.push(t('Bu kontrol, keşfedilen authenticated yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnız JSON öneri üretir; backend YALNIZ GET-gözlem yapar; ödeme/checkout TAMAMLANMAZ; advisory doğrudan HTTP atmaz).', 'Diese Prüfung wurde auf der entdeckten authentifizierten Oberfläche **mit einer KI-gestützten Advisory (ein einzelner LLM-Aufruf) analysiert** (die Advisory erzeugt nur JSON-Vorschläge; das Backend führt NUR GET-Beobachtungen durch; Zahlung/Checkout wird NICHT abgeschlossen; die Advisory sendet keine direkten HTTP-Anfragen).'));
     } else { // no_candidate
-      notes.push('Bu hedefte pasif keşifle gözlemlenebilir bir çok-adımlı iş-mantığı giriş noktası (istemci-tarafı fiyat/miktar/kupon alanı, ön-koşulsuz "onay" adımı) bulunamadığından advisory çalıştırılmadı. İş mantığı zafiyetleri bağlama özeldir; kesin sonuç manuel test gerektirir.');
+      notes.push(t('Bu hedefte pasif keşifle gözlemlenebilir bir çok-adımlı iş-mantığı giriş noktası (istemci-tarafı fiyat/miktar/kupon alanı, ön-koşulsuz "onay" adımı) bulunamadığından advisory çalıştırılmadı. İş mantığı zafiyetleri bağlama özeldir; kesin sonuç manuel test gerektirir.', 'Da bei diesem Ziel per passiver Erkundung kein beobachtbarer Einstiegspunkt für mehrstufige Geschäftslogik (clientseitiges Preis-/Mengen-/Gutscheinfeld, voraussetzungsloser „Bestätigungs"-Schritt) gefunden wurde, wurde die Advisory nicht ausgeführt. Geschäftslogik-Schwachstellen sind kontextspezifisch; ein eindeutiges Ergebnis erfordert einen manuellen Test.'));
     }
   } else if (agentStatus === 'disabled') {
-    notes.push('Bu kontrol **deterministik olarak** çalıştırıldı (gözlemsel adım-atlama + istemci-değiştirilebilir fiyat/miktar/kupon alanı). AI advisory katmanı **varsayılan olarak devre dışıdır** (deneyde ek doğrulanmış kanıt üretmediği için).');
+    notes.push(t('Bu kontrol **deterministik olarak** çalıştırıldı (gözlemsel adım-atlama + istemci-değiştirilebilir fiyat/miktar/kupon alanı). AI advisory katmanı **varsayılan olarak devre dışıdır** (deneyde ek doğrulanmış kanıt üretmediği için).', 'Diese Prüfung wurde **deterministisch** ausgeführt (beobachtendes Schrittüberspringen + clientseitig veränderbares Preis-/Mengen-/Gutscheinfeld). Die KI-Advisory-Schicht ist **standardmäßig deaktiviert** (da sie im Experiment keinen zusätzlichen bestätigten Nachweis erbrachte).'));
   } else {
-    notes.push('AI advisory (LLM) analizi tamamlanamadı (anahtar yok/timeout/hata) — bu kontrol **deterministik göstergeyle sınırlıdır** (gözlemsel adım-atlama/fiyat alanı, advisory muhakemesi olmadan).');
+    notes.push(t('AI advisory (LLM) analizi tamamlanamadı (anahtar yok/timeout/hata) — bu kontrol **deterministik göstergeyle sınırlıdır** (gözlemsel adım-atlama/fiyat alanı, advisory muhakemesi olmadan).', 'Die KI-Advisory-Analyse (LLM) konnte nicht abgeschlossen werden (kein Schlüssel/Timeout/Fehler) — diese Prüfung ist **auf den deterministischen Indikator beschränkt** (beobachtendes Schrittüberspringen/Preisfeld, ohne Advisory-Schlussfolgerung).'));
   }
 
   // GET-only gözlem: adım-atlama (ön koşul olmadan erişilebilir "onay" sayfası mı).
@@ -220,12 +224,12 @@ export async function collectMultiStepBusinessLogicEvidence(host: string, sessio
     if (AUTH_WRITE_BLOCKLIST_RE.test(url)) continue;
     const r = await ctx.fetchOnce(url); // GET — state değiştirmez
     if (r && r.status === 200 && !/oturum|login|giriş yap|unauthorized|403|yetkisiz/i.test(r.text.slice(0, 2000))) {
-      findings.push({ check: 'business_logic_multistep', inputPoint: new URL(url).pathname, vulnerable: true, technique: 'observation (step-skip, GET only)', evidence: `Bir "başarılı/onay" adımı sayfası (${new URL(url).pathname}) ön koşul olmadan doğrudan GET ile erişilebilir göründü — çok-adımlı iş mantığı (adım-atlama) göstergesi; kesin doğrulama manuel test gerektirir (ödeme TAMAMLANMADI).`, confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
+      findings.push({ check: 'business_logic_multistep', inputPoint: new URL(url).pathname, vulnerable: true, technique: 'observation (step-skip, GET only)', evidence: t(`Bir "başarılı/onay" adımı sayfası (${new URL(url).pathname}) ön koşul olmadan doğrudan GET ile erişilebilir göründü — çok-adımlı iş mantığı (adım-atlama) göstergesi; kesin doğrulama manuel test gerektirir (ödeme TAMAMLANMADI).`, `Eine „Erfolgs-/Bestätigungs"-Schrittseite (${new URL(url).pathname}) schien ohne Voraussetzung direkt per GET erreichbar zu sein — Indikator für mehrstufige Geschäftslogik (Schrittüberspringen); eine eindeutige Bestätigung erfordert einen manuellen Test (Zahlung NICHT abgeschlossen).`), confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
     }
   }
 
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!findings.length && agentStatus === 'analyzed') notes.push('Yapay zekâ destekli advisory bu yüzeyi analiz etti; uygulanabilir bir çok-adımlı iş-mantığı vektörü tespit edilmedi (temiz sonuç — uydurma bulgu yok).');
+  if (!findings.length && agentStatus === 'analyzed') notes.push(t('Yapay zekâ destekli advisory bu yüzeyi analiz etti; uygulanabilir bir çok-adımlı iş-mantığı vektörü tespit edilmedi (temiz sonuç — uydurma bulgu yok).', 'Die KI-gestützte Advisory hat diese Oberfläche analysiert; es wurde kein ausnutzbarer mehrstufiger Geschäftslogik-Vektor festgestellt (sauberes Ergebnis — kein erfundener Befund).'));
   const inputsFound = (hiddenPrice ? 1 : 0) + targets.length + surf.domForms.length;
   return { ok: true, pagesScanned: surf.pagesScanned, inputsFound, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed: scenarios !== null, agentStatus };
 }

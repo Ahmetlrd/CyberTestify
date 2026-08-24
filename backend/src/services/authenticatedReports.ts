@@ -723,63 +723,63 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   } catch { /* fiyat önerisi rapor akışını asla bozmaz */ }
 
   const runs: Run[] = [];
-  const cookieEv = collectCookieFlagsEvidence(session);
+  const cookieEv = collectCookieFlagsEvidence(session, de);
   runs.push({ title: T('Oturum Çerezi Bayrakları'), conf: 'Yüksek', rep: buildActiveCheckReport(cookieEv, COOKIE_CFG, de), inputs: cookieEv.inputsFound, probes: cookieEv.probesSent, fc: cookieEv.findings.length });
-  const fixEv = await collectSessionFixationEvidence(host, session).catch(() => null);
+  const fixEv = await collectSessionFixationEvidence(host, session, de).catch(() => null);
   runs.push({ title: T('Session Fixation'), conf: 'Orta', rep: fixEv ? buildActiveCheckReport(fixEv, FIXATION_CFG, de) : null, inputs: fixEv?.inputsFound ?? 0, probes: fixEv?.probesSent ?? 0, fc: fixEv?.findings.length ?? 0 });
-  const logoutEv = await collectLogoutEvidence(host, session).catch(() => null);
+  const logoutEv = await collectLogoutEvidence(host, session, de).catch(() => null);
   runs.push({ title: T('Logout / Oturum Geçersizleştirme'), conf: 'Orta', rep: logoutEv ? buildActiveCheckReport(logoutEv, LOGOUT_CFG, de) : null, inputs: logoutEv?.inputsFound ?? 0, probes: logoutEv?.probesSent ?? 0, fc: logoutEv?.findings.length ?? 0 });
-  const forcedEv = await collectForcedBrowsingEvidence(host, session).catch(() => null);
+  const forcedEv = await collectForcedBrowsingEvidence(host, session, de).catch(() => null);
   runs.push({ title: T('Forced Browsing / Fonksiyon-Seviye Yetki'), conf: 'Orta', rep: forcedEv ? buildActiveCheckReport(forcedEv, FORCED_CFG, de) : null, inputs: forcedEv?.inputsFound ?? 0, probes: forcedEv?.probesSent ?? 0, fc: forcedEv?.findings.length ?? 0 });
-  const injEv = await collectInjectionEvidence(host, session).catch(() => null);
+  const injEv = await collectInjectionEvidence(host, session, de).catch(() => null);
   runs.push({ title: T('Authenticated Enjeksiyon (SQLi/XSS)'), conf: 'Yüksek', rep: injEv ? buildInjectionReport(injEv, de) : null, inputs: injEv?.inputsFound ?? 0, probes: injEv?.probesSent ?? 0, fc: injEv?.findings.length ?? 0 });
-  const idorEv = await collectIdorEvidence(host, session).catch(() => null);
+  const idorEv = await collectIdorEvidence(host, session, de).catch(() => null);
   runs.push({ title: T('Authenticated IDOR (kendi kaynakları)'), conf: 'Orta', rep: idorEv ? buildIdorReport(idorEv, de) : null, inputs: idorEv?.candidates ?? 0, probes: idorEv?.probesSent ?? 0, fc: idorEv?.findings.length ?? 0, enumerableSurface: idorEv?.enumerableSurface ?? null });
   // (FAZ D) SINIRLI/KONTROLLÜ AJAN KATMANI — priv-esc + çok-adımlı iş mantığı (ajan öneri, backend uygular).
-  const privEv = await collectPrivilegeEscalationEvidence(host, session).catch(() => null);
+  const privEv = await collectPrivilegeEscalationEvidence(host, session, de).catch(() => null);
   // (İş A) advisor AÇIK (analyzed) ise AI-danışma dili; KAPALI (varsayılan) ise deterministik dil.
   const privCfg = privEv?.agentStatus === 'analyzed' ? { ...PRIVESC_CFG, whatChecked: [PRIVESC_WC_AI, ...PRIVESC_CFG.whatChecked.slice(1)], whatCheckedDe: [PRIVESC_WC_AI_DE, ...(PRIVESC_CFG.whatCheckedDe ?? []).slice(1)] } : PRIVESC_CFG;
   runs.push({ title: T('Yetki Yükseltme (Privilege Escalation)'), conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, privCfg, de) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0, agentCheck: true, agentUsed: privEv?.agentUsed ?? false, agentStatus: privEv?.agentStatus });
-  const multiEv = await collectMultiStepBusinessLogicEvidence(host, session).catch(() => null);
+  const multiEv = await collectMultiStepBusinessLogicEvidence(host, session, de).catch(() => null);
   const multiCfg = multiEv?.agentStatus === 'analyzed' ? { ...MULTISTEP_CFG, whatChecked: [MULTISTEP_WC_AI, ...MULTISTEP_CFG.whatChecked.slice(1)], whatCheckedDe: [MULTISTEP_WC_AI_DE, ...(MULTISTEP_CFG.whatCheckedDe ?? []).slice(1)] } : MULTISTEP_CFG;
   runs.push({ title: T('Çok-Adımlı İş Mantığı'), conf: 'Düşük', rep: multiEv ? buildActiveCheckReport(multiEv, multiCfg, de) : null, inputs: multiEv?.inputsFound ?? 0, probes: multiEv?.probesSent ?? 0, fc: multiEv?.findings.length ?? 0, agentCheck: true, agentUsed: multiEv?.agentUsed ?? false, agentStatus: multiEv?.agentStatus });
   const advisorActive = privEv?.agentStatus === 'analyzed' || multiEv?.agentStatus === 'analyzed'; // (İş A) tek bayrak
   // (İŞ 3) JWT/token güvenliği + giriş baypası (SQLi göstergesi) — deterministik, gözlemsel.
-  const jwtEv = await collectJwtAnalysis(host, session).catch(() => null);
+  const jwtEv = await collectJwtAnalysis(host, session, de).catch(() => null);
   runs.push({ title: T('JWT / Token Güvenliği'), conf: 'Yüksek', rep: jwtEv ? buildActiveCheckReport(jwtEv, JWT_CFG, de) : null, inputs: jwtEv?.inputsFound ?? 0, probes: jwtEv?.probesSent ?? 0, fc: jwtEv?.findings.length ?? 0 });
-  const loginBypassEv = await collectLoginBypassEvidence(host, session.loginUrl).catch(() => null);
+  const loginBypassEv = await collectLoginBypassEvidence(host, session.loginUrl, de).catch(() => null);
   runs.push({ title: T('Giriş Baypası (SQLi Göstergesi)'), conf: 'Yüksek', rep: loginBypassEv ? buildActiveCheckReport(loginBypassEv, LOGIN_BYPASS_CFG, de) : null, inputs: loginBypassEv?.inputsFound ?? 0, probes: loginBypassEv?.probesSent ?? 0, fc: loginBypassEv?.findings.length ?? 0 });
 
   // (YENİ — 6. pakete özel) Client-Side / JS Analizi: pasif JS bundle sır + source-map + zafiyetli-kütüphane.
-  const jsEv = await collectJsAnalysisEvidence(host).catch(() => null);
+  const jsEv = await collectJsAnalysisEvidence(host, de).catch(() => null);
   runs.push({ title: T('Client-Side / JS Analizi'), conf: 'Yüksek', rep: jsEv ? buildActiveCheckReport(jsEv, JS_ANALYSIS_CFG, de) : null, inputs: jsEv?.inputsFound ?? 0, probes: jsEv?.probesSent ?? 0, fc: jsEv?.findings.length ?? 0 });
 
   // (YENİ — Faz 1-B) Client-Side Statik Analiz: DOM-XSS gösterge / postMessage / storage / SRI / tabnabbing / open-redirect.
-  const csEv = await collectClientSideEvidence(host).catch(() => null);
+  const csEv = await collectClientSideEvidence(host, de).catch(() => null);
   runs.push({ title: T('Client-Side Statik Analiz'), conf: 'Orta', rep: csEv ? buildActiveCheckReport(csEv, CLIENT_SIDE_CFG, de) : null, inputs: csEv?.inputsFound ?? 0, probes: csEv?.probesSent ?? 0, fc: csEv?.findings.length ?? 0 });
 
   // (YENİ — Faz 2-A) Kimlik-Doğrulama Derinliği: enum/varsayılan-kimlik/lockout/reset/politika/cache/MFA/HTTP.
-  const adEv = await collectAuthDepthEvidence(host, session).catch(() => null);
+  const adEv = await collectAuthDepthEvidence(host, session, de).catch(() => null);
   runs.push({ title: T('Kimlik-Doğrulama Derinliği'), conf: 'Yüksek', rep: adEv ? buildActiveCheckReport(adEv, AUTH_DEPTH_CFG, de) : null, inputs: adEv?.inputsFound ?? 0, probes: adEv?.probesSent ?? 0, fc: adEv?.findings.length ?? 0 });
 
   // (YENİ — Faz 2-B) Oturum Güvenliği Derinliği: CSRF/SameSite, session-id entropi, oturum-URL, prefix, timeout.
-  const sdEv = await collectSessionDepthEvidence(host, session).catch(() => null);
+  const sdEv = await collectSessionDepthEvidence(host, session, de).catch(() => null);
   runs.push({ title: T('Oturum Güvenliği Derinliği'), conf: 'Orta', rep: sdEv ? buildActiveCheckReport(sdEv, SESSION_DEPTH_CFG, de) : null, inputs: sdEv?.inputsFound ?? 0, probes: sdEv?.probesSent ?? 0, fc: sdEv?.findings.length ?? 0 });
 
   // (YENİ — Faz 3-A) Girdi & Header + Yapılandırma & İfşa derinliği (güvenli GET/OPTIONS/TRACE + statik).
-  const ihEv = await collectInputHeaderEvidence(host, session).catch(() => null);
+  const ihEv = await collectInputHeaderEvidence(host, session, de).catch(() => null);
   runs.push({ title: T('Girdi & Header Derinliği'), conf: 'Orta', rep: ihEv ? buildActiveCheckReport(ihEv, INPUT_HEADER_CFG, de) : null, inputs: ihEv?.inputsFound ?? 0, probes: ihEv?.probesSent ?? 0, fc: ihEv?.findings.length ?? 0 });
-  const ceEv = await collectConfigExposureEvidence(host, session).catch(() => null);
+  const ceEv = await collectConfigExposureEvidence(host, session, de).catch(() => null);
   runs.push({ title: T('Yapılandırma & İfşa Derinliği'), conf: 'Yüksek', rep: ceEv ? buildActiveCheckReport(ceEv, CONFIG_EXPOSURE_CFG, de) : null, inputs: ceEv?.inputsFound ?? 0, probes: ceEv?.probesSent ?? 0, fc: ceEv?.findings.length ?? 0 });
-  const apiEv = await collectApiSecurityEvidence(host, session).catch(() => null);
+  const apiEv = await collectApiSecurityEvidence(host, session, de).catch(() => null);
   runs.push({ title: T('API Güvenliği Derinliği (OWASP API Top 10)'), conf: 'Orta', rep: apiEv ? buildActiveCheckReport(apiEv, API_SECURITY_CFG, de) : null, inputs: apiEv?.inputsFound ?? 0, probes: apiEv?.probesSent ?? 0, fc: apiEv?.findings.length ?? 0 });
-  const edEv = await collectEmailDnsEvidence(host).catch(() => null);
+  const edEv = await collectEmailDnsEvidence(host, de).catch(() => null);
   runs.push({ title: T('E-posta & DNS Derinliği (Anti-Spoofing)'), conf: 'Orta', rep: edEv ? buildActiveCheckReport(edEv, EMAIL_DNS_CFG, de) : null, inputs: edEv?.inputsFound ?? 0, probes: edEv?.probesSent ?? 0, fc: edEv?.findings.length ?? 0 });
-  const tsEv = await collectTransportSecurityEvidence(host).catch(() => null);
+  const tsEv = await collectTransportSecurityEvidence(host, de).catch(() => null);
   runs.push({ title: T('Taşıma Katmanı, CORS & Güvenlik Başlığı Derinliği'), conf: 'Orta', rep: tsEv ? buildActiveCheckReport(tsEv, TRANSPORT_CFG, de) : null, inputs: tsEv?.inputsFound ?? 0, probes: tsEv?.probesSent ?? 0, fc: tsEv?.findings.length ?? 0 });
-  const stkEv = await collectSubdomainTakeoverEvidence(host).catch(() => null);
+  const stkEv = await collectSubdomainTakeoverEvidence(host, de).catch(() => null);
   runs.push({ title: T('Subdomain Takeover (Dangling DNS)'), conf: 'Orta', rep: stkEv ? buildActiveCheckReport(stkEv, TAKEOVER_CFG, de) : null, inputs: stkEv?.inputsFound ?? 0, probes: stkEv?.probesSent ?? 0, fc: stkEv?.findings.length ?? 0 });
-  const aiEv = await collectActiveIndicatorsEvidence(host, session).catch(() => null);
+  const aiEv = await collectActiveIndicatorsEvidence(host, session, de).catch(() => null);
   runs.push({ title: T('Authenticated Güvenli Aktif Göstergeler (LFI/Redirect/HPP/SSTI)'), conf: 'Orta', rep: aiEv ? buildActiveCheckReport(aiEv, AUTH_INDICATORS_CFG, de) : null, inputs: aiEv?.inputsFound ?? 0, probes: aiEv?.probesSent ?? 0, fc: aiEv?.findings.length ?? 0 });
 
   // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).

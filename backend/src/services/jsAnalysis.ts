@@ -142,12 +142,12 @@ const REAL_SECRET_RULES: Array<{ id: string; re: RegExp; why: string }> = [
 ];
 
 // PUBLIC-BY-DESIGN (istismar edilebilir SIR DEĞİL) — bulgu değil, "bilgilendirici" olarak etiketlenir.
-const PUBLIC_BY_DESIGN_RULES: Array<{ id: string; label: string; re: RegExp }> = [
-  { id: 'google_api_key', label: 'Google API anahtarı (Firebase/Maps browser key — public-by-design, referer/kota ile sınırlanır)', re: /\bAIza[0-9A-Za-z_-]{35}\b/g },
-  { id: 'stripe_publishable', label: 'Stripe publishable key (pk_ — public-by-design, gizli değildir)', re: /\bpk_(?:live|test)_[0-9a-zA-Z]{20,}\b/g },
-  { id: 'ga_measurement', label: 'GA/GTM/Ads ölçüm kimliği (public-by-design)', re: /\b(?:G-[A-Z0-9]{6,}|GTM-[A-Z0-9]{5,}|UA-\d{4,}-\d+|AW-\d{6,})\b/g },
-  { id: 'recaptcha_site', label: 'reCAPTCHA SITE key (public-by-design; secret key ayrıdır)', re: /\b6L[0-9A-Za-z_-]{38}\b/g },
-  { id: 'firebase_cfg', label: 'Firebase istemci yapılandırması (apiKey/authDomain/projectId — public-by-design, güvenlik Firebase kurallarındadır)', re: /(?:authDomain|messagingSenderId|storageBucket)\s*:\s*["'][^"']+["']/g },
+const PUBLIC_BY_DESIGN_RULES: Array<{ id: string; label: string; labelDe: string; re: RegExp }> = [
+  { id: 'google_api_key', label: 'Google API anahtarı (Firebase/Maps browser key — public-by-design, referer/kota ile sınırlanır)', labelDe: 'Google-API-Schlüssel (Firebase/Maps Browser-Key — public-by-design, durch Referer/Kontingent begrenzt)', re: /\bAIza[0-9A-Za-z_-]{35}\b/g },
+  { id: 'stripe_publishable', label: 'Stripe publishable key (pk_ — public-by-design, gizli değildir)', labelDe: 'Stripe Publishable Key (pk_ — public-by-design, nicht geheim)', re: /\bpk_(?:live|test)_[0-9a-zA-Z]{20,}\b/g },
+  { id: 'ga_measurement', label: 'GA/GTM/Ads ölçüm kimliği (public-by-design)', labelDe: 'GA-/GTM-/Ads-Mess-ID (public-by-design)', re: /\b(?:G-[A-Z0-9]{6,}|GTM-[A-Z0-9]{5,}|UA-\d{4,}-\d+|AW-\d{6,})\b/g },
+  { id: 'recaptcha_site', label: 'reCAPTCHA SITE key (public-by-design; secret key ayrıdır)', labelDe: 'reCAPTCHA SITE-Key (public-by-design; der Secret-Key ist separat)', re: /\b6L[0-9A-Za-z_-]{38}\b/g },
+  { id: 'firebase_cfg', label: 'Firebase istemci yapılandırması (apiKey/authDomain/projectId — public-by-design, güvenlik Firebase kurallarındadır)', labelDe: 'Firebase-Client-Konfiguration (apiKey/authDomain/projectId — public-by-design, die Sicherheit liegt in den Firebase-Regeln)', re: /(?:authDomain|messagingSenderId|storageBucket)\s*:\s*["'][^"']+["']/g },
 ];
 
 // ============================ C) BİLİNEN-ZAFİYETLİ KÜTÜPHANELER ============================
@@ -211,19 +211,20 @@ function detectLib(url: string, body: string): { lib: string; display: string; v
 export { detectLib, matchVuln };
 
 // (Doğrulama için) tek metni tarayıp GERÇEK-sır bulgularını + public-by-design etiketlerini döndürür.
-export function scanTextForSecrets(text: string, where = 'test'): { findings: VFinding[]; publicByDesign: string[] } {
+export function scanTextForSecrets(text: string, where = 'test', de: boolean = false): { findings: VFinding[]; publicByDesign: string[] } {
   const findings: VFinding[] = []; const publicSeen = new Set<string>();
-  scanSecrets(text, where, findings, publicSeen);
+  scanSecrets(text, where, findings, publicSeen, de);
   return { findings, publicByDesign: [...publicSeen] };
 }
 
-export async function collectJsAnalysisEvidence(host: string): Promise<ActiveCheckEvidence> {
+export async function collectJsAnalysisEvidence(host: string, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const findings: VFinding[] = [];
   const notes: string[] = [];
   const c = await fetchClientCorpus(host);
   if (!c.reachable) {
     return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null,
-      notes: ['Ana sayfa HTML çekilemedi — istemci-tarafı/JS analizi bu hedef için **kapsam dışıdır**.'] };
+      notes: [t('Ana sayfa HTML çekilemedi — istemci-tarafı/JS analizi bu hedef için **kapsam dışıdır**.', 'Startseiten-HTML konnte nicht abgerufen werden — die clientseitige/JS-Analyse ist für dieses Ziel **außerhalb des Geltungsbereichs**.')] };
   }
 
   const publicSeen = new Set<string>();
@@ -232,12 +233,12 @@ export async function collectJsAnalysisEvidence(host: string): Promise<ActiveChe
   let mapsTried = 0, probes = c.fetches;
 
   // INLINE script'ler: sır + public-by-design.
-  for (const [i, code] of c.inlineScripts.entries()) scanSecrets(code, `inline-script#${i + 1}`, findings, publicSeen);
+  for (const [i, code] of c.inlineScripts.entries()) scanSecrets(code, `inline-script#${i + 1}`, findings, publicSeen, de);
 
   // SAME-ORIGIN JS: A) sır, B) source-map, C) kütüphane.
   for (const f of c.sameOriginJs) {
     const short = (() => { try { return new URL(f.url).pathname.split('/').pop() || f.url; } catch { return f.url; } })();
-    scanSecrets(f.body, short, findings, publicSeen);
+    scanSecrets(f.body, short, findings, publicSeen, de);
     if (mapsTried < MAX_MAP_TRIES) {
       const mapUrl = sourceMapUrl(f.url, f.body);
       if (mapUrl) {
@@ -259,7 +260,7 @@ export async function collectJsAnalysisEvidence(host: string): Promise<ActiveChe
     const lib = detectLib(f.url, f.body);
     if (lib && !libSeen.has(lib.lib)) {
       libSeen.add(lib.lib);
-      libsDetected.push(`${lib.display}${lib.version ? ` ${lib.version}` : ' (sürüm okunamadı)'}`);
+      libsDetected.push(`${lib.display}${lib.version ? ` ${lib.version}` : t(' (sürüm okunamadı)', ' (Version nicht lesbar)')}`);
       if (lib.version) {
         const v = matchVuln(lib.lib, lib.version);
         if (v) findings.push({
@@ -277,7 +278,7 @@ export async function collectJsAnalysisEvidence(host: string): Promise<ActiveChe
     const lib = detectLib(u, '');
     if (lib && lib.version && !libSeen.has(lib.lib)) {
       libSeen.add(lib.lib);
-      libsDetected.push(`${lib.display} ${lib.version} (harici/CDN)`);
+      libsDetected.push(`${lib.display} ${lib.version}${t(' (harici/CDN)', ' (extern/CDN)')}`);
       const v = matchVuln(lib.lib, lib.version);
       if (v) findings.push({
         check: 'vulnerable_js_lib', inputPoint: `${lib.display} ${lib.version} (CDN)`, vulnerable: true,
@@ -288,10 +289,10 @@ export async function collectJsAnalysisEvidence(host: string): Promise<ActiveChe
     }
   }
 
-  notes.push(`Tarandı: **${c.sameOriginJs.length}** same-origin JS dosyası + **${c.inlineScripts.length}** inline script; **${libsDetected.length}** kütüphane tespit edildi; **${mapsTried}** source-map adayı denendi. (${c.externalScripts.length} harici/CDN script sürüm için incelendi.)`);
-  if (libsDetected.length) notes.push(`Tespit edilen kütüphaneler: ${libsDetected.join(' · ')}.`);
-  if (publicSeen.size) notes.push(`Bilgilendirici (public-by-design — istismar edilebilir sır DEĞİL, bulgu sayılmaz): ${[...publicSeen].join(' · ')}.`);
-  if (!c.sameOriginJs.length && !c.inlineScripts.length) notes.push('Sayfada analiz edilebilir JS bulunamadı (ör. sunucu-render, JS’siz sayfa) — bu hedefte JS analizi sınırlıdır.');
+  notes.push(t(`Tarandı: **${c.sameOriginJs.length}** same-origin JS dosyası + **${c.inlineScripts.length}** inline script; **${libsDetected.length}** kütüphane tespit edildi; **${mapsTried}** source-map adayı denendi. (${c.externalScripts.length} harici/CDN script sürüm için incelendi.)`, `Gescannt: **${c.sameOriginJs.length}** Same-Origin-JS-Dateien + **${c.inlineScripts.length}** Inline-Skripte; **${libsDetected.length}** Bibliothek(en) erkannt; **${mapsTried}** Source-Map-Kandidat(en) geprüft. (${c.externalScripts.length} externe/CDN-Skripte auf Version untersucht.)`));
+  if (libsDetected.length) notes.push(t(`Tespit edilen kütüphaneler: ${libsDetected.join(' · ')}.`, `Erkannte Bibliotheken: ${libsDetected.join(' · ')}.`));
+  if (publicSeen.size) notes.push(t(`Bilgilendirici (public-by-design — istismar edilebilir sır DEĞİL, bulgu sayılmaz): ${[...publicSeen].join(' · ')}.`, `Informativ (public-by-design — KEIN ausnutzbares Geheimnis, zählt nicht als Befund): ${[...publicSeen].join(' · ')}.`));
+  if (!c.sameOriginJs.length && !c.inlineScripts.length) notes.push(t('Sayfada analiz edilebilir JS bulunamadı (ör. sunucu-render, JS’siz sayfa) — bu hedefte JS analizi sınırlıdır.', 'Keine analysierbaren JS auf der Seite gefunden (z. B. serverseitig gerendert, Seite ohne JS) — die JS-Analyse ist bei diesem Ziel eingeschränkt.'));
 
   return { ok: true, pagesScanned: 1, inputsFound: c.sameOriginJs.length, probesSent: probes, findings, stopped: null, notes };
 }
@@ -306,10 +307,10 @@ function sourceMapUrl(jsUrl: string, body: string): string | null {
 }
 
 // A) tek metinde sır tara — GERÇEK sır → finding; public-by-design → publicSeen (bilgilendirici).
-function scanSecrets(text: string, where: string, findings: VFinding[], publicSeen: Set<string>): void {
+function scanSecrets(text: string, where: string, findings: VFinding[], publicSeen: Set<string>, de: boolean = false): void {
   for (const rule of PUBLIC_BY_DESIGN_RULES) {
     rule.re.lastIndex = 0;
-    if (rule.re.test(text)) publicSeen.add(rule.label);
+    if (rule.re.test(text)) publicSeen.add(de ? rule.labelDe : rule.label);
   }
   for (const rule of REAL_SECRET_RULES) {
     rule.re.lastIndex = 0;

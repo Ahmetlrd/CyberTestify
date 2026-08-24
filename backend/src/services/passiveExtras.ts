@@ -322,28 +322,30 @@ export function classifyExposedFile(
   path: string,
   fetched: FetchOut,
   homepage: string,
+  de: boolean = false,
 ): { verdict: ExposedVerdict; reason: string } {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   if (!fetched.ok || fetched.status !== 200 || !fetched.text.trim()) {
-    return { verdict: 'not-exposed', reason: `HTTP ${fetched.status || 'hata'} / boş gövde — erişilebilir değil` };
+    return { verdict: 'not-exposed', reason: t(`HTTP ${fetched.status || 'hata'} / boş gövde — erişilebilir değil`, `HTTP ${fetched.status || 'Fehler'} / leerer Body — nicht erreichbar`) };
   }
   const body = fetched.text;
   // (2) Catch-all: ana sayfayla ayni mi?
   if (looksLikeHomepage(body, homepage)) {
-    return { verdict: 'not-exposed', reason: 'içerik ana sayfayla aynı (SPA/catch-all yönlendirme; dosya gerçekten açık değil)' };
+    return { verdict: 'not-exposed', reason: t('içerik ana sayfayla aynı (SPA/catch-all yönlendirme; dosya gerçekten açık değil)', 'Inhalt identisch mit der Startseite (SPA/Catch-all-Weiterleitung; die Datei ist nicht wirklich offen zugänglich)') };
   }
   const isHtml = /^\s*<(!doctype|html)\b/i.test(body.trimStart()) || fetched.contentType.includes('text/html');
   const sig = FILE_SIGNATURES[path];
   // (1) Beklenen format imzasi.
   if (sig) {
-    if (sig(body)) return { verdict: 'exposed', reason: 'beklenen dosya formatı doğrulandı (catch-all değil)' };
+    if (sig(body)) return { verdict: 'exposed', reason: t('beklenen dosya formatı doğrulandı (catch-all değil)', 'erwartetes Dateiformat bestätigt (kein Catch-all)') };
     return {
       verdict: 'not-exposed',
-      reason: `HTTP 200 ama içerik beklenen dosya formatına uymuyor${isHtml ? ' (HTML döndü — muhtemelen catch-all)' : ''}`,
+      reason: t(`HTTP 200 ama içerik beklenen dosya formatına uymuyor${isHtml ? ' (HTML döndü — muhtemelen catch-all)' : ''}`, `HTTP 200, aber der Inhalt entspricht nicht dem erwarteten Dateiformat${isHtml ? ' (HTML zurückgegeben — vermutlich Catch-all)' : ''}`),
     };
   }
   // Imza tanimli degil: HTML donduyse catch-all say; degilse kesin diyemeyiz.
-  if (isHtml) return { verdict: 'not-exposed', reason: 'HTTP 200 ama HTML döndü (muhtemelen catch-all)' };
-  return { verdict: 'inconclusive', reason: 'HTTP 200, format imzası tanımlı değil — manuel doğrulama gerekir' };
+  if (isHtml) return { verdict: 'not-exposed', reason: t('HTTP 200 ama HTML döndü (muhtemelen catch-all)', 'HTTP 200, aber HTML zurückgegeben (vermutlich Catch-all)') };
+  return { verdict: 'inconclusive', reason: t('HTTP 200, format imzası tanımlı değil — manuel doğrulama gerekir', 'HTTP 200, keine Formatsignatur definiert — manuelle Überprüfung erforderlich') };
 }
 
 const SENSITIVE_PATHS = ['/.git/config', '/.git/HEAD', '/.env', '/backup.zip', '/backup.sql', '/.DS_Store', '/wp-config.php',

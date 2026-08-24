@@ -57,13 +57,14 @@ async function probeRedirectLocation(url: string): Promise<{ status: number; loc
 
 const isExternalTo = (u: string, host: string): boolean => { try { return new URL(u, `https://${host}/`).hostname.toLowerCase() !== host.toLowerCase(); } catch { return false; } };
 
-export async function collectClientSideEvidence(host: string): Promise<ActiveCheckEvidence> {
+export async function collectClientSideEvidence(host: string, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const findings: VFinding[] = [];
   const notes: string[] = [];
   const c = await fetchClientCorpus(host);
   if (!c.reachable) {
     return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null,
-      notes: ['Ana sayfa HTML çekilemedi — client-side statik analiz bu hedef için **kapsam dışıdır**.'] };
+      notes: [t('Ana sayfa HTML çekilemedi — client-side statik analiz bu hedef için **kapsam dışıdır**.', 'Startseiten-HTML konnte nicht abgerufen werden — die clientseitige statische Analyse ist für dieses Ziel **außerhalb des Geltungsbereichs**.')] };
   }
 
   const jsBlobs: Array<{ name: string; body: string }> = [
@@ -177,9 +178,9 @@ export async function collectClientSideEvidence(host: string): Promise<ActiveChe
   }
 
   // --- POZİTİF GÜVENCE (gerçek sayılar) ---
-  notes.push(`Statik ayrıştırıldı: **${c.sameOriginJs.length}** same-origin JS + **${c.inlineScripts.length}** inline script; **${sriTargets.length}** harici kaynak SRI için, **${c.blankLinks.length}** \`target=_blank\` link tabnabbing için kontrol edildi; **${redirectProbes}** redirect-parametresi güvenli probla denendi (redirect TAKİP EDİLMEDİ).`);
-  notes.push('DOM-XSS eşleşmeleri STATİK **göstergedir** (kanıtlanmış XSS değil); yüksek yanlış-pozitif potansiyeli taşır ve dinamik doğrulama gerektirir.');
-  if (!candidates.length) notes.push('HTML’de gözlemlenen bir yönlendirme (redirect) parametresi bulunamadı — open redirect probu **kapsam dışı**.');
+  notes.push(t(`Statik ayrıştırıldı: **${c.sameOriginJs.length}** same-origin JS + **${c.inlineScripts.length}** inline script; **${sriTargets.length}** harici kaynak SRI için, **${c.blankLinks.length}** \`target=_blank\` link tabnabbing için kontrol edildi; **${redirectProbes}** redirect-parametresi güvenli probla denendi (redirect TAKİP EDİLMEDİ).`, `Statisch geparst: **${c.sameOriginJs.length}** Same-Origin-JS + **${c.inlineScripts.length}** Inline-Skripte; **${sriTargets.length}** externe Ressourcen auf SRI, **${c.blankLinks.length}** \`target=_blank\`-Links auf Tabnabbing geprüft; **${redirectProbes}** Redirect-Parameter mit sicherer Probe getestet (Redirect NICHT verfolgt).`));
+  notes.push(t('DOM-XSS eşleşmeleri STATİK **göstergedir** (kanıtlanmış XSS değil); yüksek yanlış-pozitif potansiyeli taşır ve dinamik doğrulama gerektirir.', 'DOM-XSS-Treffer sind ein STATISCHER **Indikator** (kein nachgewiesenes XSS); sie bergen ein hohes Falsch-Positiv-Potenzial und erfordern eine dynamische Verifizierung.'));
+  if (!candidates.length) notes.push(t('HTML’de gözlemlenen bir yönlendirme (redirect) parametresi bulunamadı — open redirect probu **kapsam dışı**.', 'Im HTML wurde kein beobachteter Redirect-Parameter gefunden — die Open-Redirect-Probe ist **außerhalb des Geltungsbereichs**.'));
 
   const inputs = jsBlobs.length + sriTargets.length + c.blankLinks.length + candidates.length;
   return { ok: true, pagesScanned: 1, inputsFound: inputs, probesSent: c.fetches + redirectProbes, findings, stopped: null, notes };

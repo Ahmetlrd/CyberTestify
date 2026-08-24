@@ -28,7 +28,8 @@ function abs(host: string, p: string): string | null {
 // ======================================================================================
 // A) Oturum çerezi bayrakları — login yanıtındaki Set-Cookie'lerin güvenlik bayrakları (ağ yok).
 // ======================================================================================
-export function collectCookieFlagsEvidence(session: AuthSession): ActiveCheckEvidence {
+export function collectCookieFlagsEvidence(session: AuthSession, de: boolean = false): ActiveCheckEvidence {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const findings: VFinding[] = [];
   const notes: string[] = [];
   const flags = session.cookieFlags ?? [];
@@ -46,8 +47,8 @@ export function collectCookieFlagsEvidence(session: AuthSession): ActiveCheckEvi
     if (missing.length) {
       findings.push({
         check: 'cookie_flags', inputPoint: `cookie:${f.name}`, vulnerable: true,
-        technique: 'oturum çerezi güvenlik bayrağı analizi',
-        evidence: `Oturum çerezi \`${f.name}\` şu güvenlik bayraklarından yoksun: ${missing.join(', ')}. (HttpOnly yoksa XSS ile çalınabilir; Secure yoksa düz HTTP'de sızabilir; SameSite yoksa CSRF riski.)`,
+        technique: t('oturum çerezi güvenlik bayrağı analizi', 'Sicherheitsflag-Analyse des Sitzungs-Cookies'),
+        evidence: t(`Oturum çerezi \`${f.name}\` şu güvenlik bayraklarından yoksun: ${missing.join(', ')}. (HttpOnly yoksa XSS ile çalınabilir; Secure yoksa düz HTTP'de sızabilir; SameSite yoksa CSRF riski.)`, `Das Sitzungs-Cookie \`${f.name}\` weist folgende Sicherheitsflags nicht auf: ${missing.join(', ')}. (Ohne HttpOnly per XSS stehlbar; ohne Secure über einfaches HTTP abfließbar; ohne SameSite CSRF-Risiko.)`),
         confidence: 'high', severity: missing.includes('HttpOnly') ? 'medium' : 'low', sideEffectRisk: 'none',
       });
     }
@@ -55,8 +56,8 @@ export function collectCookieFlagsEvidence(session: AuthSession): ActiveCheckEvi
   if (!sessionCookies.length) {
     notes.push(
       analyticsSeen
-        ? `Sunucu-taraflı oturum çerezi gözlemlenmedi; oturum bearer/token ile taşınıyor. Gözlenen ${analyticsSeen} çerez analitik/3rd-party (client-side JS) çerezidir — bunlar oturum çerezi değildir ve HttpOnly değerlendirmesine tabi tutulamaz. Oturum çerezi güvenlik bayrağı analizi bu hedef için **kapsam dışıdır**.`
-        : 'Sunucu-taraflı oturum çerezi gözlemlenmedi (oturum bearer/token ile taşınıyor) — Set-Cookie güvenlik bayrağı analizi bu hedef için **kapsam dışıdır**.',
+        ? t(`Sunucu-taraflı oturum çerezi gözlemlenmedi; oturum bearer/token ile taşınıyor. Gözlenen ${analyticsSeen} çerez analitik/3rd-party (client-side JS) çerezidir — bunlar oturum çerezi değildir ve HttpOnly değerlendirmesine tabi tutulamaz. Oturum çerezi güvenlik bayrağı analizi bu hedef için **kapsam dışıdır**.`, `Kein serverseitiges Sitzungs-Cookie beobachtet; die Sitzung wird per Bearer/Token übertragen. Die beobachteten ${analyticsSeen} Cookies sind Analytics-/Drittanbieter-Cookies (clientseitiges JS) — dies sind keine Sitzungs-Cookies und können keiner HttpOnly-Bewertung unterzogen werden. Die Sicherheitsflag-Analyse des Sitzungs-Cookies ist für dieses Ziel **außerhalb des Geltungsbereichs**.`)
+        : t('Sunucu-taraflı oturum çerezi gözlemlenmedi (oturum bearer/token ile taşınıyor) — Set-Cookie güvenlik bayrağı analizi bu hedef için **kapsam dışıdır**.', 'Kein serverseitiges Sitzungs-Cookie beobachtet (die Sitzung wird per Bearer/Token übertragen) — die Set-Cookie-Sicherheitsflag-Analyse ist für dieses Ziel **außerhalb des Geltungsbereichs**.'),
     );
   }
   return { ok: true, pagesScanned: 1, inputsFound: sessionCookies.length, probesSent: 0, findings, stopped: null, notes };
@@ -65,13 +66,14 @@ export function collectCookieFlagsEvidence(session: AuthSession): ActiveCheckEvi
 // ======================================================================================
 // B) Session fixation — login ÖNCESİ session id, login SONRASI ile AYNI mı? (tek unauth GET)
 // ======================================================================================
-export async function collectSessionFixationEvidence(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+export async function collectSessionFixationEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const notes: string[] = [];
   const findings: VFinding[] = [];
   const postCookies = (session.cookie ?? '').split(';').map((s) => s.trim()).filter(Boolean);
   const postAuth = postCookies.map((c) => ({ name: c.split('=')[0], value: c.split('=').slice(1).join('=') })).filter((c) => isSessionCookieName(c.name));
   if (!postAuth.length) {
-    notes.push('Oturum çerez-tabanlı değil (bearer/token) — session fixation (çerez yenileme) analizi bu hedef için **kapsam dışıdır**.');
+    notes.push(t('Oturum çerez-tabanlı değil (bearer/token) — session fixation (çerez yenileme) analizi bu hedef için **kapsam dışıdır**.', 'Die Sitzung ist nicht cookie-basiert (Bearer/Token) — die Session-Fixation-Analyse (Cookie-Erneuerung) ist für dieses Ziel **außerhalb des Geltungsbereichs**.'));
     return { ok: true, pagesScanned: 1, inputsFound: 0, probesSent: 0, findings, stopped: null, notes };
   }
   // Login ÖNCESİ (unauth) ana sayfa GET — Set-Cookie session id yakala.
@@ -88,15 +90,15 @@ export async function collectSessionFixationEvidence(host: string, session: Auth
   } catch { /* ağ hatası -> aşağıda kapsam dışı */ }
   const compared = postAuth.filter((c) => preValues.has(c.name));
   if (!compared.length) {
-    notes.push('Login öncesi eşleşen bir oturum çerezi gözlemlenemedi (sunucu login öncesi session çerezi vermiyor olabilir) — kesin fixation kanıtı için manuel test önerilir.');
+    notes.push(t('Login öncesi eşleşen bir oturum çerezi gözlemlenemedi (sunucu login öncesi session çerezi vermiyor olabilir) — kesin fixation kanıtı için manuel test önerilir.', 'Vor dem Login konnte kein übereinstimmendes Sitzungs-Cookie beobachtet werden (der Server vergibt möglicherweise vor dem Login kein Sitzungs-Cookie) — für einen eindeutigen Fixation-Nachweis wird ein manueller Test empfohlen.'));
     return { ok: true, pagesScanned: 1, inputsFound: postAuth.length, probesSent: probes, findings, stopped: null, notes };
   }
   for (const c of compared) {
     if (preValues.get(c.name) === c.value) {
       findings.push({
         check: 'session_fixation', inputPoint: `cookie:${c.name}`, vulnerable: true,
-        technique: 'login öncesi/sonrası session id karşılaştırması',
-        evidence: `\`${c.name}\` oturum çerezi login SONRASINDA da login ÖNCESİYLE AYNI değerde kaldı — sunucu girişte oturumu yenilemiyor (session fixation göstergesi).`,
+        technique: t('login öncesi/sonrası session id karşılaştırması', 'Vergleich der Session-ID vor/nach dem Login'),
+        evidence: t(`\`${c.name}\` oturum çerezi login SONRASINDA da login ÖNCESİYLE AYNI değerde kaldı — sunucu girişte oturumu yenilemiyor (session fixation göstergesi).`, `Das Sitzungs-Cookie \`${c.name}\` behielt auch NACH dem Login denselben Wert wie VOR dem Login — der Server erneuert die Sitzung beim Login nicht (Indikator für Session Fixation).`),
         confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
       });
     }
@@ -118,7 +120,8 @@ function looksAuthed(status: number, text: string): boolean {
   return !/unauthorized|forbidden|access denied|please log ?in|invalid token|jwt (expired|malformed)/i.test(head);
 }
 
-export async function collectLogoutEvidence(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+export async function collectLogoutEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const notes: string[] = [];
   const findings: VFinding[] = [];
   const ctx = new ProbeCtx();
@@ -149,7 +152,7 @@ export async function collectLogoutEvidence(host: string, session: AuthSession):
   }
   if (!protectedUrl) {
     if (ctx.stopped) notes.push(ctx.stopped);
-    notes.push('Oturumla 200 dönen, AYIRT EDİCİ (SPA catch-all shell olmayan) bir korumalı doğrulama uç noktası (whoami/profil) bu hedefte gözlemlenmedi — logout geçersizleştirme testi bu hedef için **kapsam dışıdır**.');
+    notes.push(t('Oturumla 200 dönen, AYIRT EDİCİ (SPA catch-all shell olmayan) bir korumalı doğrulama uç noktası (whoami/profil) bu hedefte gözlemlenmedi — logout geçersizleştirme testi bu hedef için **kapsam dışıdır**.', 'Ein geschützter Verifizierungs-Endpunkt (whoami/Profil), der mit der Sitzung 200 zurückgibt und UNTERSCHEIDBAR ist (kein SPA-Catch-all-Shell), wurde bei diesem Ziel nicht beobachtet — der Logout-Invalidierungstest ist für dieses Ziel **außerhalb des Geltungsbereichs**.'));
     return { ok: true, pagesScanned: 1, inputsFound: 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
   }
 
@@ -163,7 +166,7 @@ export async function collectLogoutEvidence(host: string, session: AuthSession):
   }
   if (!logoutCalled) {
     if (ctx.stopped) notes.push(ctx.stopped);
-    notes.push('Sunucu-taraflı (GET ile çağrılabilen) bir logout uç noktası bulunamadı — token istemci-tarafında geçersizleştiriliyor olabilir; sunucu-taraflı geçersizleştirme testi **kapsam dışıdır**.');
+    notes.push(t('Sunucu-taraflı (GET ile çağrılabilen) bir logout uç noktası bulunamadı — token istemci-tarafında geçersizleştiriliyor olabilir; sunucu-taraflı geçersizleştirme testi **kapsam dışıdır**.', 'Es wurde kein serverseitiger (per GET aufrufbarer) Logout-Endpunkt gefunden — das Token wird möglicherweise clientseitig invalidiert; der serverseitige Invalidierungstest ist **außerhalb des Geltungsbereichs**.'));
     return { ok: true, pagesScanned: 1, inputsFound: 1, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
   }
 
@@ -172,8 +175,8 @@ export async function collectLogoutEvidence(host: string, session: AuthSession):
   if (isDistinctiveAuthed(after)) {
     findings.push({
       check: 'logout_invalidation', inputPoint: new URL(protectedUrl).pathname, vulnerable: true,
-      technique: 'logout sonrası token yeniden kullanımı',
-      evidence: `Logout çağrıldıktan SONRA da AYNI oturum token'ıyla korumalı uç (${new URL(protectedUrl).pathname}) 200 döndürdü — oturum sunucu tarafında geçersizleştirilmiyor.`,
+      technique: t('logout sonrası token yeniden kullanımı', 'Token-Wiederverwendung nach dem Logout'),
+      evidence: t(`Logout çağrıldıktan SONRA da AYNI oturum token'ıyla korumalı uç (${new URL(protectedUrl).pathname}) 200 döndürdü — oturum sunucu tarafında geçersizleştirilmiyor.`, `Auch NACH dem Aufruf des Logouts gab der geschützte Endpunkt (${new URL(protectedUrl).pathname}) mit DEMSELBEN Sitzungs-Token 200 zurück — die Sitzung wird serverseitig nicht invalidiert.`),
       confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
     });
   }
@@ -190,7 +193,8 @@ const ADMIN_PATHS = [
   '/api/Users', '/rest/products/reviews', '/metrics', '/actuator', '/actuator/env',
   '/admin/api', '/api/management', '/console', '/api/config', '/rest/admin/application-version',
 ];
-export async function collectForcedBrowsingEvidence(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+export async function collectForcedBrowsingEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const notes: string[] = [];
   const findings: VFinding[] = [];
   const ctx = new ProbeCtx();
@@ -214,13 +218,13 @@ export async function collectForcedBrowsingEvidence(host: string, session: AuthS
     if (isJson || r.len > 0) {
       findings.push({
         check: 'forced_browsing', inputPoint: new URL(u).pathname, vulnerable: true,
-        technique: 'düşük yetkili oturumla forced browsing (GET)',
-        evidence: `\`${new URL(u).pathname}\` uç noktası, düşük yetkili test hesabının oturumuyla **200** ve ${isJson ? 'JSON veri' : 'içerik'} döndürdü — eksik fonksiyon-seviye yetkilendirme (olası yetkisiz yönetim erişimi) göstergesi (dönen veri raporda gösterilmez).`,
+        technique: t('düşük yetkili oturumla forced browsing (GET)', 'Forced Browsing mit einer Sitzung geringer Berechtigung (GET)'),
+        evidence: t(`\`${new URL(u).pathname}\` uç noktası, düşük yetkili test hesabının oturumuyla **200** ve ${isJson ? 'JSON veri' : 'içerik'} döndürdü — eksik fonksiyon-seviye yetkilendirme (olası yetkisiz yönetim erişimi) göstergesi (dönen veri raporda gösterilmez).`, `Der Endpunkt \`${new URL(u).pathname}\` gab mit der Sitzung des Testkontos mit geringer Berechtigung **200** und ${isJson ? 'JSON-Daten' : 'Inhalt'} zurück — Indikator für fehlende Autorisierung auf Funktionsebene (möglicher unbefugter Verwaltungszugriff) (die zurückgegebenen Daten werden im Bericht nicht angezeigt).`),
         confidence: isJson ? 'medium' : 'low', severity: 'medium', sideEffectRisk: 'none',
       });
     }
   }
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!tested) notes.push('Test edilebilir bir admin-benzeri uç noktası denenemedi.');
+  if (!tested) notes.push(t('Test edilebilir bir admin-benzeri uç noktası denenemedi.', 'Es konnte kein testbarer admin-ähnlicher Endpunkt geprüft werden.'));
   return { ok: true, pagesScanned: 1, inputsFound: tested, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }

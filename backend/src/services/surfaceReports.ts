@@ -151,7 +151,7 @@ export async function generateHeaderLeakReport(host: string, locale: string = 't
   const RW = de ? RISK_WORD_DE : RISK_WORD;
   const http = await collectHttp(host);
   if (!http.ok) return null;
-  const exposed = await collectExposedFiles(host, http.html);
+  const exposed = await collectExposedFiles(host, http.html, de);
 
   const missing = SEC_HDRS.filter((h) => !http.headers.has(h.hdr));
   const missingCrit = missing.filter((h) => h.hdr === 'content-security-policy' || h.hdr === 'x-frame-options');

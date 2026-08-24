@@ -78,14 +78,15 @@ export function scanCommentLeak(text: string, where: string): VFinding[] {
 }
 
 // ================= GRUP D: GİRDİ/HEADER =================
-export async function collectInputHeaderEvidence(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+export async function collectInputHeaderEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   void session;
   const findings: VFinding[] = []; const notes: string[] = [];
   await resolveOrigin(host).catch(() => null);
   const origin = cachedOriginUrl(host);
   const pageIsHttps = origin.startsWith('https://');
   const corpus = await fetchClientCorpus(host);
-  if (!corpus.reachable) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: ['Ana sayfa çekilemedi — girdi/header derinliği bu hedef için **kapsam dışıdır**.'] };
+  if (!corpus.reachable) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: [t('Ana sayfa çekilemedi — girdi/header derinliği bu hedef için **kapsam dışıdır**.', 'Startseite konnte nicht abgerufen werden — die Eingabe-/Header-Tiefenprüfung ist für dieses Ziel **außerhalb des Geltungsbereichs**.')] };
   let probes = 1;
 
   // D4) MIXED CONTENT (statik)
@@ -121,7 +122,7 @@ export async function collectInputHeaderEvidence(host: string, session: AuthSess
       check: 'dangerous_http_method', inputPoint: 'TRACE', vulnerable: true, technique: 'TRACE metodu gözlemi', evidence: 'Sunucu **TRACE** metoduna 200 + istek yankısı döndürüyor — Cross-Site Tracing (XST) göstergesi. TRACE kapatılmalı.', confidence: 'high', severity: 'medium', sideEffectRisk: 'none',
     });
   }
-  if (allow && /\b(PUT|DELETE|PATCH)\b/i.test(allow)) notes.push(`OPTIONS Allow durum-değiştiren method(lar) listeliyor (${allow}) — REST API'lerde olağan olabilir; yetkilendirme sunucuda zorunlu kılınmalı (bilgilendirici; PUT/DELETE GÖNDERİLMEDİ).`);
+  if (allow && /\b(PUT|DELETE|PATCH)\b/i.test(allow)) notes.push(t(`OPTIONS Allow durum-değiştiren method(lar) listeliyor (${allow}) — REST API'lerde olağan olabilir; yetkilendirme sunucuda zorunlu kılınmalı (bilgilendirici; PUT/DELETE GÖNDERİLMEDİ).`, `OPTIONS Allow listet zustandsändernde Methode(n) auf (${allow}) — bei REST-APIs kann dies üblich sein; die Autorisierung muss serverseitig erzwungen werden (informativ; PUT/DELETE NICHT GESENDET).`));
 
   // D2) HTTP PARAMETER POLLUTION — gözlemsel (SPA'da genelde ayırt-edici davranış yok)
   const paramUrl = [...corpus.homeHtml.matchAll(/(?:href|action)\s*=\s*["']([^"']*\?[^"']*=[^"']*)["']/gi)].map((m) => m[1]).find((u) => { try { return new URL(u, `${origin}/`).hostname.toLowerCase() === host.toLowerCase(); } catch { return false; } });
@@ -131,11 +132,11 @@ export async function collectInputHeaderEvidence(host: string, session: AuthSess
       if (p) {
         const a = await probe(`${u.origin}${u.pathname}?${p}=ctA`, { label: 'D2 HPP a' }); probes++;
         const dbl = await probe(`${u.origin}${u.pathname}?${p}=ctA&${p}=ctB`, { label: 'D2 HPP a&b' }); probes++;
-        if (a && dbl && a.status === dbl.status && !isHtmlShell(dbl.text) && md5(a.text) !== md5(dbl.text)) notes.push(`HTTP Parameter Pollution gözlemi: \`${p}\` parametresi tekrarlandığında yanıt değişiyor — tutarsız işleme göstergesi (bilgilendirici; gözlemsel).`);
-        else notes.push('HTTP Parameter Pollution için ayırt-edici davranış gözlemlenmedi (SPA/tek-tip yanıt).');
+        if (a && dbl && a.status === dbl.status && !isHtmlShell(dbl.text) && md5(a.text) !== md5(dbl.text)) notes.push(t(`HTTP Parameter Pollution gözlemi: \`${p}\` parametresi tekrarlandığında yanıt değişiyor — tutarsız işleme göstergesi (bilgilendirici; gözlemsel).`, `HTTP-Parameter-Pollution-Beobachtung: Bei Wiederholung des Parameters \`${p}\` ändert sich die Antwort — Indikator für inkonsistente Verarbeitung (informativ; beobachtend).`));
+        else notes.push(t('HTTP Parameter Pollution için ayırt-edici davranış gözlemlenmedi (SPA/tek-tip yanıt).', 'Kein unterscheidbares Verhalten für HTTP Parameter Pollution beobachtet (SPA/einheitliche Antwort).'));
       }
     } catch { /* */ }
-  } else notes.push('Parametreli same-origin uç gözlemlenmedi — HPP için test edilebilir yüzey yok.');
+  } else notes.push(t('Parametreli same-origin uç gözlemlenmedi — HPP için test edilebilir yüzey yok.', 'Kein parametrisierter Same-Origin-Endpunkt beobachtet — keine testbare Angriffsfläche für HPP.'));
 
   // D5) STORED-XSS GİRİŞ NOKTASI — SADECE ADAY (GÖNDERİM/KAYIT YOK)
   const persistFields = [...corpus.homeHtml.matchAll(/<(?:textarea|input)\b[^>]*\bname\s*=\s*["']([^"']*(?:comment|message|review|feedback|bio|about|description|note|content|post|title|name)[^"']*)["']/gi)].map((m) => m[1]);
@@ -148,7 +149,7 @@ export async function collectInputHeaderEvidence(host: string, session: AuthSess
     });
   }
 
-  notes.push(`Denenen: **${probes}** güvenli girdi/header probu (yalnız GET/OPTIONS/TRACE — PUT/DELETE GÖNDERİLMEDİ; stored-XSS yalnız aday, veri OLUŞTURULMADI). Mixed content: ${mixed.length} HTTP kaynak.`);
+  notes.push(t(`Denenen: **${probes}** güvenli girdi/header probu (yalnız GET/OPTIONS/TRACE — PUT/DELETE GÖNDERİLMEDİ; stored-XSS yalnız aday, veri OLUŞTURULMADI). Mixed content: ${mixed.length} HTTP kaynak.`, `Durchgeführt: **${probes}** sichere Eingabe-/Header-Proben (nur GET/OPTIONS/TRACE — PUT/DELETE NICHT GESENDET; Stored-XSS nur als Kandidat, keine Daten ERZEUGT). Mixed Content: ${mixed.length} HTTP-Ressourcen.`));
   return { ok: true, pagesScanned: 1, inputsFound: 1, probesSent: probes, findings, stopped: null, notes };
 }
 
@@ -156,12 +157,13 @@ export async function collectInputHeaderEvidence(host: string, session: AuthSess
 const BACKUP_PATHS = ['/.env', '/.env.bak', '/config.bak', '/config.php.bak', '/wp-config.php.bak', '/backup.zip', '/backup.tar.gz', '/db.sql', '/database.sql', '/.git/config', '/.svn/entries', '/.DS_Store', '/index.php~', '/app.js.map'];
 const ADMIN_PATHS = ['/admin', '/administrator', '/wp-admin/', '/admin/login', '/manager/html', '/phpmyadmin/', '/server-status', '/actuator', '/actuator/env', '/.git/', '/console'];
 
-export async function collectConfigExposureEvidence(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+export async function collectConfigExposureEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   void session;
   const findings: VFinding[] = []; const notes: string[] = [];
   const origin = cachedOriginUrl(host);
   const corpus = await fetchClientCorpus(host);
-  if (!corpus.reachable) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: ['Ana sayfa çekilemedi — yapılandırma/ifşa derinliği bu hedef için **kapsam dışıdır**.'] };
+  if (!corpus.reachable) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: [t('Ana sayfa çekilemedi — yapılandırma/ifşa derinliği bu hedef için **kapsam dışıdır**.', 'Startseite konnte nicht abgerufen werden — die Konfigurations-/Offenlegungs-Tiefenprüfung ist für dieses Ziel **außerhalb des Geltungsbereichs**.')] };
   const shellHash = md5(corpus.homeHtml);
   let probes = 1, backupTried = 0, adminTried = 0;
 
@@ -195,7 +197,7 @@ export async function collectConfigExposureEvidence(host: string, session: AuthS
       findings.push({ check: 'cloud_bucket_listable', inputPoint: b.slice(0, 80), vulnerable: true, technique: 'public cloud storage bucket listelenebilirlik gözlemi', evidence: `Kaynaklarda referans verilen bulut deposu (\`${b.slice(0, 70)}\`) **listelenebilir** (dizin listesi döndü) — yanlış yapılandırılmış public bucket, tüm nesnelerin envanteri sızabilir. Liste iznini kapatın; hassas nesneleri private yapın.`, confidence: 'high', severity: 'high', sideEffectRisk: 'none' });
     }
   }
-  if (buckets.length) notes.push(`Kaynaklarda ${buckets.length} bulut-depo referansı gözlemlendi (asset için public olabilir; yalnız listelenebilir olan bulgu sayıldı).`);
+  if (buckets.length) notes.push(t(`Kaynaklarda ${buckets.length} bulut-depo referansı gözlemlendi (asset için public olabilir; yalnız listelenebilir olan bulgu sayıldı).`, `In den Ressourcen wurden ${buckets.length} Cloud-Storage-Referenz(en) beobachtet (für Assets ggf. öffentlich; nur auflistbare wurden als Befund gezählt).`));
 
   // E4) CACHE HEADER / POISONING GÖSTERGESİ — güvenli gözlem
   const cp = await probe(`${origin}/`, { headers: { 'x-forwarded-host': HOST_PROBE }, label: 'E4 cache/poisoning gözlemi' }); probes++;
@@ -214,6 +216,6 @@ export async function collectConfigExposureEvidence(host: string, session: AuthS
   corpus.inlineScripts.forEach((code, i) => findings.push(...scanCommentLeak(code, `inline-script#${i + 1}`)));
   for (const f of corpus.sameOriginJs) findings.push(...scanCommentLeak(f.body, (() => { try { return new URL(f.url).pathname.split('/').pop() || f.url; } catch { return f.url; } })()));
 
-  notes.push(`Denenen: **${backupTried}** yedek/eski dosya + **${adminTried}** admin yolu (SPA catch-all shell 200'ler ELENDİ — gerçek/ayırt-edici olmayan yanıt bulgu sayılmadı); **${buckets.length}** bulut-depo referansı; yorum/metadata statik tarandı.`);
+  notes.push(t(`Denenen: **${backupTried}** yedek/eski dosya + **${adminTried}** admin yolu (SPA catch-all shell 200'ler ELENDİ — gerçek/ayırt-edici olmayan yanıt bulgu sayılmadı); **${buckets.length}** bulut-depo referansı; yorum/metadata statik tarandı.`, `Durchgeführt: **${backupTried}** Backup-/Alt-Dateien + **${adminTried}** Admin-Pfade (SPA-Catch-all-Shell-200er AUSGEFILTERT — nicht echte/nicht unterscheidbare Antworten wurden nicht als Befund gezählt); **${buckets.length}** Cloud-Storage-Referenz(en); Kommentare/Metadaten statisch gescannt.`));
   return { ok: true, pagesScanned: 1, inputsFound: 1, probesSent: probes, findings, stopped: null, notes };
 }

@@ -55,19 +55,20 @@ const CANARY = 'https://cybertestify-redirect-probe.example/ct';
 const FILE_PAYLOADS_SHALLOW = ['../../etc/passwd', '..\\..\\windows\\win.ini'];
 const FILE_PAYLOADS_DEEP = ['../../../../../../../../etc/passwd', '..%2f..%2f..%2f..%2f..%2f..%2fetc%2fpasswd', '....//....//....//....//....//etc/passwd', '..\\..\\..\\..\\..\\..\\..\\windows\\win.ini', '/etc/passwd'];
 
-export async function collectActiveIndicatorsEvidence(host: string, session?: AuthSession): Promise<ActiveCheckEvidence> {
+export async function collectActiveIndicatorsEvidence(host: string, session?: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const findings: VFinding[] = []; const notes: string[] = [];
   const authed = !!session;
   const H: Record<string, string> = session ? (applyAuthHeaders({}, session) as Record<string, string>) : {};
   const surf = await discoverSurface(host, session).catch(() => null);
-  if (!surf || !surf.ok) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: ['Hedef yüzeyi keşfedilemedi — güvenli aktif göstergeler bu hedef için **kapsam dışıdır**.'] };
+  if (!surf || !surf.ok) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: [t('Hedef yüzeyi keşfedilemedi — güvenli aktif göstergeler bu hedef için **kapsam dışıdır**.', 'Die Zieloberfläche konnte nicht erkundet werden — die sicheren aktiven Indikatoren sind für dieses Ziel **außerhalb des Geltungsbereichs**.')] };
   const getParams = surf.inputs.filter((ip) => ip.method === 'GET' && ip.source === 'url');
   const inputsFound = getParams.length + surf.uploadForms.length;
   let probes = 0;
 
   if (getParams.length === 0 && surf.uploadForms.length === 0) {
     return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: 0, probesSent: 1, findings, stopped: null,
-      notes: [`${authed ? 'Login-sonrası' : 'Gözlemlenebilir'} enjekte-edilebilir bir yüzey (GET parametresi / yükleme formu) bu hedefte bulunamadı — güvenli aktif göstergeler **kapsam dışıdır** (iyi-yapılandırılmış/SPA sitelerde beklenen sonuç).`] };
+      notes: [`${authed ? t('Login-sonrası', 'Nach dem Login') : t('Gözlemlenebilir', 'Beobachtbare')}${t(' enjekte-edilebilir bir yüzey (GET parametresi / yükleme formu) bu hedefte bulunamadı — güvenli aktif göstergeler **kapsam dışıdır** (iyi-yapılandırılmış/SPA sitelerde beklenen sonuç).', ' injizierbare Oberfläche (GET-Parameter / Upload-Formular) wurde bei diesem Ziel nicht gefunden — die sicheren aktiven Indikatoren sind **außerhalb des Geltungsbereichs** (bei gut konfigurierten/SPA-Websites das erwartete Ergebnis).')}`] };
   }
 
   // ── A1/B1 LFI (kademeli; yalnız imza = bulgu) ──
@@ -88,7 +89,7 @@ export async function collectActiveIndicatorsEvidence(host: string, session?: Au
         if (r && LFI_SIGN_RE.test(r.text)) { hit = true; break; }
       }
     }
-    if (hit) findings.push({ check: 'lfi', inputPoint: epLabel(ip), vulnerable: true, technique: `yol geçişi / LFI (path traversal) — kademeli güvenli prob${authed ? ' (authenticated)' : ''}`, evidence: `\`${ip.param}\` parametresine yol-geçişi payload'ı gönderildiğinde yanıtta **bilinen sistem dosyası imzası** (ör. \`root:x:0:0:\` / \`[fonts]\`) gözlendi — sunucu dosya sistemine LFI/path-traversal göstergesi. Dosya içeriği **REDAKTE** (çekilmedi/saklanmadı). Girdi dosya yoluna konmamalı; allowlist + kök-dizin hapsi uygulanmalı.`, confidence: 'high', severity: 'high', sideEffectRisk: 'none' });
+    if (hit) findings.push({ check: 'lfi', inputPoint: epLabel(ip), vulnerable: true, technique: `${t('yol geçişi / LFI (path traversal) — kademeli güvenli prob', 'Pfad-Traversierung / LFI (path traversal) — gestufter sicherer Prob')}${authed ? ' (authenticated)' : ''}`, evidence: t(`\`${ip.param}\` parametresine yol-geçişi payload'ı gönderildiğinde yanıtta **bilinen sistem dosyası imzası** (ör. \`root:x:0:0:\` / \`[fonts]\`) gözlendi — sunucu dosya sistemine LFI/path-traversal göstergesi. Dosya içeriği **REDAKTE** (çekilmedi/saklanmadı). Girdi dosya yoluna konmamalı; allowlist + kök-dizin hapsi uygulanmalı.`, `Als an den Parameter \`${ip.param}\` ein Path-Traversal-Payload gesendet wurde, wurde in der Antwort eine **bekannte Systemdatei-Signatur** (z. B. \`root:x:0:0:\` / \`[fonts]\`) beobachtet — Indikator für LFI/Path-Traversal auf dem Server-Dateisystem. Der Dateiinhalt ist **REDIGIERT** (nicht abgerufen/gespeichert). Eingaben sollten nicht in einen Dateipfad übernommen werden; eine Allowlist + Einsperrung im Wurzelverzeichnis sollten angewendet werden.`), confidence: 'high', severity: 'high', sideEffectRisk: 'none' });
   }
 
   // ── A2/B2 Open redirect (kanarya; redirect TAKİP EDİLMEZ) ──
@@ -101,7 +102,7 @@ export async function collectActiveIndicatorsEvidence(host: string, session?: Au
     const metaRefresh = /<meta[^>]+http-equiv=["']?refresh["']?[^>]+url=([^"'>\s]+)/i.exec(r.text)?.[1] ?? '';
     const reflectsCanary = (s: string) => /cybertestify-redirect-probe\.example/i.test(s);
     if ((r.status >= 300 && r.status < 400 && reflectsCanary(loc)) || reflectsCanary(metaRefresh)) {
-      findings.push({ check: 'open_redirect', inputPoint: epLabel(ip), vulnerable: true, technique: `açık yönlendirme (open redirect) — zararsız kanarya gözlemi (redirect TAKİP EDİLMEDİ)${authed ? ' (authenticated)' : ''}`, evidence: `\`${ip.param}\` parametresine verilen **harici kanarya** URL'i yanıtın \`Location\`/meta-refresh hedefine **yansıdı** — açık yönlendirme göstergesi (phishing/oturum-token sızıntısı yüzeyi). Yönlendirme hedefleri sunucuda allowlist ile sınırlanmalı. Yönlendirme TAKİP EDİLMEDİ.`, confidence: 'high', severity: 'medium', sideEffectRisk: 'none' });
+      findings.push({ check: 'open_redirect', inputPoint: epLabel(ip), vulnerable: true, technique: `${t('açık yönlendirme (open redirect) — zararsız kanarya gözlemi (redirect TAKİP EDİLMEDİ)', 'Offene Weiterleitung (open redirect) — harmlose Kanarienvogel-Beobachtung (Weiterleitung NICHT gefolgt)')}${authed ? ' (authenticated)' : ''}`, evidence: t(`\`${ip.param}\` parametresine verilen **harici kanarya** URL'i yanıtın \`Location\`/meta-refresh hedefine **yansıdı** — açık yönlendirme göstergesi (phishing/oturum-token sızıntısı yüzeyi). Yönlendirme hedefleri sunucuda allowlist ile sınırlanmalı. Yönlendirme TAKİP EDİLMEDİ.`, `Die dem Parameter \`${ip.param}\` übergebene **externe Kanarienvogel**-URL wurde im \`Location\`-/meta-refresh-Ziel der Antwort **widergespiegelt** — Indikator für eine offene Weiterleitung (Angriffsfläche für Phishing/Sitzungs-Token-Leck). Weiterleitungsziele sollten serverseitig per Allowlist eingeschränkt werden. Der Weiterleitung wurde NICHT gefolgt.`), confidence: 'high', severity: 'medium', sideEffectRisk: 'none' });
     }
   }
 
@@ -114,8 +115,8 @@ export async function collectActiveIndicatorsEvidence(host: string, session?: Au
     if (!single || !dbl) continue;
     const both = /CTPPA\s*[,;| ]?\s*CTPPB|CTPPACTPPB/.test(dbl.text);
     const onlyB = dbl.text.includes('CTPPB') && !dbl.text.includes('CTPPA') && single.text.includes('CTPPA');
-    if (both) findings.push({ check: 'hpp', inputPoint: epLabel(ip), vulnerable: true, technique: `HTTP parametre kirliliği (HPP) — tekrarlı parametre işleniş gözlemi (veri gönderilmedi)${authed ? ' (authenticated)' : ''}`, evidence: `\`${ip.param}\` iki kez gönderildiğinde (\`?${ip.param}=A&${ip.param}=B\`) sunucu **her iki değeri birleştirerek** işledi — HTTP Parameter Pollution göstergesi (filtre atlatma/mantık sapması yüzeyi). Parametreler tek-değere normalize edilmeli. Salt gözlem.`, confidence: 'medium', severity: 'low', sideEffectRisk: 'none' });
-    else if (onlyB) notes.push(`HPP: \`${ip.param}\` tekrarında son-değer (last-wins) ayrıştırma gözlendi — tek başına zafiyet değil, bilgilendirici.`);
+    if (both) findings.push({ check: 'hpp', inputPoint: epLabel(ip), vulnerable: true, technique: `${t('HTTP parametre kirliliği (HPP) — tekrarlı parametre işleniş gözlemi (veri gönderilmedi)', 'HTTP-Parameter-Pollution (HPP) — Beobachtung der Verarbeitung wiederholter Parameter (keine Daten gesendet)')}${authed ? ' (authenticated)' : ''}`, evidence: t(`\`${ip.param}\` iki kez gönderildiğinde (\`?${ip.param}=A&${ip.param}=B\`) sunucu **her iki değeri birleştirerek** işledi — HTTP Parameter Pollution göstergesi (filtre atlatma/mantık sapması yüzeyi). Parametreler tek-değere normalize edilmeli. Salt gözlem.`, `Als \`${ip.param}\` zweimal gesendet wurde (\`?${ip.param}=A&${ip.param}=B\`), verarbeitete der Server **beide Werte zusammengefügt** — Indikator für HTTP Parameter Pollution (Angriffsfläche für Filterumgehung/Logikabweichung). Parameter sollten auf einen einzigen Wert normalisiert werden. Reine Beobachtung.`), confidence: 'medium', severity: 'low', sideEffectRisk: 'none' });
+    else if (onlyB) notes.push(t(`HPP: \`${ip.param}\` tekrarında son-değer (last-wins) ayrıştırma gözlendi — tek başına zafiyet değil, bilgilendirici.`, `HPP: Bei der Wiederholung von \`${ip.param}\` wurde eine Last-Wins-Verarbeitung (letzter Wert) beobachtet — allein keine Schwachstelle, informativ.`));
   }
 
   // ── A5/B5 SSTI (yalnız aritmetik) ──
@@ -131,20 +132,20 @@ export async function collectActiveIndicatorsEvidence(host: string, session?: Au
       if (done) break;
       const r = await get(buildUrl(ip, payload), `SSTI ${ip.param}`, H); probes++;
       if (r && r.text.includes(expect) && !r.text.includes(payload)) {
-        findings.push({ check: 'ssti', inputPoint: epLabel(ip), vulnerable: true, technique: `şablon enjeksiyonu (SSTI) — yalnız aritmetik gösterge (kod/komut YOK)${authed ? ' (authenticated)' : ''}`, evidence: `\`${ip.param}\` parametresine yalnız aritmetik ifade (\`${short(payload)}\`) gönderildiğinde çıktıda **değerlendirilmiş sonuç** (\`${expect}\`) belirdi (ifade ham geçmedi) — sunucu-taraflı şablon enjeksiyonu (SSTI) göstergesi. Yalnız aritmetik denendi; kod/komut çalıştırılmadı. Girdi şablona interpolasyonla konmamalı.`, confidence: 'high', severity: 'medium', sideEffectRisk: 'none' });
+        findings.push({ check: 'ssti', inputPoint: epLabel(ip), vulnerable: true, technique: `${t('şablon enjeksiyonu (SSTI) — yalnız aritmetik gösterge (kod/komut YOK)', 'Template-Injection (SSTI) — nur arithmetischer Indikator (KEIN Code/Befehl)')}${authed ? ' (authenticated)' : ''}`, evidence: t(`\`${ip.param}\` parametresine yalnız aritmetik ifade (\`${short(payload)}\`) gönderildiğinde çıktıda **değerlendirilmiş sonuç** (\`${expect}\`) belirdi (ifade ham geçmedi) — sunucu-taraflı şablon enjeksiyonu (SSTI) göstergesi. Yalnız aritmetik denendi; kod/komut çalıştırılmadı. Girdi şablona interpolasyonla konmamalı.`, `Als an den Parameter \`${ip.param}\` nur ein arithmetischer Ausdruck (\`${short(payload)}\`) gesendet wurde, erschien in der Ausgabe das **ausgewertete Ergebnis** (\`${expect}\`) (der Ausdruck wurde nicht roh durchgereicht) — Indikator für serverseitige Template-Injection (SSTI). Es wurde nur Arithmetik versucht; es wurde kein Code/Befehl ausgeführt. Eingaben sollten nicht per Interpolation in das Template übernommen werden.`), confidence: 'high', severity: 'medium', sideEffectRisk: 'none' });
         done = true;
       }
     }
   }
 
   // ── A4/B4 boolean-SQLi + A6/B6 upload → çapraz-referans / gözlem ──
-  notes.push(`Boolean-tabanlı SQL Enjeksiyonu **${authed ? 'Authenticated Enjeksiyon (SQLi/XSS)' : 'Enjeksiyon (SQLi/XSS) Doğrulama'}** bölümünde katı yanlış-pozitif kalkanıyla değerlendirilir (burada tekrar edilmez).`);
+  notes.push(`${t('Boolean-tabanlı SQL Enjeksiyonu **', 'Boolean-basierte SQL-Injection wird im Abschnitt **')}${authed ? t('Authenticated Enjeksiyon (SQLi/XSS)', 'Authentifizierte Injektion (SQLi/XSS)') : t('Enjeksiyon (SQLi/XSS) Doğrulama', 'Injektion (SQLi/XSS)-Verifizierung')}${t('** bölümünde katı yanlış-pozitif kalkanıyla değerlendirilir (burada tekrar edilmez).', '** mit einem strengen Falsch-Positiv-Schutz bewertet (hier nicht wiederholt).')}`);
   if (surf.uploadForms.length) {
     notes.push(authed
-      ? `Login-sonrası **${surf.uploadForms.length}** dosya yükleme noktası gözlendi; **gerçek dosya YÜKLENMEDİ** (konfig gözlemi — güvenli). Sunucu-taraflı tip/boyut doğrulaması manuel test gerektirir.`
-      : `Dosya yükleme yüzeyi (**${surf.uploadForms.length}** form) **Dosya Yükleme Doğrulama** bölümünde değerlendirilir (gerçek dosya yüklenmeden).`);
+      ? t(`Login-sonrası **${surf.uploadForms.length}** dosya yükleme noktası gözlendi; **gerçek dosya YÜKLENMEDİ** (konfig gözlemi — güvenli). Sunucu-taraflı tip/boyut doğrulaması manuel test gerektirir.`, `Nach dem Login wurden **${surf.uploadForms.length}** Datei-Upload-Punkte beobachtet; **es wurde KEINE echte Datei hochgeladen** (Konfigurationsbeobachtung — sicher). Die serverseitige Typ-/Größenvalidierung erfordert einen manuellen Test.`)
+      : t(`Dosya yükleme yüzeyi (**${surf.uploadForms.length}** form) **Dosya Yükleme Doğrulama** bölümünde değerlendirilir (gerçek dosya yüklenmeden).`, `Die Datei-Upload-Oberfläche (**${surf.uploadForms.length}** Formular(e)) wird im Abschnitt **Datei-Upload-Verifizierung** bewertet (ohne dass eine echte Datei hochgeladen wird).`));
   }
 
-  notes.push(`Denenen: **${probes}** güvenli read-only prob${authed ? ' (login-sonrası oturumla)' : ''} (yalnız GET; yükleme/komut/time-based YOK). LFI yalnız imza — içerik REDAKTE; open-redirect kanaryası TAKİP EDİLMEDİ; SSTI yalnız aritmetik; HPP salt gözlem. Test edilen GET parametresi: **${getParams.length}**${authed ? ' (Faz 7 SPA-keşif + auth-kapılı uçlar dâhil)' : ''}.`);
+  notes.push(`${t('Denenen: **', 'Durchgeführt: **')}${probes}${t('** güvenli read-only prob', '** sichere schreibgeschützte Probes')}${authed ? t(' (login-sonrası oturumla)', ' (mit der Sitzung nach dem Login)') : ''}${t(' (yalnız GET; yükleme/komut/time-based YOK). LFI yalnız imza — içerik REDAKTE; open-redirect kanaryası TAKİP EDİLMEDİ; SSTI yalnız aritmetik; HPP salt gözlem. Test edilen GET parametresi: **', ' (nur GET; kein Upload/Befehl/time-based). LFI nur Signatur — Inhalt REDIGIERT; der Open-Redirect-Kanarienvogel wurde NICHT verfolgt; SSTI nur Arithmetik; HPP reine Beobachtung. Getestete GET-Parameter: **')}${getParams.length}**${authed ? t(' (Faz 7 SPA-keşif + auth-kapılı uçlar dâhil)', ' (inkl. Phase-7-SPA-Erkundung + auth-geschützte Endpunkte)') : ''}.`);
   return { ok: true, pagesScanned: surf.pagesScanned, inputsFound, probesSent: probes, findings, stopped: null, notes };
 }

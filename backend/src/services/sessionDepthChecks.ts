@@ -42,7 +42,8 @@ function entropyBits(v: string): number {
 }
 
 // ---- Saf analiz çekirdeği (BİRİM TEST edilebilir) ----
-export function analyzeSessionSecurity(cookies: SessCookie[], homeHtml: string): { findings: VFinding[]; notes: string[] } {
+export function analyzeSessionSecurity(cookies: SessCookie[], homeHtml: string, de: boolean = false): { findings: VFinding[]; notes: string[] } {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const findings: VFinding[] = [];
   const notes: string[] = [];
 
@@ -58,8 +59,8 @@ export function analyzeSessionSecurity(cookies: SessCookie[], homeHtml: string):
   if (noPrefix.length) {
     findings.push({
       check: 'cookie_prefix_missing', inputPoint: noPrefix.map((c) => c.name).join(', '), vulnerable: true,
-      technique: 'oturum çerezi güvenlik prefix (__Host-/__Secure-) gözlemi',
-      evidence: `Oturum çerez(ler)i \`${noPrefix.map((c) => c.name).join('`, `')}\` **__Host-/__Secure- prefix'i olmadan** ayarlanmış — prefix, çerezin yalnız HTTPS'te ve doğru kapsam/host'ta set edilmesini zorlar (alt-domain/enjeksiyon sertleştirmesi). Düşük-etkili sertleştirme boşluğu.`,
+      technique: t('oturum çerezi güvenlik prefix (__Host-/__Secure-) gözlemi', 'Beobachtung des Sicherheits-Präfixes des Sitzungs-Cookies (__Host-/__Secure-)'),
+      evidence: t(`Oturum çerez(ler)i \`${noPrefix.map((c) => c.name).join('`, `')}\` **__Host-/__Secure- prefix'i olmadan** ayarlanmış — prefix, çerezin yalnız HTTPS'te ve doğru kapsam/host'ta set edilmesini zorlar (alt-domain/enjeksiyon sertleştirmesi). Düşük-etkili sertleştirme boşluğu.`, `Das/die Sitzungs-Cookie(s) \`${noPrefix.map((c) => c.name).join('`, `')}\` wurde(n) **ohne __Host-/__Secure--Präfix** gesetzt — das Präfix erzwingt, dass das Cookie nur über HTTPS und mit dem korrekten Geltungsbereich/Host gesetzt wird (Härtung gegen Subdomain/Injektion). Härtungslücke mit geringer Auswirkung.`),
       confidence: 'high', severity: 'low', sideEffectRisk: 'none',
     });
   }
@@ -68,37 +69,38 @@ export function analyzeSessionSecurity(cookies: SessCookie[], homeHtml: string):
   if (noSameSite.length && (postForms.length === 0 || formsWithoutToken.length > 0) && !csrfInMeta) {
     findings.push({
       check: 'csrf_protection', inputPoint: noSameSite.map((c) => c.name).join(', '), vulnerable: true,
-      technique: 'CSRF koruması gözlemi (SameSite + anti-CSRF token) — gösterge',
-      evidence: `Oturum çerez(ler)inde **SameSite (Strict/Lax) yok**${postForms.length ? ` ve durum-değiştiren ${formsWithoutToken.length}/${postForms.length} POST formunda anti-CSRF token gözlemlenmedi` : ' (form gözlemlenmedi)'} — çerez-tabanlı oturumda **CSRF göstergesi**. Bu bir göstergedir (gerçek cross-origin saldırı YAPILMADI); SameSite + anti-CSRF token önerilir.`,
+      technique: t('CSRF koruması gözlemi (SameSite + anti-CSRF token) — gösterge', 'Beobachtung des CSRF-Schutzes (SameSite + Anti-CSRF-Token) — Indikator'),
+      evidence: `${t('Oturum çerez(ler)inde **SameSite (Strict/Lax) yok**', 'Das/die Sitzungs-Cookie(s) haben **kein SameSite (Strict/Lax)**')}${postForms.length ? t(` ve durum-değiştiren ${formsWithoutToken.length}/${postForms.length} POST formunda anti-CSRF token gözlemlenmedi`, ` und in ${formsWithoutToken.length}/${postForms.length} zustandsändernden POST-Formularen wurde kein Anti-CSRF-Token beobachtet`) : t(' (form gözlemlenmedi)', ' (kein Formular beobachtet)')}${t(' — çerez-tabanlı oturumda **CSRF göstergesi**. Bu bir göstergedir (gerçek cross-origin saldırı YAPILMADI); SameSite + anti-CSRF token önerilir.', ' — **CSRF-Indikator** bei einer cookie-basierten Sitzung. Dies ist ein Indikator (es wurde KEIN echter Cross-Origin-Angriff durchgeführt); SameSite + Anti-CSRF-Token werden empfohlen.')}`,
       confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
     });
   } else if (noSameSite.length === 0) {
-    notes.push('Oturum çerez(ler)inde SameSite mevcut — CSRF için temel koruma var (olumlu).');
+    notes.push(t('Oturum çerez(ler)inde SameSite mevcut — CSRF için temel koruma var (olumlu).', 'Das/die Sitzungs-Cookie(s) haben SameSite — ein grundlegender CSRF-Schutz ist vorhanden (positiv).'));
   }
 
   // ---- 2) OTURUM TOKEN ENTROPİSİ ----
   for (const c of cookies) {
-    if (isJwt(c.value)) { notes.push(`\`${c.name}\` bir JWT (yapısal token) — klasik session-id entropi analizi geçerli değil; JWT güvenliği ayrı bölümde.`); continue; }
+    if (isJwt(c.value)) { notes.push(t(`\`${c.name}\` bir JWT (yapısal token) — klasik session-id entropi analizi geçerli değil; JWT güvenliği ayrı bölümde.`, `\`${c.name}\` ist ein JWT (strukturiertes Token) — die klassische Session-ID-Entropieanalyse ist nicht anwendbar; die JWT-Sicherheit wird in einem separaten Abschnitt behandelt.`)); continue; }
     if (!c.value) continue;
     const bits = entropyBits(c.value);
     const weak = c.value.length < 16 || bits < 64 || /^\d+$/.test(c.value);
     if (weak) {
       findings.push({
         check: 'weak_session_entropy', inputPoint: c.name, vulnerable: true,
-        technique: 'oturum kimliği (session-id) yapısal entropi gözlemi — gösterge',
-        evidence: `Oturum kimliği \`${c.name}\` yapısal olarak **zayıf/tahmin-edilebilir** görünüyor (uzunluk ${c.value.length}, ~${Math.round(bits)} bit entropi${/^\d+$/.test(c.value) ? ', tümü sayısal' : ''}) — değer REDAKTE. Yeterli değilse tahmin/brute riski. Gösterge; kesin değerlendirme için üretim token örneklemi gerekir. En az 128-bit rastgele session-id önerilir.`,
+        technique: t('oturum kimliği (session-id) yapısal entropi gözlemi — gösterge', 'Beobachtung der strukturellen Entropie der Sitzungs-ID (Session-ID) — Indikator'),
+        evidence: `${t(`Oturum kimliği \`${c.name}\` yapısal olarak **zayıf/tahmin-edilebilir** görünüyor (uzunluk ${c.value.length}, ~${Math.round(bits)} bit entropi`, `Die Sitzungs-ID \`${c.name}\` erscheint strukturell **schwach/vorhersehbar** (Länge ${c.value.length}, ~${Math.round(bits)} Bit Entropie`)}${/^\d+$/.test(c.value) ? t(', tümü sayısal', ', komplett numerisch') : ''}${t(`) — değer REDAKTE. Yeterli değilse tahmin/brute riski. Gösterge; kesin değerlendirme için üretim token örneklemi gerekir. En az 128-bit rastgele session-id önerilir.`, `) — der Wert ist REDIGIERT. Falls unzureichend, besteht ein Raten-/Brute-Force-Risiko. Indikator; für eine eindeutige Bewertung ist eine Stichprobe von Produktions-Tokens erforderlich. Es wird eine zufällige Session-ID mit mindestens 128 Bit empfohlen.`)}`,
         confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
       });
     }
   }
 
   // ---- 4) OTURUM ZAMAN AŞIMI / EŞ-ZAMANLI (gözlemsel) ----
-  notes.push('Oturum zaman aşımı ve eş-zamanlı oturum politikası GÖZLEMSELDİR; güvenli tek-gözlemle kesin doğrulanamaz (ikinci oturum/uzun bekleme gerektirir) — manuel test önerilir.');
+  notes.push(t('Oturum zaman aşımı ve eş-zamanlı oturum politikası GÖZLEMSELDİR; güvenli tek-gözlemle kesin doğrulanamaz (ikinci oturum/uzun bekleme gerektirir) — manuel test önerilir.', 'Die Sitzungs-Timeout- und Parallelsitzungs-Richtlinie ist BEOBACHTEND; sie kann mit einer einzelnen sicheren Beobachtung nicht eindeutig bestätigt werden (erfordert eine zweite Sitzung/langes Warten) — ein manueller Test wird empfohlen.'));
 
   return { findings, notes };
 }
 
-export async function collectSessionDepthEvidence(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+export async function collectSessionDepthEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const corpus = await fetchClientCorpus(host);
   const flagByName = new Map<string, CookieFlag>((session.cookieFlags ?? []).map((f) => [f.name, f]));
   // GERÇEK sunucu Set-Cookie oturum çerezi: hem cookieFlags'te (Set-Cookie'den) hem Cookie header'ında değeri olan.
@@ -110,11 +112,11 @@ export async function collectSessionDepthEvidence(host: string, session: AuthSes
   if (serverSessionCookies.length === 0) {
     return {
       ok: true, pagesScanned: 1, inputsFound: 0, probesSent: 0, findings: [], stopped: null,
-      notes: [`Sunucu-taraflı oturum çerezi (Set-Cookie session) gözlemlenmedi — oturum ${session.bearer ? '**Bearer/JWT token** ile' : 'çerez-dışı'} taşınıyor. Oturum ÇEREZİ güvenliği kontrolleri (CSRF SameSite / çerez-prefix / session-id entropi / oturum-URL'de) bu hedef için **kapsam dışıdır**. Token/JWT güvenliği ayrı **JWT / Token Güvenliği** bölümünde ele alınır.`],
+      notes: [`${t('Sunucu-taraflı oturum çerezi (Set-Cookie session) gözlemlenmedi — oturum ', 'Es wurde kein serverseitiges Sitzungs-Cookie (Set-Cookie session) beobachtet — die Sitzung wird ')}${session.bearer ? t('**Bearer/JWT token** ile', 'per **Bearer/JWT-Token**') : t('çerez-dışı', 'nicht per Cookie')}${t(` taşınıyor. Oturum ÇEREZİ güvenliği kontrolleri (CSRF SameSite / çerez-prefix / session-id entropi / oturum-URL'de) bu hedef için **kapsam dışıdır**. Token/JWT güvenliği ayrı **JWT / Token Güvenliği** bölümünde ele alınır.`, ` übertragen. Die Prüfungen zur Sitzungs-COOKIE-Sicherheit (CSRF SameSite / Cookie-Präfix / Session-ID-Entropie / Sitzung in URL) sind für dieses Ziel **außerhalb des Geltungsbereichs**. Die Token/JWT-Sicherheit wird im separaten Abschnitt **JWT / Token-Sicherheit** behandelt.`)}`],
     };
   }
 
-  const { findings, notes } = analyzeSessionSecurity(serverSessionCookies, corpus.homeHtml);
+  const { findings, notes } = analyzeSessionSecurity(serverSessionCookies, corpus.homeHtml, de);
 
   // ---- 3) OTURUM URL'DE (SESS-04) — session id URL/query'de ifşa mı ----
   const urlParamHit = corpus.homeHtml.match(/[?&](sid|jsessionid|phpsessid|session_?id|sess|asp\.?net_?sessionid|cfid|cftoken)=/i);
@@ -122,13 +124,13 @@ export async function collectSessionDepthEvidence(host: string, session: AuthSes
   if (urlParamHit || valueInUrl) {
     findings.push({
       check: 'session_in_url', inputPoint: urlParamHit ? urlParamHit[1] : (valueInUrl?.name ?? 'session'), vulnerable: true,
-      technique: 'oturum kimliğinin URL/query içinde ifşası gözlemi',
-      evidence: `Oturum kimliği ${urlParamHit ? `URL parametresi olarak (\`${urlParamHit[1]}=\`)` : 'çerez değeriyle bir URL içinde'} ifşa oluyor — URL'ler Referer başlığı, tarayıcı geçmişi, sunucu/proxy loglarında sızar (oturum çalma/fixation riski). Oturum kimliği yalnız HttpOnly çerezde taşınmalı, asla URL'de olmamalı.`,
+      technique: t('oturum kimliğinin URL/query içinde ifşası gözlemi', 'Beobachtung der Offenlegung der Sitzungs-ID in URL/Query'),
+      evidence: `${t('Oturum kimliği ', 'Die Sitzungs-ID wird ')}${urlParamHit ? t(`URL parametresi olarak (\`${urlParamHit[1]}=\`)`, `als URL-Parameter (\`${urlParamHit[1]}=\`)`) : t('çerez değeriyle bir URL içinde', 'mit dem Cookie-Wert innerhalb einer URL')}${t(` ifşa oluyor — URL'ler Referer başlığı, tarayıcı geçmişi, sunucu/proxy loglarında sızar (oturum çalma/fixation riski). Oturum kimliği yalnız HttpOnly çerezde taşınmalı, asla URL'de olmamalı.`, ` offengelegt — URLs lecken über den Referer-Header, den Browserverlauf sowie Server-/Proxy-Logs (Risiko von Sitzungsdiebstahl/Fixation). Die Sitzungs-ID sollte nur in einem HttpOnly-Cookie getragen werden und niemals in der URL stehen.`)}`,
       confidence: 'high', severity: 'high', sideEffectRisk: 'none',
     });
   }
 
   const cookieNames = serverSessionCookies.map((c) => c.name).join(', ');
-  notes.push(`Gözlemlenen sunucu oturum çerezi: **${serverSessionCookies.length}** (${cookieNames}). Kontroller: SameSite/CSRF, __Host-/__Secure- prefix, session-id entropi, URL-ifşa, zaman-aşımı (gözlemsel).`);
+  notes.push(t(`Gözlemlenen sunucu oturum çerezi: **${serverSessionCookies.length}** (${cookieNames}). Kontroller: SameSite/CSRF, __Host-/__Secure- prefix, session-id entropi, URL-ifşa, zaman-aşımı (gözlemsel).`, `Beobachtete Server-Sitzungs-Cookies: **${serverSessionCookies.length}** (${cookieNames}). Prüfungen: SameSite/CSRF, __Host-/__Secure--Präfix, Session-ID-Entropie, URL-Offenlegung, Timeout (beobachtend).`));
   return { ok: true, pagesScanned: 1, inputsFound: serverSessionCookies.length, probesSent: 0, findings, stopped: null, notes };
 }

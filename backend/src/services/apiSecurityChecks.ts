@@ -58,12 +58,13 @@ export function mineApiPaths(text: string): string[] {
 const SENSITIVE_FIELD_RE = /"(password|passwordHash|pwd|hash|salt|ssn|tckn|creditcard|cardnumber|cvv|secret|privatekey|api[_-]?key|access[_-]?token|refresh[_-]?token|otpsecret|totpsecret)"\s*:/i;
 const OVEREXPOSED_FIELD_RE = /"(isadmin|is_admin|role|roles|isdeleted|deletedat|internalid|internal_id|_id|adminflag)"\s*:/i;
 
-export async function collectApiSecurityEvidence(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+export async function collectApiSecurityEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const findings: VFinding[] = []; const notes: string[] = [];
   await resolveOrigin(host).catch(() => null);
   const origin = cachedOriginUrl(host);
   const corpus = await fetchClientCorpus(host);
-  if (!corpus.reachable) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: ['Ana sayfa çekilemedi — API güvenliği bu hedef için **kapsam dışıdır**.'] };
+  if (!corpus.reachable) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: [t('Ana sayfa çekilemedi — API güvenliği bu hedef için **kapsam dışıdır**.', 'Startseite konnte nicht abgerufen werden — die API-Sicherheit ist für dieses Ziel **außerhalb des Geltungsbereichs**.')] };
   const shellHash = md5(corpus.homeHtml);
   const authHeaders = applyAuthHeaders({}, session);
   let probes = 1;
@@ -98,11 +99,11 @@ export async function collectApiSecurityEvidence(host: string, session: AuthSess
   // ---- SÜTUN 0 SCOPING: gerçek API yoksa TÜM bölüm kapsam dışı (hayalet-bulgu önleme) ----
   if (realApi.length === 0 && !graphqlUrl) {
     return { ok: true, pagesScanned: 1, inputsFound: 0, probesSent: probes, findings: [], stopped: null,
-      notes: [`Aynı-origin, JSON dönen (SPA catch-all shell OLMAYAN) gerçek bir sunucu REST/GraphQL API ucu bu hedefte gözlemlenmedi (istemci-SDK/Firebase/SPA) — API güvenliği kontrolleri bu hedef için **kapsam dışıdır**.`] };
+      notes: [t(`Aynı-origin, JSON dönen (SPA catch-all shell OLMAYAN) gerçek bir sunucu REST/GraphQL API ucu bu hedefte gözlemlenmedi (istemci-SDK/Firebase/SPA) — API güvenliği kontrolleri bu hedef için **kapsam dışıdır**.`, `Kein echter, Same-Origin, JSON liefernder (KEINE SPA-Catch-all-Shell) Server-REST-/GraphQL-API-Endpunkt bei diesem Ziel beobachtet (Client-SDK/Firebase/SPA) — die API-Sicherheitsprüfungen sind für dieses Ziel **außerhalb des Geltungsbereichs**.`)] };
   }
 
   // ---- F1: BOLA/BFLA çapraz-referans (tekrar probe YOK) ----
-  notes.push('BOLA/BFLA (OWASP API1/API5 — nesne/fonksiyon-seviyesi yetki) **Authenticated IDOR** ve **Forced Browsing** bölümlerinde değerlendirilmiştir (çift bulgu önlemek için burada tekrar probe edilmedi).');
+  notes.push(t('BOLA/BFLA (OWASP API1/API5 — nesne/fonksiyon-seviyesi yetki) **Authenticated IDOR** ve **Forced Browsing** bölümlerinde değerlendirilmiştir (çift bulgu önlemek için burada tekrar probe edilmedi).', 'BOLA/BFLA (OWASP API1/API5 — Objekt-/Funktionsebenen-Autorisierung) wurde in den Abschnitten **Authenticated IDOR** und **Forced Browsing** bewertet (zur Vermeidung doppelter Befunde hier nicht erneut geprüft).'));
 
   // ---- F2: AŞIRI VERİ İFŞASI / BOPLA (API3) — gerçek API yanıtlarında hassas/aşırı alan ----
   for (const api of realApi) {
@@ -131,7 +132,7 @@ export async function collectApiSecurityEvidence(host: string, session: AuthSess
       if (r.status === 429 || r.headers.get('retry-after') || /ratelimit-remaining|x-rate-limit/i.test([...r.headers.keys()].join(','))) { limited = true; break; }
       if (r.status >= 500 || (times.length > 2 && r.ms > times[0] * 4 && r.ms > 2000)) { stopped = true; break; } // hedefi yorma — dur
     }
-    if (limited) notes.push('API rate-limit gözlemlendi (429 / rate-limit başlığı) — olumlu.');
+    if (limited) notes.push(t('API rate-limit gözlemlendi (429 / rate-limit başlığı) — olumlu.', 'API-Rate-Limit beobachtet (429 / Rate-Limit-Header) — positiv.'));
     else if (!stopped) findings.push({
       check: 'no_rate_limit', inputPoint: new URL(realApi[0].path, origin).pathname, vulnerable: true, technique: 'API rate-limit / kısıtlanmamış tüketim gözlemi (modest burst — DoS değil)',
       evidence: `Bir API ucuna (\`${new URL(realApi[0].path, origin).pathname}\`) art arda ${times.length} istek sonrası **429 veya rate-limit başlığı gözlenmedi** — kısıtlanmamış kaynak tüketimi (API4) göstergesi (brute-force/scraping/DoS'a açık olabilir). Hedef yorulmadı (modest burst). Rate-limit + kota önerilir.`,
@@ -163,9 +164,9 @@ export async function collectApiSecurityEvidence(host: string, session: AuthSess
       evidence: `GraphQL ucu (\`${new URL(graphqlUrl).pathname}\`) **introspection açık** — tüm şema (tipler/alanlar/mutasyonlar) dışarıya ifşa oluyor, saldırı yüzeyini haritalar. Üretimde introspection kapatılmalı. (Yalnız şema sorgulandı; veri değiştirilmedi.)`,
       confidence: 'high', severity: 'medium', sideEffectRisk: 'none',
     });
-    else notes.push('GraphQL ucu gözlemlendi ancak introspection kapalı/erişilemez görünüyor (olumlu).');
+    else notes.push(t('GraphQL ucu gözlemlendi ancak introspection kapalı/erişilemez görünüyor (olumlu).', 'GraphQL-Endpunkt beobachtet, aber Introspection erscheint deaktiviert/nicht erreichbar (positiv).'));
   }
 
-  notes.push(`Keşfedilen gerçek API ucu: **${realApi.length}**${graphqlUrl ? ' + GraphQL' : ''} (aynı-origin, JSON, SPA-shell olmayan). Denenen: **${probes}** güvenli prob (yalnız GET + read-only introspection; mutasyon/veri-değiştirme/DoS YOK).`);
+  notes.push(t(`Keşfedilen gerçek API ucu: **${realApi.length}**${graphqlUrl ? ' + GraphQL' : ''} (aynı-origin, JSON, SPA-shell olmayan). Denenen: **${probes}** güvenli prob (yalnız GET + read-only introspection; mutasyon/veri-değiştirme/DoS YOK).`, `Entdeckte echte API-Endpunkte: **${realApi.length}**${graphqlUrl ? ' + GraphQL' : ''} (Same-Origin, JSON, keine SPA-Shell). Durchgeführt: **${probes}** sichere Proben (nur GET + Read-only-Introspection; KEINE Mutation/Datenänderung/DoS).`));
   return { ok: true, pagesScanned: 1, inputsFound: realApi.length + (graphqlUrl ? 1 : 0), probesSent: probes, findings, stopped: null, notes };
 }

@@ -37,15 +37,16 @@ async function isRealLoginEndpoint(loginUrl: string | null, homeShell: string): 
 }
 
 // Güvenlik-sorusu tabanlı reset GERÇEK bir sunucu ucu mu? (var-olmayan e-posta ile GET; e-posta gitmez.)
-async function observeSecurityQuestionReset(host: string, r: string): Promise<{ real: boolean; finding: VFinding | null }> {
+async function observeSecurityQuestionReset(host: string, r: string, de: boolean = false): Promise<{ real: boolean; finding: VFinding | null }> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const secQ = new URL('/rest/user/security-question', `${cachedOriginUrl(host)}/`).toString();
   const sq = await probe(`${secQ}?email=${encodeURIComponent(`ct-reset-${r}@example.invalid`)}`, { label: 'reset: security-question gözlemi (var-olmayan e-posta)' });
   const real = !!sq && sq.status >= 200 && sq.status < 400 && /question|soru|"id"\s*:/i.test(sq.text) && !/<!doctype|<html[\s>]/i.test(sq.text.slice(0, 200));
   return real
     ? { real: true, finding: {
         check: 'weak_password_reset', inputPoint: '/rest/user/security-question', vulnerable: true,
-        technique: 'parola sıfırlama mekanizması gözlemi (güvenlik sorusu) — gösterge',
-        evidence: 'Parola sıfırlama **güvenlik sorusu** tabanlı görünüyor (security-question ucu yanıt verdi) — güvenlik soruları tahmin/OSINT ile aşılabilir; token-tabanlı e-posta sıfırlaması daha güvenli. Gösterge; GERÇEK sıfırlama e-postası tetiklenmedi.',
+        technique: t('parola sıfırlama mekanizması gözlemi (güvenlik sorusu) — gösterge', 'Beobachtung des Passwort-Zurücksetzungs-Mechanismus (Sicherheitsfrage) — Indikator'),
+        evidence: t('Parola sıfırlama **güvenlik sorusu** tabanlı görünüyor (security-question ucu yanıt verdi) — güvenlik soruları tahmin/OSINT ile aşılabilir; token-tabanlı e-posta sıfırlaması daha güvenli. Gösterge; GERÇEK sıfırlama e-postası tetiklenmedi.', 'Die Passwort-Zurücksetzung scheint auf einer **Sicherheitsfrage** zu basieren (der security-question-Endpunkt hat geantwortet) — Sicherheitsfragen können per Raten/OSINT überwunden werden; eine token-basierte E-Mail-Zurücksetzung ist sicherer. Indikator; es wurde KEINE echte Zurücksetzungs-E-Mail ausgelöst.'),
         confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
       } }
     : { real: false, finding: null };
@@ -109,7 +110,8 @@ function findEndpoint(homeHtml: string, host: string, kws: RegExp, wellKnown: st
   return wellKnown.length ? new URL(wellKnown[0], `${cachedOriginUrl(host)}/`).toString() : null;
 }
 
-export async function collectAuthDepthEvidence(host: string, session: AuthSession): Promise<ActiveCheckEvidence> {
+export async function collectAuthDepthEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
+  const t = (trS: string, deS: string) => (de ? deS : trS);
   const findings: VFinding[] = [];
   const notes: string[] = [];
   await resolveOrigin(host).catch(() => null);
@@ -127,18 +129,18 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
   // sahte uca 5 başarısız login atıp "lockout yok" gibi HAYALET bulgu ÜRETİLMEZ (nomorelink bug'ı).
   const homeShell = homeHtml ? md5(homeHtml) : '';
   const loginRealistic = await isRealLoginEndpoint(loginUrl, homeShell); probes++;
-  const resetReal = await observeSecurityQuestionReset(host, rand()); probes++;
+  const resetReal = await observeSecurityQuestionReset(host, rand(), de); probes++;
   if (!loginRealistic && !resetReal.real) {
     return { ok: true, pagesScanned: 1, inputsFound: 0, probesSent: probes, findings: [], stopped: null,
-      notes: ['Uygulanabilir bir SUNUCU kimlik-doğrulama uç noktası (login/reset/register) bu hedefte gözlemlenmedi — guessed uçlar SPA catch-all shell / 404 döndü (istemci-taraflı/SPA veya Firebase auth). Kimlik-doğrulama derinliği kontrolleri bu hedef için **kapsam dışıdır**.'] };
+      notes: [t('Uygulanabilir bir SUNUCU kimlik-doğrulama uç noktası (login/reset/register) bu hedefte gözlemlenmedi — guessed uçlar SPA catch-all shell / 404 döndü (istemci-taraflı/SPA veya Firebase auth). Kimlik-doğrulama derinliği kontrolleri bu hedef için **kapsam dışıdır**.', 'Bei diesem Ziel wurde kein anwendbarer SERVER-Authentifizierungs-Endpunkt (Login/Reset/Register) beobachtet — die geratenen Endpunkte gaben ein SPA-Catch-all-Shell / 404 zurück (clientseitig/SPA oder Firebase-Auth). Die Prüfungen zur Authentifizierungstiefe sind für dieses Ziel **außerhalb des Geltungsbereichs**.')] };
   }
 
   // ---- 9) KİMLİK ŞİFRESİZ KANALDA (ATHN-01) — yalnız gerçek login ucu varsa ----
   if (loginRealistic && (!httpsOk || (loginUrl && loginUrl.startsWith('http://')))) {
     findings.push({
       check: 'auth_cleartext', inputPoint: loginUrl ?? origin, vulnerable: true,
-      technique: 'kimlik bilgisi taşıma kanalı (HTTP/HTTPS) gözlemi',
-      evidence: `Giriş ${!httpsOk ? 'hedefi HTTPS (443) üzerinden yanıt vermedi; iletişim düz metin (HTTP)' : 'formu/POST\'u HTTP üzerinden yapılıyor'} — kimlik bilgileri şifresiz taşınıyor, ağ üzerinde ele geçirilebilir.`,
+      technique: t('kimlik bilgisi taşıma kanalı (HTTP/HTTPS) gözlemi', 'Beobachtung des Übertragungskanals der Anmeldedaten (HTTP/HTTPS)'),
+      evidence: `${t('Giriş ', 'Die Anmeldung ')}${!httpsOk ? t('hedefi HTTPS (443) üzerinden yanıt vermedi; iletişim düz metin (HTTP)', 'antwortete nicht über HTTPS (443); die Kommunikation erfolgt im Klartext (HTTP)') : t('formu/POST\'u HTTP üzerinden yapılıyor', 'erfolgt per Formular/POST über HTTP')}${t(' — kimlik bilgileri şifresiz taşınıyor, ağ üzerinde ele geçirilebilir.', ' — die Anmeldedaten werden unverschlüsselt übertragen und können im Netzwerk abgefangen werden.')}`,
       confidence: 'high', severity: 'high', sideEffectRisk: 'none',
     });
   }
@@ -156,12 +158,12 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
       if (statusDiff || msgDiff) {
         findings.push({
           check: 'user_enumeration', inputPoint: new URL(loginUrl).pathname, vulnerable: true,
-          technique: 'hesap enumerasyonu (geçerli vs geçersiz kullanıcı yanıt farkı) — gösterge',
-          evidence: `Giriş ucu, GEÇERLİ ve GEÇERSİZ kullanıcı için FARKLI yanıt veriyor (${statusDiff ? `durum ${valid.status} vs ${invalid.status}` : 'hata mesajı/gövde farkı'}) — hesap enumerasyonu **göstergesi**. Bu bir göstergedir; tek-tip yanıt önerilir. (Kanıtlanmış hesap sızıntısı değil; doğrulama gerekir.)`,
+          technique: t('hesap enumerasyonu (geçerli vs geçersiz kullanıcı yanıt farkı) — gösterge', 'Konto-Enumeration (Antwortunterschied gültiger vs. ungültiger Benutzer) — Indikator'),
+          evidence: `${t('Giriş ucu, GEÇERLİ ve GEÇERSİZ kullanıcı için FARKLI yanıt veriyor (', 'Der Login-Endpunkt antwortet für einen GÜLTIGEN und einen UNGÜLTIGEN Benutzer UNTERSCHIEDLICH (')}${statusDiff ? `${t('durum ', 'Status ')}${valid.status} vs ${invalid.status}` : t('hata mesajı/gövde farkı', 'Unterschied in Fehlermeldung/Body')}${t(') — hesap enumerasyonu **göstergesi**. Bu bir göstergedir; tek-tip yanıt önerilir. (Kanıtlanmış hesap sızıntısı değil; doğrulama gerekir.)', ') — **Indikator** für Konto-Enumeration. Dies ist ein Indikator; eine einheitliche Antwort wird empfohlen. (Kein nachgewiesenes Konto-Leck; eine Bestätigung ist erforderlich.)')}`,
           confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
         });
       } else if (timingDiff) {
-        notes.push(`Zamanlama farkı gözlemlendi (${valid.ms}ms vs ${invalid.ms}ms) — zayıf/gürültülü enumerasyon sinyali; tek başına güvenilir değil (bilgilendirici).`);
+        notes.push(t(`Zamanlama farkı gözlemlendi (${valid.ms}ms vs ${invalid.ms}ms) — zayıf/gürültülü enumerasyon sinyali; tek başına güvenilir değil (bilgilendirici).`, `Zeitunterschied beobachtet (${valid.ms}ms vs ${invalid.ms}ms) — schwaches/verrauschtes Enumerationssignal; allein nicht zuverlässig (informativ).`));
       }
     }
   }
@@ -174,8 +176,8 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
       if (r?.success) {
         findings.push({
           check: 'default_credentials', inputPoint: `${new URL(loginUrl).pathname} (${u}/****)`, vulnerable: true,
-          technique: 'varsayılan kimlik bilgisi denemesi (oturum KULLANILMADI)',
-          evidence: `Varsayılan kimlik çifti \`${u}\` / (parola gizli) giriş ucunda **KABUL EDİLDİ** — varsayılan hesap açık. (Kanıtla-istismar-etme: oturum kullanılmadı, yalnız gözlemlendi.)`,
+          technique: t('varsayılan kimlik bilgisi denemesi (oturum KULLANILMADI)', 'Versuch mit Standard-Anmeldedaten (Sitzung NICHT genutzt)'),
+          evidence: t(`Varsayılan kimlik çifti \`${u}\` / (parola gizli) giriş ucunda **KABUL EDİLDİ** — varsayılan hesap açık. (Kanıtla-istismar-etme: oturum kullanılmadı, yalnız gözlemlendi.)`, `Das Standard-Anmeldepaar \`${u}\` / (Passwort verborgen) wurde am Login-Endpunkt **AKZEPTIERT** — das Standardkonto ist offen. (Nachweisen-nicht-ausnutzen: die Sitzung wurde nicht genutzt, nur beobachtet.)`),
           confidence: 'high', severity: 'high', sideEffectRisk: 'none',
         });
         break; // bir tane yeter — istismar yok
@@ -198,12 +200,12 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
       if (!blocked && !slow && times.length >= 4) {
         findings.push({
           check: 'weak_lockout', inputPoint: new URL(loginUrl).pathname, vulnerable: true,
-          technique: 'hesap kilitleme / login hız-sınırı gözlemi (throwaway kullanıcıyla)',
-          evidence: `Art arda ${times.length} başarısız giriş denemesinden sonra kilitleme, 429 veya belirgin gecikme gözlemlenmedi — **zayıf/yok lockout & rate-limit göstergesi** (brute-force'a açık olabilir). Gerçek hesap kilitlenmedi (throwaway kullanıcı kullanıldı).`,
+          technique: t('hesap kilitleme / login hız-sınırı gözlemi (throwaway kullanıcıyla)', 'Beobachtung der Kontosperrung / Login-Ratenbegrenzung (mit Wegwerf-Benutzer)'),
+          evidence: t(`Art arda ${times.length} başarısız giriş denemesinden sonra kilitleme, 429 veya belirgin gecikme gözlemlenmedi — **zayıf/yok lockout & rate-limit göstergesi** (brute-force'a açık olabilir). Gerçek hesap kilitlenmedi (throwaway kullanıcı kullanıldı).`, `Nach ${times.length} aufeinanderfolgenden fehlgeschlagenen Anmeldeversuchen wurde keine Sperrung, kein 429 und keine deutliche Verzögerung beobachtet — **Indikator für schwache/fehlende Sperrung & Ratenbegrenzung** (möglicherweise für Brute-Force anfällig). Es wurde kein echtes Konto gesperrt (ein Wegwerf-Benutzer wurde verwendet).`),
           confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
         });
       } else if (blocked) {
-        notes.push('Login hız-sınırı/lockout gözlemlendi (art arda hatalı denemede engel) — olumlu.');
+        notes.push(t('Login hız-sınırı/lockout gözlemlendi (art arda hatalı denemede engel) — olumlu.', 'Login-Ratenbegrenzung/Sperrung beobachtet (Blockade bei aufeinanderfolgenden Fehlversuchen) — positiv.'));
       }
     }
   }
@@ -214,9 +216,9 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
     if (resetReal.finding) {
       findings.push(resetReal.finding);
     } else if (resetUrl) {
-      notes.push('Parola sıfırlama ucu gözlemlendi; token/mekanizma statik olarak doğrulanamadı (gerçek e-posta tetiklenmedi) — bu bölüm için sınırlı.');
+      notes.push(t('Parola sıfırlama ucu gözlemlendi; token/mekanizma statik olarak doğrulanamadı (gerçek e-posta tetiklenmedi) — bu bölüm için sınırlı.', 'Ein Passwort-Zurücksetzungs-Endpunkt wurde beobachtet; das Token/der Mechanismus konnte statisch nicht validiert werden (es wurde keine echte E-Mail ausgelöst) — für diesen Abschnitt eingeschränkt.'));
     } else {
-      notes.push('Gözlemlenebilir bir parola sıfırlama ucu bulunamadı — bu kontrol **kapsam dışı**.');
+      notes.push(t('Gözlemlenebilir bir parola sıfırlama ucu bulunamadı — bu kontrol **kapsam dışı**.', 'Es wurde kein beobachtbarer Passwort-Zurücksetzungs-Endpunkt gefunden — diese Prüfung ist **außerhalb des Geltungsbereichs**.'));
     }
   }
 
@@ -231,21 +233,21 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
     if (pwInputs.length && weak) {
       findings.push({
         check: 'weak_password_policy', inputPoint: 'parola alanı (client-side)', vulnerable: true,
-        technique: 'parola politikası client-side gözlemi (kayıt YAPILMADI)',
-        evidence: `Parola alanı client-side olarak **minimum uzunluk (≥8) / karmaşıklık kuralı zorunlu kılmıyor** — zayıf parola politikası göstergesi (sunucu tarafı ayrıca doğrulanmalı; gerçek kayıt yapılmadı).`,
+        technique: t('parola politikası client-side gözlemi (kayıt YAPILMADI)', 'clientseitige Beobachtung der Passwortrichtlinie (KEINE Registrierung durchgeführt)'),
+        evidence: t(`Parola alanı client-side olarak **minimum uzunluk (≥8) / karmaşıklık kuralı zorunlu kılmıyor** — zayıf parola politikası göstergesi (sunucu tarafı ayrıca doğrulanmalı; gerçek kayıt yapılmadı).`, `Das Passwortfeld erzwingt clientseitig **keine Mindestlänge (≥8) / keine Komplexitätsregel** — Indikator für eine schwache Passwortrichtlinie (die Serverseite muss zusätzlich validiert werden; es wurde keine echte Registrierung durchgeführt).`),
         confidence: 'low', severity: 'low', sideEffectRisk: 'none',
       });
     } else if (!pwInputs.length) {
-      notes.push('Ana sayfada client-side parola alanı gözlemlenmedi (SPA/ayrı sayfa olabilir) — parola politikası statik olarak sınırlı incelendi.');
+      notes.push(t('Ana sayfada client-side parola alanı gözlemlenmedi (SPA/ayrı sayfa olabilir) — parola politikası statik olarak sınırlı incelendi.', 'Auf der Startseite wurde kein clientseitiges Passwortfeld beobachtet (möglicherweise SPA/separate Seite) — die Passwortrichtlinie wurde statisch nur eingeschränkt geprüft.'));
     }
   }
 
   // ---- 6) "BENİ HATIRLA" KALICI ÇEREZ (ATHN-05) ----
   if (session.method === 'api' && session.bearer) {
-    notes.push('Oturum bearer/token tabanlı (çerez-tabanlı "beni hatırla" kalıcı çerezi kapsam dışı).');
+    notes.push(t('Oturum bearer/token tabanlı (çerez-tabanlı "beni hatırla" kalıcı çerezi kapsam dışı).', 'Die Sitzung ist Bearer/Token-basiert (ein cookie-basiertes „Angemeldet bleiben"-Persistenz-Cookie ist außerhalb des Geltungsbereichs).'));
   } else {
     const persistent = (session.cookieFlags ?? []).length; // ayrıntılı Max-Age erişimimiz yok; gözlem sınırlı
-    if (!persistent) notes.push('Kalıcı "beni hatırla" çerezi gözlemlenmedi — bu kontrol sınırlı/kapsam dışı.');
+    if (!persistent) notes.push(t('Kalıcı "beni hatırla" çerezi gözlemlenmedi — bu kontrol sınırlı/kapsam dışı.', 'Es wurde kein persistentes „Angemeldet bleiben"-Cookie beobachtet — diese Prüfung ist eingeschränkt/außerhalb des Geltungsbereichs.'));
   }
 
   // ---- 7) AUTHENTICATED SAYFA CACHE (ATHN-06) — session ile authed uç, Cache-Control gözlemi ----
@@ -267,14 +269,14 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
       if (!safe) {
         findings.push({
           check: 'auth_page_cacheable', inputPoint: new URL(u).pathname, vulnerable: true,
-          technique: 'authenticated yanıt cache başlığı gözlemi',
-          evidence: `Kimlik-doğrulamalı yanıt (\`${new URL(u).pathname}\`) \`Cache-Control: no-store/no-cache/private\` içermiyor (gözlenen: \`${r.cacheControl ?? 'yok'}\`) — tarayıcı/ara-proxy hassas içeriği önbelleğe alabilir.`,
+          technique: t('authenticated yanıt cache başlığı gözlemi', 'Beobachtung des Cache-Headers der authentifizierten Antwort'),
+          evidence: t(`Kimlik-doğrulamalı yanıt (\`${new URL(u).pathname}\`) \`Cache-Control: no-store/no-cache/private\` içermiyor (gözlenen: \`${r.cacheControl ?? 'yok'}\`) — tarayıcı/ara-proxy hassas içeriği önbelleğe alabilir.`, `Die authentifizierte Antwort (\`${new URL(u).pathname}\`) enthält kein \`Cache-Control: no-store/no-cache/private\` (beobachtet: \`${r.cacheControl ?? 'keines'}\`) — Browser/Zwischen-Proxy können sensible Inhalte zwischenspeichern.`),
           confidence: 'medium', severity: 'low', sideEffectRisk: 'none',
         });
       }
       break;
     }
-    if (!checked) notes.push('Cache gözlemi için authenticated JSON uç noktası bulunamadı — bu kontrol sınırlı.');
+    if (!checked) notes.push(t('Cache gözlemi için authenticated JSON uç noktası bulunamadı — bu kontrol sınırlı.', 'Für die Cache-Beobachtung wurde kein authentifizierter JSON-Endpunkt gefunden — diese Prüfung ist eingeschränkt.'));
   }
 
   // ---- 8) MFA VARLIK GÖSTERGESİ (ATHN-11) — bilgilendirici ----
@@ -282,11 +284,11 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
     const mfaHint = /\b(otp|totp|2fa|mfa|two[\s-]?factor|authenticator|verification code|doğrulama kodu|one[\s-]?time)\b/i.test(homeHtml)
       || (session.cookie ?? '').includes('totp') || /totp|mfa|2fa/i.test(corpus.sameOriginJs.map((f) => f.body.slice(0, 4000)).join(' '));
     notes.push(mfaHint
-      ? 'MFA/2FA göstergesi gözlemlendi (login akışında ikinci faktör alanları/anahtarları) — olumlu (bilgilendirici).'
-      : 'Login akışında MFA/2FA göstergesi gözlemlenmedi (bilgilendirici; ikinci faktör önerilir).');
+      ? t('MFA/2FA göstergesi gözlemlendi (login akışında ikinci faktör alanları/anahtarları) — olumlu (bilgilendirici).', 'MFA/2FA-Indikator beobachtet (Zweitfaktor-Felder/-Schlüssel im Login-Ablauf) — positiv (informativ).')
+      : t('Login akışında MFA/2FA göstergesi gözlemlenmedi (bilgilendirici; ikinci faktör önerilir).', 'Im Login-Ablauf wurde kein MFA/2FA-Indikator beobachtet (informativ; ein zweiter Faktor wird empfohlen).'));
   }
 
-  notes.push(`Denenen: **${probes}** güvenli auth-probu (varsayılan-kimlik yalnız başarısız login; lockout THROWAWAY kullanıcıyla; reset var-olmayan e-posta ile; kayıt YAPILMADI; gerçek hesap kilitlenmedi).`);
+  notes.push(t(`Denenen: **${probes}** güvenli auth-probu (varsayılan-kimlik yalnız başarısız login; lockout THROWAWAY kullanıcıyla; reset var-olmayan e-posta ile; kayıt YAPILMADI; gerçek hesap kilitlenmedi).`, `Durchgeführt: **${probes}** sichere Auth-Probes (Standard-Anmeldedaten nur als fehlgeschlagener Login; Sperrung mit WEGWERF-Benutzer; Zurücksetzung mit nicht existierender E-Mail; KEINE Registrierung; kein echtes Konto gesperrt).`));
   // Buraya YALNIZ gerçek bir sunucu login/reset ucu VARSA gelinir (yukarıdaki kapsam kapısı) → inputsFound=1.
   return { ok: true, pagesScanned: 1, inputsFound: 1, probesSent: probes, findings, stopped: null, notes };
 }
