@@ -149,6 +149,54 @@ const REMEDIATION_DE: Record<HeaderKey, { title: string; body: string }> = {
   },
 };
 
+// English (UK) remediation texts (code examples IDENTICAL; only prose/title translated).
+const REMEDIATION_EN: Record<HeaderKey, { title: string; body: string }> = {
+  csp: {
+    title: 'Add a Content-Security-Policy (CSP)',
+    body:
+      'This is the most effective browser-level defence against XSS and content injection. Start with a baseline policy suited to your site and tighten it over time:\n\n' +
+      '```nginx\nadd_header Content-Security-Policy "default-src \'self\'; img-src \'self\' data:; script-src \'self\'; style-src \'self\' \'unsafe-inline\'; frame-ancestors \'self\'" always;\n```\n\n' +
+      'If you use third-party scripts (GTM, Analytics, Pixel), add the relevant domains to `script-src`/`connect-src`.',
+  },
+  xfo: {
+    title: 'Add X-Frame-Options',
+    body:
+      'Prevents your page from being embedded in another site’s iframe and exposed to clickjacking:\n\n' +
+      '```nginx\nadd_header X-Frame-Options "SAMEORIGIN" always;\n```\n\n' +
+      'As a modern alternative, CSP `frame-ancestors \'self\'` provides the same protection.',
+  },
+  xcto: {
+    title: 'Add X-Content-Type-Options',
+    body:
+      'Prevents the browser from MIME-type sniffing and misinterpreting content (and the XSS risk that follows):\n\n' +
+      '```nginx\nadd_header X-Content-Type-Options "nosniff" always;\n```',
+  },
+  hsts: {
+    title: 'Add Strict-Transport-Security (HSTS)',
+    body:
+      'Enforces HTTPS and makes SSL-stripping/MITM attacks harder. (Apply only if your site runs entirely over HTTPS.)\n\n' +
+      '```nginx\nadd_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;\n```',
+  },
+  referrer: {
+    title: 'Add Referrer-Policy',
+    body:
+      'Reduces information leakage via the `Referer` header sent to external links:\n\n' +
+      '```nginx\nadd_header Referrer-Policy "strict-origin-when-cross-origin" always;\n```',
+  },
+  permissions: {
+    title: 'Add Permissions-Policy',
+    body:
+      'Restricts browser APIs (camera, microphone, location, etc.) and prevents unwanted access by third-party iframes:\n\n' +
+      '```nginx\nadd_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;\n```',
+  },
+  xxss: {
+    title: 'X-XSS-Protection (defence-in-depth)',
+    body:
+      'A legacy header for older browsers; the real protection lies in CSP. You may add it optionally:\n\n' +
+      '```nginx\nadd_header X-XSS-Protection "1; mode=block" always;\n```',
+  },
+};
+
 // Eksik basliklarin varsayilan onceligi (rapora yazim sirasi).
 const ORDER: HeaderKey[] = ['csp', 'xfo', 'xcto', 'hsts', 'referrer', 'permissions', 'xxss'];
 
@@ -159,8 +207,9 @@ const ORDER: HeaderKey[] = ['csp', 'xfo', 'xcto', 'hsts', 'referrer', 'permissio
  * satin alinip indirilebilir.
  */
 export function buildHeaderFixSuggestions(findingsMd: string, hostname: string, locale: string = 'tr'): string {
-  const de = locale === 'de';
-  const R = de ? REMEDIATION_DE : REMEDIATION;
+  const de = locale === 'de', en = locale === 'en';
+  const p = (tr: string, deS: string, enS: string) => (de ? deS : en ? enS : tr);
+  const R = de ? REMEDIATION_DE : en ? REMEDIATION_EN : REMEDIATION;
   const { present, absent } = parseSecurityHeaders(findingsMd);
   // Ele alinacaklar: acikca "Yok" isaretliler; hicbiri yoksa "present degil" olan onerilenler;
   // o da yoksa (parse bos) tum onerilen temel set.
@@ -195,21 +244,25 @@ export function buildHeaderFixSuggestions(findingsMd: string, hostname: string, 
   const iis = keys.map((k) => `      <add name="${HV[k].name}" value="${HV[k].value}" />`).join('\n');
 
   return (
-    (de
-      ? `Die folgenden Empfehlungen dienen der Behebung der auf der Startseite von ${hostname} festgestellten fehlenden Sicherheits-Header. ` +
-        `Zu jedem Header folgt zuerst eine kurze Erläuterung, dann ein Nginx-Beispiel; am Ende finden Sie fertige Blöcke für andere Plattformen (Firebase, Vercel, Next.js, Apache). Kopieren Sie den zu Ihrem Server passenden Block.\n\n`
-      : `Aşağıdaki öneriler, ${hostname} ana sayfasında tespit edilen eksik güvenlik başlıklarını gidermeye yöneliktir. ` +
-        `Her başlık için önce kısa açıklama, ardından Nginx örneği verilmiştir; en sonda Nginx dışı platformlar (Firebase, Vercel, Next.js, Apache) için hazır bloklar bulabilirsiniz. Kendi sunucunuza uygun olanı kopyalayın.\n\n`) +
+    p(
+      `Aşağıdaki öneriler, ${hostname} ana sayfasında tespit edilen eksik güvenlik başlıklarını gidermeye yöneliktir. ` +
+        `Her başlık için önce kısa açıklama, ardından Nginx örneği verilmiştir; en sonda Nginx dışı platformlar (Firebase, Vercel, Next.js, Apache) için hazır bloklar bulabilirsiniz. Kendi sunucunuza uygun olanı kopyalayın.\n\n`,
+      `Die folgenden Empfehlungen dienen der Behebung der auf der Startseite von ${hostname} festgestellten fehlenden Sicherheits-Header. ` +
+        `Zu jedem Header folgt zuerst eine kurze Erläuterung, dann ein Nginx-Beispiel; am Ende finden Sie fertige Blöcke für andere Plattformen (Firebase, Vercel, Next.js, Apache). Kopieren Sie den zu Ihrem Server passenden Block.\n\n`,
+      `The following recommendations address the missing security headers detected on the home page of ${hostname}. ` +
+        `Each header has a short explanation followed by an Nginx example; at the end you will find ready-made blocks for non-Nginx platforms (Firebase, Vercel, Next.js, Apache). Copy the one that suits your server.\n\n`) +
     `${items}\n\n` +
-    (de ? `### Kombinierte Konfiguration — Nginx\n\n` : `### Tümünü birleştiren yapılandırma — Nginx\n\n`) +
-    (de
-      ? `In Ihren Server-Block (server { ... }) einfügen, mit \`nginx -t\` prüfen und anschließend mit \`systemctl reload nginx\` neu laden:\n\n`
-      : `Sunucu bloğunuza (server { ... }) ekleyip \`nginx -t\` ile doğrulayın, ardından \`systemctl reload nginx\` ile yeniden yükleyin:\n\n`) +
+    p(`### Tümünü birleştiren yapılandırma — Nginx\n\n`, `### Kombinierte Konfiguration — Nginx\n\n`, `### Combined configuration — Nginx\n\n`) +
+    p(
+      `Sunucu bloğunuza (server { ... }) ekleyip \`nginx -t\` ile doğrulayın, ardından \`systemctl reload nginx\` ile yeniden yükleyin:\n\n`,
+      `In Ihren Server-Block (server { ... }) einfügen, mit \`nginx -t\` prüfen und anschließend mit \`systemctl reload nginx\` neu laden:\n\n`,
+      `Add these to your server block (server { ... }), verify with \`nginx -t\`, then reload with \`systemctl reload nginx\`:\n\n`) +
     '```nginx\n' + `${combined}\n` + '```\n\n' +
-    (de ? `### Fertige Konfiguration für andere Plattformen\n\n` : `### Diğer platformlar için hazır yapılandırma\n\n`) +
-    (de
-      ? `Falls Ihr Server nicht Nginx ist, können Sie dieselben Header mit einem der folgenden fertigen Blöcke hinzufügen.\n\n`
-      : `Aynı başlıkları, sunucunuz Nginx değilse aşağıdaki hazır bloklardan uygun olanıyla ekleyebilirsiniz.\n\n`) +
+    p(`### Diğer platformlar için hazır yapılandırma\n\n`, `### Fertige Konfiguration für andere Plattformen\n\n`, `### Ready-made configuration for other platforms\n\n`) +
+    p(
+      `Aynı başlıkları, sunucunuz Nginx değilse aşağıdaki hazır bloklardan uygun olanıyla ekleyebilirsiniz.\n\n`,
+      `Falls Ihr Server nicht Nginx ist, können Sie dieselben Header mit einem der folgenden fertigen Blöcke hinzufügen.\n\n`,
+      `If your server is not Nginx, you can add the same headers using one of the ready-made blocks below.\n\n`) +
     `**Firebase Hosting — \`firebase.json\`:**\n\n` +
     '```json\n' +
     `{\n  "hosting": {\n    "headers": [\n      {\n        "source": "**",\n        "headers": [\n${jsonHeaders}\n        ]\n      }\n    ]\n  }\n}\n` +
@@ -226,8 +279,9 @@ export function buildHeaderFixSuggestions(findingsMd: string, hostname: string, 
     '```apache\n' + `${apache}\n` + '```\n\n' +
     `**IIS / ASP.NET — \`web.config\`:**\n\n` +
     '```xml\n' + `<configuration>\n  <system.webServer>\n    <httpProtocol>\n      <customHeaders>\n${iis}\n      </customHeaders>\n    </httpProtocol>\n  </system.webServer>\n</configuration>\n` + '```\n\n' +
-    (de
-      ? `Prüfen Sie nach den Änderungen mit den Browser-Entwicklertools (Tab „Network") oder mit \`curl -I https://${hostname}\`, dass die Header in der Antwort enthalten sind.`
-      : `Değişikliklerden sonra tarayıcı geliştirici araçları (Network sekmesi) veya \`curl -I https://${hostname}\` ile başlıkların yanıta eklendiğini doğrulayın.`)
+    p(
+      `Değişikliklerden sonra tarayıcı geliştirici araçları (Network sekmesi) veya \`curl -I https://${hostname}\` ile başlıkların yanıta eklendiğini doğrulayın.`,
+      `Prüfen Sie nach den Änderungen mit den Browser-Entwicklertools (Tab „Network") oder mit \`curl -I https://${hostname}\`, dass die Header in der Antwort enthalten sind.`,
+      `After making the changes, verify with your browser developer tools (Network tab) or \`curl -I https://${hostname}\` that the headers are present in the response.`)
   );
 }
