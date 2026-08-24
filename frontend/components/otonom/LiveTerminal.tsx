@@ -52,7 +52,7 @@ export function LiveTerminal() {
           <span style={{ display: 'inline-block', width: 8, height: 15, background: '#F5A623', verticalAlign: 'middle', animation: 'rtBlink 1s step-end infinite' }} />
         </div>
       </div>
-      <div style={{ position: 'absolute', right: -14, bottom: -14, background: '#0e241f', border: '1px solid #1e3b33', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 12px 32px rgba(0,0,0,.5)' }}>
+      <div style={{ position: 'absolute', right: 8, bottom: 8, maxWidth: 'calc(100% - 16px)', background: '#0e241f', border: '1px solid #1e3b33', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 12px 32px rgba(0,0,0,.5)' }}>
         <div style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid #1e3b33', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'conic-gradient(from 0deg, transparent 70%, rgba(245,166,35,.7))', animation: 'rtRadarSpin 3s linear infinite' }} />
         </div>

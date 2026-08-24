@@ -86,7 +86,7 @@ const PHASE_SETS: Record<string, string[]> = {
   ],
 };
 
-function phasesFor(key?: string | null): string[] {
+export function phasesFor(key?: string | null): string[] {
   return (key && PHASE_SETS[key]) || DEFAULT_PHASES;
 }
 

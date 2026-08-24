@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '../../../lib/api';
 import { StatusTracker } from '../../../components/dashboard/StatusTracker';
-import { LiveScanPhases } from '../../../components/dashboard/LiveScanPhases';
+import { ScanRunningView } from '../../../components/dashboard/ScanRunningView';
 import { InvoiceRequestForm } from '../../../components/dashboard/InvoiceRequestForm';
 import { ScanFailedActions } from '../../../components/dashboard/ScanFailedActions';
 import { GA_ID } from '../../../lib/consent';
@@ -181,19 +181,21 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   }
 
   return (
-    <main className="container-page max-w-xl py-16">
-      <p className="eyebrow">Sipariş Durumu</p>
-      <h1 className="mt-2 text-3xl font-extrabold text-brand">
-        {status === 'scan_completed' && order?.report?.incomplete
-          ? 'Rapor hazır — ancak eksik'
-          : HEADLINE[status] ?? status}
-      </h1>
-      {order && <p className="mt-1 text-sm text-ink-muted">Hedef: {hostname}</p>}
+    <main className={`container-page py-16 ${active ? "max-w-5xl" : "max-w-xl"}`}>
+      {!active && <>
+        <p className="eyebrow">Sipariş Durumu</p>
+        <h1 className="mt-2 text-3xl font-extrabold text-brand">
+          {status === 'scan_completed' && order?.report?.incomplete
+            ? 'Rapor hazır — ancak eksik'
+            : HEADLINE[status] ?? status}
+        </h1>
+        {order && <p className="mt-1 text-sm text-ink-muted">Hedef: {hostname}</p>}
+      </>}
 
       {/* İade/süre-doldu gibi terminal durumlarda adım göstergesi YANILTICI olur — gösterilmez.
           ÖDEME BEKLENİYOR'da da gösterilmez: tarama HENÜZ BAŞLAMADI; "Tarama çalışıyor" adımı
           müşteriyi yanıltır (ödeme yapmadan tarama sanıyor). Onun yerine ödeme kartı gösterilir. */}
-      {!['refunded', 'report_purged', 'awaiting_payment', 'awaiting_domain_verification'].includes(status) && (
+      {!active && !['refunded', 'report_purged', 'awaiting_payment', 'awaiting_domain_verification'].includes(status) && (
         <div className="mt-8">
           <StatusTracker status={status} />
         </div>
@@ -276,27 +278,18 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
           : status === 'scan_queued' || status === 'paid' || !order?.flow?.startedAt;
         const s1Started = order?.paidAt ?? order?.createdAt;
         return (
-        <>
-          {/* Tek bilgilendirme satırı — kuyruk/başka tarama detayı verilmez; "başlatılıyor" başlık + terminal yeterli. */}
-          <p className="mt-4 rounded-card bg-brand-50/70 px-4 py-3 text-sm text-ink-soft">
-            Bu sayfa otomatik güncelleniyor — kapatabilirsiniz; sonuç hazır olduğunda erişim kodu e-postanıza gönderilecek.
-          </p>
-
-          {/* Canlı aktivite — landing'deki terminal görünümüyle aynı; içerik GERÇEK
-              (worker'ın ürettiği redakte/kategorilenmiş akış), her 5 sn güncellenir. */}
-          <div className="mt-4 overflow-hidden rounded-card border border-white/10 bg-[#0A1F1C] shadow-lg">
-            <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
-              <span className="h-3 w-3 rounded-full bg-red-400/70" />
-              <span className="h-3 w-3 rounded-full bg-accent/70" />
-              <span className="h-3 w-3 rounded-full bg-emerald-400/70" />
-              <span className="ml-3 text-xs font-medium text-white/40">cybertestify — live scan</span>
-            </div>
-            <LiveScanPhases hostname={hostname} feed={isS1 ? [] : (notStarted ? [] : feed)} startedAt={isS1 ? s1Started : order?.flow?.startedAt} packageKey={order?.packageKey} queued={notStarted} authConfirmedAt={order?.flow?.authConfirmedAt} secondsPerPhase={isS1 ? 240 : undefined} />
-            <div className="border-t border-white/10 px-5 py-3 text-xs text-white/40">
-              Teknik loglar güvenlik ve gizlilik nedeniyle gizlenmiştir; yalnızca genel aktivite gösterilir.
-            </div>
-          </div>
-        </>
+          // (Tasarım: Scan Status v2) TEMA: S1 → koyu, 6 paket → açık. Tarama türü de gösterilir.
+          <ScanRunningView
+            hostname={hostname}
+            packageKey={order?.packageKey}
+            packageName={order?.packageName}
+            startedAt={isS1 ? s1Started : order?.flow?.startedAt}
+            authConfirmedAt={order?.flow?.authConfirmedAt}
+            feed={isS1 ? [] : (notStarted ? [] : feed)}
+            notStarted={notStarted}
+            dark={isS1}
+            secondsPerPhase={isS1 ? 240 : undefined}
+          />
         );
       })()}
 

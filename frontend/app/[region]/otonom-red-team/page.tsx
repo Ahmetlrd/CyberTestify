@@ -41,7 +41,7 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
   const packagesHref = `/${region.code}/packages`;
 
   return (
-    <main style={{ background: C.bg, color: C.text }}>
+    <main style={{ background: C.bg, color: C.text, overflowX: 'hidden' }}>
       {/* Animasyon keyframe'leri (LiveTerminal + hero) */}
       <style>{`
         @keyframes rtPulseDot{0%,100%{opacity:1}50%{opacity:.25}}
