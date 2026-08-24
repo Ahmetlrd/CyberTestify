@@ -13,6 +13,7 @@ import { renderReportPdf, htmlToPdfBuffer } from '../services/pdf.js';
 import { renderRedTeamFullHtml, redteamReportNo } from '../redteam/report.js';
 import { storeRedTeamCustomerReport } from '../services/redteamOrderReport.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
+import { getPackageDef, localizedPackage } from '../services/scanPackages.js';
 import { LEVEL_CFG } from '../redteam/orchestrator.js';
 import { appendLogs } from '../redteam/observability.js';
 import { hardkill } from '../redteam/hardkill.js';
@@ -357,12 +358,14 @@ adminRouter.get('/orders/:id/report.pdf', async (req, res) => {
   const di = fullText.indexOf(PASSIVE_EXTRAS_DELIM);
   const reportMd = di === -1 ? fullText : fullText.slice(0, di).trim();
   const extrasMarkdown = di === -1 ? null : fullText.slice(di + PASSIVE_EXTRAS_DELIM.length).trim();
-  const locale: 'tr' | 'en' = report.order.locale === 'en' ? 'en' : 'tr';
+  const locale: 'tr' | 'en' | 'de' = report.order.locale === 'en' ? 'en' : report.order.locale === 'de' ? 'de' : 'tr';
+  const admPkgDef = getPackageDef(report.order.package.key);
+  const admPkgName = admPkgDef ? localizedPackage(admPkgDef, locale).displayName : report.order.package.displayName;
 
   const pdf = await renderReportPdf(
     reportMd,
     {
-      hostname: report.order.domain.hostname, packageName: report.order.package.displayName,
+      hostname: report.order.domain.hostname, packageName: admPkgName,
       packageKey: report.order.package.key, createdAt: report.createdAt, locale,
     },
     { fixMarkdown, extrasMarkdown },

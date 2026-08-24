@@ -8,7 +8,7 @@ import { renderReportPdf, htmlToPdfBuffer } from '../services/pdf.js';
 import { renderRedTeamFullHtml, redteamReportNo } from '../redteam/report.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
 import { requireAuth } from '../middleware/auth.js';
-import { getPackageDef, fixSuggestionPrice } from '../services/scanPackages.js';
+import { getPackageDef, fixSuggestionPrice, localizedPackage } from '../services/scanPackages.js';
 import { evaluatePromo } from '../services/promo.js';
 import { initiateFixSuggestionPayment } from '../services/payment/iyzico.js';
 
@@ -89,12 +89,14 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
   const reportMd = di === -1 ? full : full.slice(0, di).trim();
   const extrasMarkdown = di === -1 ? null : full.slice(di + PASSIVE_EXTRAS_DELIM.length).trim();
 
-  const locale: 'tr' | 'en' = report.order.locale === 'en' ? 'en' : 'tr';
+  const locale: 'tr' | 'en' | 'de' = report.order.locale === 'en' ? 'en' : report.order.locale === 'de' ? 'de' : 'tr';
+  const pkgDef = getPackageDef(report.order.package.key);
+  const localizedPkgName = pkgDef ? localizedPackage(pkgDef, locale).displayName : report.order.package.displayName;
   const pdf = await renderReportPdf(
     reportMd,
     {
       hostname: report.order.domain.hostname,
-      packageName: report.order.package.displayName,
+      packageName: localizedPkgName,
       packageKey: report.order.package.key,
       createdAt: report.createdAt,
       locale,
