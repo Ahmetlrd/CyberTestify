@@ -20,7 +20,7 @@ type Props = {
   secondsPerPhase?: number;
   verified?: boolean; // sahiplik/DNS doğrulaması yapılmış paket (5 & 6) → "Sahiplik doğrulandı" adımı/logu gösterilir
   loginless?: boolean; // "loginsiz devam et" → login fazı atlanır (bkz LiveScanPhases/computeScanProgress)
-  lang?: 'tr' | 'de';
+  lang?: 'tr' | 'de' | 'en';
 };
 
 // S1 tarama türü detayları — S1 /de'de gösterilmez → yalnız TR (çevrilmez).
@@ -58,10 +58,23 @@ const SRV = {
     scanType: 'Scan-Typ', scanFallback: 'Scan',
     termHeader: 'cybertestify — Live-Scan', termFooter: 'Technische Logs werden aus Sicherheits- und Datenschutzgründen ausgeblendet; nur die allgemeine Aktivität wird angezeigt.',
   },
+  en: {
+    eyebrow: 'Scan status', starting: 'Your scan is starting', running: 'Your scan is running',
+    isolatedPrep: 'Preparing isolated environment',
+    stepVerified: { t: 'Ownership verified', d: 'Confirmed that the domain belongs to you' },
+    stepReceived: { t: 'Request received', d: 'Your payment was confirmed and the scan was queued' },
+    stepScanT: 'Scan running', stepScanD6: 'The AI-assisted scan is inspecting your site safely',
+    stepAnalyze: { t: 'Evaluating findings', d: 'Results are being sorted by severity' },
+    stepReport: { t: 'Report ready', d: 'Your encrypted report has been generated' },
+    autoNote: 'This page updates automatically — you can close it; once the result is ready, the access code will be sent to your email.',
+    step: 'Step', ringNote: 'Your site is being inspected safely in an isolated environment.',
+    scanType: 'Scan type', scanFallback: 'Scan',
+    termHeader: 'cybertestify — live scan', termFooter: 'Technical logs are hidden for security and privacy reasons; only general activity is shown.',
+  },
 } as const;
 
 export function ScanRunningView({ hostname, packageKey, packageName, startedAt, authConfirmedAt, feed, notStarted, dark, secondsPerPhase, verified, loginless, lang = 'tr' }: Props) {
-  const L = SRV[lang === 'de' ? 'de' : 'tr'];
+  const L = SRV[lang === 'de' ? 'de' : lang === 'en' ? 'en' : 'tr'];
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
 

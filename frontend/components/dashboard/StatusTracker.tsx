@@ -12,6 +12,12 @@ const STEPS_BY_LANG = {
     { key: 'analyze', label: 'Befunde werden ausgewertet', hint: 'Ergebnisse werden nach Schweregrad sortiert' },
     { key: 'report', label: 'Bericht fertig', hint: 'Ihr verschlüsselter Bericht wurde erstellt' },
   ],
+  en: [
+    { key: 'verify', label: 'Ownership verified', hint: 'Confirmed that the domain belongs to you' },
+    { key: 'scan', label: 'Scan running', hint: 'The AI-powered scan is safely examining your website' },
+    { key: 'analyze', label: 'Findings being assessed', hint: 'Results are being sorted by severity' },
+    { key: 'report', label: 'Report ready', hint: 'Your encrypted report has been generated' },
+  ],
 } as const;
 
 // order.status -> kac adim TAMAMLANDI (active = ilk tamamlanmayan)
@@ -40,10 +46,10 @@ function Spinner() {
   );
 }
 
-export function StatusTracker({ status, lang = 'tr' }: { status: string; lang?: 'tr' | 'de' }) {
+export function StatusTracker({ status, lang = 'tr' }: { status: string; lang?: 'tr' | 'de' | 'en' }) {
   const failed = status === 'scan_failed' || status === 'scope_violation';
   const done = completedCount(status);
-  const STEPS = STEPS_BY_LANG[lang === 'de' ? 'de' : 'tr'];
+  const STEPS = STEPS_BY_LANG[lang === 'de' ? 'de' : lang === 'en' ? 'en' : 'tr'];
 
   return (
     <div className="card p-6">

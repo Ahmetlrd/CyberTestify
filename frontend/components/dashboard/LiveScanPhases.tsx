@@ -144,16 +144,74 @@ const PHASE_SETS_DE: Record<string, string[]> = {
   ],
 };
 
-export function phasesFor(key?: string | null, lang: 'tr' | 'de' = 'tr'): string[] {
+// (İngiltere /en) İngilizce faz setleri — YALNIZ /en'de görünen paketler (default + basit + surface +
+// recon + active_verify + full_pentest). bundle_compliance ve redteam_s1 /en'de GİZLİ → çevrilmez.
+const DEFAULT_PHASES_EN = [
+  'Checking target reachability and surface',
+  'Checking HTTP security headers',
+  'Checking TLS/SSL configuration',
+  'Scanning the application surface and input points',
+  'Evaluating and prioritising findings',
+  'Preparing the report',
+];
+const PHASE_SETS_EN: Record<string, string[]> = {
+  basit_tarama: [
+    'Checking target reachability',
+    'Scanning HTTP security headers',
+    'Checking TLS/SSL configuration',
+    'Checking common vulnerabilities (OWASP pre-assessment)',
+    'Compiling findings',
+    'Preparing the report',
+  ],
+  bundle_surface: [
+    'Checking target reachability',
+    'Checking SSL/TLS configuration',
+    'Scanning HTTP security headers',
+    'DNS & email security (SPF/DKIM/DMARC)',
+    'Checking CORS & cookie security',
+    'Analysing Content-Security-Policy (CSP)',
+    'Preparing the report',
+  ],
+  bundle_recon: [
+    'Mapping the target attack surface',
+    'Subdomain & DNS reconnaissance',
+    'Checking subdomain-takeover risk',
+    'API & Swagger/OpenAPI discovery',
+    'CMS/framework fingerprinting & known-CVE matching',
+    'Prioritising findings',
+    'Preparing the report',
+  ],
+  bundle_active_verify: [
+    'Discovering surface & input points',
+    'Verifying injection (SQLi/XSS)',
+    'Verifying IDOR / unauthorised access',
+    'Checking SSRF & file upload',
+    'Observing business logic & race conditions',
+    'Verifying findings',
+    'Preparing the report',
+  ],
+  bundle_full_pentest: [
+    'Signing in with the test account',
+    'Cookie/session & authorization checks',
+    'Authenticated injection/IDOR checks',
+    'Privilege-escalation analysis (AI-assisted)',
+    'Multi-step business-logic analysis',
+    'Compiling findings',
+    'Encrypting the report',
+  ],
+};
+
+export function phasesFor(key?: string | null, lang: 'tr' | 'de' | 'en' = 'tr'): string[] {
   if (lang === 'de') return (key && PHASE_SETS_DE[key]) || DEFAULT_PHASES_DE;
+  if (lang === 'en') return (key && PHASE_SETS_EN[key]) || DEFAULT_PHASES_EN;
   return (key && PHASE_SETS[key]) || DEFAULT_PHASES;
 }
 
 // (SENKRON) Tek kaynak: hem terminal LOG satırı hem ilerleme çubuğu/halkası BURADAN beslenir → aynı
 // faz index'i → aynı %. % FAZ-bazlıdır (zaman-sabitli DEĞİL): log ilerledikçe çubuk da ilerler, log bir
 // fazda beklerken (ör. login gate) çubuk da bekler. Böylece "log duruyor ama çubuk artıyor" karışıklığı biter.
-export function computeScanProgress(opts: { packageKey?: string | null; startedAt?: string | null; authConfirmedAt?: string | null; now: number; perPhase?: number; loginless?: boolean; lang?: 'tr' | 'de' }): { phases: string[]; idx: number; pct: number; current: string } {
-  let phases = phasesFor(opts.packageKey, opts.lang === 'de' ? 'de' : 'tr');
+export function computeScanProgress(opts: { packageKey?: string | null; startedAt?: string | null; authConfirmedAt?: string | null; now: number; perPhase?: number; loginless?: boolean; lang?: 'tr' | 'de' | 'en' }): { phases: string[]; idx: number; pct: number; current: string } {
+  let phases = phasesFor(opts.packageKey, opts.lang === 'de' ? 'de' : opts.lang === 'en' ? 'en' : 'tr');
   const per = opts.perPhase && opts.perPhase > 0 ? opts.perPhase : SECONDS_PER_PHASE;
   const startMs = opts.startedAt ? new Date(opts.startedAt).getTime() : opts.now;
   const elapsed = Math.max(0, (opts.now - startMs) / 1000);
@@ -184,6 +242,7 @@ const SECONDS_PER_PHASE = 9; // her faz ~9 sn; son "çalışan" fazda durur (bit
 const LP = {
   tr: { verified: '✓ Alan adı sahipliği doğrulandı', starting: '→ Tarama başlatılıyor…', liveActivity: '— canlı aktivite —' },
   de: { verified: '✓ Domain-Inhaberschaft bestätigt', starting: '→ Scan wird gestartet…', liveActivity: '— Live-Aktivität —' },
+  en: { verified: '✓ Domain ownership verified', starting: '→ Starting scan…', liveActivity: '— live activity —' },
 } as const;
 
 export function LiveScanPhases({
@@ -198,9 +257,9 @@ export function LiveScanPhases({
   secondsPerPhase?: number; // (S1) uzun-süren koşularda faz cadence'ını yavaşlat (varsayılan 9sn)
   verified?: boolean; // "✓ Alan adı sahipliği doğrulandı" YALNIZ DNS-doğrulaması olan paketlerde (5 & 6) gösterilir
   loginless?: boolean; // "loginsiz devam et" seçildi → login fazı çıkarılır, gate kaldırılır (bkz computeScanProgress)
-  lang?: 'tr' | 'de';
+  lang?: 'tr' | 'de' | 'en';
 }) {
-  const lp = LP[lang === 'de' ? 'de' : 'tr'];
+  const lp = LP[lang === 'de' ? 'de' : lang === 'en' ? 'en' : 'tr'];
   const perPhase = secondsPerPhase && secondsPerPhase > 0 ? secondsPerPhase : SECONDS_PER_PHASE;
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {

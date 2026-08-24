@@ -181,34 +181,45 @@ function riskLevel(absent: Set<SecKey>, tls: TlsInfo): 'low' | 'medium' | 'high'
   return 'low';
 }
 
-const HEADER_ROWS: Array<{ key: SecKey | 'ctype' | 'xxss'; header: string; hdr: string; presentNote: string; absentNote: string; presentDe: string; absentDe: string }> = [
-  { key: 'hsts', header: 'Strict-Transport-Security', hdr: 'strict-transport-security', presentNote: 'HTTPS zorunlu tutuluyor; SSL-stripping/MITM saldırılarına karşı koruma sağlıyor.', absentNote: 'HTTPS zorunluluğu tarayıcıya bildirilmiyor; ilk isteklerde SSL-stripping/MITM riski var.', presentDe: 'HTTPS wird erzwungen; Schutz gegen SSL-Stripping-/MITM-Angriffe.', absentDe: 'Die HTTPS-Pflicht wird dem Browser nicht mitgeteilt; bei Erstanfragen besteht SSL-Stripping-/MITM-Risiko.' },
-  { key: 'csp', header: 'Content-Security-Policy', hdr: 'content-security-policy', presentNote: 'Kaynak yükleme politikası tanımlı; XSS/enjeksiyon yüzeyi daralıyor.', absentNote: 'Tarayıcı hangi kaynakların yükleneceğini kısıtlayamıyor; XSS ve içerik enjeksiyonuna karşı temel savunma yok.', presentDe: 'Eine Ressourcen-Ladepolitik ist definiert; die XSS-/Injektionsfläche wird verkleinert.', absentDe: 'Der Browser kann nicht einschränken, welche Ressourcen geladen werden; keine grundlegende Verteidigung gegen XSS und Content-Injection.' },
-  { key: 'xfo', header: 'X-Frame-Options', hdr: 'x-frame-options', presentNote: 'Sayfa yabancı iframe’lere gömülemiyor; clickjacking engelli.', absentNote: 'Sayfa başka bir sitenin iframe’ine gömülebilir; clickjacking ile kullanıcı kandırılabilir.', presentDe: 'Die Seite kann nicht in fremde iframes eingebettet werden; Clickjacking wird verhindert.', absentDe: 'Die Seite kann in das iframe einer fremden Website eingebettet werden; Nutzer können per Clickjacking getäuscht werden.' },
-  { key: 'xcto', header: 'X-Content-Type-Options', hdr: 'x-content-type-options', presentNote: 'MIME-sniffing kapalı; içerik beyan edilen türde işleniyor.', absentNote: 'Tarayıcı içerik türünü tahmin edebilir (MIME-sniffing); yüklenen dosyalar script gibi çalıştırılabilir.', presentDe: 'MIME-Sniffing ist deaktiviert; Inhalte werden im deklarierten Typ verarbeitet.', absentDe: 'Der Browser kann den Inhaltstyp erraten (MIME-Sniffing); hochgeladene Dateien könnten wie Skripte ausgeführt werden.' },
-  { key: 'referrer', header: 'Referrer-Policy', hdr: 'referrer-policy', presentNote: 'Referrer paylaşımı sınırlandırılmış.', absentNote: 'Dış bağlantılara tam URL (Referer) gönderilir; oturum/gizlilik bilgisi sızabilir.', presentDe: 'Die Referrer-Weitergabe ist eingeschränkt.', absentDe: 'An externe Links wird die vollständige URL (Referer) gesendet; Sitzungs-/Datenschutzinformationen können abfließen.' },
-  { key: 'permissions', header: 'Permissions-Policy', hdr: 'permissions-policy', presentNote: 'Tarayıcı API’leri (kamera/mikrofon/konum) kısıtlı.', absentNote: 'Kamera/mikrofon/konum gibi hassas API’ler kısıtlanmamış; üçüncü taraf içerik kötüye kullanabilir.', presentDe: 'Browser-APIs (Kamera/Mikrofon/Standort) sind eingeschränkt.', absentDe: 'Sensible APIs wie Kamera/Mikrofon/Standort sind nicht eingeschränkt; Drittinhalte könnten sie missbrauchen.' },
-  { key: 'xxss', header: 'X-XSS-Protection', hdr: 'x-xss-protection', presentNote: 'Eski tarayıcı XSS filtresi tanımlı (savunma derinliği).', absentNote: 'Eski tarayıcı XSS filtresi ayarlı değil (modern tarayıcılarda kritik değildir; asıl koruma CSP’dir).', presentDe: 'Der Legacy-XSS-Filter älterer Browser ist gesetzt (Defense-in-Depth).', absentDe: 'Der Legacy-XSS-Filter älterer Browser ist nicht gesetzt (in modernen Browsern unkritisch; der eigentliche Schutz ist CSP).' },
-  { key: 'ctype', header: 'Content-Type', hdr: 'content-type', presentNote: '', absentNote: 'Content-Type belirtilmemiş; tarayıcı içerik türünü tahmin etmek zorunda kalır.', presentDe: '', absentDe: 'Content-Type ist nicht angegeben; der Browser muss den Inhaltstyp erraten.' },
+const HEADER_ROWS: Array<{ key: SecKey | 'ctype' | 'xxss'; header: string; hdr: string; presentNote: string; absentNote: string; presentDe: string; absentDe: string; presentEn: string; absentEn: string }> = [
+  { key: 'hsts', header: 'Strict-Transport-Security', hdr: 'strict-transport-security', presentNote: 'HTTPS zorunlu tutuluyor; SSL-stripping/MITM saldırılarına karşı koruma sağlıyor.', absentNote: 'HTTPS zorunluluğu tarayıcıya bildirilmiyor; ilk isteklerde SSL-stripping/MITM riski var.', presentDe: 'HTTPS wird erzwungen; Schutz gegen SSL-Stripping-/MITM-Angriffe.', absentDe: 'Die HTTPS-Pflicht wird dem Browser nicht mitgeteilt; bei Erstanfragen besteht SSL-Stripping-/MITM-Risiko.', presentEn: 'HTTPS is enforced; provides protection against SSL-stripping/MITM attacks.', absentEn: 'HTTPS is not enforced to the browser; on first requests there is an SSL-stripping/MITM risk.' },
+  { key: 'csp', header: 'Content-Security-Policy', hdr: 'content-security-policy', presentNote: 'Kaynak yükleme politikası tanımlı; XSS/enjeksiyon yüzeyi daralıyor.', absentNote: 'Tarayıcı hangi kaynakların yükleneceğini kısıtlayamıyor; XSS ve içerik enjeksiyonuna karşı temel savunma yok.', presentDe: 'Eine Ressourcen-Ladepolitik ist definiert; die XSS-/Injektionsfläche wird verkleinert.', absentDe: 'Der Browser kann nicht einschränken, welche Ressourcen geladen werden; keine grundlegende Verteidigung gegen XSS und Content-Injection.', presentEn: 'A resource-loading policy is defined; the XSS/injection surface is reduced.', absentEn: 'The browser cannot restrict which resources are loaded; there is no basic defence against XSS and content injection.' },
+  { key: 'xfo', header: 'X-Frame-Options', hdr: 'x-frame-options', presentNote: 'Sayfa yabancı iframe’lere gömülemiyor; clickjacking engelli.', absentNote: 'Sayfa başka bir sitenin iframe’ine gömülebilir; clickjacking ile kullanıcı kandırılabilir.', presentDe: 'Die Seite kann nicht in fremde iframes eingebettet werden; Clickjacking wird verhindert.', absentDe: 'Die Seite kann in das iframe einer fremden Website eingebettet werden; Nutzer können per Clickjacking getäuscht werden.', presentEn: 'The page cannot be embedded in foreign iframes; clickjacking is prevented.', absentEn: 'The page can be embedded in another site’s iframe; users can be deceived via clickjacking.' },
+  { key: 'xcto', header: 'X-Content-Type-Options', hdr: 'x-content-type-options', presentNote: 'MIME-sniffing kapalı; içerik beyan edilen türde işleniyor.', absentNote: 'Tarayıcı içerik türünü tahmin edebilir (MIME-sniffing); yüklenen dosyalar script gibi çalıştırılabilir.', presentDe: 'MIME-Sniffing ist deaktiviert; Inhalte werden im deklarierten Typ verarbeitet.', absentDe: 'Der Browser kann den Inhaltstyp erraten (MIME-Sniffing); hochgeladene Dateien könnten wie Skripte ausgeführt werden.', presentEn: 'MIME-sniffing is disabled; content is processed as the declared type.', absentEn: 'The browser may guess the content type (MIME-sniffing); uploaded files could be executed as scripts.' },
+  { key: 'referrer', header: 'Referrer-Policy', hdr: 'referrer-policy', presentNote: 'Referrer paylaşımı sınırlandırılmış.', absentNote: 'Dış bağlantılara tam URL (Referer) gönderilir; oturum/gizlilik bilgisi sızabilir.', presentDe: 'Die Referrer-Weitergabe ist eingeschränkt.', absentDe: 'An externe Links wird die vollständige URL (Referer) gesendet; Sitzungs-/Datenschutzinformationen können abfließen.', presentEn: 'Referrer sharing is restricted.', absentEn: 'The full URL (Referer) is sent to external links; session/privacy information may leak.' },
+  { key: 'permissions', header: 'Permissions-Policy', hdr: 'permissions-policy', presentNote: 'Tarayıcı API’leri (kamera/mikrofon/konum) kısıtlı.', absentNote: 'Kamera/mikrofon/konum gibi hassas API’ler kısıtlanmamış; üçüncü taraf içerik kötüye kullanabilir.', presentDe: 'Browser-APIs (Kamera/Mikrofon/Standort) sind eingeschränkt.', absentDe: 'Sensible APIs wie Kamera/Mikrofon/Standort sind nicht eingeschränkt; Drittinhalte könnten sie missbrauchen.', presentEn: 'Browser APIs (camera/microphone/location) are restricted.', absentEn: 'Sensitive APIs such as camera/microphone/location are not restricted; third-party content could abuse them.' },
+  { key: 'xxss', header: 'X-XSS-Protection', hdr: 'x-xss-protection', presentNote: 'Eski tarayıcı XSS filtresi tanımlı (savunma derinliği).', absentNote: 'Eski tarayıcı XSS filtresi ayarlı değil (modern tarayıcılarda kritik değildir; asıl koruma CSP’dir).', presentDe: 'Der Legacy-XSS-Filter älterer Browser ist gesetzt (Defense-in-Depth).', absentDe: 'Der Legacy-XSS-Filter älterer Browser ist nicht gesetzt (in modernen Browsern unkritisch; der eigentliche Schutz ist CSP).', presentEn: 'The legacy browser XSS filter is set (defence-in-depth).', absentEn: 'The legacy browser XSS filter is not set (not critical in modern browsers; the real protection is CSP).' },
+  { key: 'ctype', header: 'Content-Type', hdr: 'content-type', presentNote: '', absentNote: 'Content-Type belirtilmemiş; tarayıcı içerik türünü tahmin etmek zorunda kalır.', presentDe: '', absentDe: 'Content-Type ist nicht angegeben; der Browser muss den Inhaltstyp erraten.', presentEn: '', absentEn: 'Content-Type is not specified; the browser is forced to guess the content type.' },
 ];
 
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', high: 'Yüksek' } as const;
 const RISK_WORD_DE = { low: 'Niedrig', medium: 'Mittel', high: 'Hoch' } as const;
+const RISK_WORD_EN = { low: 'Low', medium: 'Medium', high: 'High' } as const;
 // Bulgu tablosundaki şiddet kelimesini locale'e çevir (makine-değer TR kalır; yalnız görüntü).
 const SEV_DE: Record<string, string> = { 'Kritik': 'Kritisch', 'Yüksek': 'Hoch', 'Orta': 'Mittel', 'Düşük': 'Niedrig', 'Bilgilendirme': 'Hinweis' };
+const SEV_EN: Record<string, string> = { 'Kritik': 'Critical', 'Yüksek': 'High', 'Orta': 'Medium', 'Düşük': 'Low', 'Bilgilendirme': 'Informational' };
 
 /**
  * basit_tarama raporunu KOD-toplanmis kanittan uretir. Ana sayfaya ulasilamazsa null doner.
  */
 export async function generateBasitReport(hostname: string, locale: string = 'tr'): Promise<{ findings: string; fixText: string } | null> {
-  const de = locale === 'de'; // 'de' dışı her locale → Türkçe (mevcut davranış korunur)
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const de = locale === 'de'; // 'de' dışı her locale → Türkçe (mevcut davranış korunur, 'en' hariç)
+  const en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const ev = await collectEvidence(hostname);
 
   // (DÜRÜSTLÜK — c durumu) HEDEFE HİÇ ULAŞILAMADI: ne https(443) ne http ne TLS yanıt verdi.
   // Bu KESİNLİKLE "temiz"/"düşük risk" DEĞİL, "İncelenemedi"dir (assessBasit nötr amber rozet basar).
   if (!ev.reachable && !ev.tls.found) {
-    const findings = de
+    const findings = en
+      ? `## EXECUTIVE SUMMARY\n\n` +
+        `- **Overall risk level: Not assessable** — the scan could not be carried out because no connection to the target (${hostname}) could be established.\n` +
+        `- This result does NOT mean the website is SECURE; it only shows that the checks could not be run.\n` +
+        `- **Recommended first step:** Confirm that the domain is live and reachable from the outside, then repeat the scan.\n\n` +
+        `## OVERALL ASSESSMENT\n\n**Risk Level: Not assessable**\n\n` +
+        `No connection could be established to the target's ports 443 (HTTPS) and 80 (HTTP) (timeout or connection refused). Passive checks such as security headers and TLS could therefore not be run. If the domain is correct and live, a firewall/access restriction may be blocking the scan.\n\n` +
+        `## SCAN STATUS\n\nThis scan was **not completed**: the target was unreachable and no check could collect data. This report is **NOT** a "clean/secure" result; the target should be re-scanned once access is possible.\n`
+      : de
       ? `## MANAGEMENTZUSAMMENFASSUNG\n\n` +
         `- **Gesamtrisikostufe: Nicht prüfbar** — die Prüfung konnte nicht durchgeführt werden, da keine Verbindung zum Ziel (${hostname}) hergestellt werden konnte.\n` +
         `- Dieses Ergebnis bedeutet NICHT, dass die Website SICHER ist; es zeigt lediglich, dass die Kontrollen nicht ausgeführt werden konnten.\n` +
@@ -253,10 +264,10 @@ export async function generateBasitReport(hostname: string, locale: string = 'tr
     for (const k of ['csp', 'xfo'] as SecKey[]) {
       const row = HEADER_ROWS.find((r) => r.key === k)!;
       const absentOn = headerAbsentCount.get(k) ?? 0;
-      if (ev.headers.has(row.hdr) && absentOn > 0) perPageMissing.push(`${row.header} (${t(`${absentOn}/${pageCount} sayfada`, `auf ${absentOn}/${pageCount} Seiten`)})`);
+      if (ev.headers.has(row.hdr) && absentOn > 0) perPageMissing.push(`${row.header} (${t(`${absentOn}/${pageCount} sayfada`, `auf ${absentOn}/${pageCount} Seiten`, `on ${absentOn}/${pageCount} pages`)})`);
     }
   }
-  const cov = (k: SecKey) => (pageCount > 1 ? t(` (${headerAbsentCount.get(k) ?? pageCount}/${pageCount} taranan sayfada eksik)`, ` (fehlt auf ${headerAbsentCount.get(k) ?? pageCount}/${pageCount} geprüften Seiten)`) : '');
+  const cov = (k: SecKey) => (pageCount > 1 ? t(` (${headerAbsentCount.get(k) ?? pageCount}/${pageCount} taranan sayfada eksik)`, ` (fehlt auf ${headerAbsentCount.get(k) ?? pageCount}/${pageCount} geprüften Seiten)`, ` (missing on ${headerAbsentCount.get(k) ?? pageCount}/${pageCount} scanned pages)`) : '');
 
   // http-only (şifresiz iletişim) TEK BAŞINA ciddi bir bulgudur -> genel risk en az Yüksek.
   // (HATA 4) EOL/eski yazılım imzası -> GERÇEK bulgu (bilgi metni değil). Sürüm imzasından türer.
@@ -271,11 +282,11 @@ export async function generateBasitReport(hostname: string, locale: string = 'tr
   // Tablo
   const tableRows = HEADER_ROWS.map((r) => {
     const present = ev.headers.has(r.hdr);
-    let note = present ? t(r.presentNote, r.presentDe) : t(r.absentNote, r.absentDe);
-    if (r.key === 'ctype' && present) note = ev.headers.get('content-type') ?? t('Belirtilmiş.', 'Angegeben.');
+    let note = present ? t(r.presentNote, r.presentDe, r.presentEn) : t(r.absentNote, r.absentDe, r.absentEn);
+    if (r.key === 'ctype' && present) note = ev.headers.get('content-type') ?? t('Belirtilmiş.', 'Angegeben.', 'Specified.');
     // CSP/SPA baglami: somut deger katar (Grok: "CSP eksikligi SPA'da XSS riskini artirir")
-    if (r.key === 'csp' && !present && isSpa) note += t(' Bu site bir SPA (JavaScript ağırlıklı) olduğundan CSP eksikliği XSS etkisini belirgin şekilde büyütür.', ' Da diese Website eine SPA (JavaScript-lastig) ist, vergrößert das Fehlen einer CSP die XSS-Auswirkung deutlich.');
-    return `| ${r.header} | ${present ? t('Var', 'Vorhanden') : t('Yok', 'Fehlt')} | ${note} |`;
+    if (r.key === 'csp' && !present && isSpa) note += t(' Bu site bir SPA (JavaScript ağırlıklı) olduğundan CSP eksikliği XSS etkisini belirgin şekilde büyütür.', ' Da diese Website eine SPA (JavaScript-lastig) ist, vergrößert das Fehlen einer CSP die XSS-Auswirkung deutlich.', ' As this site is a SPA (JavaScript-heavy), the absence of a CSP significantly amplifies the XSS impact.');
+    return `| ${r.header} | ${present ? t('Var', 'Vorhanden', 'Present') : t('Yok', 'Fehlt', 'Missing')} | ${note} |`;
   }).join('\n');
 
   // TLS
@@ -286,26 +297,29 @@ export async function generateBasitReport(hostname: string, locale: string = 'tr
       ? t(
           `⚠️ Bu hedef **HTTPS (443) üzerinden yanıt vermedi**; geçerli bir TLS sertifikası bulunamadı. Site yalnızca **şifresiz HTTP** üzerinden yayında (bkz. Tespit Edilen Riskler → “HTTPS desteklenmiyor”). Aşağıdaki başlık kontrolleri http:// üzerinden yürütülmüştür.`,
           `⚠️ Dieses Ziel **hat nicht über HTTPS (443) geantwortet**; es wurde kein gültiges TLS-Zertifikat gefunden. Die Website ist nur über **unverschlüsseltes HTTP** erreichbar (siehe Festgestellte Risiken → „HTTPS wird nicht unterstützt"). Die nachfolgenden Header-Kontrollen wurden über http:// durchgeführt.`,
+          `⚠️ This target **did not respond over HTTPS (443)**; no valid TLS certificate was found. The site is only reachable over **unencrypted HTTP** (see Identified Risks → "HTTPS not supported"). The header checks below were performed over http://.`,
         )
-      : t('TLS sertifika bilgisi elde edilemedi (443 portuna güvenli bağlantı kurulamadı).', 'Es konnten keine TLS-Zertifikatsinformationen ermittelt werden (keine sichere Verbindung zu Port 443 möglich).');
+      : t('TLS sertifika bilgisi elde edilemedi (443 portuna güvenli bağlantı kurulamadı).', 'Es konnten keine TLS-Zertifikatsinformationen ermittelt werden (keine sichere Verbindung zu Port 443 möglich).', 'No TLS certificate information could be obtained (no secure connection to port 443 could be established).');
   } else {
     const l: string[] = [];
-    l.push(`- **${t('Geçerlilik', 'Gültigkeit')}:** ${tlsInf.daysLeft != null ? (tlsInf.daysLeft >= 0 ? t(`Geçerli, ${tlsInf.daysLeft} gün kaldı`, `Gültig, noch ${tlsInf.daysLeft} Tage`) : t(`SÜRESİ DOLMUŞ (${Math.abs(tlsInf.daysLeft)} gün önce)`, `ABGELAUFEN (vor ${Math.abs(tlsInf.daysLeft)} Tagen)`)) : t('Belirlenemedi', 'Nicht ermittelbar')}${tlsInf.notAfter ? t(` (bitiş: ${tlsInf.notAfter})`, ` (Ablauf: ${tlsInf.notAfter})`) : ''}`);
+    l.push(`- **${t('Geçerlilik', 'Gültigkeit', 'Validity')}:** ${tlsInf.daysLeft != null ? (tlsInf.daysLeft >= 0 ? t(`Geçerli, ${tlsInf.daysLeft} gün kaldı`, `Gültig, noch ${tlsInf.daysLeft} Tage`, `Valid, ${tlsInf.daysLeft} days remaining`) : t(`SÜRESİ DOLMUŞ (${Math.abs(tlsInf.daysLeft)} gün önce)`, `ABGELAUFEN (vor ${Math.abs(tlsInf.daysLeft)} Tagen)`, `EXPIRED (${Math.abs(tlsInf.daysLeft)} days ago)`)) : t('Belirlenemedi', 'Nicht ermittelbar', 'Not determinable')}${tlsInf.notAfter ? t(` (bitiş: ${tlsInf.notAfter})`, ` (Ablauf: ${tlsInf.notAfter})`, ` (expiry: ${tlsInf.notAfter})`) : ''}`);
     if (tlsInf.hostnameMatch === false) l.push(t(
       `- **Hostname eşleşmesi:** ⚠️ Sertifika ${hostname} ile eşleşmiyor${tlsInf.cn ? ` (sertifika sahibi: ${tlsInf.cn})` : ''}${tlsInf.san.length ? `; kapsanan adlar: ${tlsInf.san.slice(0, 6).join(', ')}` : ''}. Tarayıcı güvenlik uyarısı verebilir.`,
       `- **Hostname-Abgleich:** ⚠️ Das Zertifikat stimmt nicht mit ${hostname} überein${tlsInf.cn ? ` (Zertifikatsinhaber: ${tlsInf.cn})` : ''}${tlsInf.san.length ? `; abgedeckte Namen: ${tlsInf.san.slice(0, 6).join(', ')}` : ''}. Browser können eine Sicherheitswarnung anzeigen.`,
+      `- **Hostname match:** ⚠️ The certificate does not match ${hostname}${tlsInf.cn ? ` (certificate owner: ${tlsInf.cn})` : ''}${tlsInf.san.length ? `; covered names: ${tlsInf.san.slice(0, 6).join(', ')}` : ''}. Browsers may display a security warning.`,
     ));
     else if (tlsInf.hostnameMatch === true) {
       const multi = tlsInf.cn && tlsInf.cn.toLowerCase() !== hostname.toLowerCase();
       l.push(t(
         `- **Hostname eşleşmesi:** Uyumlu${multi ? ` (çok alanlı sertifika; ${hostname} kapsanıyor)` : ''}.`,
         `- **Hostname-Abgleich:** Übereinstimmend${multi ? ` (Multi-Domain-Zertifikat; ${hostname} ist abgedeckt)` : ''}.`,
+        `- **Hostname match:** Matching${multi ? ` (multi-domain certificate; ${hostname} is covered)` : ''}.`,
       ));
     }
-    if (tlsInf.issuer) l.push(`- **${t('Veren (issuer)', 'Aussteller (Issuer)')}:** ${tlsInf.issuer}`);
-    if (tlsInf.protocol) l.push(`- **${t('TLS sürümü', 'TLS-Version')}:** ${tlsInf.protocol}${/TLSv1\.[01]$/.test(tlsInf.protocol) ? t(' — ⚠️ eski/zayıf sürüm, TLS 1.2+ önerilir', ' — ⚠️ veraltete/schwache Version, TLS 1.2+ empfohlen') : ''}`);
+    if (tlsInf.issuer) l.push(`- **${t('Veren (issuer)', 'Aussteller (Issuer)', 'Issuer')}:** ${tlsInf.issuer}`);
+    if (tlsInf.protocol) l.push(`- **${t('TLS sürümü', 'TLS-Version', 'TLS version')}:** ${tlsInf.protocol}${/TLSv1\.[01]$/.test(tlsInf.protocol) ? t(' — ⚠️ eski/zayıf sürüm, TLS 1.2+ önerilir', ' — ⚠️ veraltete/schwache Version, TLS 1.2+ empfohlen', ' — ⚠️ old/weak version, TLS 1.2+ recommended') : ''}`);
     if (tlsInf.cipher) l.push(`- **Cipher:** ${tlsInf.cipher}`);
-    if (tlsInf.daysLeft != null && tlsInf.daysLeft >= 0 && tlsInf.daysLeft < 45) l.push(t('- ⚠️ **Uyarı:** Sertifika 45 günden kısa sürede sona eriyor; kesinti yaşamamak için yenilemeyi planlayın.', '- ⚠️ **Warnung:** Das Zertifikat läuft in weniger als 45 Tagen ab; planen Sie die Erneuerung, um Ausfälle zu vermeiden.'));
+    if (tlsInf.daysLeft != null && tlsInf.daysLeft >= 0 && tlsInf.daysLeft < 45) l.push(t('- ⚠️ **Uyarı:** Sertifika 45 günden kısa sürede sona eriyor; kesinti yaşamamak için yenilemeyi planlayın.', '- ⚠️ **Warnung:** Das Zertifikat läuft in weniger als 45 Tagen ab; planen Sie die Erneuerung, um Ausfälle zu vermeiden.', '- ⚠️ **Warning:** The certificate expires in less than 45 days; plan its renewal to avoid an outage.'));
     tlsSection = l.join('\n');
   }
 
@@ -315,17 +329,22 @@ export async function generateBasitReport(hostname: string, locale: string = 'tr
     .replace(/^Barındırma: /, 'Hosting: ')
     .replace(/^HTTP\/3 desteği \(Alt-Svc\)$/, 'HTTP/3-Unterstützung (Alt-Svc)')
     .replace(/ tabanlı SPA$/, '-basierte SPA');
+  const enTechLabel = (s: string) => s
+    .replace(/^Sunucu: /, 'Server: ')
+    .replace(/^Barındırma: /, 'Hosting: ')
+    .replace(/^HTTP\/3 desteği \(Alt-Svc\)$/, 'HTTP/3 support (Alt-Svc)')
+    .replace(/ tabanlı SPA$/, '-based SPA');
   const techSection = tech.length
-    ? tech.map((x) => `- ${de ? deTechLabel(x) : x}`).join('\n')
-    : t('- Yanıt başlıkları ve ana sayfa HTML’inde belirgin bir teknoloji imzası pasif olarak gözlemlenmedi.', '- In den Antwort-Headern und im HTML der Startseite wurde passiv keine eindeutige Technologiesignatur beobachtet.');
+    ? tech.map((x) => `- ${de ? deTechLabel(x) : en ? enTechLabel(x) : x}`).join('\n')
+    : t('- Yanıt başlıkları ve ana sayfa HTML’inde belirgin bir teknoloji imzası pasif olarak gözlemlenmedi.', '- In den Antwort-Headern und im HTML der Startseite wurde passiv keine eindeutige Technologiesignatur beobachtet.', '- No distinct technology signature was passively observed in the response headers or the home page HTML.');
 
   // Riskler — MASTER TABLO + ZAFİYET DAĞILIMINA girmesi için ŞİDDET KOLONLU tablo (bullet değil).
   // parseFindings (pdf.ts) yalnız şiddet-kolonlu tabloları sayar; böylece https_missing/eksik başlıklar
   // "Temiz" değil GERÇEK bulgu olarak dağılıma/master'a düşer.
   const risks: Array<{ bulgu: string; sev: string; aciklama: string }> = [];
-  if (httpOnly) risks.push({ bulgu: t('HTTPS desteklenmiyor (şifresiz iletişim)', 'HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation)'), sev: 'Yüksek', aciklama: t(`Site HTTPS'e yanıt vermiyor; sayfaya gelen/giden tüm trafik şifresiz (düz metin) taşınıyor — aynı ağdaki bir saldırgan trafiği dinleyebilir, oturum/şifre çalabilir veya içeriği değiştirebilir. Tarama http:// üzerinden yürütüldü.`, `Die Website antwortet nicht über HTTPS; der gesamte ein- und ausgehende Datenverkehr wird unverschlüsselt (Klartext) übertragen — ein Angreifer im selben Netzwerk kann den Verkehr mitlesen, Sitzungen/Passwörter stehlen oder Inhalte verändern. Die Prüfung wurde über http:// durchgeführt.`) });
-  if (tlsInf.hostnameMatch === false) risks.push({ bulgu: t('TLS hostname uyuşmazlığı', 'TLS-Hostname-Abweichung'), sev: 'Yüksek', aciklama: t(`Sertifika ${hostname} adına düzenlenmemiş; ziyaretçiler tarayıcı güvenlik uyarısıyla karşılaşabilir ve siteye güven azalır.`, `Das Zertifikat ist nicht auf ${hostname} ausgestellt; Besucher können auf eine Browser-Sicherheitswarnung stoßen und das Vertrauen in die Website sinkt.`) });
-  if (tlsInf.daysLeft != null && tlsInf.daysLeft < 0) risks.push({ bulgu: t('TLS sertifikası süresi dolmuş', 'TLS-Zertifikat abgelaufen'), sev: 'Yüksek', aciklama: t('Site tarayıcılarca güvensiz kabul edilir; ziyaretçi kaybına yol açar.', 'Die Website wird von Browsern als unsicher eingestuft; das führt zu Besucherverlusten.') });
+  if (httpOnly) risks.push({ bulgu: t('HTTPS desteklenmiyor (şifresiz iletişim)', 'HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation)', 'HTTPS not supported (unencrypted communication)'), sev: 'Yüksek', aciklama: t(`Site HTTPS'e yanıt vermiyor; sayfaya gelen/giden tüm trafik şifresiz (düz metin) taşınıyor — aynı ağdaki bir saldırgan trafiği dinleyebilir, oturum/şifre çalabilir veya içeriği değiştirebilir. Tarama http:// üzerinden yürütüldü.`, `Die Website antwortet nicht über HTTPS; der gesamte ein- und ausgehende Datenverkehr wird unverschlüsselt (Klartext) übertragen — ein Angreifer im selben Netzwerk kann den Verkehr mitlesen, Sitzungen/Passwörter stehlen oder Inhalte verändern. Die Prüfung wurde über http:// durchgeführt.`, `The site does not respond over HTTPS; all inbound/outbound traffic is carried unencrypted (plain text) — an attacker on the same network can eavesdrop on the traffic, steal sessions/passwords or alter content. The scan was carried out over http://.`) });
+  if (tlsInf.hostnameMatch === false) risks.push({ bulgu: t('TLS hostname uyuşmazlığı', 'TLS-Hostname-Abweichung', 'TLS hostname mismatch'), sev: 'Yüksek', aciklama: t(`Sertifika ${hostname} adına düzenlenmemiş; ziyaretçiler tarayıcı güvenlik uyarısıyla karşılaşabilir ve siteye güven azalır.`, `Das Zertifikat ist nicht auf ${hostname} ausgestellt; Besucher können auf eine Browser-Sicherheitswarnung stoßen und das Vertrauen in die Website sinkt.`, `The certificate is not issued for ${hostname}; visitors may encounter a browser security warning and trust in the site decreases.`) });
+  if (tlsInf.daysLeft != null && tlsInf.daysLeft < 0) risks.push({ bulgu: t('TLS sertifikası süresi dolmuş', 'TLS-Zertifikat abgelaufen', 'TLS certificate expired'), sev: 'Yüksek', aciklama: t('Site tarayıcılarca güvensiz kabul edilir; ziyaretçi kaybına yol açar.', 'Die Website wird von Browsern als unsicher eingestuft; das führt zu Besucherverlusten.', 'The site is considered insecure by browsers; this leads to a loss of visitors.') });
   for (const e of eolRisks) risks.push({ bulgu: e.bulgu, sev: e.sev, aciklama: e.aciklama });
   const keyOf = (headerName: string): SecKey | undefined => HEADER_ROWS.find((r) => r.header === headerName)?.key as SecKey | undefined;
   const covFor = (headerNames: string[]): string => {
@@ -335,22 +354,23 @@ export async function generateBasitReport(hostname: string, locale: string = 'tr
     return t(
       ` Taranan ${pageCount} benzersiz sayfanın ${n === pageCount ? 'TAMAMINDA' : `${n}/${pageCount}'sinde`} eksik.`,
       ` Fehlt auf ${n === pageCount ? `ALLEN ${pageCount}` : `${n} von ${pageCount}`} geprüften einzigartigen Seiten.`,
+      ` Missing on ${n === pageCount ? `ALL ${pageCount}` : `${n} of ${pageCount}`} scanned unique pages.`,
     );
   };
   const critList: string[] = missingSec.filter((h) => h === 'Content-Security-Policy' || h === 'X-Frame-Options');
   if (critList.length) {
-    const spaNote = isSpa && critList.includes('Content-Security-Policy') ? t(' Site JavaScript ağırlıklı bir SPA olduğundan CSP eksikliği XSS etkisini büyütür; önceliklendirilmesi önerilir.', ' Da die Website eine JavaScript-lastige SPA ist, vergrößert das Fehlen einer CSP die XSS-Auswirkung; eine Priorisierung wird empfohlen.') : '';
-    risks.push({ bulgu: t(`Kritik güvenlik başlıkları eksik (${critList.join(', ')})`, `Kritische Sicherheits-Header fehlen (${critList.join(', ')})`), sev: 'Orta', aciklama: t(`XSS ve/veya clickjacking saldırılarına karşı tarayıcı seviyesinde savunma bulunmuyor.`, `Auf Browser-Ebene besteht keine Verteidigung gegen XSS- und/oder Clickjacking-Angriffe.`) + covFor(critList) + spaNote });
+    const spaNote = isSpa && critList.includes('Content-Security-Policy') ? t(' Site JavaScript ağırlıklı bir SPA olduğundan CSP eksikliği XSS etkisini büyütür; önceliklendirilmesi önerilir.', ' Da die Website eine JavaScript-lastige SPA ist, vergrößert das Fehlen einer CSP die XSS-Auswirkung; eine Priorisierung wird empfohlen.', ' As the site is a JavaScript-heavy SPA, the absence of a CSP amplifies the XSS impact; prioritisation is recommended.') : '';
+    risks.push({ bulgu: t(`Kritik güvenlik başlıkları eksik (${critList.join(', ')})`, `Kritische Sicherheits-Header fehlen (${critList.join(', ')})`, `Critical security headers missing (${critList.join(', ')})`), sev: 'Orta', aciklama: t(`XSS ve/veya clickjacking saldırılarına karşı tarayıcı seviyesinde savunma bulunmuyor.`, `Auf Browser-Ebene besteht keine Verteidigung gegen XSS- und/oder Clickjacking-Angriffe.`, `There is no browser-level defence against XSS and/or clickjacking attacks.`) + covFor(critList) + spaNote });
   }
   const otherMissing = missingSec.filter((h) => !critList.includes(h));
-  if (otherMissing.length) risks.push({ bulgu: t(`Ek güvenlik başlıkları eksik (${otherMissing.join(', ')})`, `Weitere Sicherheits-Header fehlen (${otherMissing.join(', ')})`), sev: 'Orta', aciklama: t(`Savunma derinliği zayıf; tek tek düşük etkili olsa da birlikte saldırı yüzeyini genişletir.`, `Die Verteidigungstiefe ist schwach; einzeln geringfügig, vergrößern sie zusammen die Angriffsfläche.`) + covFor(otherMissing) });
+  if (otherMissing.length) risks.push({ bulgu: t(`Ek güvenlik başlıkları eksik (${otherMissing.join(', ')})`, `Weitere Sicherheits-Header fehlen (${otherMissing.join(', ')})`, `Additional security headers missing (${otherMissing.join(', ')})`), sev: 'Orta', aciklama: t(`Savunma derinliği zayıf; tek tek düşük etkili olsa da birlikte saldırı yüzeyini genişletir.`, `Die Verteidigungstiefe ist schwach; einzeln geringfügig, vergrößern sie zusammen die Angriffsfläche.`, `Defence-in-depth is weak; individually low-impact, but together they widen the attack surface.`) + covFor(otherMissing) });
   // (BÖLÜM 1) SAYFAYA-ÖZGÜ tutarsızlık: ana sayfada MEVCUT bir kritik başlık bazı alt sayfalarda EKSİK.
-  if (perPageMissing.length) risks.push({ bulgu: t('Sayfaya özgü güvenlik başlığı tutarsızlığı', 'Seitenspezifische Inkonsistenz der Sicherheits-Header'), sev: 'Orta', aciklama: t(`Ana sayfada mevcut olan bir/birkaç kritik başlık bazı iç sayfalarda gönderilmiyor: ${perPageMissing.join(', ')}. Başlık politikası tüm yollarda tutarlı uygulanmalı (ör. sunucu bloğu genelinde, tek uç noktada değil).`, `Ein oder mehrere auf der Startseite vorhandene kritische Header werden auf einigen Unterseiten nicht gesendet: ${perPageMissing.join(', ')}. Die Header-Richtlinie sollte auf allen Pfaden konsistent angewendet werden (z. B. serverweit, nicht nur an einem Endpunkt).`) });
-  if (disclosure.length) risks.push({ bulgu: t('Üçüncü taraf servis kimlikleri', 'Kennungen von Drittanbieterdiensten'), sev: 'Bilgilendirme', aciklama: t(`Ana sayfada ${disclosure.join('; ')} açıkça görülüyor. İstismar edilebilir açık değildir; yalnızca dış servis bağımlılıklarına dair farkındalık amacıyla listelenmiştir.`, `Auf der Startseite sind ${disclosure.join('; ')} offen sichtbar. Dies ist keine ausnutzbare Schwachstelle; sie wird nur zur Sensibilisierung für externe Dienstabhängigkeiten aufgeführt.`) });
+  if (perPageMissing.length) risks.push({ bulgu: t('Sayfaya özgü güvenlik başlığı tutarsızlığı', 'Seitenspezifische Inkonsistenz der Sicherheits-Header', 'Page-specific security header inconsistency'), sev: 'Orta', aciklama: t(`Ana sayfada mevcut olan bir/birkaç kritik başlık bazı iç sayfalarda gönderilmiyor: ${perPageMissing.join(', ')}. Başlık politikası tüm yollarda tutarlı uygulanmalı (ör. sunucu bloğu genelinde, tek uç noktada değil).`, `Ein oder mehrere auf der Startseite vorhandene kritische Header werden auf einigen Unterseiten nicht gesendet: ${perPageMissing.join(', ')}. Die Header-Richtlinie sollte auf allen Pfaden konsistent angewendet werden (z. B. serverweit, nicht nur an einem Endpunkt).`, `One or more critical headers present on the home page are not sent on some inner pages: ${perPageMissing.join(', ')}. The header policy should be applied consistently across all paths (e.g. server-wide, not at a single endpoint).`) });
+  if (disclosure.length) risks.push({ bulgu: t('Üçüncü taraf servis kimlikleri', 'Kennungen von Drittanbieterdiensten', 'Third-party service identifiers'), sev: 'Bilgilendirme', aciklama: t(`Ana sayfada ${disclosure.join('; ')} açıkça görülüyor. İstismar edilebilir açık değildir; yalnızca dış servis bağımlılıklarına dair farkındalık amacıyla listelenmiştir.`, `Auf der Startseite sind ${disclosure.join('; ')} offen sichtbar. Dies ist keine ausnutzbare Schwachstelle; sie wird nur zur Sensibilisierung für externe Dienstabhängigkeiten aufgeführt.`, `${disclosure.join('; ')} are openly visible on the home page. This is not an exploitable vulnerability; it is listed only to raise awareness of external service dependencies.`) });
 
   const riskSection = risks.length
-    ? `| ${t('Bulgu', 'Befund')} | ${t('Şiddet', 'Schweregrad')} | ${t('Açıklama', 'Beschreibung')} |\n|-------|--------|----------|\n${risks.map((r) => `| ${r.bulgu} | ${de ? SEV_DE[r.sev] ?? r.sev : r.sev} | ${r.aciklama.replace(/\|/g, '\\|')} |`).join('\n')}`
-    : t('Belirgin bir güvenlik riski öne çıkmadı; rapor yalnızca küçük iyileştirme fırsatlarını listeler.', 'Es ist kein deutliches Sicherheitsrisiko hervorgetreten; der Bericht listet nur kleine Verbesserungsmöglichkeiten auf.');
+    ? `| ${t('Bulgu', 'Befund', 'Finding')} | ${t('Şiddet', 'Schweregrad', 'Severity')} | ${t('Açıklama', 'Beschreibung', 'Description')} |\n|-------|--------|----------|\n${risks.map((r) => `| ${r.bulgu} | ${en ? (SEV_EN[r.sev] ?? r.sev) : de ? (SEV_DE[r.sev] ?? r.sev) : r.sev} | ${r.aciklama.replace(/\|/g, '\\|')} |`).join('\n')}`
+    : t('Belirgin bir güvenlik riski öne çıkmadı; rapor yalnızca küçük iyileştirme fırsatlarını listeler.', 'Es ist kein deutliches Sicherheitsrisiko hervorgetreten; der Bericht listet nur kleine Verbesserungsmöglichkeiten auf.', 'No significant security risk stood out; the report lists only minor improvement opportunities.');
 
   // Yonetici ozeti
   const tlsProblem = tlsInf.hostnameMatch === false ? t('TLS sertifikası bu alan adıyla eşleşmiyor', 'Das TLS-Zertifikat stimmt nicht mit dieser Domain überein') : tlsInf.daysLeft != null && tlsInf.daysLeft < 0 ? t('TLS sertifikasının süresi dolmuş', 'Das TLS-Zertifikat ist abgelaufen') : '';

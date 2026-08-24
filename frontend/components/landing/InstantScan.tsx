@@ -27,6 +27,15 @@ const IS = {
     errScan: 'Der Scan konnte derzeit nicht abgeschlossen werden. Bitte versuchen Sie es erneut.',
     aria: 'Zu scannende Domain',
   },
+  en: {
+    heading: 'Scan your website for free, instantly',
+    sub: 'See a security score and the top gaps in seconds — no card or sign-up required.',
+    scan: 'Scan for free', waiting: 'Awaiting verification…',
+    errDomain: 'Enter a domain (e.g. example.com).',
+    errToken: 'Please complete the verification box first.',
+    errScan: 'The scan could not be completed right now. Please try again.',
+    aria: 'Domain to scan',
+  },
 } as const;
 
 const SEV_LABEL: Record<'high' | 'medium' | 'low', string> = { high: 'Yüksek', medium: 'Orta', low: 'Düşük' };
@@ -94,8 +103,8 @@ export function InstantScan() {
   const [result, setResult] = useState<InstantScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const turnstile = useRef<TurnstileHandle>(null);
-  const [lang, setLang] = useState<'tr' | 'de'>('tr');
-  useEffect(() => { setLang(getRegion(readRegionCookie()).lang === 'de' ? 'de' : 'tr'); }, []);
+  const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
+  useEffect(() => { const lg = getRegion(readRegionCookie()).lang; setLang(lg === 'de' ? 'de' : lg === 'en' ? 'en' : 'tr'); }, []);
   const L = IS[lang];
 
   async function onScan(e: React.FormEvent) {

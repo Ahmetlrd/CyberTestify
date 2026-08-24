@@ -20,6 +20,12 @@ const CB_T = {
     policy: 'Cookie-Richtlinie',
     ok: 'Akzeptieren',
   },
+  en: {
+    aria: 'Cookie notice',
+    body: 'We use cookies to improve your experience.',
+    policy: 'Cookie Policy',
+    ok: 'Accept',
+  },
 } as const;
 
 /**
@@ -29,11 +35,11 @@ const CB_T = {
  */
 export function CookieBanner() {
   const [show, setShow] = useState(false);
-  const [lang, setLang] = useState<'tr' | 'de'>('tr');
+  const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
   const analyticsEnabled = !!GA_ID || !!CLARITY_ID;
 
   useEffect(() => {
-    setLang(getRegion(readRegionCookie()).lang === 'de' ? 'de' : 'tr');
+    { const lg = getRegion(readRegionCookie()).lang; setLang(lg === 'de' ? 'de' : lg === 'en' ? 'en' : 'tr'); }
     if (analyticsEnabled && !noticeDismissed()) setShow(true);
     const reopen = () => setShow(true);
     window.addEventListener(OPEN_PREFS_EVENT, reopen);

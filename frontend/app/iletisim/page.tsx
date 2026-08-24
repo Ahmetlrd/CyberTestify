@@ -21,11 +21,20 @@ const T = {
     metaTitle: 'Kontakt — CyberTestify',
     metaDesc: 'Kontaktieren Sie CyberTestify — für Support, Fragen und Unternehmensanfragen.',
   },
+  en: {
+    title: 'Contact',
+    intro: 'For questions, support requests and contractual notices, you can reach us through the channels below.',
+    emailLabel: 'Email',
+    note: 'Support requests are usually answered within 1 business day. You can use the same email address for questions about payment and invoicing.',
+    metaTitle: 'Contact — CyberTestify',
+    metaDesc: 'Get in touch with CyberTestify — for support, questions and business enquiries.',
+  },
 } as const;
 
 function pick() {
   const region = getRegion(cookies().get('region')?.value);
-  return T[region.lang === 'de' ? 'de' : 'tr'];
+  const lang = region.lang === 'de' ? 'de' : region.lang === 'en' ? 'en' : 'tr';
+  return T[lang];
 }
 
 export function generateMetadata() {

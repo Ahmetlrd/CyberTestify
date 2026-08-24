@@ -38,12 +38,24 @@ const T = {
     haveAccount: 'Bereits ein Konto?', login: 'Anmelden',
     link1Href: '/de/legal/agb', link2Href: '/de/legal/datenschutz',
   },
+  en: {
+    title: 'Create account', subtitle: 'Verification is free — get started in minutes.',
+    google: 'Register with Google', or: 'or', email: 'Email',
+    password: 'Password (at least 8 characters)', confirm: 'Confirm password', mismatch: 'Passwords do not match.',
+    termsPre: 'I have read and accept the ', link1: 'Terms of Service', termsMid: ' and the ', link2: 'Privacy Policy', termsPost: '.',
+    errMismatch: 'Passwords do not match — please enter the same password in both fields.',
+    errTerms: 'To continue, you must accept the Terms of Service and Privacy Policy.',
+    errCaptcha: 'Please complete the verification box.',
+    submitting: 'Registering…', waiting: 'Verification pending…', submit: 'Register',
+    haveAccount: 'Already have an account?', login: 'Sign in',
+    link1Href: '/en/legal/terms', link2Href: '/en/legal/privacy',
+  },
 } as const;
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [lang, setLang] = useState<'tr' | 'de'>('tr');
-  useEffect(() => { setLang(getRegion(readRegionCookie()).lang === 'de' ? 'de' : 'tr'); }, []);
+  const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
+  useEffect(() => { const l = getRegion(readRegionCookie()).lang; setLang(l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr'); }, []);
   const t = T[lang];
   // ?next: satın-alma akışında paket niyeti kayıt sonrası da korunsun (yoksa /verify).
   const next = useSearchParams().get('next') || '/verify';

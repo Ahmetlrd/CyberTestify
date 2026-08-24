@@ -29,7 +29,7 @@ type Order = {
 
 // (Savunma) awaiting_admin_review backend'de zaten 'scan_running'e maskelenir; yine de hiçbir koşulda
 // ham enum sızmasın diye burada da "Taranıyor"/"Wird gescannt" gösterilir.
-const ORDER_STATUS_LABEL: Record<'tr' | 'de', Record<string, string>> = {
+const ORDER_STATUS_LABEL: Record<'tr' | 'de' | 'en', Record<string, string>> = {
   tr: {
     awaiting_payment: 'Ödeme bekleniyor',
     awaiting_domain_verification: 'Alan adı doğrulaması bekleniyor',
@@ -57,6 +57,20 @@ const ORDER_STATUS_LABEL: Record<'tr' | 'de', Record<string, string>> = {
     scope_violation: 'Gestoppt (außerhalb des Geltungsbereichs)',
     report_purged: 'Abgelaufen',
     refunded: 'Erstattet',
+  },
+  en: {
+    awaiting_payment: 'Awaiting payment',
+    awaiting_domain_verification: 'Awaiting domain verification',
+    paid: 'Queuing',
+    scan_queued: 'Starting',
+    scan_running: 'Scanning',
+    awaiting_admin_review: 'Scanning',
+    scan_completed: 'Report ready',
+    report_delivered: 'Report ready',
+    scan_failed: 'Failed',
+    scope_violation: 'Stopped (out of scope)',
+    report_purged: 'Expired',
+    refunded: 'Refunded',
   },
 };
 
@@ -186,6 +200,68 @@ const VER_T = {
     alreadyVerified: (h: string) => `„${h}“ ist bereits hinzugefügt und verifiziert.`,
     bulkDeleted: (d: number, k: number) => `${d} Domain(s) gelöscht; ${k} mit Scans wurden beibehalten.`,
   },
+  en: {
+    verifiedDomains: 'Your verified domains',
+    verifiedValid: 'Verified · valid',
+    continueWithDomain: 'Continue with this domain',
+    startScan: 'Start scan',
+    delete: 'Delete',
+    pendingVerification: 'Awaiting verification',
+    expiredReverify: 'Expired — re-verify',
+    notVerifiedYet: 'Not verified yet',
+    passiveHint: 'Passive packages require no verification. Active packages require DNS verification.',
+    continue: 'Continue',
+    hide: 'Hide',
+    verify: 'Verify',
+    txtIntro1: 'Add the following',
+    txtIntro2: 'record to your DNS panel:',
+    nameLabel: 'Name:',
+    valueLabel: 'Value:',
+    checking: 'Checking…',
+    checkVerification: 'Check verification',
+    addNewDomain: '+ Add new domain',
+    deleteAll: 'Delete all',
+    newDomain: 'New domain',
+    adding: 'Adding…',
+    addAndContinue: 'Add and continue',
+    add: 'Add',
+    domainPlaceholder: 'example.com',
+    willBeAdded: 'The following domain will be added:',
+    stripNote1: 'and path segments are removed automatically.',
+    noDomains: 'You don\'t have any domains yet. Add a domain and verify it to get started.',
+    invoiceSent: 'Invoice sent',
+    invoiceRequested: 'Invoice requested ✓',
+    requestInvoice: 'Request invoice',
+    unarchive: 'Unarchive',
+    archive: 'Archive',
+    myPanel: 'My dashboard',
+    selectDomain: 'Select a domain',
+    startScanning: 'Start scanning',
+    activeNotice1: 'Before we can start active security tests, you need to prove the domain belongs to you with a',
+    activeNoticeStrong: 'DNS TXT record',
+    activeNotice2: '.',
+    passiveTitle: 'No verification is required for this package',
+    passiveBody1: 'The passive scan only observes from the outside (security headers, TLS, configuration).',
+    passiveBody2: 'Add your domain and',
+    passiveBodyStrong: 'continue right away',
+    passiveBody3: '— no need to add a DNS record.',
+    tabMyScans: 'My scans',
+    tabDomains: 'Domains',
+    tabScheduled: 'Scheduled ↗',
+    myScans: 'My scans',
+    hideArchived: 'Hide archived',
+    archived: 'Archived',
+    showLess: 'Show less',
+    showAll: (n: number) => `Show all (${n})`,
+    noArchivedScans: 'No archived scans.',
+    noScansYet: 'You don\'t have any scans yet. Start a scan from the “Domains” tab.',
+    confirmDeleteDomain: 'Are you sure you want to delete this domain? This action cannot be undone.',
+    confirmDeleteAll: 'Delete all domains without scans?',
+    confirmDeleteReport: 'Are you sure you want to delete this report? This action cannot be undone.',
+    dnsNotVisible: 'The record is not visible yet. DNS propagation can take a little while; please try again shortly.',
+    alreadyVerified: (h: string) => `“${h}” is already added and verified.`,
+    bulkDeleted: (d: number, k: number) => `${d} domain(s) deleted; ${k} with scans were kept.`,
+  },
 } as const;
 
 const HISTORY_PREVIEW = 3;
@@ -243,7 +319,7 @@ export default function VerifyHub() {
   const [tab, setTab] = useState<'domains' | 'history'>('domains');
   // (Çok-bölge) Dil + locale: region cookie'sinden. de → Almanca metin + Alman tarih biçimi.
   const [region, setRegion] = useState<RegionCode>('tr');
-  const lang: 'tr' | 'de' = getRegion(region).lang === 'de' ? 'de' : 'tr';
+  const lang: 'tr' | 'de' | 'en' = getRegion(region).lang === 'de' ? 'de' : getRegion(region).lang === 'en' ? 'en' : 'tr';
   const T = VER_T[lang];
   const dateLocale = getRegion(region).locale;
 

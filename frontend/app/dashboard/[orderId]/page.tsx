@@ -84,6 +84,40 @@ const DASH = {
     scopeViolation: 'Der Scan wurde aus Sicherheitsgründen gestoppt, weil ein Zugriffsversuch auf ein Ziel außerhalb des Scope erkannt wurde. Dies ist eine bewusste Schutzmaßnahme für Sie und Dritte.',
     targetFallback: 'Ziel',
   },
+  en: {
+    headline: {
+      awaiting_payment: 'Awaiting payment', awaiting_domain_verification: 'Domain verification required',
+      paid: 'Payment received — preparing scan', scan_queued: 'Your scan is starting', scan_running: 'Your scan is running',
+      scan_completed: 'Your report is ready', scan_failed: 'The scan could not be completed', scope_violation: 'Scan stopped for security reasons',
+      report_purged: 'Report retention period expired', refunded: 'Your order has been refunded',
+    } as Record<string, string>,
+    orderStatus: 'Order status', target: 'Target', reportReadyIncomplete: 'Report ready — but incomplete',
+    dvTitle: 'Verify your domain ownership',
+    dvBodyHtml: 'Your payment has been received. However, this package sends <strong>active security probes</strong> (authenticated tests, injection/session attempts); by law these tests can only start <strong>after you have verified via DNS that you are the owner/authorised person of the domain</strong>. Once verification is complete, your scan <strong>starts automatically</strong> — this page updates by itself.',
+    dvCta: 'Verify via DNS',
+    apTitle: 'Your payment is not complete yet',
+    apBodyHtml: 'Your order has been created, but because no payment was received the scan <strong>has not started yet</strong>. Simply complete the payment to start the scan.',
+    apRedirecting: 'Redirecting to the payment page…', apCta: 'Complete payment',
+    apNote: 'Secure payment is processed via iyzico. Once payment is confirmed, the scan starts automatically and this page updates by itself.',
+    payErr: 'The payment page could not be loaded. Please try again.',
+    refundTitle: 'Your order has been refunded',
+    refundBodyPre: 'This order has been cancelled/refunded. If you made a payment, the refund amount will be credited to your card/account within a few business days, depending on your bank. If you have any questions, you can contact ',
+    refundBodyPost: '.',
+    incompletePre: '⚠️ This scan completed incompletely.', incompleteDefault: 'The scan ended earlier than expected and the report content may be incomplete/empty.',
+    incompleteMid: ' For a refund or to have the scan re-run, contact ', incompleteTail: (id: string) => ` (order number: ${id}).`,
+    reportDownloaded: 'Report downloaded ✓', reportReady: 'Your encrypted report is ready', oneTimeCode: 'Opened with a one-time access code',
+    codeSentHtml: '<strong>Your access code has been sent by email.</strong> Enter the one-time code from your email below to open your report. (Once opened, it is remembered on this device.)',
+    accessCode: 'Access code', downloadReport: 'Download report',
+    fixTitle: 'AI Remediation Suggestions', fixSub: 'Concrete, actionable remediation steps for your findings (with secure code/config examples).',
+    campaign: 'CAMPAIGN', campaignFree: '— unlocked free for you as part of the campaign',
+    fixUnlockedHtml: '✓ Unlocked — the remediation suggestions are now <strong>included in your report</strong>. Use the button below to download the current report (including suggestions).',
+    downloadWithFix: 'Download report (including remediation suggestions)', enterCodeFirst: 'Enter the access code above first.',
+    fixLockedPre: '🔒 This content is locked. Unlocks for', fixLockedPost: '.',
+    promoOptional: 'Promo code (optional)', promoPlaceholder: 'Your code', processing: 'Processing…', buyUnlock: 'Buy and unlock',
+    fixNote: 'Secure payment is processed via iyzico. If the promo code is 100%, the payment step is skipped.',
+    scopeViolation: 'The scan was stopped for security reasons because an attempt to access an out-of-scope target was detected. This is a deliberate protective measure for you and third parties.',
+    targetFallback: 'target',
+  },
 } as const;
 
 function LockIcon({ open }: { open: boolean }) {
@@ -110,8 +144,8 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const [error, setError] = useState<string | null>(null);
   const [dlError, setDlError] = useState<string | null>(null); // rapor indirme hatası — kutunun altında gösterilir
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [lang, setLang] = useState<'tr' | 'de'>('tr');
-  useEffect(() => { setLang(getRegion(readRegionCookie()).lang === 'de' ? 'de' : 'tr'); }, []);
+  const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
+  useEffect(() => { const l = getRegion(readRegionCookie()).lang; setLang(l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr'); }, []);
   const t = DASH[lang];
 
   useEffect(() => {

@@ -35,6 +35,19 @@ const PROF_T = {
     logout: 'Abmelden',
     support: 'Support:',
   },
+  en: {
+    eyebrow: 'My account',
+    title: 'Profile',
+    loggedIn: 'Signed in',
+    sessionActive: 'Your session is active.',
+    email: 'Email',
+    emailVerification: 'Email verification',
+    verified: 'Verified',
+    pending: 'Pending',
+    panel: 'My dashboard (My domains and scans)',
+    logout: 'Sign out',
+    support: 'Support:',
+  },
 } as const;
 
 /**
@@ -46,10 +59,11 @@ export default function ProfilePage() {
   const router = useRouter();
   const [me, setMe] = useState<{ email: string; emailVerified: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lang, setLang] = useState<'tr' | 'de'>('tr');
+  const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
 
   useEffect(() => {
-    setLang(getRegion(readRegionCookie()).lang === 'de' ? 'de' : 'tr');
+    const l = getRegion(readRegionCookie()).lang;
+    setLang(l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr');
     if (typeof window !== 'undefined' && !window.localStorage.getItem('token')) {
       router.replace('/login?next=/profile');
       return;

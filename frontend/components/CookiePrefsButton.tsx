@@ -8,14 +8,15 @@ import { getRegion } from '../config/regions';
 /** Footer "Çerez tercihleri" — kullanıcı onay kararını sonradan değiştirsin (banner'ı yeniden açar). */
 export function CookiePrefsButton({ className }: { className?: string }) {
   // (Çok-bölge) /de → Almanca etiket ("Cookie-Einstellungen").
-  const [lang, setLang] = useState<'tr' | 'de'>('tr');
+  const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
   useEffect(() => {
-    setLang(getRegion(readRegionCookie()).lang === 'de' ? 'de' : 'tr');
+    const lg = getRegion(readRegionCookie()).lang;
+    setLang(lg === 'de' ? 'de' : lg === 'en' ? 'en' : 'tr');
   }, []);
   if (!GA_ID && !CLARITY_ID) return null; // izleme yoksa tercih ayarına gerek yok
   return (
     <button type="button" onClick={openCookiePrefs} className={className}>
-      {lang === 'de' ? 'Cookie-Einstellungen' : 'Çerez tercihleri'}
+      {lang === 'de' ? 'Cookie-Einstellungen' : lang === 'en' ? 'Cookie settings' : 'Çerez tercihleri'}
     </button>
   );
 }

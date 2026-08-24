@@ -26,10 +26,18 @@ const CERT = {
     footPre: 'Dieser Scan konnte technisch ausschließlich das Ziel ', footMid: ' erreichen. ',
     footClean: 'Es gab keinen Zugriffsversuch auf ein Ziel außerhalb des Scope.', footBlocked: 'Versuche außerhalb des Scope wurden vom Proxy sofort blockiert.',
   },
+  en: {
+    title: 'Scope Verification Certificate', by: 'Verified by the CyberTestify scope lock',
+    target: 'Verified target', method: 'Analysis method', methodVal: 'Evidence-based', verified: '· verified ✓',
+    access: 'Access control', accessVal: 'Scope lock', active: '· active ✓',
+    attempts: 'Out-of-scope access attempts', blocked: 'blocked',
+    footPre: 'This scan could technically reach only the target ', footMid: '. ',
+    footClean: 'There was no access attempt to any out-of-scope target.', footBlocked: 'Out-of-scope attempts were blocked immediately by the proxy.',
+  },
 } as const;
 
-export function ScopeCertificate({ hostname, flow, lang = 'tr' }: { hostname: string; flow?: Flow | null; lang?: 'tr' | 'de' }) {
-  const c = CERT[lang === 'de' ? 'de' : 'tr'];
+export function ScopeCertificate({ hostname, flow, lang = 'tr' }: { hostname: string; flow?: Flow | null; lang?: 'tr' | 'de' | 'en' }) {
+  const c = CERT[lang === 'de' ? 'de' : lang === 'en' ? 'en' : 'tr'];
   const outOfScope = flow?.scopeViolationTarget
     ? flow.scopeViolationTarget.split(',').filter(Boolean).length
     : 0;

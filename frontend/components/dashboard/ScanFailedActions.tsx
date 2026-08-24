@@ -44,6 +44,24 @@ const SF = {
     refundReasonPh: 'Ihr Erstattungsgrund (optional)', sending: 'Wird gesendet…', requestRefund: 'Erstattung anfordern',
     errRetry: 'Erneuter Versuch fehlgeschlagen.', errLoginless: 'Fortfahren ohne Login nicht möglich.', errRefund: 'Erstattungsanfrage konnte nicht gesendet werden.',
   },
+  en: {
+    fmDefault: 'The scan could not be completed. You can try again.',
+    fmUnreachable: 'During your scan, your website was unreachable (the server returned an error/unreachable status) — this is NOT a username/password issue; no login attempt was even made. Make sure your site is currently online and try again (your test-account details are still saved).',
+    fm2fa: 'The test account you provided appears to have two-factor authentication (2FA) enabled, so sign-in was not possible. Please try again with a TEST account without 2FA and with limited privileges.',
+    fmAuth: 'Sign-in with the test account you provided failed — the username/password may be incorrect. Check the details, re-enter them, and try again.',
+    fmGen: 'An unexpected error occurred during the scan. You can try again.',
+    fmInterrupted: 'The scan was interrupted unexpectedly (e.g. maintenance). You can try again.',
+    refundReceivedPre: 'Your refund request has been received.', refundReceivedBody: ' Your request for this order has been recorded; our team will review it and contact you shortly to process your refund. You do not need to submit a new request. If you have any questions, you can reach us at ', refundReceivedPost: '.',
+    failedTitle: 'Scan could not be completed',
+    credUser: 'Test account username', credPass: 'Test account password',
+    needCredsErr: 'This package includes authenticated testing; enter the test-account details to continue.',
+    retrying: 'Retrying…', retry: 'Try again', starting: 'Starting…', loginless: 'Continue without login',
+    insteadRefund: 'Request a refund instead',
+    loginlessHintHtml: 'If your site has no login, <strong>“Continue without login”</strong> runs the scan without authentication; in-session checks appear in the report as “out of scope”.',
+    tooMany: 'This scan has been attempted several times. If you wish, you can request a refund; our team will process it.',
+    refundReasonPh: 'Your reason for the refund (optional)', sending: 'Sending…', requestRefund: 'Request a refund',
+    errRetry: 'Retry failed.', errLoginless: 'Could not continue without login.', errRefund: 'The refund request could not be sent.',
+  },
 } as const;
 
 function failureMessage(reason: string | null | undefined, s: { fmDefault: string; fmUnreachable: string; fm2fa: string; fmAuth: string; fmGen: string; fmInterrupted: string }): string {
@@ -65,9 +83,9 @@ export function ScanFailedActions({
   failureReason?: string | null;
   refundRequestedAt?: string | null;
   onRetry: () => void;
-  lang?: 'tr' | 'de';
+  lang?: 'tr' | 'de' | 'en';
 }) {
-  const s = SF[lang === 'de' ? 'de' : 'tr'];
+  const s = SF[lang === 'de' ? 'de' : lang === 'en' ? 'en' : 'tr'];
   const tooMany = attemptCount > 2;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);

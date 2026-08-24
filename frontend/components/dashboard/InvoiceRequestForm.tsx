@@ -38,6 +38,19 @@ const IVF = {
     errAddress: 'Adresse ist erforderlich.', errEmail: 'Bitte geben Sie eine gültige Rechnungs-E-Mail ein.', errCompany: 'Firmenname ist erforderlich.',
     errTaxOffice: '', errVkn: '', errName: 'Name ist erforderlich.', errTckn: '', errSend: 'Anfrage konnte nicht gesendet werden.',
   },
+  en: {
+    status: { requested: 'Your request has been received — your invoice will be prepared and sent by email.', issued: 'Your invoice has been issued; it will reach you by email shortly.', sent: 'Your invoice has been sent by email.' } as Record<string, string>,
+    title: 'Request an invoice', sub: 'Optional — if you would like an invoice, enter your details and it will be sent by email.',
+    edit: 'Edit details', request: 'Request an invoice',
+    updated: 'Your invoice details have been updated.', created: 'Your invoice request has been received; the invoice will be sent by email.',
+    individual: 'Individual', corporate: 'Business',
+    companyName: 'Company name', taxOffice: '', taxNumber: 'VAT number (optional)', fullName: 'Full name', nationalId: '',
+    address: 'Billing address', email: 'Billing email',
+    sending: 'Sending…', update: 'Update details', close: 'Close',
+    foot: 'Your invoice is prepared by our team and sent by email. One request is kept per order; if you submit again, the details are updated.',
+    errAddress: 'Address is required.', errEmail: 'Please enter a valid billing email.', errCompany: 'Company name is required.',
+    errTaxOffice: '', errVkn: '', errName: 'Full name is required.', errTckn: '', errSend: 'The request could not be sent.',
+  },
 } as const;
 
 /**
@@ -45,9 +58,9 @@ const IVF = {
  * Sistem OTOMATİK e-fatura KESMEZ; bilgi toplanır, ekip elle keser/gönderir. Müşteri sonradan da girebilir.
  * /de'de Türkiye-özgü alanlar (TCKN/Vergi dairesi) gizlenir; doğrulama gevşetilir (USt-IdNr opsiyonel).
  */
-export function InvoiceRequestForm({ orderId, defaultEmail, existing, lang = 'tr' }: { orderId: string; defaultEmail: string; existing: Existing; lang?: 'tr' | 'de' }) {
-  const v = IVF[lang === 'de' ? 'de' : 'tr'];
-  const isDe = lang === 'de';
+export function InvoiceRequestForm({ orderId, defaultEmail, existing, lang = 'tr' }: { orderId: string; defaultEmail: string; existing: Existing; lang?: 'tr' | 'de' | 'en' }) {
+  const v = IVF[lang === 'de' ? 'de' : lang === 'en' ? 'en' : 'tr'];
+  const isDe = lang === 'de' || lang === 'en'; // intl: TR'ye özgü TCKN/Vergi-dairesi alanlarını gizle (de+en)
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<'bireysel' | 'kurumsal'>(existing?.type ?? 'bireysel');
   const [companyName, setCompanyName] = useState(existing?.companyName ?? '');

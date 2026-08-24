@@ -254,6 +254,111 @@ const ORD = {
     legalSlash: '',
     intlSoonHtml: '',
   },
+  en: {
+    title: 'Start Your Scan', sub: 'Choose a package, tick the consents and proceed to secure payment.',
+    noDomainPre: 'First choose a domain to scan.', noDomainLink: 'Choose a domain →',
+    dnsVerified: 'Domain verified via DNS — the active scan starts after payment confirmation.',
+    activeVerifyTitle: 'This package sends active probes — DNS verification required',
+    activeVerifyBodyHtml: 'Without DNS verification of your domain ownership the active scan (injection/session attempts) <strong>will not start</strong> — even after payment the order is held in the <strong>“awaiting domain verification”</strong> status and starts <strong>automatically</strong> once verified.',
+    verifyNow: 'Verify via DNS now →',
+    passiveNoVerify: 'No verification is required for this package — the scan starts immediately after payment confirmation.',
+    step1: '1 · Choose a package', entryBadge: 'Entry',
+    basitDesc: 'A quick, low-cost trial scan — intended as a preview (not a comprehensive audit).',
+    kdv: 'VAT included', sampleReport: 'View sample report', buy: 'Buy now',
+    popular: 'Popular', includes: 'Includes',
+    reconItems: [
+      'Abandoned subdomain (Subdomain Takeover) scan — subdomain inventory from CT logs',
+      'Public API / Swagger documentation discovery',
+      'CMS & technology fingerprint analysis',
+      'Detection of administrative/sensitive paths from the sitemap',
+    ],
+    reconNote: 'Passive external-surface reconnaissance; no active endpoint injection or authenticated testing.',
+    soon: 'Coming soon', soonClosed: 'Not currently on sale',
+    testCredsMembers: 'Test account details',
+    avTitle: '💡 Transparency & Scope — please read before payment',
+    avP1Html: 'This package tests your website’s <strong>public (no-login) external attack surface</strong> with harmless probes — injection, authorisation and logic risks across public search, form, API and login/registration flows.',
+    avP2Html: 'If your website has <strong>no public search, form, API or ID-based endpoints</strong>, checks listed in the contents such as <strong>IDOR / Business Logic / File Upload / Race</strong> may appear as <strong>“Not assessed”</strong> in the report. This is <strong>not an error</strong> — it is a natural consequence of your site’s external-surface structure (no open entry point to test).',
+    avP3Html: 'For deep authorisation/business-logic testing <strong>after</strong> login, choose the <strong>Full-Scope Pentest</strong> package.',
+    fpReviewHtml: '<strong class="text-ink">Review process:</strong> For security reasons this package starts <strong>immediately after payment confirmation</strong> once ordered.',
+    fpAccountHtml: '<strong class="text-ink">Test account:</strong> For authenticated testing you must provide a <strong>TEST account</strong> (NOT your main/production account; without 2FA, minimal privileges, single-use). Your credentials are stored <strong>encrypted/temporarily</strong> and deleted after the scan.',
+    fpMethodHtml: '<strong class="text-ink">Method:</strong> After login, cookie/session/authorisation, authenticated injection and IDOR, privilege escalation and multi-step business-logic indicators are examined with <strong>deterministic security checks</strong>. Real data/account changes and payment completion are <strong>blocked at code level</strong> — this is not an autonomous/unrestricted pentest.',
+    fpAiHtml: '<strong class="text-ink">Optional AI layer:</strong> Two checks (privilege escalation + multi-step business logic) have an optional, lightweight <strong>AI advisory layer</strong>; it is <strong>disabled by default</strong> and only engages when enabled and it finds an additional, verifiable indicator. When disabled, results are produced with <strong>fully deterministic authenticated checks</strong> — this is normal and expected, and the report shows it transparently.',
+    fpScopeHtml: '<strong class="text-ink">Scope:</strong> <strong>Cross-account</strong> IDOR (accessing another user’s data) is out of scope in this version.',
+    step2: '2 · Consents', needConsents: (n: number) => `Tick the following ${n} consents to continue.`,
+    contractShow: 'View the Distance Sales Agreement for this order', contractHide: 'Hide the agreement for this order',
+    step3: '3 · Repeat', oneOff: 'One-off scan', repeat: 'Repeat regularly',
+    frequency: 'Frequency', weekly: 'Weekly', biweekly: 'Every two weeks', monthly: 'Monthly',
+    howManyRuns: 'How many scans (prepaid)',
+    recurringNote: (runs: number) => `You pay in advance for ${runs} scans; the first runs immediately, the rest at your chosen frequency. (Minimum frequency: weekly.)`,
+    step4: '4 · Start', firstScan: '(first scan)', startNow: 'Start immediately', startLater: 'Start on a specific date',
+    startDateTime: 'Start date and time',
+    startLaterNote: 'The scan starts on the control cycle nearest to your chosen time (within a few minutes).',
+    atTitle: 'Active Test Authorisation (required)',
+    atBody: 'This package sends limited active test requests to confirm vulnerabilities. To continue you must read the scope and complete the declaration.',
+    atDoes: 'What this scan DOES', atDoesNot: 'What this scan does NOT do',
+    atConsentNote: 'Your consent is logged automatically together with your account, timestamp, IP and the text version (no extra details needed). On request it is attached to your order as an authorisation PDF.',
+    acTitle: 'Test account details', acOptional: '(optional)',
+    acInfoHtml: 'This field is <strong>optional</strong>. If your website has <strong>no login mechanism</strong>, leave it blank — the scan runs <strong>without login (unauthenticated)</strong>. If there is a login, you can enter a <strong>TEST account</strong> for in-session checks.',
+    acWarnTitle: '⚠️ Enter a TEST account only — NOT your main/production account',
+    acWarnBodyHtml: 'Use an account created for this scan with <strong>minimal privileges and single use</strong>; change its password after the scan.',
+    acWarn2Html: 'Provide an account <strong>without 2FA</strong>. Your credentials are stored <strong>encrypted</strong> and <strong>deleted</strong> after the scan.',
+    acUser: 'Username / email', acPass: 'Password', acPassPh: 'Test account password',
+    acCheckBtn: 'Verify test login (optional)', acChecking: 'Attempting login…',
+    acCheckingHint: 'Searching for and trying the login form — this may take a few seconds…',
+    acNoCredsHtml: 'ℹ️ You have not entered any test account details — the scan will run <strong>without login (unauthenticated)</strong>. If your website has no login, this is normal.',
+    lcOk: 'Login with the test account verified.',
+    lcBad: 'Could not log in with this username/password — please check the details.',
+    lc2fa: 'The account appears to have 2FA — please provide a test account without 2FA.',
+    lcNoForm: 'No automatic login form found — you can still continue (the scan will try more thoroughly).',
+    lcTimeout: 'Verification took too long — you can still continue (the real scan will try more thoroughly).',
+    lcOther: 'Login could not be verified at the moment — you can still continue.',
+    promoLabel: 'Promo code (optional)', promoPh: 'Your code', apply: 'Apply',
+    promoAppliedPre: 'Code applied — discount', promoNewTotal: 'New total:', promoFree: ' — the payment step is skipped and the scan is queued immediately.',
+    queueBusyHtml: 'You can place your order — <strong>your scan will start as soon as possible</strong> and you can track its status from this panel.',
+    checking: 'Pre-checking whether your target is reachable…',
+    unreachTitle: '🚫 Your target is currently unreachable from outside',
+    unreachP1Html: 'Your website’s main address (<strong>443/HTTPS and 80/HTTP</strong>) is not responding at the moment. This is not an error — it means your website is <strong>offline, closed, or blocking our access</strong>. If the scan starts now it will find no externally testable surface, so the report will most likely come back <strong>empty / “Not assessed”</strong>.',
+    unreachP2Html: '<strong>Our recommendation:</strong> make sure your website is online and reachable, then refresh this page and try again. If you believe the issue is temporary you can still continue.',
+    unreachAck: 'I understand the access issue; I want to start now anyway.',
+    lowTitle: '⚠️ Important Pre-check',
+    lowP1Html: 'The automatic quick scan found <strong>almost no testable entry point</strong> (form, query parameter, endpoint with a numeric ID) on your website. This is usually because the site has a <strong>JavaScript-rendered (SPA)</strong> structure.',
+    lowP2Html: 'The scan will still run, but many checks may end up as <strong>“out of scope / not assessed”</strong>. The amount paid is <strong>not a guarantee of findings</strong>; it covers the entire comprehensive assessment process.',
+    lowAck: 'I want to continue.',
+    summary: 'Order Summary', domainLabel: 'Domain', freqLabel: 'Frequency', startLabelKey: 'Start', contentLabel: 'Contents',
+    scanCount: (n: number) => `${n} scans`, total: 'Total', totalRuns: (n: number) => `Total · ${n} scans`, kdvIncl: 'VAT included',
+    verifyDomain: 'Verify domain',
+    verifyHint: 'For the active scan, first verify your domain ownership via DNS — you can purchase once verified.',
+    scheduledHint: 'You can manage these from the Scheduled scans screen.', autoStartHint: 'The scan starts automatically after payment confirmation.',
+    selectPackage: 'Choose a package to continue.',
+    freqOneOff: 'One-off', freqEvery: (label: string, runs: number) => `${label} · ${runs} scans`, startImmediate: 'Immediately',
+    ctaStarting: 'Starting…', ctaBuyBundle: 'Buy package', ctaSetupRecurring: 'Set up regular scan', ctaSchedule: 'Schedule scan', ctaStart: 'Start scan',
+    hintSelectDomain: 'First verify your website ownership.', hintSelectModules: 'Choose the package contents.',
+    hintConsents: 'Tick the consents below to continue →', hintLowScope: 'Read and acknowledge the pre-check notice →', hintUnreach: 'Read and acknowledge the access notice →', hintChecking: 'Pre-check in progress…',
+    payPageErr: 'Payment page could not be loaded. Please try again.',
+    errSelectPackage: 'Please choose a package.',
+    errAllConsents: 'You must tick all consents to continue.',
+    errActiveNoSchedule: 'Active-test packages cannot be scheduled; they run one-off and immediately.',
+    errActiveRisk: 'For the active test you must tick the risk acceptance box.',
+    errFutureDate: 'For a later start, choose a date/time in the future.',
+    errAuthConsents: 'You entered test account details — tick the additional consents for authenticated testing (test-account declaration and acceptance of the higher risk). (Or leave the fields blank and continue without login.)',
+    errSelectModule: 'Choose at least one module.',
+    errLowScopeAck: 'To continue you must acknowledge the pre-check notice.',
+    errUnreachAck: 'Target unreachable — to continue you must acknowledge the notice.',
+    trustSSL: '256-bit SSL · secure payment via iyzico', trustCard: 'Card details are processed at iyzico, not stored by us', trustKvkk: 'GDPR-compliant · data stored encrypted',
+    payAlt: 'Pay with iyzico',
+    noPackage: 'No package selected', mobileVerify: 'Verify',
+    cGenStrong: 'I have read and agree:', cGenOwn1: 'I am the owner/authorised person of this domain', cGenOwn2: 'and its infrastructure', cGenOwn3: 'and I consent to',
+    cGenActive: 'an active-light verification test', cGenPassive: 'a passive', cGenScan: 'scan', cGenConsent: 'being carried out on this target;',
+    cGenLegalMid: 'as well as the', cGenLegalRead: ' and I accept them.',
+    cGenActiveRiskHtml: ' I accept that this package sends active test requests carrying <strong>higher risk</strong>.',
+    cGenAuthHtml: ' I declare that the account I provide is <strong>not</strong> my production/main account, but a single-use <strong>TEST account</strong> with minimal privileges.',
+    cCrossStrong: 'AI analysis:', cCrossBodyPre: ' In this package my scan data', cCrossAuth: ' and the ', cCrossAuthStrong: 'test account details', cCrossBodyPost: ' I provide are transferred for analysis to ', cCrossForeign: 'an AI service based outside the UK', cCrossBodyEnd: '; I expressly consent to this.', cCrossAuthNote: ' My details are stored encrypted and deleted after the scan.',
+    cWithStrong: 'Cancellation rights:', cWithBodyHtml: ' I request that the service <strong>begins immediately</strong>, and I acknowledge that I will <strong>lose my right to cancel</strong> under the Consumer Contracts (Information, Cancellation and Additional Charges) Regulations 2013 once the service has been fully performed.',
+    legalOn: 'Terms & Conditions', legalMesafeli: 'Cancellation Rights', legalIptal: 'Cancellation Rights', legalGizlilik: 'Privacy Policy', legalKvkk: 'Privacy Policy',
+    legalOnHref: '/en/legal/terms', legalMesafeliHref: '/en/legal/cancellation', legalIptalHref: '/en/legal/cancellation', legalGizlilikHref: '/en/legal/privacy', legalKvkkHref: '/en/legal/privacy',
+    legalSlash: '',
+    intlSoonHtml: '',
+  },
 } as const;
 
 export default function OrderPage() {
@@ -386,7 +491,8 @@ export default function OrderPage() {
 
   // (Çok-bölge) Dil: region cookie'sinden. de → Almanca metin + Alman legal linkleri (Widerruf dahil).
   const deLang = getRegion(region).lang === 'de';
-  const L = ORD[deLang ? 'de' : 'tr'];
+  const enLang = getRegion(region).lang === 'en';
+  const L = ORD[deLang ? 'de' : enLang ? 'en' : 'tr'];
   const selectedPkg = packages.find((p) => p.key === selected);
   // SATIS MODELI: tekil kontrol satisi YOK — secilebilir TEK "tekil" paket basit_tarama (giris).
   const basitPkg = packages.find((p) => p.key === 'basit_tarama');
@@ -394,7 +500,7 @@ export default function OrderPage() {
   // (#4) Uluslararasi odeme (Paddle) henuz canli degil — TR disi bolgede nazik "yakinda".
   // /de artık gerçek iyzico+EUR ödemesiyle satın alınabilir → intlComingSoon'a DAHİL DEĞİL.
   // Yalnız us/ae (Paddle canlı değil) "yakında" olur.
-  const intlComingSoon = region !== 'tr' && region !== 'de';
+  const intlComingSoon = region !== 'tr' && region !== 'de' && region !== 'en';
   const needsAuthCreds = selected === 'authenticated_scan';
 
   // (İŞ 3) Onay GRUPLAMA — UI'da ≤3 checkbox. Sunucu-tarafı zorunluluk DEĞİŞMEZ: her grup, altındaki
@@ -579,6 +685,19 @@ export default function OrderPage() {
           {isActiveLightSel && <> Ich akzeptiere, dass dieses Paket aktive Testanfragen mit <strong>höherem Risiko</strong> sendet.</>}
           {needsAuthSel && <> Ich erkläre, dass das von mir angegebene Konto <strong>nicht</strong> mein Produktiv-/Hauptkonto ist, sondern ein <strong>TEST-Konto</strong> mit minimalen Rechten und Einmalgebrauch.</>}
         </>
+      ) : enLang ? (
+        <>
+          <strong>I have read and agree:</strong> I am the owner/authorised person of this domain <strong>and its infrastructure</strong> and
+          I consent to {isActiveLightSel ? <>an <strong>active-light verification test</strong></> : <>a <strong>passive</strong> scan</>} being carried out on this target;
+          I have read the{' '}
+          <Link href="/en/legal/terms" target="_blank" className="font-semibold text-accent-600 underline">Terms &amp; Conditions</Link>, the{' '}
+          <Link href="/en/legal/cancellation" target="_blank" className="font-semibold text-accent-600 underline">Cancellation Rights</Link>{' '}
+          as well as the{' '}
+          <Link href="/en/legal/privacy" target="_blank" className="font-semibold text-accent-600 underline">Privacy Policy</Link>{' '}
+          and I accept them.
+          {isActiveLightSel && <> I accept that this package sends active test requests carrying <strong>higher risk</strong>.</>}
+          {needsAuthSel && <> I declare that the account I provide is <strong>not</strong> my production/main account, but a single-use <strong>TEST account</strong> with minimal privileges.</>}
+        </>
       ) : (
         <>
           <strong>Okudum, onaylıyorum:</strong> Bu alan adının <strong>ve altyapısının</strong> sahibi/yetkilisiyim ve
@@ -606,6 +725,10 @@ export default function OrderPage() {
             <>
               <strong>KI-Analyse:</strong> In diesem Paket werden meine Scan-Daten{needsAuthSel && <> und die von mir angegebenen <strong>Testkonto-Daten</strong></>} zur Analyse an einen <strong>außerhalb der EU ansässigen KI-Dienst</strong> übermittelt; dem stimme ich ausdrücklich zu.{needsAuthSel && ' Meine Daten werden verschlüsselt gespeichert und nach dem Scan gelöscht.'}
             </>
+          ) : enLang ? (
+            <>
+              <strong>AI analysis:</strong> In this package my scan data{needsAuthSel && <> and the <strong>test account details</strong> I provide</>} are transferred for analysis to <strong>an AI service based outside the UK</strong>; I expressly consent to this.{needsAuthSel && ' My details are stored encrypted and deleted after the scan.'}
+            </>
           ) : (
             <>
               <strong>Yapay zekâ analizi:</strong> Bu pakette tarama verilerim{needsAuthSel && <> ve verdiğim <strong>test hesabı bilgilerim</strong></>}, analiz için <strong>yurt dışında yerleşik bir yapay zekâ hizmetine</strong> aktarılır; buna açıkça rıza gösteriyorum.{needsAuthSel && ' Bilgilerim şifreli saklanır ve tarama sonrası silinir.'}
@@ -622,6 +745,11 @@ export default function OrderPage() {
         <>
           <strong>Widerrufsrecht:</strong> Ich verlange, dass die Dienstleistung mit meiner Zustimmung <strong>vor Ablauf der
           Widerrufsfrist unmittelbar beginnt</strong>, und akzeptiere, dass ich dadurch <strong>mein Widerrufsrecht verliere</strong> (§ 356 Abs. 5 BGB).
+        </>
+      ) : enLang ? (
+        <>
+          <strong>Cancellation rights:</strong> I request that the service <strong>begins immediately</strong>, and I acknowledge that I will
+          <strong> lose my right to cancel</strong> under the Consumer Contracts (Information, Cancellation and Additional Charges) Regulations 2013 once the service has been fully performed.
         </>
       ) : (
         <>
@@ -640,7 +768,7 @@ export default function OrderPage() {
   const freqLabel = selectedBundle || !recurring ? L.freqOneOff : L.freqEvery(intervalLabel, runs);
   const startLabel =
     !selectedBundle && startMode === 'later' && startAt
-      ? new Date(startAt).toLocaleString(deLang ? 'de-DE' : 'tr-TR', { dateStyle: 'short', timeStyle: 'short' })
+      ? new Date(startAt).toLocaleString(deLang ? 'de-DE' : enLang ? 'en-GB' : 'tr-TR', { dateStyle: 'short', timeStyle: 'short' })
       : L.startImmediate;
   const baseAmountMinor = selectedBundle ? selectedBundle.amountMinorUnit : selectedPkg ? selectedPkg.priceMinorUnit : 0;
   // Promo (tekil paket VEYA bundle) gecerliyse indirimli tutari goster.

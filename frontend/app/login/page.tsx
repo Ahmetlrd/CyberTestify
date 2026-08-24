@@ -27,12 +27,20 @@ const T = {
     submitting: 'Anmeldung läuft…', submit: 'Anmelden',
     noAccount: 'Noch kein Konto?', register: 'Kostenlos registrieren',
   },
+  en: {
+    title: 'Sign in', subtitle: 'Access your account and manage your scan.',
+    google: 'Continue with Google',
+    googleError: 'Sign-in with Google could not be completed. Please try again.',
+    or: 'or', email: 'Email', password: 'Password', forgot: 'Forgot password',
+    submitting: 'Signing in…', submit: 'Sign in',
+    noAccount: 'Don\'t have an account?', register: 'Register for free',
+  },
 } as const;
 
 export default function LoginPage() {
   const router = useRouter();
-  const [lang, setLang] = useState<'tr' | 'de'>('tr');
-  useEffect(() => { setLang(getRegion(readRegionCookie()).lang === 'de' ? 'de' : 'tr'); }, []);
+  const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
+  useEffect(() => { const l = getRegion(readRegionCookie()).lang; setLang(l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr'); }, []);
   const t = T[lang];
   // Satın-alma akışı vb. için: ?next varsa login sonrası oraya dön (yoksa /verify).
   const sp = useSearchParams();
