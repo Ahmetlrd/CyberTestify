@@ -841,7 +841,7 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
     where: { id: req.params.orderId, customerId: req.customerId! },
     include: {
       flow: true,
-      domain: { select: { hostname: true } },
+      domain: { select: { hostname: true, verifiedAt: true } },
       package: { select: { key: true, displayName: true } },
       customer: { select: { email: true } }, // (Fatura talebi) fatura e-postası varsayılanı
       invoiceRequest: true, // (Fatura talebi) mevcut talebi göster/düzenle
@@ -904,7 +904,9 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
       : order.flow;
 
   // packageName + packageKey (GA event / fatura / canlı-tarama faz metinleri); ham package objesi gönderilmez.
-  res.json({ ...order, status: customerStatus, flow: customerFlow, package: undefined, packageName: order.package.displayName, packageKey: order.package.key, report: customerReport, queue });
+  // (Canlı tarama) "Alan adı sahipliği doğrulandı" satırı YALNIZ DNS-doğrulaması yapılmış paketlerde
+  // (aktif paketler) gösterilsin diye domainVerified sinyali eklenir (pasif paketlerde doğrulama yok).
+  res.json({ ...order, status: customerStatus, flow: customerFlow, package: undefined, packageName: order.package.displayName, packageKey: order.package.key, domainVerified: order.domain.verifiedAt != null, report: customerReport, queue });
 });
 
 // ============================================================================

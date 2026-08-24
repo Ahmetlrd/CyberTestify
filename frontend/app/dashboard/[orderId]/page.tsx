@@ -289,6 +289,8 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
             notStarted={notStarted}
             dark={isS1}
             secondsPerPhase={isS1 ? 240 : undefined}
+            verified={order?.domainVerified === true}
+            loginless={order?.loginless === true}
           />
         );
       })()}

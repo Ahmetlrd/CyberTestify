@@ -93,13 +93,17 @@ export function phasesFor(key?: string | null): string[] {
 // (SENKRON) Tek kaynak: hem terminal LOG satırı hem ilerleme çubuğu/halkası BURADAN beslenir → aynı
 // faz index'i → aynı %. % FAZ-bazlıdır (zaman-sabitli DEĞİL): log ilerledikçe çubuk da ilerler, log bir
 // fazda beklerken (ör. login gate) çubuk da bekler. Böylece "log duruyor ama çubuk artıyor" karışıklığı biter.
-export function computeScanProgress(opts: { packageKey?: string | null; startedAt?: string | null; authConfirmedAt?: string | null; now: number; perPhase?: number }): { phases: string[]; idx: number; pct: number; current: string } {
-  const phases = phasesFor(opts.packageKey);
+export function computeScanProgress(opts: { packageKey?: string | null; startedAt?: string | null; authConfirmedAt?: string | null; now: number; perPhase?: number; loginless?: boolean }): { phases: string[]; idx: number; pct: number; current: string } {
+  let phases = phasesFor(opts.packageKey);
   const per = opts.perPhase && opts.perPhase > 0 ? opts.perPhase : SECONDS_PER_PHASE;
   const startMs = opts.startedAt ? new Date(opts.startedAt).getTime() : opts.now;
   const elapsed = Math.max(0, (opts.now - startMs) / 1000);
+  let gateIdx = opts.packageKey ? AUTH_GATE_IDX[opts.packageKey] : undefined;
+  // (LOGINSİZ) "loginsiz devam et" seçilirse GERÇEK login YOK → login fazını tamamen ÇIKAR ve gate'i
+  // KALDIR. Aksi halde "Test hesabıyla oturum açılıyor" fazı hiç gelmeyecek authConfirmedAt'i bekleyip
+  // TAKILI kalırdı (kullanıcı şikayeti). Böylece adımlar normal ilerler.
+  if (opts.loginless && gateIdx != null) { phases = phases.filter((_, i) => i !== gateIdx); gateIdx = undefined; }
   const rawIdx = Math.min(Math.floor(elapsed / per), phases.length - 1);
-  const gateIdx = opts.packageKey ? AUTH_GATE_IDX[opts.packageKey] : undefined;
   let idx = rawIdx;
   if (gateIdx != null) {
     if (!opts.authConfirmedAt) idx = Math.min(rawIdx, gateIdx);
@@ -119,7 +123,7 @@ const AUTH_GATE_IDX: Record<string, number> = { bundle_full_pentest: 0 };
 const SECONDS_PER_PHASE = 9; // her faz ~9 sn; son "çalışan" fazda durur (bitiş gerçek durumdan gelir)
 
 export function LiveScanPhases({
-  hostname, feed, startedAt, packageKey, queued, authConfirmedAt, secondsPerPhase,
+  hostname, feed, startedAt, packageKey, queued, authConfirmedAt, secondsPerPhase, verified, loginless,
 }: {
   hostname: string;
   feed: Array<{ seq: number; text: string }>;
@@ -128,6 +132,8 @@ export function LiveScanPhases({
   queued?: boolean;
   authConfirmedAt?: string | null; // backend'den: login GERÇEKTEN ne zaman doğrulandı (bkz AUTH_GATE_IDX)
   secondsPerPhase?: number; // (S1) uzun-süren koşularda faz cadence'ını yavaşlat (varsayılan 9sn)
+  verified?: boolean; // "✓ Alan adı sahipliği doğrulandı" YALNIZ DNS-doğrulaması olan paketlerde (5 & 6) gösterilir
+  loginless?: boolean; // "loginsiz devam et" seçildi → login fazı çıkarılır, gate kaldırılır (bkz computeScanProgress)
 }) {
   const perPhase = secondsPerPhase && secondsPerPhase > 0 ? secondsPerPhase : SECONDS_PER_PHASE;
   const [now, setNow] = useState<number>(() => Date.now());
@@ -143,7 +149,7 @@ export function LiveScanPhases({
     return (
       <div className="min-h-[180px] p-5 font-mono text-[13px] leading-7">
         <div className="text-white/45" dir="ltr">$ cybertestify scan {hostname}</div>
-        <div className="text-emerald-300" dir="ltr">✓ Alan adı sahipliği doğrulandı</div>
+        {verified && <div className="text-emerald-300" dir="ltr">✓ Alan adı sahipliği doğrulandı</div>}
         <div className="text-white/85" dir="ltr">→ Tarama başlatılıyor…<span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" /></div>
         <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
           <div className="h-full w-1/4 animate-pulse rounded-full bg-gradient-to-r from-accent/60 to-emerald-400/70" />
@@ -154,12 +160,12 @@ export function LiveScanPhases({
 
   // (SENKRON) idx + pct TEK kaynaktan (computeScanProgress) — ScanRunningView halkası da aynı fonksiyonu
   // kullanır → terminal log satırı, alt çubuk ve üst halka HEP birlikte ilerler.
-  const { phases: PHASES, idx, pct } = computeScanProgress({ packageKey, startedAt, authConfirmedAt, now, perPhase });
+  const { phases: PHASES, idx, pct } = computeScanProgress({ packageKey, startedAt, authConfirmedAt, now, perPhase, loginless });
 
   return (
     <div className="min-h-[180px] p-5 font-mono text-[13px] leading-7">
       <div className="text-white/45" dir="ltr">$ cybertestify scan {hostname}</div>
-      <div className="text-emerald-300" dir="ltr">✓ Alan adı sahipliği doğrulandı</div>
+      {verified && <div className="text-emerald-300" dir="ltr">✓ Alan adı sahipliği doğrulandı</div>}
       {PHASES.map((label, i) => {
         if (i > idx) return null;
         const current = i === idx;

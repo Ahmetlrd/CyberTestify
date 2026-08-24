@@ -18,6 +18,8 @@ type Props = {
   notStarted: boolean;
   dark: boolean; // S1 → koyu, 6 paket → açık
   secondsPerPhase?: number;
+  verified?: boolean; // sahiplik/DNS doğrulaması yapılmış paket (5 & 6) → "Sahiplik doğrulandı" adımı/logu gösterilir
+  loginless?: boolean; // "loginsiz devam et" → login fazı atlanır (bkz LiveScanPhases/computeScanProgress)
 };
 
 // S1 tarama türü detayları (kartta gösterilir) — otonom RT seviyesi S1.
@@ -28,19 +30,21 @@ const S1_DETAILS: Array<[string, string]> = [
   ['Kontrol', 'Otomatik; kritik adımlarda insan kontrolü'],
 ];
 
-export function ScanRunningView({ hostname, packageKey, packageName, startedAt, authConfirmedAt, feed, notStarted, dark, secondsPerPhase }: Props) {
+export function ScanRunningView({ hostname, packageKey, packageName, startedAt, authConfirmedAt, feed, notStarted, dark, secondsPerPhase, verified, loginless }: Props) {
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
 
   const isS1 = packageKey === 'redteam_s1';
   // (SENKRON) LiveScanPhases ile AYNI fonksiyon → halka, üst çubuk ve terminal LOG satırı HEP birlikte ilerler.
-  const prog = computeScanProgress({ packageKey, startedAt, authConfirmedAt, now, perPhase: secondsPerPhase });
+  const prog = computeScanProgress({ packageKey, startedAt, authConfirmedAt, now, perPhase: secondsPerPhase, loginless });
   const pct = notStarted ? 4 : prog.pct;
   const currentPhase = notStarted ? 'İzole ortam hazırlanıyor' : prog.current;
 
   // 4 adımlı üst-düzey şerit (StatusTracker ile aynı anlam): tarama sürerken adım 2 aktif.
   const STEPS = [
-    { t: 'Sahiplik doğrulandı', d: 'Alan adınızın sizin olduğu teyit edildi' },
+    verified
+      ? { t: 'Sahiplik doğrulandı', d: 'Alan adınızın sizin olduğu teyit edildi' }
+      : { t: 'Talebiniz alındı', d: 'Ödemeniz onaylandı ve tarama sıraya alındı' },
     { t: 'Tarama çalışıyor', d: isS1 ? 'Otonom AI ajanı hedefinizi güvenli sınırlar içinde sınıyor' : 'Yapay zekâ destekli tarama sitenizi güvenli şekilde inceliyor' },
     { t: 'Bulgular değerlendiriliyor', d: 'Sonuçlar önem derecesine göre sıralanıyor' },
     { t: 'Rapor hazır', d: 'Şifreli raporunuz oluşturuldu' },
@@ -149,7 +153,7 @@ export function ScanRunningView({ hostname, packageKey, packageName, startedAt, 
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
             <span className="ml-2 font-mono text-xs text-white/40">cybertestify — canlı tarama</span>
           </div>
-          <LiveScanPhases hostname={hostname} feed={feed} startedAt={startedAt} packageKey={packageKey} queued={notStarted} authConfirmedAt={authConfirmedAt} secondsPerPhase={secondsPerPhase} />
+          <LiveScanPhases hostname={hostname} feed={feed} startedAt={startedAt} packageKey={packageKey} queued={notStarted} authConfirmedAt={authConfirmedAt} secondsPerPhase={secondsPerPhase} verified={verified} loginless={loginless} />
           <div className="border-t border-white/5 px-5 py-3 text-xs text-white/32">Teknik loglar güvenlik ve gizlilik nedeniyle gizlenmiştir; yalnızca genel aktivite gösterilir.</div>
         </div>
       </div>
