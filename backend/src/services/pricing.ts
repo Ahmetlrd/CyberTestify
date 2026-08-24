@@ -46,8 +46,33 @@ const USD_CENTS: Record<string, number> = {
 // (VISIBLE_REGION_CODES) önce buraya paket-başı gerçek EUR-cent değerleri girilecek. Boşken 'de'
 // REGIONAL_PRICING'de undefined kalır ve getPricing güvenli şekilde TR tutarına düşer (currency EUR) —
 // bu YALNIZ /de gizliyken geçerli bir placeholder'dır; canlıya çıkmadan doldurulmalıdır.
+// YAKLAŞIK değerler (Alman/AB pazarı için temiz euro fiyat noktaları; kur türevi DEĞİL, bağımsız
+// tutarlar). Vedat kesinleştirecek. Bundle fiyatı = üye tekil EUR toplamı × (1 - indirim) (bkz
+// bundlePrice). /de'de gizli paketler (Uyum: kvkk/pci/iso) ve S1 dahil edilmedi (görünmüyorlar).
 const EUR_CENTS: Record<string, number> = {
-  // basit_tarama: 1900, // örnek — GERÇEK rakamları Vedat girecek
+  // Tekil / Basit
+  basit_tarama: 1900, // €19
+  // Dış Yüzey & Yapılandırma üyeleri
+  ssl_tls: 2500, // €25
+  header_leak: 2500, // €25
+  dns_email: 2900, // €29
+  cors_cookie: 2500, // €25
+  csp_analiz: 2500, // €25
+  // Keşif üyeleri
+  subdomain_takeover: 4500, // €45
+  api_discovery: 3900, // €39
+  cms_cve: 4500, // €45
+  // Aktif Doğrulama üyeleri
+  injection_verify: 9900, // €99
+  idor_verify: 9900, // €99
+  ssrf_verify: 11500, // €115
+  file_upload_verify: 11500, // €115
+  business_logic_verify: 14900, // €149
+  race_massassign_verify: 14900, // €149
+  rce_verify: 17900, // €179
+  // Tam Kapsamlı Pentest üyeleri
+  authenticated_scan: 49900, // €499 (bundle değerinin taşıyıcısı)
+  autonomous_pentest: 12900, // €129 (hafif advisory — düşük etiket)
 };
 
 const TRY_PER_USD = 47.5; // yaklasik kur — USD turetimi icin
