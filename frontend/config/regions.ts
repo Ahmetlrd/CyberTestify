@@ -101,10 +101,11 @@ export function isRegionCode(v: string | undefined | null): v is RegionCode {
   return !!v && (REGION_CODES as readonly string[]).includes(v);
 }
 
-// GEÇİCİ (2026-08-13): Kullanıcıya YALNIZCA Türkiye görünür. us/ae config'i, sayfaları ve
-// tüm çok-bölge altyapısı DURUYOR — sadece görünürlük kapatıldı. İleride bölge açmak için:
-// bu listeye 'us'/'ae' ekle + ilgili REGIONS[...].legalReady'yi true yap. Kod SİLİNMEDİ.
-export const VISIBLE_REGION_CODES: readonly RegionCode[] = ['tr'];
+// GÖRÜNÜR BÖLGELER: tr + de (Almanya lansmanı — 2026-08-24 public çıkış: site/checkout/rapor/
+// e-posta uçtan uca Almanca, iyzico+EUR, Alman legal sayfaları hazır). us/ae config'i ve tüm
+// çok-bölge altyapısı DURUYOR — görünürlük kapalı. Bölge açmak için: bu listeye ekle + ilgili
+// REGIONS[...].legalReady'yi true yap. Kod SİLİNMEDİ.
+export const VISIBLE_REGION_CODES: readonly RegionCode[] = ['tr', 'de'];
 export function isVisibleRegion(v: string | undefined | null): v is RegionCode {
   return isRegionCode(v) && VISIBLE_REGION_CODES.includes(v);
 }
