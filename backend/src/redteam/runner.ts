@@ -343,10 +343,14 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
       },
     });
 
-    // (S1 TİCARİ ENTEGRASYON — Aşama 2) Ödemeli Order'a bağlı S1 koşusu bitti → raporu mevcut teslim
-    // makinesine köprüle: müşteri-erişim-kodlu ŞİFRELİ Report + Order awaiting_admin_review (onay kapısı).
-    // orderId YOKsa (eski beta/operatör koşusu) atlanır — geriye uyumlu. Best-effort: hata koşuyu bozmaz.
-    if (job.orderId && reportJson) {
+    // (YARIŞ DÜZELTMESİ) Koşu KILL-SWITCH/watchdog ile ABORTED olduysa: runner'ın runJob'u yok edilen
+    // droplet'e SSH deneyip "Permission denied" ile ok:false döner ve BURADA order'ı yanlışlıkla
+    // scan_failed'e çekerdi. Kill/watchdog akışı order'ı KENDİSİ yönetir (aşağıda kill endpoint). Job
+    // GÜNCEL durumu 'aborted' ise order'a HİÇ DOKUNMA — geç-tamamlanma order'ı EZMESİN.
+    const curStatus = (await prisma.redTeamJob.findUnique({ where: { id: jobId }, select: { status: true } }))?.status;
+    if (curStatus === 'aborted') {
+      console.log(`[redteam-s1] job ${jobId} aborted (kill/watchdog) → runner order'a dokunmuyor (kill akışı sahiplendi)`);
+    } else if (job.orderId && reportJson) {
       try {
         const incomplete = !result.ok;
         const { accessSecret, gated } = await storeRedTeamCustomerReport(job.orderId, reportJson, {

@@ -11,6 +11,7 @@ import { hasTestCredential } from '../services/testCredentials.js';
 import { decryptReport, decryptSecret } from '../services/crypto.js';
 import { renderReportPdf, htmlToPdfBuffer } from '../services/pdf.js';
 import { renderRedTeamFullHtml, redteamReportNo } from '../redteam/report.js';
+import { storeRedTeamCustomerReport } from '../services/redteamOrderReport.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
 import { LEVEL_CFG } from '../redteam/orchestrator.js';
 import { appendLogs } from '../redteam/observability.js';
@@ -655,7 +656,7 @@ adminRouter.get('/redteam-jobs/:id/logs', async (req, res) => {
 adminRouter.post('/redteam-jobs/:id/kill', async (req, res) => {
   const job = await prisma.redTeamJob.findUnique({
     where: { id: req.params.id },
-    select: { id: true, dropletIp: true, dropletId: true, targetIp: true, domain: true, level: true, environment: true, status: true },
+    select: { id: true, dropletIp: true, dropletId: true, targetIp: true, domain: true, level: true, environment: true, status: true, orderId: true },
   });
   if (!job) return res.status(404).json({ error: 'İş bulunamadı.' });
   if (!job.dropletIp && !job.dropletId) return res.status(400).json({ error: 'Droplet IP/ID yok (aktif/canlı iş değil) — durduracak bir şey yok.' });
@@ -681,6 +682,22 @@ adminRouter.post('/redteam-jobs/:id/kill', async (req, res) => {
     source: 'killswitch', level: result.destroyError ? 'error' : 'warn',
     message: `admin KILL-SWITCH: imha ${result.destroyRequested ? (result.destroyError ? `İSTENDİ ama HATA — ${result.destroyError}` : 'İSTENDİ ✓') : 'İSTENEMEDİ'} · doğrulama=${result.verified} · rapor ${result.report ? `üretildi (kanıtlı ${result.report.counts.kanitli}/belirsiz ${result.report.counts.belirsiz})` : 'üretilemedi'}`,
   }]);
+
+  // (S1) Kill'lenen job bir ödemeli Order'a bağlıysa order'ı DETERMİNİSTİK yönet (kill akışı SAHİPLENİR;
+  // runner geç-tamamlanma artık aborted job'da order'a dokunmuyor). Kısmi rapor varsa müşteri onay
+  // kuyruğuna (awaiting_admin_review); yoksa scan_failed (koşu durduruldu, teslim edilecek bir şey yok).
+  if (job.orderId) {
+    try {
+      if (result.report) {
+        await storeRedTeamCustomerReport(job.orderId, result.report, { incomplete: true, incompleteReason: 'Koşu durduruldu (kill-switch); rapor o ana kadarki ham kanıttan üretildi.' });
+      } else {
+        await prisma.order.updateMany({
+          where: { id: job.orderId, status: { notIn: ['scan_completed', 'awaiting_admin_review'] } },
+          data: { status: 'scan_failed', failureReason: 'Tarama durduruldu (kill-switch) — rapor üretilemedi.' },
+        });
+      }
+    } catch (e) { console.error('[redteam-s1] kill→order işaretleme hatası:', (e as Error).message); }
+  }
 
   // D2/D3: sahte-başarı YOK — gerçek durum + doğrulanmış/doğrulanamamış ayrımı dönülür.
   res.json({
