@@ -7,6 +7,7 @@ import { H1, Table, fmtDate } from '../../../components/admin/ui';
 export default function AdminBlog() {
   const [data, setData] = useState<any>(null);
   const [text, setText] = useState('');
+  const [lang, setLang] = useState<'tr' | 'de'>('tr'); // yeni yükleme/yayın hangi dile/bölgeye ait
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ created: any[]; conflicts: string[]; errors: string[] } | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -21,7 +22,7 @@ export default function AdminBlog() {
     if (!text.trim() || busy) return;
     setBusy(true); setResult(null); setNote(null); setError(null);
     try {
-      const r = await adminApi.blogBulk(text);
+      const r = await adminApi.blogBulk(text, lang);
       setResult(r);
       if (r.created.length) setText(''); // basarili yuklemede kutuyu temizle
       load();
@@ -29,10 +30,10 @@ export default function AdminBlog() {
   }
 
   async function publishNext() {
-    if (!confirm('Sıradaki (en eski) taslağı ŞİMDİ yayınla?')) return;
+    if (!confirm(`Sıradaki (en eski) ${lang.toUpperCase()} taslağını ŞİMDİ yayınla?`)) return;
     setNote(null); setError(null);
     try {
-      const r = await adminApi.blogPublishNext();
+      const r = await adminApi.blogPublishNext(lang);
       setNote(r.published ? `Yayınlandı: "${r.published.title}" (/${r.published.slug})` : (r.message ?? 'Sırada taslak yok.'));
       load();
     } catch (e: any) { setError(e.message); }
@@ -65,6 +66,15 @@ export default function AdminBlog() {
         <p style={{ color: '#94a3b8', fontSize: 12, margin: '0 0 8px' }}>
           Her makale <code style={{ color: '#fbbf24' }}>---</code> ile başlayan bir front-matter (title, description, slug) + ardından markdown içerik. Birden fazlasını ard arda yapıştırabilirsiniz. <code>draft</code> olarak eklenir; slug otomatik normalize edilir (Türkçe karakter → ascii).
         </p>
+        {/* (Çok-dilli) Bu yükleme hangi dile/bölgeye ait: tr → /tr/blog, de → /de/blog. Yalnız o rotada görünür. */}
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#cbd5e1', fontSize: 13, marginBottom: 8 }}>
+          Dil / Bölge:
+          <select value={lang} onChange={(e) => setLang(e.target.value as 'tr' | 'de')} style={{ background: '#020617', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '4px 8px', fontSize: 13 }}>
+            <option value="tr">🇹🇷 Türkçe (/tr/blog)</option>
+            <option value="de">🇩🇪 Deutsch (/de/blog)</option>
+          </select>
+          <span style={{ color: '#64748b', fontSize: 11 }}>Almanca yazılar otomatik günlük yayına GİRMEZ — elle “Şimdi yayınla”.</span>
+        </label>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -97,10 +107,11 @@ export default function AdminBlog() {
       {/* Liste */}
       {data && (
         <Table
-          columns={['Başlık', 'Slug', 'Durum', 'Oluşturuldu', 'Yayınlandı']}
+          columns={['Başlık', 'Dil', 'Slug', 'Durum', 'Oluşturuldu', 'Yayınlandı']}
           rows={data.posts.map((p: any) => [
             p.title,
-            p.status === 'published' ? <a key="l" href={`/blog/${p.slug}`} target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa' }}>/{p.slug}</a> : `/${p.slug}`,
+            <span key="lg" style={{ background: '#1e293b', color: '#93c5fd', padding: '2px 8px', borderRadius: 999, fontSize: 11, textTransform: 'uppercase' }}>{p.lang ?? 'tr'}</span>,
+            p.status === 'published' ? <a key="l" href={`/${p.lang ?? 'tr'}/blog/${p.slug}`} target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa' }}>/{p.lang ?? 'tr'}/blog/{p.slug}</a> : `/${p.slug}`,
             <span key="s" style={badge(p.status)}>{p.status}</span>,
             fmtDate(p.createdAt),
             p.publishedAt ? fmtDate(p.publishedAt) : '—',

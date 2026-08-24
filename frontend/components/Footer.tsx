@@ -40,7 +40,7 @@ export function Footer({ region }: { region: RegionConfig }) {
               <Link href="/hakkimizda" className="font-medium text-white/80 hover:text-white hover:underline">
                 Hakkımızda
               </Link>
-              <Link href="/blog" className="font-medium text-white/80 hover:text-white hover:underline">
+              <Link href={`/${region.code}/blog`} className="font-medium text-white/80 hover:text-white hover:underline">
                 Blog
               </Link>
               <Link href="/acik-kaynak" className="font-medium text-white/80 hover:text-white hover:underline">

@@ -42,7 +42,13 @@ export function middleware(req: NextRequest) {
     res.cookies.set('region', seg, { path: '/', maxAge: YEAR });
     return res;
   }
-  // GEÇİCİ: Kapalı bölgeye doğrudan erişim (/us, /ae) -> aynı yolu görünür bölgeyle (tr) ver.
+  // (Almanya lansmanı — BLOG İSTİSNASI) /de henüz GÖRÜNMEZ ama /de/blog erişilebilir olmalı
+  // (P5: boş "Bald verfügbar" sayfası). Bu yüzden /de/blog(/...) aşağıdaki /de -> /tr redirect'ine
+  // TAKILMADAN geçer (cookie region'ı DEĞİŞTİRİLMEZ — ziyaretçinin bölgesi bozulmasın).
+  if (seg === 'de' && (pathname === '/de/blog' || pathname.startsWith('/de/blog/'))) {
+    return pass();
+  }
+  // GEÇİCİ: Kapalı bölgeye doğrudan erişim (/us, /ae, görünmez /de) -> aynı yolu görünür bölgeyle (tr) ver.
   if (isRegionCode(seg)) {
     const rest = pathname.slice(seg.length + 1); // "/us/packages" -> "/packages"
     return NextResponse.redirect(new URL(`/${DEFAULT_REGION}${rest}`, req.url));
@@ -66,6 +72,11 @@ export function middleware(req: NextRequest) {
   // (mail/bookmark/eski iç link) KIRILMASIN diye uygun bolgeye yonlendirilir.
   if (pathname === '/legal' || pathname.startsWith('/legal/')) {
     return NextResponse.redirect(new URL(`/${region}${pathname}`, req.url));
+  }
+  // (Cok-dilli blog) Eski cıplak /blog(/...) -> KALICI /tr/blog (301). Eski indeksli URL'ler/bağlantılar
+  // kırılmasın; /tr/blog içerik/davranış aynı kalır. /de/blog yukarıda ayrıca ele alındı.
+  if (pathname === '/blog' || pathname.startsWith('/blog/')) {
+    return NextResponse.redirect(new URL(`/tr${pathname}`, req.url), 301);
   }
 
   // Uygulama/hukuki/statik/admin rotalar bölge-bağımsız — dokunma.

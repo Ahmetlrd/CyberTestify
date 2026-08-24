@@ -82,13 +82,13 @@ export const adminApi = {
     areq<{ total: number; pendingCount: number; items: any[] }>(`/admin/invoice-requests${status ? `?status=${status}` : ''}`),
   updateInvoice: (id: string, body: { status?: 'requested' | 'issued' | 'sent'; notes?: string }) =>
     areq<{ ok: boolean; status: string }>(`/admin/invoice-requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  // (SEO BLOG)
+  // (SEO BLOG — çok-dilli: tr | de)
   blogList: () =>
-    areq<{ posts: Array<{ id: string; title: string; slug: string; status: string; createdAt: string; publishedAt: string | null }>; draftCount: number; publishedCount: number; lastPublishedAt: string | null }>('/admin/blog'),
-  blogBulk: (text: string) =>
-    areq<{ created: Array<{ title: string; slug: string }>; conflicts: string[]; errors: string[] }>('/admin/blog/bulk', { method: 'POST', body: JSON.stringify({ text }) }),
-  blogPublishNext: () =>
-    areq<{ ok: boolean; published: { slug: string; title: string } | null; message?: string }>('/admin/blog/publish-next', { method: 'POST' }),
+    areq<{ posts: Array<{ id: string; title: string; slug: string; status: string; lang: string; createdAt: string; publishedAt: string | null }>; draftCount: number; publishedCount: number; lastPublishedAt: string | null }>('/admin/blog'),
+  blogBulk: (text: string, lang: 'tr' | 'de' = 'tr') =>
+    areq<{ created: Array<{ title: string; slug: string }>; conflicts: string[]; errors: string[]; lang: string }>('/admin/blog/bulk', { method: 'POST', body: JSON.stringify({ text, lang }) }),
+  blogPublishNext: (lang?: 'tr' | 'de') =>
+    areq<{ ok: boolean; published: { slug: string; title: string } | null; message?: string }>('/admin/blog/publish-next', { method: 'POST', body: JSON.stringify(lang ? { lang } : {}) }),
   systemHealth: () => areq<any>('/admin/system-health'),
 
   // (HER ŞEYİ GÖSTER) Müşteri detay: alan adları + siparişler + raporlar + planlı taramalar + rızalar.

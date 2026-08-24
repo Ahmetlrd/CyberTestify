@@ -5,7 +5,7 @@ import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { checkEgressProxyHealth } from '../services/egressHealth.js';
 import { sendRefundNotice, sendReportReady } from '../services/mailer.js';
-import { createDraftsFromBulk, listAllAdmin, publishNextDraft } from '../services/blog.js';
+import { createDraftsFromBulk, listAllAdmin, publishNextDraft, normalizeBlogLang } from '../services/blog.js';
 import { enqueueOrStartScan } from '../services/orchestrator.js';
 import { hasTestCredential } from '../services/testCredentials.js';
 import { decryptReport, decryptSecret } from '../services/crypto.js';
@@ -510,16 +510,20 @@ adminRouter.patch('/invoice-requests/:id', async (req, res) => {
 adminRouter.post('/blog/bulk', async (req, res) => {
   const text = typeof req.body?.text === 'string' ? req.body.text : '';
   if (!text.trim()) return res.status(400).json({ error: 'Boş içerik.' });
-  const result = await createDraftsFromBulk(text);
-  res.json(result); // { created[], conflicts[], errors[] }
+  const lang = normalizeBlogLang(req.body?.lang); // hangi dile/bölgeye (tr|de) — varsayılan tr
+  const result = await createDraftsFromBulk(text, lang);
+  res.json({ ...result, lang }); // { created[], conflicts[], errors[], lang }
 });
 
-adminRouter.get('/blog', async (_req, res) => {
-  res.json(await listAllAdmin()); // { posts[], draftCount, publishedCount, lastPublishedAt }
+adminRouter.get('/blog', async (req, res) => {
+  // ?lang=tr|de ile filtre; yoksa TÜM diller (admin hepsini görür, satırda lang etiketi olur).
+  const lang = typeof req.query.lang === 'string' ? normalizeBlogLang(req.query.lang) : undefined;
+  res.json(await listAllAdmin(lang)); // { posts[], draftCount, publishedCount, lastPublishedAt }
 });
 
-adminRouter.post('/blog/publish-next', async (_req, res) => {
-  const done = await publishNextDraft();
+adminRouter.post('/blog/publish-next', async (req, res) => {
+  const lang = typeof req.body?.lang === 'string' ? normalizeBlogLang(req.body.lang) : undefined;
+  const done = await publishNextDraft(lang);
   if (!done) return res.json({ ok: true, published: null, message: 'Sırada yayınlanacak taslak yok.' });
   console.log(`[admin][blog] elle yayinlandi: ${done.slug}`);
   res.json({ ok: true, published: done });

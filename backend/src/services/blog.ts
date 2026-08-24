@@ -73,6 +73,13 @@ export function parseArticles(text: string): { articles: ParsedArticle[]; errors
   return { articles, errors };
 }
 
+// --- Dil normalize (cok-dilli blog) -------------------------------------------
+// Desteklenen blog dilleri: tr (varsayilan) ve de. Bilinmeyen -> tr.
+export const BLOG_LANGS = ['tr', 'de'] as const;
+export function normalizeBlogLang(v: unknown): string {
+  return typeof v === 'string' && (BLOG_LANGS as readonly string[]).includes(v) ? v : 'tr';
+}
+
 // --- Markdown -> HTML (icerik admin-uretimi; html:false ile ham HTML kacilir) -
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
 export function renderContentHtml(contentMd: string): string {
@@ -80,7 +87,7 @@ export function renderContentHtml(contentMd: string): string {
 }
 
 // --- Toplu taslak olusturma ---------------------------------------------------
-export async function createDraftsFromBulk(text: string): Promise<{
+export async function createDraftsFromBulk(text: string, lang = 'tr'): Promise<{
   created: Array<{ title: string; slug: string }>;
   conflicts: string[];
   errors: string[];
@@ -91,19 +98,23 @@ export async function createDraftsFromBulk(text: string): Promise<{
   const seenInBatch = new Set<string>();
   for (const a of articles) {
     if (seenInBatch.has(a.slug)) { conflicts.push(`"${a.title}" (${a.slug}) — bu yüklemede tekrar eden slug.`); continue; }
-    const exists = await prisma.blogPost.findUnique({ where: { slug: a.slug }, select: { id: true } });
-    if (exists) { conflicts.push(`"${a.title}" (${a.slug}) — slug zaten mevcut.`); continue; }
+    // Cakisma kontrolu dil-bazli: ayni slug baska dilde olabilir, ayni dilde olamaz.
+    const exists = await prisma.blogPost.findUnique({ where: { slug_lang: { slug: a.slug, lang } }, select: { id: true } });
+    if (exists) { conflicts.push(`"${a.title}" (${a.slug}) — slug zaten mevcut (${lang}).`); continue; }
     seenInBatch.add(a.slug);
-    await prisma.blogPost.create({ data: { title: a.title, description: a.description, slug: a.slug, contentMd: a.contentMd, status: 'draft' } });
+    await prisma.blogPost.create({ data: { title: a.title, description: a.description, slug: a.slug, contentMd: a.contentMd, status: 'draft', lang } });
     created.push({ title: a.title, slug: a.slug });
   }
   return { created, conflicts, errors };
 }
 
 // --- Yayinlama ----------------------------------------------------------------
-/** En eski (ilk olusturulan) draft'i published yapar. Sira bossa null doner. */
-export async function publishNextDraft(): Promise<{ slug: string; title: string } | null> {
-  const draft = await prisma.blogPost.findFirst({ where: { status: 'draft' }, orderBy: { createdAt: 'asc' } });
+/** En eski (ilk olusturulan) draft'i published yapar. lang verilirse yalniz o dilde. Sira bossa null. */
+export async function publishNextDraft(lang?: string): Promise<{ slug: string; title: string } | null> {
+  const draft = await prisma.blogPost.findFirst({
+    where: { status: 'draft', ...(lang ? { lang } : {}) },
+    orderBy: { createdAt: 'asc' },
+  });
   if (!draft) return null;
   await prisma.blogPost.update({ where: { id: draft.id }, data: { status: 'published', publishedAt: new Date() } });
   return { slug: draft.slug, title: draft.title };
@@ -120,36 +131,39 @@ function trDayStart(now = new Date()): Date {
  * Worker her tick'te cagirir; restart-guvenli, cift-yayin YOK. Sira bossa sessizce gecer.
  */
 export async function publishDailyIfDue(): Promise<void> {
+  // Otomatik gunluk yayin YALNIZ tr (SEO otomasyonu). Almanca yazilari kullanici admin'den ELLE
+  // yayinlar (P5: "tek tek yukleyecek") — otomatik yayina girmezler.
   const publishedToday = await prisma.blogPost.count({
-    where: { status: 'published', publishedAt: { gte: trDayStart() } },
+    where: { status: 'published', lang: 'tr', publishedAt: { gte: trDayStart() } },
   });
   if (publishedToday > 0) return; // bugun zaten yayinlandi
-  const done = await publishNextDraft();
+  const done = await publishNextDraft('tr');
   if (done) console.log(`[blog] otomatik yayinlandi: ${done.slug}`);
 }
 
 // --- Okuma (public + admin) ---------------------------------------------------
-export async function listPublished() {
+export async function listPublished(lang = 'tr') {
   return prisma.blogPost.findMany({
-    where: { status: 'published' },
+    where: { status: 'published', lang },
     orderBy: { publishedAt: 'desc' },
     select: { title: true, description: true, slug: true, publishedAt: true },
   });
 }
 
-export async function getPublishedBySlug(slug: string) {
+export async function getPublishedBySlug(slug: string, lang = 'tr') {
   const post = await prisma.blogPost.findFirst({
-    where: { slug, status: 'published' },
+    where: { slug, lang, status: 'published' },
     select: { title: true, description: true, slug: true, contentMd: true, publishedAt: true },
   });
   if (!post) return null;
   return { ...post, contentHtml: renderContentHtml(post.contentMd) };
 }
 
-export async function listAllAdmin() {
+export async function listAllAdmin(lang?: string) {
   const posts = await prisma.blogPost.findMany({
+    where: lang ? { lang } : {},
     orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
-    select: { id: true, title: true, slug: true, status: true, createdAt: true, publishedAt: true },
+    select: { id: true, title: true, slug: true, status: true, lang: true, createdAt: true, publishedAt: true },
   });
   const draftCount = posts.filter((p) => p.status === 'draft').length;
   const publishedCount = posts.filter((p) => p.status === 'published').length;

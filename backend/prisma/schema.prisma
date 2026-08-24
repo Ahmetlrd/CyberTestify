@@ -492,14 +492,18 @@ model BlogPost {
   id          String    @id @default(uuid())
   title       String
   description String // meta aciklama (SEO)
-  slug        String    @unique // Turkce karaktersiz, tire ayrimli (backend normalize eder)
+  slug        String // Turkce karaktersiz, tire ayrimli (backend normalize eder)
+  // (Cok-dilli blog) Yazinin dili/bolgesi: 'tr' -> /tr/blog, 'de' -> /de/blog. Ayni slug farkli
+  // dillerde olabilir (cevirisi) -> unique [slug, lang]. Otomatik gunluk yayin YALNIZ tr (bkz worker).
+  lang        String    @default("tr")
   contentMd   String // Markdown icerik
   status      String    @default("draft") // draft | scheduled | published
   createdAt   DateTime  @default(now())
   publishedAt DateTime? // null = henuz yayinlanmadi
 
+  @@unique([slug, lang])
+  @@index([status, lang, publishedAt])
   @@index([status, createdAt])
-  @@index([status, publishedAt])
 }
 
 // (GÖZLEMLENEBİLİRLİK) Taramanın adım-adım YAPILANDIRILMIŞ logu — admin panelde "arkada ne oldu"
