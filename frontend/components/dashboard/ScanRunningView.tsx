@@ -20,9 +20,10 @@ type Props = {
   secondsPerPhase?: number;
   verified?: boolean; // sahiplik/DNS doğrulaması yapılmış paket (5 & 6) → "Sahiplik doğrulandı" adımı/logu gösterilir
   loginless?: boolean; // "loginsiz devam et" → login fazı atlanır (bkz LiveScanPhases/computeScanProgress)
+  lang?: 'tr' | 'de';
 };
 
-// S1 tarama türü detayları (kartta gösterilir) — otonom RT seviyesi S1.
+// S1 tarama türü detayları — S1 /de'de gösterilmez → yalnız TR (çevrilmez).
 const S1_DETAILS: Array<[string, string]> = [
   ['Risk', 'Düşük — çoğunlukla okuma ve az-etkili denemeler'],
   ['Teknik', 'Pasif + hafif aktif göstergeler'],
@@ -30,24 +31,52 @@ const S1_DETAILS: Array<[string, string]> = [
   ['Kontrol', 'Otomatik; kritik adımlarda insan kontrolü'],
 ];
 
-export function ScanRunningView({ hostname, packageKey, packageName, startedAt, authConfirmedAt, feed, notStarted, dark, secondsPerPhase, verified, loginless }: Props) {
+const SRV = {
+  tr: {
+    eyebrow: 'Tarama Durumu', starting: 'Taramanız başlatılıyor', running: 'Taramanız çalışıyor',
+    isolatedPrep: 'İzole ortam hazırlanıyor',
+    stepVerified: { t: 'Sahiplik doğrulandı', d: 'Alan adınızın sizin olduğu teyit edildi' },
+    stepReceived: { t: 'Talebiniz alındı', d: 'Ödemeniz onaylandı ve tarama sıraya alındı' },
+    stepScanT: 'Tarama çalışıyor', stepScanD6: 'Yapay zekâ destekli tarama sitenizi güvenli şekilde inceliyor',
+    stepAnalyze: { t: 'Bulgular değerlendiriliyor', d: 'Sonuçlar önem derecesine göre sıralanıyor' },
+    stepReport: { t: 'Rapor hazır', d: 'Şifreli raporunuz oluşturuldu' },
+    autoNote: 'Bu sayfa otomatik güncelleniyor — kapatabilirsiniz; sonuç hazır olduğunda erişim kodu e-postanıza gönderilecek.',
+    step: 'Adım', ringNote: 'Siteniz izole bir ortamda güvenli şekilde inceleniyor.',
+    scanType: 'Tarama türü', scanFallback: 'Tarama',
+    termHeader: 'cybertestify — canlı tarama', termFooter: 'Teknik loglar güvenlik ve gizlilik nedeniyle gizlenmiştir; yalnızca genel aktivite gösterilir.',
+  },
+  de: {
+    eyebrow: 'Scan-Status', starting: 'Ihr Scan wird gestartet', running: 'Ihr Scan läuft',
+    isolatedPrep: 'Isolierte Umgebung wird vorbereitet',
+    stepVerified: { t: 'Inhaberschaft bestätigt', d: 'Bestätigt, dass die Domain Ihnen gehört' },
+    stepReceived: { t: 'Anfrage eingegangen', d: 'Ihre Zahlung wurde bestätigt und der Scan in die Warteschlange gestellt' },
+    stepScanT: 'Scan läuft', stepScanD6: 'Der KI-gestützte Scan prüft Ihre Website auf sichere Weise',
+    stepAnalyze: { t: 'Befunde werden ausgewertet', d: 'Ergebnisse werden nach Schweregrad sortiert' },
+    stepReport: { t: 'Bericht fertig', d: 'Ihr verschlüsselter Bericht wurde erstellt' },
+    autoNote: 'Diese Seite aktualisiert sich automatisch — Sie können sie schließen; sobald das Ergebnis fertig ist, wird der Zugangscode an Ihre E-Mail gesendet.',
+    step: 'Schritt', ringNote: 'Ihre Website wird in einer isolierten Umgebung sicher geprüft.',
+    scanType: 'Scan-Typ', scanFallback: 'Scan',
+    termHeader: 'cybertestify — Live-Scan', termFooter: 'Technische Logs werden aus Sicherheits- und Datenschutzgründen ausgeblendet; nur die allgemeine Aktivität wird angezeigt.',
+  },
+} as const;
+
+export function ScanRunningView({ hostname, packageKey, packageName, startedAt, authConfirmedAt, feed, notStarted, dark, secondsPerPhase, verified, loginless, lang = 'tr' }: Props) {
+  const L = SRV[lang === 'de' ? 'de' : 'tr'];
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
 
   const isS1 = packageKey === 'redteam_s1';
   // (SENKRON) LiveScanPhases ile AYNI fonksiyon → halka, üst çubuk ve terminal LOG satırı HEP birlikte ilerler.
-  const prog = computeScanProgress({ packageKey, startedAt, authConfirmedAt, now, perPhase: secondsPerPhase, loginless });
+  const prog = computeScanProgress({ packageKey, startedAt, authConfirmedAt, now, perPhase: secondsPerPhase, loginless, lang });
   const pct = notStarted ? 4 : prog.pct;
-  const currentPhase = notStarted ? 'İzole ortam hazırlanıyor' : prog.current;
+  const currentPhase = notStarted ? L.isolatedPrep : prog.current;
 
   // 4 adımlı üst-düzey şerit (StatusTracker ile aynı anlam): tarama sürerken adım 2 aktif.
   const STEPS = [
-    verified
-      ? { t: 'Sahiplik doğrulandı', d: 'Alan adınızın sizin olduğu teyit edildi' }
-      : { t: 'Talebiniz alındı', d: 'Ödemeniz onaylandı ve tarama sıraya alındı' },
-    { t: 'Tarama çalışıyor', d: isS1 ? 'Otonom AI ajanı hedefinizi güvenli sınırlar içinde sınıyor' : 'Yapay zekâ destekli tarama sitenizi güvenli şekilde inceliyor' },
-    { t: 'Bulgular değerlendiriliyor', d: 'Sonuçlar önem derecesine göre sıralanıyor' },
-    { t: 'Rapor hazır', d: 'Şifreli raporunuz oluşturuldu' },
+    verified ? L.stepVerified : L.stepReceived,
+    { t: L.stepScanT, d: isS1 ? 'Otonom AI ajanı hedefinizi güvenli sınırlar içinde sınıyor' : L.stepScanD6 },
+    L.stepAnalyze,
+    L.stepReport,
   ];
   const activeStep = 1; // tarama sürerken
 
@@ -71,8 +100,8 @@ export function ScanRunningView({ hostname, packageKey, packageName, startedAt, 
       {/* ————— SOL: başlık + adım şeridi + not ————— */}
       <div className="flex flex-col gap-4">
         <div>
-          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', color: t.eyebrow, textTransform: 'uppercase', marginBottom: 8 }}>Tarama Durumu</div>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: t.title, margin: '0 0 8px', letterSpacing: '-0.01em', lineHeight: 1.15 }}>{notStarted ? 'Taramanız başlatılıyor' : 'Taramanız çalışıyor'}</h2>
+          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', color: t.eyebrow, textTransform: 'uppercase', marginBottom: 8 }}>{L.eyebrow}</div>
+          <h2 style={{ fontSize: 24, fontWeight: 800, color: t.title, margin: '0 0 8px', letterSpacing: '-0.01em', lineHeight: 1.15 }}>{notStarted ? L.starting : L.running}</h2>
           <div style={{ fontSize: 13.5, color: t.muted, fontFamily: 'var(--font-mono, ui-monospace, monospace)', wordBreak: 'break-all' }}>{hostname}</div>
         </div>
 
@@ -102,7 +131,7 @@ export function ScanRunningView({ hostname, packageKey, packageName, startedAt, 
         </div>
 
         <div style={{ background: t.noteBg, border: `1px solid ${t.noteBorder}`, borderRadius: 14, padding: '15px 16px', fontSize: 12.5, color: t.text, lineHeight: 1.55 }}>
-          Bu sayfa otomatik güncelleniyor — kapatabilirsiniz; sonuç hazır olduğunda erişim kodu e-postanıza gönderilecek.
+          {L.autoNote}
         </div>
       </div>
 
@@ -115,18 +144,18 @@ export function ScanRunningView({ hostname, packageKey, packageName, startedAt, 
             <text x="44" y="50" textAnchor="middle" fontFamily="JetBrains Mono, ui-monospace, monospace" fontSize="20" fontWeight="600" fill={t.title}>{pct}%</text>
           </svg>
           <div style={{ minWidth: 180, flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: amber, textTransform: 'uppercase', marginBottom: 6 }}>Adım {activeStep + 1} / {STEPS.length}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: amber, textTransform: 'uppercase', marginBottom: 6 }}>{L.step} {activeStep + 1} / {STEPS.length}</div>
             <div style={{ fontSize: 18, fontWeight: 700, color: t.title, marginBottom: 6 }}>{currentPhase}</div>
-            <div style={{ fontSize: 13.5, color: t.muted, lineHeight: 1.5 }}>Siteniz izole bir ortamda güvenli şekilde inceleniyor.</div>
+            <div style={{ fontSize: 13.5, color: t.muted, lineHeight: 1.5 }}>{L.ringNote}</div>
           </div>
         </div>
 
         {/* Tarama türü — 6 paket: paket adı · S1: tür + risk/teknik/tutarlılık */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: isS1 ? 14 : 0, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: t.muted, textTransform: 'uppercase' }}>Tarama türü</span>
+            <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: t.muted, textTransform: 'uppercase' }}>{L.scanType}</span>
             <span style={{ fontSize: 14, fontWeight: 800, color: t.title, background: dark ? 'rgba(245,166,35,0.12)' : '#FDF3DE', border: `1px solid ${dark ? 'rgba(245,166,35,0.3)' : '#F5D9A0'}`, borderRadius: 999, padding: '4px 12px' }}>
-              {isS1 ? 'S1 · Otonom AI Red Team' : (packageName || 'Tarama')}
+              {isS1 ? 'S1 · Otonom AI Red Team' : (packageName || L.scanFallback)}
             </span>
           </div>
           {isS1 && (
@@ -151,10 +180,10 @@ export function ScanRunningView({ hostname, packageKey, packageName, startedAt, 
             <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
             <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
-            <span className="ml-2 font-mono text-xs text-white/40">cybertestify — canlı tarama</span>
+            <span className="ml-2 font-mono text-xs text-white/40">{L.termHeader}</span>
           </div>
-          <LiveScanPhases hostname={hostname} feed={feed} startedAt={startedAt} packageKey={packageKey} queued={notStarted} authConfirmedAt={authConfirmedAt} secondsPerPhase={secondsPerPhase} verified={verified} loginless={loginless} />
-          <div className="border-t border-white/5 px-5 py-3 text-xs text-white/32">Teknik loglar güvenlik ve gizlilik nedeniyle gizlenmiştir; yalnızca genel aktivite gösterilir.</div>
+          <LiveScanPhases hostname={hostname} feed={feed} startedAt={startedAt} packageKey={packageKey} queued={notStarted} authConfirmedAt={authConfirmedAt} secondsPerPhase={secondsPerPhase} verified={verified} loginless={loginless} lang={lang} />
+          <div className="border-t border-white/5 px-5 py-3 text-xs text-white/32">{L.termFooter}</div>
         </div>
       </div>
       </div>

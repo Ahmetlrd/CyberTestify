@@ -9,7 +9,27 @@ type Flow = {
  * Kapsam Doğrulama Sertifikası — rakiplerde OLMAYAN, gerçek egress-kilidi/scope
  * audit verimizin doğal UI çıktısı. "İddia değil, ölçülebilir kanıt" güven sinyali.
  */
-export function ScopeCertificate({ hostname, flow }: { hostname: string; flow?: Flow | null }) {
+const CERT = {
+  tr: {
+    title: 'Kapsam Doğrulama Sertifikası', by: 'CyberTestify kapsam kilidi tarafından doğrulandı',
+    target: 'Doğrulanan hedef', method: 'Analiz yöntemi', methodVal: 'Kanıt-tabanlı', verified: '· doğrulama ✓',
+    access: 'Erişim denetimi', accessVal: 'Kapsam kilidi', active: '· etkin ✓',
+    attempts: 'Kapsam dışı erişim girişimi', blocked: 'engellendi',
+    footPre: 'Bu tarama, teknik olarak yalnızca ', footMid: ' hedefine erişebildi. ',
+    footClean: 'Kapsam dışı hiçbir hedefe erişim girişimi olmadı.', footBlocked: 'Kapsam dışı girişimler proxy tarafından anında engellendi.',
+  },
+  de: {
+    title: 'Scope-Verifizierungszertifikat', by: 'Durch die CyberTestify-Scope-Sperre verifiziert',
+    target: 'Verifiziertes Ziel', method: 'Analysemethode', methodVal: 'Nachweisbasiert', verified: '· verifiziert ✓',
+    access: 'Zugriffskontrolle', accessVal: 'Scope-Sperre', active: '· aktiv ✓',
+    attempts: 'Zugriffsversuche außerhalb des Scope', blocked: 'blockiert',
+    footPre: 'Dieser Scan konnte technisch ausschließlich das Ziel ', footMid: ' erreichen. ',
+    footClean: 'Es gab keinen Zugriffsversuch auf ein Ziel außerhalb des Scope.', footBlocked: 'Versuche außerhalb des Scope wurden vom Proxy sofort blockiert.',
+  },
+} as const;
+
+export function ScopeCertificate({ hostname, flow, lang = 'tr' }: { hostname: string; flow?: Flow | null; lang?: 'tr' | 'de' }) {
+  const c = CERT[lang === 'de' ? 'de' : 'tr'];
   const outOfScope = flow?.scopeViolationTarget
     ? flow.scopeViolationTarget.split(',').filter(Boolean).length
     : 0;
@@ -25,36 +45,36 @@ export function ScopeCertificate({ hostname, flow }: { hostname: string; flow?: 
           </svg>
         </span>
         <div>
-          <h3 className="text-sm font-extrabold text-brand">Kapsam Doğrulama Sertifikası</h3>
-          <p className="text-xs text-ink-muted">CyberTestify kapsam kilidi tarafından doğrulandı</p>
+          <h3 className="text-sm font-extrabold text-brand">{c.title}</h3>
+          <p className="text-xs text-ink-muted">{c.by}</p>
         </div>
       </div>
 
       <dl className="mt-5 grid grid-cols-2 gap-4">
         <div>
-          <dt className="text-xs text-ink-muted">Doğrulanan hedef</dt>
+          <dt className="text-xs text-ink-muted">{c.target}</dt>
           <dd className="truncate text-sm font-semibold text-ink" title={hostname}>{hostname}</dd>
         </div>
         <div>
-          <dt className="text-xs text-ink-muted">Analiz yöntemi</dt>
-          <dd className="text-sm font-semibold text-emerald-600">Kanıt-tabanlı <span className="text-xs">· doğrulama ✓</span></dd>
+          <dt className="text-xs text-ink-muted">{c.method}</dt>
+          <dd className="text-sm font-semibold text-emerald-600">{c.methodVal} <span className="text-xs">{c.verified}</span></dd>
         </div>
         <div>
-          <dt className="text-xs text-ink-muted">Erişim denetimi</dt>
-          <dd className="text-sm font-semibold text-emerald-600">Kapsam kilidi <span className="text-xs">· etkin ✓</span></dd>
+          <dt className="text-xs text-ink-muted">{c.access}</dt>
+          <dd className="text-sm font-semibold text-emerald-600">{c.accessVal} <span className="text-xs">{c.active}</span></dd>
         </div>
         <div>
-          <dt className="text-xs text-ink-muted">Kapsam dışı erişim girişimi</dt>
+          <dt className="text-xs text-ink-muted">{c.attempts}</dt>
           <dd className={`text-lg font-extrabold ${clean ? 'text-emerald-600' : 'text-red-600'}`}>
             {clean ? '0' : outOfScope}
-            <span className="ml-1 text-xs font-medium">{clean ? '✓' : 'engellendi'}</span>
+            <span className="ml-1 text-xs font-medium">{clean ? '✓' : c.blocked}</span>
           </dd>
         </div>
       </dl>
 
       <p className="mt-4 border-t border-brand-100 pt-3 text-xs leading-relaxed text-ink-muted">
-        Bu tarama, teknik olarak yalnızca <strong className="text-ink-soft">{hostname}</strong> hedefine
-        erişebildi. {clean ? 'Kapsam dışı hiçbir hedefe erişim girişimi olmadı.' : 'Kapsam dışı girişimler proxy tarafından anında engellendi.'}
+        {c.footPre}<strong className="text-ink-soft">{hostname}</strong>{c.footMid}
+        {clean ? c.footClean : c.footBlocked}
       </p>
     </div>
   );

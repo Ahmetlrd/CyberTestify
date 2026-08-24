@@ -9,21 +9,82 @@ import { InvoiceRequestForm } from '../../../components/dashboard/InvoiceRequest
 import { ScanFailedActions } from '../../../components/dashboard/ScanFailedActions';
 import { GA_ID } from '../../../lib/consent';
 import { ScopeCertificate } from '../../../components/dashboard/ScopeCertificate';
+import { readRegionCookie } from '../../../lib/region';
+import { getRegion } from '../../../config/regions';
 
 const TERMINAL = new Set(['scan_completed', 'scan_failed', 'scope_violation', 'report_purged']);
 
-const HEADLINE: Record<string, string> = {
-  awaiting_payment: 'Ödeme bekleniyor',
-  awaiting_domain_verification: 'Alan adı doğrulaması gerekli',
-  paid: 'Ödeme alındı — tarama hazırlanıyor',
-  scan_queued: 'Taramanız başlatılıyor',
-  scan_running: 'Taramanız çalışıyor',
-  scan_completed: 'Raporunuz hazır',
-  scan_failed: 'Tarama tamamlanamadı',
-  scope_violation: 'Tarama güvenlik nedeniyle durduruldu',
-  report_purged: 'Rapor saklama süresi doldu',
-  refunded: 'Siparişiniz iade edildi',
-};
+// (Çok-bölge) Dashboard metinleri tr/de. Client sayfa → cookie'den lang (hydration-safe).
+const DASH = {
+  tr: {
+    headline: {
+      awaiting_payment: 'Ödeme bekleniyor', awaiting_domain_verification: 'Alan adı doğrulaması gerekli',
+      paid: 'Ödeme alındı — tarama hazırlanıyor', scan_queued: 'Taramanız başlatılıyor', scan_running: 'Taramanız çalışıyor',
+      scan_completed: 'Raporunuz hazır', scan_failed: 'Tarama tamamlanamadı', scope_violation: 'Tarama güvenlik nedeniyle durduruldu',
+      report_purged: 'Rapor saklama süresi doldu', refunded: 'Siparişiniz iade edildi',
+    } as Record<string, string>,
+    orderStatus: 'Sipariş Durumu', target: 'Hedef', reportReadyIncomplete: 'Rapor hazır — ancak eksik',
+    dvTitle: 'Alan adı sahipliğinizi doğrulayın',
+    dvBodyHtml: 'Ödemeniz alındı. Ancak bu paket <strong>aktif güvenlik probları</strong> (kimlik-doğrulamalı testler, enjeksiyon/oturum denemeleri) gönderir; bu testler yasal olarak yalnızca <strong>alan adının sahibi/yetkilisi olduğunuzu DNS ile doğruladıktan sonra</strong> başlatılabilir. Doğrulama tamamlanınca taramanız <strong>otomatik başlar</strong> — bu sayfa kendiliğinden güncellenir.',
+    dvCta: 'DNS ile doğrula',
+    apTitle: 'Ödemeniz henüz tamamlanmadı',
+    apBodyHtml: 'Siparişiniz oluşturuldu ancak ödeme alınmadığı için tarama <strong>henüz başlamadı</strong>. Taramayı başlatmak için ödemeyi tamamlamanız yeterli.',
+    apRedirecting: 'Ödeme sayfasına yönlendiriliyor…', apCta: 'Ödemeyi Tamamla',
+    apNote: 'Güvenli ödeme iyzico altyapısıyla alınır. Ödeme onaylanınca tarama otomatik başlar ve bu sayfa kendiliğinden güncellenir.',
+    payErr: 'Ödeme sayfası alınamadı. Lütfen tekrar deneyin.',
+    refundTitle: 'Siparişiniz iade edildi',
+    refundBodyPre: 'Bu sipariş iptal/iade edilmiştir. Bir ödeme yaptıysanız iade tutarı, bankanıza bağlı olarak birkaç iş günü içinde kartınıza/hesabınıza yansır. Sorunuz varsa ',
+    refundBodyPost: ' ile iletişime geçebilirsiniz.',
+    incompletePre: '⚠️ Bu tarama eksik tamamlandı.', incompleteDefault: 'Tarama beklenenden erken sonlandı ve rapor içeriği eksik/boş olabilir.',
+    incompleteMid: ' Ücret iadesi veya taramanın yeniden çalıştırılması için ', incompleteTail: (id: string) => ` ile iletişime geçin (sipariş no: ${id}).`,
+    reportDownloaded: 'Rapor indirildi ✓', reportReady: 'Şifreli raporunuz hazır', oneTimeCode: 'Tek kullanımlık erişim koduyla açılır',
+    codeSentHtml: '<strong>Erişim kodunuz e-posta ile gönderildi.</strong> Raporunuzu açmak için e-postanızdaki tek kullanımlık kodu aşağıya girin. (Bir kez açtığınızda bu cihazda hatırlanır.)',
+    accessCode: 'Erişim kodu', downloadReport: 'Raporu indir',
+    fixTitle: 'AI Çözüm Önerileri', fixSub: 'Bulgularınız için somut, uygulanabilir düzeltme adımları (güvenli kod/config örnekleriyle).',
+    campaign: 'KAMPANYA', campaignFree: '— kampanyaya özel ücretsiz, sizin için açıldı',
+    fixUnlockedHtml: '✓ Açık — çözüm önerileri artık <strong>raporunuzun içinde</strong> yer alıyor. Güncel raporu (çözüm önerileri dahil) indirmek için aşağıdaki butonu kullanın.',
+    downloadWithFix: 'Raporu indir (çözüm önerileri dahil)', enterCodeFirst: 'Önce yukarıdaki erişim kodunu girin.',
+    fixLockedPre: '🔒 Bu içerik kilitli.', fixLockedPost: ' karşılığında açılır.',
+    promoOptional: 'Promosyon kodu (opsiyonel)', promoPlaceholder: 'Kodunuz', processing: 'İşleniyor…', buyUnlock: 'Satın al ve aç',
+    fixNote: 'Güvenli ödeme iyzico ile alınır. Promosyon kodu %100 ise ödeme adımı atlanır.',
+    scopeViolation: 'Tarama, kapsam dışı bir hedefe erişim girişimi tespit edildiği için güvenlik gereği durduruldu. Bu, sizi ve üçüncü tarafları koruyan bilinçli bir önlemdir.',
+    targetFallback: 'hedef',
+  },
+  de: {
+    headline: {
+      awaiting_payment: 'Zahlung ausstehend', awaiting_domain_verification: 'Domain-Verifizierung erforderlich',
+      paid: 'Zahlung erhalten — Scan wird vorbereitet', scan_queued: 'Ihr Scan wird gestartet', scan_running: 'Ihr Scan läuft',
+      scan_completed: 'Ihr Bericht ist fertig', scan_failed: 'Scan konnte nicht abgeschlossen werden', scope_violation: 'Scan aus Sicherheitsgründen gestoppt',
+      report_purged: 'Aufbewahrungsfrist des Berichts abgelaufen', refunded: 'Ihre Bestellung wurde erstattet',
+    } as Record<string, string>,
+    orderStatus: 'Bestellstatus', target: 'Ziel', reportReadyIncomplete: 'Bericht fertig — jedoch unvollständig',
+    dvTitle: 'Bestätigen Sie Ihre Domain-Inhaberschaft',
+    dvBodyHtml: 'Ihre Zahlung ist eingegangen. Dieses Paket sendet jedoch <strong>aktive Sicherheitsprüfungen</strong> (authentifizierte Tests, Injection-/Session-Versuche); diese Tests dürfen rechtlich erst starten, nachdem Sie <strong>per DNS bestätigt haben, dass Sie Inhaber/Berechtigter der Domain sind</strong>. Nach der Bestätigung startet Ihr Scan <strong>automatisch</strong> — diese Seite aktualisiert sich von selbst.',
+    dvCta: 'Per DNS bestätigen',
+    apTitle: 'Ihre Zahlung ist noch nicht abgeschlossen',
+    apBodyHtml: 'Ihre Bestellung wurde erstellt, aber da keine Zahlung eingegangen ist, hat der Scan <strong>noch nicht begonnen</strong>. Schließen Sie einfach die Zahlung ab, um den Scan zu starten.',
+    apRedirecting: 'Weiterleitung zur Zahlungsseite…', apCta: 'Zahlung abschließen',
+    apNote: 'Die sichere Zahlung erfolgt über iyzico. Nach Bestätigung der Zahlung startet der Scan automatisch und diese Seite aktualisiert sich von selbst.',
+    payErr: 'Zahlungsseite konnte nicht geladen werden. Bitte versuchen Sie es erneut.',
+    refundTitle: 'Ihre Bestellung wurde erstattet',
+    refundBodyPre: 'Diese Bestellung wurde storniert/erstattet. Falls Sie gezahlt haben, wird der Erstattungsbetrag je nach Bank innerhalb weniger Werktage auf Ihrer Karte/Ihrem Konto gutgeschrieben. Bei Fragen erreichen Sie uns unter ',
+    refundBodyPost: '.',
+    incompletePre: '⚠️ Dieser Scan wurde unvollständig abgeschlossen.', incompleteDefault: 'Der Scan endete früher als erwartet und der Berichtsinhalt kann unvollständig/leer sein.',
+    incompleteMid: ' Für eine Erstattung oder eine erneute Ausführung des Scans kontaktieren Sie ', incompleteTail: (id: string) => ` (Bestellnummer: ${id}).`,
+    reportDownloaded: 'Bericht heruntergeladen ✓', reportReady: 'Ihr verschlüsselter Bericht ist fertig', oneTimeCode: 'Wird mit einem Einmal-Zugangscode geöffnet',
+    codeSentHtml: '<strong>Ihr Zugangscode wurde per E-Mail gesendet.</strong> Geben Sie den Einmal-Code aus Ihrer E-Mail unten ein, um Ihren Bericht zu öffnen. (Nach dem ersten Öffnen wird er auf diesem Gerät gemerkt.)',
+    accessCode: 'Zugangscode', downloadReport: 'Bericht herunterladen',
+    fixTitle: 'KI-Lösungsempfehlungen', fixSub: 'Konkrete, umsetzbare Behebungsschritte für Ihre Befunde (mit sicheren Code-/Konfigurationsbeispielen).',
+    campaign: 'AKTION', campaignFree: '— im Rahmen der Aktion kostenlos für Sie freigeschaltet',
+    fixUnlockedHtml: '✓ Freigeschaltet — die Lösungsempfehlungen sind jetzt <strong>in Ihrem Bericht</strong> enthalten. Nutzen Sie die Schaltfläche unten, um den aktuellen Bericht (inkl. Empfehlungen) herunterzuladen.',
+    downloadWithFix: 'Bericht herunterladen (inkl. Lösungsempfehlungen)', enterCodeFirst: 'Geben Sie zuerst oben den Zugangscode ein.',
+    fixLockedPre: '🔒 Dieser Inhalt ist gesperrt.', fixLockedPost: ' freigeschaltet.',
+    promoOptional: 'Aktionscode (optional)', promoPlaceholder: 'Ihr Code', processing: 'Wird verarbeitet…', buyUnlock: 'Kaufen und freischalten',
+    fixNote: 'Die sichere Zahlung erfolgt über iyzico. Bei einem 100%-Aktionscode entfällt der Zahlungsschritt.',
+    scopeViolation: 'Der Scan wurde aus Sicherheitsgründen gestoppt, weil ein Zugriffsversuch auf ein Ziel außerhalb des Scope erkannt wurde. Dies ist eine bewusste Schutzmaßnahme für Sie und Dritte.',
+    targetFallback: 'Ziel',
+  },
+} as const;
 
 function LockIcon({ open }: { open: boolean }) {
   return (
@@ -49,6 +110,9 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const [error, setError] = useState<string | null>(null);
   const [dlError, setDlError] = useState<string | null>(null); // rapor indirme hatası — kutunun altında gösterilir
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [lang, setLang] = useState<'tr' | 'de'>('tr');
+  useEffect(() => { setLang(getRegion(readRegionCookie()).lang === 'de' ? 'de' : 'tr'); }, []);
+  const t = DASH[lang];
 
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.localStorage.getItem('token')) {
@@ -133,7 +197,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
         window.location.href = res.paymentPageUrl;
         return;
       }
-      setError('Ödeme sayfası alınamadı. Lütfen tekrar deneyin.');
+      setError(t.payErr);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -170,7 +234,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   }
 
   const status = order?.status as string;
-  const hostname = order?.domain?.hostname ?? 'hedef';
+  const hostname = order?.domain?.hostname ?? t.targetFallback;
   const active = status === 'scan_running' || status === 'paid' || status === 'scan_queued';
 
   let feed: Array<{ seq: number; text: string }> = [];
@@ -183,13 +247,13 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   return (
     <main className={`container-page py-16 ${active ? "max-w-5xl" : "max-w-xl"}`}>
       {!active && <>
-        <p className="eyebrow">Sipariş Durumu</p>
+        <p className="eyebrow">{t.orderStatus}</p>
         <h1 className="mt-2 text-3xl font-extrabold text-brand">
           {status === 'scan_completed' && order?.report?.incomplete
-            ? 'Rapor hazır — ancak eksik'
-            : HEADLINE[status] ?? status}
+            ? t.reportReadyIncomplete
+            : t.headline[status] ?? status}
         </h1>
-        {order && <p className="mt-1 text-sm text-ink-muted">Hedef: {hostname}</p>}
+        {order && <p className="mt-1 text-sm text-ink-muted">{t.target}: {hostname}</p>}
       </>}
 
       {/* İade/süre-doldu gibi terminal durumlarda adım göstergesi YANILTICI olur — gösterilmez.
@@ -197,7 +261,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
           müşteriyi yanıltır (ödeme yapmadan tarama sanıyor). Onun yerine ödeme kartı gösterilir. */}
       {!active && !['refunded', 'report_purged', 'awaiting_payment', 'awaiting_domain_verification'].includes(status) && (
         <div className="mt-8">
-          <StatusTracker status={status} />
+          <StatusTracker status={status} lang={lang} />
         </div>
       )}
 
@@ -205,16 +269,11 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
           Aktif problar (SQLi/XSS/login prob) yasal olarak yalnız sahiplik doğrulanınca çalışır. */}
       {status === 'awaiting_domain_verification' && (
         <div className="mt-8 rounded-card border-2 border-amber-300 bg-amber-50 p-6">
-          <p className="text-lg font-bold text-amber-900">Alan adı sahipliğinizi doğrulayın</p>
-          <p className="mt-1 text-sm leading-relaxed text-amber-900/80">
-            Ödemeniz alındı. Ancak bu paket <strong>aktif güvenlik probları</strong> (kimlik-doğrulamalı testler,
-            enjeksiyon/oturum denemeleri) gönderir; bu testler yasal olarak yalnızca <strong>alan adının sahibi/yetkilisi
-            olduğunuzu DNS ile doğruladıktan sonra</strong> başlatılabilir. Doğrulama tamamlanınca taramanız
-            <strong> otomatik başlar</strong> — bu sayfa kendiliğinden güncellenir.
-          </p>
+          <p className="text-lg font-bold text-amber-900">{t.dvTitle}</p>
+          <p className="mt-1 text-sm leading-relaxed text-amber-900/80" dangerouslySetInnerHTML={{ __html: t.dvBodyHtml }} />
           <a href="/verify" className="btn-primary mt-4 inline-flex w-full items-center justify-center gap-1.5 sm:w-auto">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
-            DNS ile doğrula
+            {t.dvCta}
           </a>
         </div>
       )}
@@ -223,18 +282,15 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
           Tamamla" CTA -> mevcut /pay/<orderId> ödeme sayfası (canlıda iyzico'ya yönlendirir). */}
       {status === 'awaiting_payment' && (
         <div className="mt-8 rounded-card border-2 border-accent/50 bg-accent-soft/30 p-6">
-          <p className="text-lg font-bold text-brand">Ödemeniz henüz tamamlanmadı</p>
-          <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-            Siparişiniz oluşturuldu ancak ödeme alınmadığı için tarama <strong>henüz başlamadı</strong>.
-            Taramayı başlatmak için ödemeyi tamamlamanız yeterli.
-          </p>
+          <p className="text-lg font-bold text-brand">{t.apTitle}</p>
+          <p className="mt-1 text-sm leading-relaxed text-ink-soft" dangerouslySetInnerHTML={{ __html: t.apBodyHtml }} />
           {order?.amountMinorUnit != null && (
             <div className="mt-4 flex items-baseline justify-between rounded-card bg-white/70 px-4 py-3">
               <span className="text-sm text-ink-soft">
                 {hostname}{order?.packageName ? <> · {order.packageName}</> : null}
               </span>
               <span className="text-2xl font-extrabold text-brand">
-                {(order.amountMinorUnit / 100).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}{' '}
+                {(order.amountMinorUnit / 100).toLocaleString(lang === 'de' ? 'de-DE' : 'tr-TR', { minimumFractionDigits: 2 })}{' '}
                 {order.currency === 'TRY' || !order.currency ? 'TL' : order.currency}
               </span>
             </div>
@@ -248,22 +304,19 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               <rect x="3" y="5" width="18" height="14" rx="2" />
               <path d="M3 10h18" />
             </svg>
-            {busyPay ? 'Ödeme sayfasına yönlendiriliyor…' : 'Ödemeyi Tamamla'}
+            {busyPay ? t.apRedirecting : t.apCta}
           </button>
-          <p className="mt-2 text-center text-[11px] text-ink-muted">
-            Güvenli ödeme iyzico altyapısıyla alınır. Ödeme onaylanınca tarama otomatik başlar ve bu sayfa kendiliğinden güncellenir.
-          </p>
+          <p className="mt-2 text-center text-[11px] text-ink-muted">{t.apNote}</p>
         </div>
       )}
 
       {status === 'refunded' && (
         <div className="mt-8 rounded-card border border-brand-200 bg-brand-50/60 p-6 text-sm text-ink-soft">
-          <p className="font-semibold text-brand">Siparişiniz iade edildi</p>
+          <p className="font-semibold text-brand">{t.refundTitle}</p>
           <p className="mt-1">
-            Bu sipariş iptal/iade edilmiştir. Bir ödeme yaptıysanız iade tutarı, bankanıza bağlı olarak birkaç iş günü içinde
-            kartınıza/hesabınıza yansır. Sorunuz varsa{' '}
-            <a href="mailto:support@cybertestify.com" className="font-semibold text-accent-600 underline">support@cybertestify.com</a>{' '}
-            ile iletişime geçebilirsiniz.
+            {t.refundBodyPre}
+            <a href="mailto:support@cybertestify.com" className="font-semibold text-accent-600 underline">support@cybertestify.com</a>
+            {t.refundBodyPost}
           </p>
         </div>
       )}
@@ -291,6 +344,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
             secondsPerPhase={isS1 ? 240 : undefined}
             verified={order?.domainVerified === true}
             loginless={order?.loginless === true}
+            lang={lang}
           />
         );
       })()}
@@ -299,18 +353,17 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
         <div className="mt-8 space-y-6">
           {order.report?.incomplete && (
             <div className="rounded-card border border-amber-300 bg-amber-50 px-4 py-3.5 text-sm text-amber-900">
-              <strong>⚠️ Bu tarama eksik tamamlandı.</strong>{' '}
-              {order.report.incompleteReason ??
-                'Tarama beklenenden erken sonlandı ve rapor içeriği eksik/boş olabilir.'}{' '}
-              Ücret iadesi veya taramanın yeniden çalıştırılması için{' '}
+              <strong>{t.incompletePre}</strong>{' '}
+              {order.report.incompleteReason ?? t.incompleteDefault}
+              {t.incompleteMid}
               <a href="mailto:destek@cybertestify.com" className="font-semibold underline">
                 destek@cybertestify.com
-              </a>{' '}
-              ile iletişime geçin (sipariş no: {order.id}).
+              </a>
+              {t.incompleteTail(order.id)}
             </div>
           )}
 
-          <ScopeCertificate hostname={hostname} flow={order.flow} />
+          <ScopeCertificate hostname={hostname} flow={order.flow} lang={lang} />
 
           {/* Rapor teslim — kilit mikro-etkilesimi */}
           <div className="card p-6">
@@ -319,27 +372,24 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
                 <LockIcon open={unlocked} />
               </span>
               <div>
-                <h2 className="font-bold text-ink">{unlocked ? 'Rapor indirildi ✓' : 'Şifreli raporunuz hazır'}</h2>
-                <p className="text-xs text-ink-muted">Tek kullanımlık erişim koduyla açılır</p>
+                <h2 className="font-bold text-ink">{unlocked ? t.reportDownloaded : t.reportReady}</h2>
+                <p className="text-xs text-ink-muted">{t.oneTimeCode}</p>
               </div>
             </div>
 
             {!unlocked && (
-              <div className="mt-4 rounded-card border border-line bg-brand-50/40 p-3 text-xs text-ink-soft">
-                <strong>Erişim kodunuz e-posta ile gönderildi.</strong> Raporunuzu açmak için e-postanızdaki
-                tek kullanımlık kodu aşağıya girin. (Bir kez açtığınızda bu cihazda hatırlanır.)
-              </div>
+              <div className="mt-4 rounded-card border border-line bg-brand-50/40 p-3 text-xs text-ink-soft" dangerouslySetInnerHTML={{ __html: t.codeSentHtml }} />
             )}
 
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <input
                 value={accessSecret}
                 onChange={(e) => setAccessSecret(e.target.value)}
-                placeholder="Erişim kodu"
+                placeholder={t.accessCode}
                 className="flex-1 rounded-card border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand-100"
               />
               <button onClick={handleDownload} disabled={!accessSecret} className="btn-primary disabled:opacity-50">
-                Raporu indir
+                {t.downloadReport}
               </button>
             </div>
             {dlError && (
@@ -350,70 +400,62 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
           {/* (3) Ücretli eklenti: AI Çözüm Önerileri */}
           {order.report?.hasFixSuggestions && (
             <div className="card p-6">
-              <h2 className="font-bold text-ink">AI Çözüm Önerileri</h2>
-              <p className="mt-1 text-xs text-ink-muted">
-                Bulgularınız için somut, uygulanabilir düzeltme adımları (güvenli kod/config örnekleriyle).
-              </p>
+              <h2 className="font-bold text-ink">{t.fixTitle}</h2>
+              <p className="mt-1 text-xs text-ink-muted">{t.fixSub}</p>
               {order.report.fixSuggestionsUnlocked ? (
                 <>
                   {order.report.fixCampaignFree && (
                     <div className="mt-3 flex flex-wrap items-center gap-2 rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
-                      <span className="rounded-pill bg-amber-500 px-2.5 py-0.5 text-xs font-extrabold text-white">KAMPANYA</span>
+                      <span className="rounded-pill bg-amber-500 px-2.5 py-0.5 text-xs font-extrabold text-white">{t.campaign}</span>
                       <span className="font-semibold text-amber-900">
                         {order.report.fixSuggestionListMinorUnit != null && (
                           <span className="mr-1.5 font-normal text-amber-700 line-through">
-                            {(order.report.fixSuggestionListMinorUnit / 100).toLocaleString('tr-TR')} {order.currency}
+                            {(order.report.fixSuggestionListMinorUnit / 100).toLocaleString(lang === 'de' ? 'de-DE' : 'tr-TR')} {order.currency}
                           </span>
                         )}
-                        <strong className="mr-1">0 {order.currency}</strong>— kampanyaya özel ücretsiz, sizin için açıldı
+                        <strong className="mr-1">0 {order.currency}</strong>{t.campaignFree}
                       </span>
                     </div>
                   )}
-                  <div className="mt-3 rounded-card border border-brand-200 bg-brand-50/40 px-4 py-3 text-sm text-ink-soft">
-                    ✓ Açık — çözüm önerileri artık <strong>raporunuzun içinde</strong> yer alıyor. Güncel raporu
-                    (çözüm önerileri dahil) indirmek için aşağıdaki butonu kullanın.
-                  </div>
+                  <div className="mt-3 rounded-card border border-brand-200 bg-brand-50/40 px-4 py-3 text-sm text-ink-soft" dangerouslySetInnerHTML={{ __html: t.fixUnlockedHtml }} />
                   <button onClick={handleDownload} disabled={!accessSecret} className="btn-primary mt-3 disabled:opacity-50">
-                    Raporu indir (çözüm önerileri dahil)
+                    {t.downloadWithFix}
                   </button>
                   {!accessSecret && (
-                    <p className="mt-2 text-xs text-ink-muted">Önce yukarıdaki erişim kodunu girin.</p>
+                    <p className="mt-2 text-xs text-ink-muted">{t.enterCodeFirst}</p>
                   )}
                 </>
               ) : (
                 <>
                   <div className="mt-3 rounded-card border border-line bg-brand-50/40 px-4 py-3 text-sm text-ink-soft">
-                    🔒 Bu içerik kilitli.{' '}
+                    {t.fixLockedPre}{' '}
                     {order.report.fixSuggestionPriceMinorUnit != null && (
                       <>
                         {order.report.fixSuggestionListMinorUnit != null &&
                           order.report.fixSuggestionListMinorUnit > order.report.fixSuggestionPriceMinorUnit && (
                             <span className="mr-1 text-ink-muted line-through">
-                              {(order.report.fixSuggestionListMinorUnit / 100).toLocaleString('tr-TR')} {order.currency}
+                              {(order.report.fixSuggestionListMinorUnit / 100).toLocaleString(lang === 'de' ? 'de-DE' : 'tr-TR')} {order.currency}
                             </span>
                           )}
                         <strong>
-                          {(order.report.fixSuggestionPriceMinorUnit / 100).toLocaleString('tr-TR')} {order.currency}
+                          {(order.report.fixSuggestionPriceMinorUnit / 100).toLocaleString(lang === 'de' ? 'de-DE' : 'tr-TR')} {order.currency}
                         </strong>
                       </>
-                    )}{' '}
-                    karşılığında açılır.
+                    )}{t.fixLockedPost}
                   </div>
                   <div className="mt-3">
-                    <label className="text-xs font-medium text-ink-muted">Promosyon kodu (opsiyonel)</label>
+                    <label className="text-xs font-medium text-ink-muted">{t.promoOptional}</label>
                     <input
                       value={fixPromo}
                       onChange={(e) => setFixPromo(e.target.value)}
-                      placeholder="Kodunuz"
+                      placeholder={t.promoPlaceholder}
                       className="field mt-1 uppercase"
                     />
                   </div>
                   <button onClick={handleUnlockFix} disabled={busyFix} className="btn-primary mt-3 disabled:opacity-60">
-                    {busyFix ? 'İşleniyor…' : 'Satın al ve aç'}
+                    {busyFix ? t.processing : t.buyUnlock}
                   </button>
-                  <p className="mt-2 text-xs text-ink-muted">
-                    Güvenli ödeme iyzico ile alınır. Promosyon kodu %100 ise ödeme adımı atlanır.
-                  </p>
+                  <p className="mt-2 text-xs text-ink-muted">{t.fixNote}</p>
                 </>
               )}
             </div>
@@ -423,8 +465,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
 
       {status === 'scope_violation' && (
         <p className="mt-6 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Tarama, kapsam dışı bir hedefe erişim girişimi tespit edildiği için güvenlik gereği
-          durduruldu. Bu, sizi ve üçüncü tarafları koruyan bilinçli bir önlemdir.
+          {t.scopeViolation}
         </p>
       )}
 
@@ -436,6 +477,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
           failureReason={order.failureReason}
           refundRequestedAt={order.refundRequestedAt ?? null}
           onRetry={() => window.location.reload()}
+          lang={lang}
         />
       )}
 
@@ -445,6 +487,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
           orderId={order.id}
           defaultEmail={order.customer?.email ?? ''}
           existing={order.invoiceRequest ?? null}
+          lang={lang}
         />
       )}
 

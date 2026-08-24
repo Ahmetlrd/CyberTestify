@@ -1,9 +1,18 @@
-const STEPS = [
-  { key: 'verify', label: 'Sahiplik doğrulandı', hint: 'Alan adınızın sizin olduğu teyit edildi' },
-  { key: 'scan', label: 'Tarama çalışıyor', hint: 'Yapay zekâ destekli tarama sitenizi güvenli şekilde inceliyor' },
-  { key: 'analyze', label: 'Bulgular değerlendiriliyor', hint: 'Sonuçlar önem derecesine göre sıralanıyor' },
-  { key: 'report', label: 'Rapor hazır', hint: 'Şifreli raporunuz oluşturuldu' },
-];
+// (Çok-bölge) Adım etiketleri tr/de.
+const STEPS_BY_LANG = {
+  tr: [
+    { key: 'verify', label: 'Sahiplik doğrulandı', hint: 'Alan adınızın sizin olduğu teyit edildi' },
+    { key: 'scan', label: 'Tarama çalışıyor', hint: 'Yapay zekâ destekli tarama sitenizi güvenli şekilde inceliyor' },
+    { key: 'analyze', label: 'Bulgular değerlendiriliyor', hint: 'Sonuçlar önem derecesine göre sıralanıyor' },
+    { key: 'report', label: 'Rapor hazır', hint: 'Şifreli raporunuz oluşturuldu' },
+  ],
+  de: [
+    { key: 'verify', label: 'Inhaberschaft bestätigt', hint: 'Bestätigt, dass die Domain Ihnen gehört' },
+    { key: 'scan', label: 'Scan läuft', hint: 'Der KI-gestützte Scan prüft Ihre Website auf sichere Weise' },
+    { key: 'analyze', label: 'Befunde werden ausgewertet', hint: 'Ergebnisse werden nach Schweregrad sortiert' },
+    { key: 'report', label: 'Bericht fertig', hint: 'Ihr verschlüsselter Bericht wurde erstellt' },
+  ],
+} as const;
 
 // order.status -> kac adim TAMAMLANDI (active = ilk tamamlanmayan)
 function completedCount(status: string): number {
@@ -31,9 +40,10 @@ function Spinner() {
   );
 }
 
-export function StatusTracker({ status }: { status: string }) {
+export function StatusTracker({ status, lang = 'tr' }: { status: string; lang?: 'tr' | 'de' }) {
   const failed = status === 'scan_failed' || status === 'scope_violation';
   const done = completedCount(status);
+  const STEPS = STEPS_BY_LANG[lang === 'de' ? 'de' : 'tr'];
 
   return (
     <div className="card p-6">

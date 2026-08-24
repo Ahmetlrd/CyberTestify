@@ -7,25 +7,57 @@ import { api } from '../../lib/api';
  * (Başarısız tarama) Kullanıcıya NET sebep + aksiyon. ≤2 denemede "Tekrar Dene" (kimlik-doğrulamalı
  * pakette yeni test hesabı bilgisi ister), >2 denemede tek "İade talebinde bulun" butonu (admin görür).
  */
-function failureMessage(reason?: string | null): string {
-  if (!reason) return 'Tarama tamamlanamadı. Tekrar deneyebilirsiniz.';
-  // (MANTIK TUTARLILIĞI) target_unreachable = hedef o an erişilemezdi (5xx/hata); giriş HİÇ denenmedi.
-  // Bunu kimlik-bilgisi sorunuymuş gibi göstermek yanıltıcı — mesaj gerçek nedeni net söylemeli.
-  if (reason.startsWith('auth_login_failed:target_unreachable'))
-    return 'Taramanız sırasında sitenize erişilemedi (sunucu hata/erişilemez durum döndürdü) — bu kullanıcı adı/şifre sorunu DEĞİLDİR, giriş denemesi bile yapılmadı. Sitenizin şu an yayında olduğundan emin olup tekrar deneyin (test hesabı bilgileriniz hâlâ kayıtlı).';
-  if (reason.startsWith('auth_login_failed:two_factor'))
-    return 'Verdiğiniz test hesabında iki-adımlı doğrulama (2FA) açık göründüğü için giriş yapılamadı. 2FA’sız, sınırlı yetkili bir TEST hesabıyla tekrar deneyin.';
-  if (reason.startsWith('auth_login_failed'))
-    return 'Verdiğiniz test hesabıyla giriş yapılamadı — kullanıcı adı/şifre hatalı olabilir. Bilgileri kontrol edip yeniden girerek tekrar deneyin.';
-  if (reason === 'report_generation_error')
-    return 'Tarama sırasında beklenmeyen bir hata oluştu. Tekrar deneyebilirsiniz.';
-  if (reason === 'scan_interrupted')
-    return 'Tarama beklenmedik şekilde kesildi (ör. bakım). Tekrar deneyebilirsiniz.';
-  return 'Tarama tamamlanamadı. Tekrar deneyebilirsiniz.';
+const SF = {
+  tr: {
+    fmDefault: 'Tarama tamamlanamadı. Tekrar deneyebilirsiniz.',
+    fmUnreachable: 'Taramanız sırasında sitenize erişilemedi (sunucu hata/erişilemez durum döndürdü) — bu kullanıcı adı/şifre sorunu DEĞİLDİR, giriş denemesi bile yapılmadı. Sitenizin şu an yayında olduğundan emin olup tekrar deneyin (test hesabı bilgileriniz hâlâ kayıtlı).',
+    fm2fa: 'Verdiğiniz test hesabında iki-adımlı doğrulama (2FA) açık göründüğü için giriş yapılamadı. 2FA’sız, sınırlı yetkili bir TEST hesabıyla tekrar deneyin.',
+    fmAuth: 'Verdiğiniz test hesabıyla giriş yapılamadı — kullanıcı adı/şifre hatalı olabilir. Bilgileri kontrol edip yeniden girerek tekrar deneyin.',
+    fmGen: 'Tarama sırasında beklenmeyen bir hata oluştu. Tekrar deneyebilirsiniz.',
+    fmInterrupted: 'Tarama beklenmedik şekilde kesildi (ör. bakım). Tekrar deneyebilirsiniz.',
+    refundReceivedPre: 'İade talebiniz alındı.', refundReceivedBody: ' Bu sipariş için talebiniz kaydedildi; ekibimiz inceleyip en kısa sürede sizinle iletişime geçecek ve iadenizi işleme alacaktır. Yeni bir talep göndermenize gerek yok. Sorunuz varsa ', refundReceivedPost: ' ile iletişime geçebilirsiniz.',
+    failedTitle: 'Tarama tamamlanamadı',
+    credUser: 'Test hesabı kullanıcı adı', credPass: 'Test hesabı şifresi',
+    needCredsErr: 'Bu paket kimlik-doğrulamalı test içerir; devam etmek için test hesabı bilgilerini girin.',
+    retrying: 'Deneniyor…', retry: 'Tekrar Dene', starting: 'Başlatılıyor…', loginless: 'Loginsiz devam et',
+    insteadRefund: 'Bunun yerine iade talebinde bulun',
+    loginlessHintHtml: 'Sitenizde giriş (login) yoksa <strong>“Loginsiz devam et”</strong> ile tarama kimlik-doğrulaması olmadan çalışır; oturum-içi kontroller raporda “kapsam dışı” görünür.',
+    tooMany: 'Bu tarama birden çok kez denendi. Dilerseniz iade talebinde bulunabilirsiniz; ekibimiz işleme alacaktır.',
+    refundReasonPh: 'İade sebebiniz (opsiyonel)', sending: 'Gönderiliyor…', requestRefund: 'İade talebinde bulun',
+    errRetry: 'Tekrar denenemedi.', errLoginless: 'Loginsiz devam edilemedi.', errRefund: 'İade talebi gönderilemedi.',
+  },
+  de: {
+    fmDefault: 'Der Scan konnte nicht abgeschlossen werden. Sie können es erneut versuchen.',
+    fmUnreachable: 'Während Ihres Scans war Ihre Website nicht erreichbar (der Server lieferte einen Fehler-/Nicht-erreichbar-Status) — dies ist KEIN Problem mit Benutzername/Passwort, es wurde nicht einmal ein Login-Versuch unternommen. Stellen Sie sicher, dass Ihre Website derzeit online ist, und versuchen Sie es erneut (Ihre Testkonto-Daten sind weiterhin gespeichert).',
+    fm2fa: 'Beim angegebenen Testkonto scheint die Zwei-Faktor-Authentifizierung (2FA) aktiviert zu sein, daher war keine Anmeldung möglich. Versuchen Sie es mit einem TEST-Konto ohne 2FA und eingeschränkten Rechten erneut.',
+    fmAuth: 'Mit dem angegebenen Testkonto war keine Anmeldung möglich — Benutzername/Passwort könnten falsch sein. Prüfen Sie die Daten, geben Sie sie erneut ein und versuchen Sie es noch einmal.',
+    fmGen: 'Während des Scans ist ein unerwarteter Fehler aufgetreten. Sie können es erneut versuchen.',
+    fmInterrupted: 'Der Scan wurde unerwartet unterbrochen (z. B. Wartung). Sie können es erneut versuchen.',
+    refundReceivedPre: 'Ihre Erstattungsanfrage ist eingegangen.', refundReceivedBody: ' Ihre Anfrage für diese Bestellung wurde erfasst; unser Team prüft sie und wird sich in Kürze bei Ihnen melden und die Erstattung bearbeiten. Sie müssen keine neue Anfrage senden. Bei Fragen erreichen Sie uns unter ', refundReceivedPost: '.',
+    failedTitle: 'Scan konnte nicht abgeschlossen werden',
+    credUser: 'Testkonto-Benutzername', credPass: 'Testkonto-Passwort',
+    needCredsErr: 'Dieses Paket enthält authentifizierte Tests; geben Sie die Testkonto-Daten ein, um fortzufahren.',
+    retrying: 'Wird versucht…', retry: 'Erneut versuchen', starting: 'Wird gestartet…', loginless: 'Ohne Login fortfahren',
+    insteadRefund: 'Stattdessen eine Erstattung anfordern',
+    loginlessHintHtml: 'Wenn Ihre Website keinen Login hat, läuft der Scan mit <strong>„Ohne Login fortfahren“</strong> ohne Authentifizierung; sitzungsinterne Prüfungen erscheinen im Bericht als „außerhalb des Scope“.',
+    tooMany: 'Dieser Scan wurde mehrfach versucht. Sie können eine Erstattung anfordern; unser Team wird sie bearbeiten.',
+    refundReasonPh: 'Ihr Erstattungsgrund (optional)', sending: 'Wird gesendet…', requestRefund: 'Erstattung anfordern',
+    errRetry: 'Erneuter Versuch fehlgeschlagen.', errLoginless: 'Fortfahren ohne Login nicht möglich.', errRefund: 'Erstattungsanfrage konnte nicht gesendet werden.',
+  },
+} as const;
+
+function failureMessage(reason: string | null | undefined, s: { fmDefault: string; fmUnreachable: string; fm2fa: string; fmAuth: string; fmGen: string; fmInterrupted: string }): string {
+  if (!reason) return s.fmDefault;
+  if (reason.startsWith('auth_login_failed:target_unreachable')) return s.fmUnreachable;
+  if (reason.startsWith('auth_login_failed:two_factor')) return s.fm2fa;
+  if (reason.startsWith('auth_login_failed')) return s.fmAuth;
+  if (reason === 'report_generation_error') return s.fmGen;
+  if (reason === 'scan_interrupted') return s.fmInterrupted;
+  return s.fmDefault;
 }
 
 export function ScanFailedActions({
-  orderId, packageKey, attemptCount, failureReason, refundRequestedAt, onRetry,
+  orderId, packageKey, attemptCount, failureReason, refundRequestedAt, onRetry, lang = 'tr',
 }: {
   orderId: string;
   packageKey?: string;
@@ -33,7 +65,9 @@ export function ScanFailedActions({
   failureReason?: string | null;
   refundRequestedAt?: string | null;
   onRetry: () => void;
+  lang?: 'tr' | 'de';
 }) {
+  const s = SF[lang === 'de' ? 'de' : 'tr'];
   const tooMany = attemptCount > 2;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -51,8 +85,8 @@ export function ScanFailedActions({
       await api.retryScan(orderId, needCreds ? { username: user.trim(), password: pass } : undefined);
       onRetry();
     } catch (e: any) {
-      if (e?.needsCredentials) { setNeedCreds(true); setErr('Bu paket kimlik-doğrulamalı test içerir; devam etmek için test hesabı bilgilerini girin.'); }
-      else setErr(e?.message ?? 'Tekrar denenemedi.');
+      if (e?.needsCredentials) { setNeedCreds(true); setErr(s.needCredsErr); }
+      else setErr(e?.message ?? s.errRetry);
     } finally { setBusy(false); }
   }
 
@@ -64,7 +98,7 @@ export function ScanFailedActions({
       await api.retryScan(orderId, { loginless: true });
       onRetry();
     } catch (e: any) {
-      setErr(e?.message ?? 'Loginsiz devam edilemedi.');
+      setErr(e?.message ?? s.errLoginless);
     } finally { setBusy(false); }
   }
   // Login kaynaklı başarısızlık mı (auth başarısız / giriş formu yok)? Öyleyse loginsiz-devam sun.
@@ -78,32 +112,31 @@ export function ScanFailedActions({
     try {
       await api.requestRefund(orderId, refundReason.trim() || undefined);
       setRefundDone(true);
-    } catch (e: any) { setErr(e?.message ?? 'İade talebi gönderilemedi.'); }
+    } catch (e: any) { setErr(e?.message ?? s.errRefund); }
     finally { setBusy(false); }
   }
 
   if (alreadyRefunded) {
     return (
       <div className="mt-6 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-        <strong>İade talebiniz alındı.</strong> Bu sipariş için talebiniz kaydedildi; ekibimiz inceleyip en kısa sürede
-        sizinle iletişime geçecek ve iadenizi işleme alacaktır. Yeni bir talep göndermenize gerek yok. Sorunuz varsa{' '}
-        <a href="mailto:support@cybertestify.com" className="font-semibold underline">support@cybertestify.com</a>{' '}
-        ile iletişime geçebilirsiniz.
+        <strong>{s.refundReceivedPre}</strong>{s.refundReceivedBody}
+        <a href="mailto:support@cybertestify.com" className="font-semibold underline">support@cybertestify.com</a>
+        {s.refundReceivedPost}
       </div>
     );
   }
 
   return (
     <div className="mt-6 rounded-card border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-800">
-      <p className="font-semibold">Tarama tamamlanamadı</p>
-      <p className="mt-1 text-red-700">{failureMessage(failureReason)}</p>
+      <p className="font-semibold">{s.failedTitle}</p>
+      <p className="mt-1 text-red-700">{failureMessage(failureReason, s)}</p>
 
       {!tooMany ? (
         <>
           {needCreds && (
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <input className="field" placeholder="Test hesabı kullanıcı adı" value={user} onChange={(e) => setUser(e.target.value)} autoComplete="off" />
-              <input className="field" type="password" placeholder="Test hesabı şifresi" value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="new-password" />
+              <input className="field" placeholder={s.credUser} value={user} onChange={(e) => setUser(e.target.value)} autoComplete="off" />
+              <input className="field" type="password" placeholder={s.credPass} value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="new-password" />
             </div>
           )}
           {err && <p className="mt-2 text-xs font-semibold text-red-700">{err}</p>}
@@ -113,32 +146,29 @@ export function ScanFailedActions({
               disabled={busy || (needCreds && (!user.trim() || !pass))}
               className="btn-primary disabled:opacity-60"
             >
-              {busy ? 'Deneniyor…' : 'Tekrar Dene'}
+              {busy ? s.retrying : s.retry}
             </button>
             {/* (LOGİNSİZ TEST) Login sağlanamayan pakette: kimlik-doğrulaması olmadan devam et. */}
             {isLoginFailure && (
               <button onClick={retryLoginless} disabled={busy} className="btn-dark disabled:opacity-60">
-                {busy ? 'Başlatılıyor…' : 'Loginsiz devam et'}
+                {busy ? s.starting : s.loginless}
               </button>
             )}
             <button onClick={requestRefund} disabled={busy} className="text-xs font-medium text-red-700 underline">
-              Bunun yerine iade talebinde bulun
+              {s.insteadRefund}
             </button>
           </div>
           {isLoginFailure && (
-            <p className="mt-2 text-xs text-red-700/80">
-              Sitenizde giriş (login) yoksa <strong>“Loginsiz devam et”</strong> ile tarama kimlik-doğrulaması olmadan
-              çalışır; oturum-içi kontroller raporda “kapsam dışı” görünür.
-            </p>
+            <p className="mt-2 text-xs text-red-700/80" dangerouslySetInnerHTML={{ __html: s.loginlessHintHtml }} />
           )}
         </>
       ) : (
         <>
-          <p className="mt-2 text-xs text-red-700">Bu tarama birden çok kez denendi. Dilerseniz iade talebinde bulunabilirsiniz; ekibimiz işleme alacaktır.</p>
-          <textarea className="field mt-2 min-h-[60px] w-full" placeholder="İade sebebiniz (opsiyonel)" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} />
+          <p className="mt-2 text-xs text-red-700">{s.tooMany}</p>
+          <textarea className="field mt-2 min-h-[60px] w-full" placeholder={s.refundReasonPh} value={refundReason} onChange={(e) => setRefundReason(e.target.value)} />
           {err && <p className="mt-2 text-xs font-semibold text-red-700">{err}</p>}
           <button onClick={requestRefund} disabled={busy} className="btn-primary mt-2 disabled:opacity-60">
-            {busy ? 'Gönderiliyor…' : 'İade talebinde bulun'}
+            {busy ? s.sending : s.requestRefund}
           </button>
         </>
       )}

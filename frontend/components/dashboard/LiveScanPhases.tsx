@@ -86,15 +86,74 @@ const PHASE_SETS: Record<string, string[]> = {
   ],
 };
 
-export function phasesFor(key?: string | null): string[] {
+// (Almanya /de) Almanca faz setleri — YALNIZ /de'de görünen paketler: default + basit + surface +
+// recon + active_verify + full_pentest. bundle_compliance ve redteam_s1 /de'de GİZLİ → çevrilmez (TR).
+// full_pentest index 0 = login fazı (AUTH_GATE_IDX ile aynı yapı korunur).
+const DEFAULT_PHASES_DE = [
+  'Erreichbarkeit des Ziels und Oberflächenprüfung',
+  'HTTP-Sicherheitsheader werden geprüft',
+  'TLS/SSL-Konfiguration wird geprüft',
+  'Anwendungsoberfläche und Eingabepunkte werden gescannt',
+  'Befunde werden ausgewertet und priorisiert',
+  'Bericht wird erstellt',
+];
+const PHASE_SETS_DE: Record<string, string[]> = {
+  basit_tarama: [
+    'Erreichbarkeit des Ziels wird geprüft',
+    'HTTP-Sicherheitsheader werden gescannt',
+    'TLS/SSL-Konfiguration wird geprüft',
+    'Häufige Schwachstellen (OWASP-Vorabprüfung) werden geprüft',
+    'Befunde werden zusammengestellt',
+    'Bericht wird erstellt',
+  ],
+  bundle_surface: [
+    'Erreichbarkeit des Ziels wird geprüft',
+    'SSL/TLS-Konfiguration wird geprüft',
+    'HTTP-Sicherheitsheader werden gescannt',
+    'DNS- & E-Mail-Sicherheit (SPF/DKIM/DMARC)',
+    'CORS- & Cookie-Sicherheit werden geprüft',
+    'Content-Security-Policy (CSP) wird analysiert',
+    'Bericht wird erstellt',
+  ],
+  bundle_recon: [
+    'Angriffsfläche des Ziels wird kartiert',
+    'Subdomain- & DNS-Erkundung',
+    'Subdomain-Takeover-Risiko wird geprüft',
+    'API- & Swagger/OpenAPI-Erkennung',
+    'CMS-/Framework-Fingerprinting & Abgleich bekannter CVEs',
+    'Befunde werden priorisiert',
+    'Bericht wird erstellt',
+  ],
+  bundle_active_verify: [
+    'Oberfläche & Eingabepunkte werden erkundet',
+    'Injection (SQLi/XSS) wird verifiziert',
+    'IDOR / unbefugter Zugriff wird verifiziert',
+    'SSRF & Datei-Upload werden geprüft',
+    'Geschäftslogik & Race Conditions werden beobachtet',
+    'Befunde werden verifiziert',
+    'Bericht wird erstellt',
+  ],
+  bundle_full_pentest: [
+    'Anmeldung mit Testkonto',
+    'Cookie-/Session- & Berechtigungsprüfungen',
+    'Authentifizierte Injection-/IDOR-Prüfungen',
+    'Rechteausweitungs-Analyse (KI-gestützt)',
+    'Mehrstufige Geschäftslogik-Analyse',
+    'Befunde werden zusammengestellt',
+    'Bericht wird verschlüsselt',
+  ],
+};
+
+export function phasesFor(key?: string | null, lang: 'tr' | 'de' = 'tr'): string[] {
+  if (lang === 'de') return (key && PHASE_SETS_DE[key]) || DEFAULT_PHASES_DE;
   return (key && PHASE_SETS[key]) || DEFAULT_PHASES;
 }
 
 // (SENKRON) Tek kaynak: hem terminal LOG satırı hem ilerleme çubuğu/halkası BURADAN beslenir → aynı
 // faz index'i → aynı %. % FAZ-bazlıdır (zaman-sabitli DEĞİL): log ilerledikçe çubuk da ilerler, log bir
 // fazda beklerken (ör. login gate) çubuk da bekler. Böylece "log duruyor ama çubuk artıyor" karışıklığı biter.
-export function computeScanProgress(opts: { packageKey?: string | null; startedAt?: string | null; authConfirmedAt?: string | null; now: number; perPhase?: number; loginless?: boolean }): { phases: string[]; idx: number; pct: number; current: string } {
-  let phases = phasesFor(opts.packageKey);
+export function computeScanProgress(opts: { packageKey?: string | null; startedAt?: string | null; authConfirmedAt?: string | null; now: number; perPhase?: number; loginless?: boolean; lang?: 'tr' | 'de' }): { phases: string[]; idx: number; pct: number; current: string } {
+  let phases = phasesFor(opts.packageKey, opts.lang === 'de' ? 'de' : 'tr');
   const per = opts.perPhase && opts.perPhase > 0 ? opts.perPhase : SECONDS_PER_PHASE;
   const startMs = opts.startedAt ? new Date(opts.startedAt).getTime() : opts.now;
   const elapsed = Math.max(0, (opts.now - startMs) / 1000);
@@ -122,8 +181,13 @@ const AUTH_GATE_IDX: Record<string, number> = { bundle_full_pentest: 0 };
 
 const SECONDS_PER_PHASE = 9; // her faz ~9 sn; son "çalışan" fazda durur (bitiş gerçek durumdan gelir)
 
+const LP = {
+  tr: { verified: '✓ Alan adı sahipliği doğrulandı', starting: '→ Tarama başlatılıyor…', liveActivity: '— canlı aktivite —' },
+  de: { verified: '✓ Domain-Inhaberschaft bestätigt', starting: '→ Scan wird gestartet…', liveActivity: '— Live-Aktivität —' },
+} as const;
+
 export function LiveScanPhases({
-  hostname, feed, startedAt, packageKey, queued, authConfirmedAt, secondsPerPhase, verified, loginless,
+  hostname, feed, startedAt, packageKey, queued, authConfirmedAt, secondsPerPhase, verified, loginless, lang = 'tr',
 }: {
   hostname: string;
   feed: Array<{ seq: number; text: string }>;
@@ -134,7 +198,9 @@ export function LiveScanPhases({
   secondsPerPhase?: number; // (S1) uzun-süren koşularda faz cadence'ını yavaşlat (varsayılan 9sn)
   verified?: boolean; // "✓ Alan adı sahipliği doğrulandı" YALNIZ DNS-doğrulaması olan paketlerde (5 & 6) gösterilir
   loginless?: boolean; // "loginsiz devam et" seçildi → login fazı çıkarılır, gate kaldırılır (bkz computeScanProgress)
+  lang?: 'tr' | 'de';
 }) {
+  const lp = LP[lang === 'de' ? 'de' : 'tr'];
   const perPhase = secondsPerPhase && secondsPerPhase > 0 ? secondsPerPhase : SECONDS_PER_PHASE;
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
@@ -149,8 +215,8 @@ export function LiveScanPhases({
     return (
       <div className="min-h-[180px] p-5 font-mono text-[13px] leading-7">
         <div className="text-white/45" dir="ltr">$ cybertestify scan {hostname}</div>
-        {verified && <div className="text-emerald-300" dir="ltr">✓ Alan adı sahipliği doğrulandı</div>}
-        <div className="text-white/85" dir="ltr">→ Tarama başlatılıyor…<span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" /></div>
+        {verified && <div className="text-emerald-300" dir="ltr">{lp.verified}</div>}
+        <div className="text-white/85" dir="ltr">{lp.starting}<span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" /></div>
         <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
           <div className="h-full w-1/4 animate-pulse rounded-full bg-gradient-to-r from-accent/60 to-emerald-400/70" />
         </div>
@@ -160,12 +226,12 @@ export function LiveScanPhases({
 
   // (SENKRON) idx + pct TEK kaynaktan (computeScanProgress) — ScanRunningView halkası da aynı fonksiyonu
   // kullanır → terminal log satırı, alt çubuk ve üst halka HEP birlikte ilerler.
-  const { phases: PHASES, idx, pct } = computeScanProgress({ packageKey, startedAt, authConfirmedAt, now, perPhase, loginless });
+  const { phases: PHASES, idx, pct } = computeScanProgress({ packageKey, startedAt, authConfirmedAt, now, perPhase, loginless, lang });
 
   return (
     <div className="min-h-[180px] p-5 font-mono text-[13px] leading-7">
       <div className="text-white/45" dir="ltr">$ cybertestify scan {hostname}</div>
-      {verified && <div className="text-emerald-300" dir="ltr">✓ Alan adı sahipliği doğrulandı</div>}
+      {verified && <div className="text-emerald-300" dir="ltr">{lp.verified}</div>}
       {PHASES.map((label, i) => {
         if (i > idx) return null;
         const current = i === idx;
@@ -183,7 +249,7 @@ export function LiveScanPhases({
 
       {feed.length > 0 && (
         <div className="mt-3 border-t border-white/10 pt-2">
-          <div className="text-white/35" dir="ltr">— canlı aktivite —</div>
+          <div className="text-white/35" dir="ltr">{lp.liveActivity}</div>
           {feed.map((it) => (
             <div key={it.seq} className="text-white/70" dir="ltr">→ {it.text}</div>
           ))}
