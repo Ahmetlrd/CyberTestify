@@ -207,8 +207,9 @@ export async function startScanForOrder(orderId: string) {
   // (ownershipConfirmed+riskAccepted) + runner guard'larıyla (pin/egress-deny/watchdog D1-D5) korunur.
   // Koşu tamamlanınca runner Order'ı awaiting_admin_review'e alır (Aşama 2 — mevcut onay kapısı).
   if (order.package.key === 'redteam_s1') {
-    // Promo (₺0) ile ödenen S1 → TEST MODU (gerçek droplet açmadan örnek rapor). Gerçek ödemeli → gerçek koşu.
-    await dispatchRedTeamS1Order({ id: order.id, customerId: order.customerId, hostname: order.domain.hostname, consentIp: null, testMode: order.paymentProvider === 'promo' });
+    // (CANLI) S1 tamamen açık — promo dahil HER sipariş GERÇEK droplet + PentAGI koşusu yapar (cap 900s/$2.50/30).
+    // Test modu (örnek rapor) artık kullanılmıyor; sahibi de promo koduyla gerçek müşteri akışını birebir yaşar.
+    await dispatchRedTeamS1Order({ id: order.id, customerId: order.customerId, hostname: order.domain.hostname, consentIp: null });
     return null;
   }
 
