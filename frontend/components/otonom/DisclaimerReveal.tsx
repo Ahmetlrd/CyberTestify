@@ -12,7 +12,7 @@ export const RT_REVEAL_EVENT = 'rt-reveal-code';
  * hover stili, renk/altçizgi YOKTUR. Normal ziyaretçi tıklanabilir olduğunu anlamaz.
  * Triple-click'in varsayılan metin-seçimi sayaç mantığını bozmaz; tetik anında seçim temizlenir.
  */
-export function DisclaimerReveal({ text, word, className }: { text: string; word: string; className?: string }) {
+export function DisclaimerReveal({ text, word, className, style }: { text: string; word: string; className?: string; style?: React.CSSProperties }) {
   const taps = useRef<number[]>([]);
   const idx = text.indexOf(word);
 
@@ -30,10 +30,10 @@ export function DisclaimerReveal({ text, word, className }: { text: string; word
   }
 
   // Kelime bulunamazsa düz metin göster (güvenli geri düşüş).
-  if (idx < 0) return <p className={className}>{text}</p>;
+  if (idx < 0) return <p className={className} style={style}>{text}</p>;
 
   return (
-    <p className={className}>
+    <p className={className} style={style}>
       {text.slice(0, idx)}
       {/* GÖRSEL OLARAK normal metin: cursor:text, hover/renk yok. Sadece tıklama sayacı. */}
       <span onClick={onWordClick} style={{ cursor: 'text' }}>
