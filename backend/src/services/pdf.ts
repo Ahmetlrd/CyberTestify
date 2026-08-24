@@ -682,8 +682,9 @@ const GLOSSARY_TERMS: Array<{ re: RegExp; term: string; tr: string; en: string; 
   { re: /forced browsing|yetki y[üu]kseltme/i, term: 'Forced Browsing', tr: 'Menüde olmayan (ör. yönetici) uç noktalara URL bilerek erişme.', en: 'Accessing hidden endpoints by guessing URLs.', de: 'Zugriff auf versteckte Endpunkte durch Erraten von URLs.' },
 ];
 function buildGlossary(md: string, locale: 'tr' | 'en' | 'de'): string {
-  // (P1/acceptance) /de'de KVKK/VERBİS terimleri sözlükte GÖSTERİLMEZ (de === '' ile işaretli → elenir).
-  const hits = GLOSSARY_TERMS.filter((g) => g.re.test(md)).filter((g) => !(locale === 'de' && g.de === ''));
+  // (P1/acceptance) /de VE /en'de KVKK/VERBİS gibi Türkiye'ye özel terimler sözlükte GÖSTERİLMEZ
+  // (de === '' ile işaretli → hem de hem en'de elenir; UK raporu Türk mevzuat terimi içermemeli).
+  const hits = GLOSSARY_TERMS.filter((g) => g.re.test(md)).filter((g) => !((locale === 'de' || locale === 'en') && g.de === ''));
   if (hits.length === 0) return '';
   const rows = hits.map((g) => `<tr><td><strong>${escapeHtml(g.term)}</strong></td><td>${escapeHtml(p3(locale, g.tr, g.en, g.de || g.en))}</td></tr>`).join('');
   return `<h2 id="s-glossary">${p3(locale, 'Ek — Sözlük', 'Appendix — Glossary', 'Anhang — Glossar')}</h2>
