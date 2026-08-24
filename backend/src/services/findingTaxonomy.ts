@@ -402,7 +402,8 @@ const FRIENDLY_LABEL: Record<FindingType, { tr: string; en: string }> = {
   ssti: { tr: 'Şablon enjeksiyonu (SSTI) göstergesi', en: 'Template injection (SSTI) indicator' },
   hpp: { tr: 'HTTP Parametre Kirliliği (HPP)', en: 'HTTP Parameter Pollution (HPP)' },
 };
-export function friendlyLabel(type: FindingType, locale: 'tr' | 'en'): string {
+export function friendlyLabel(type: FindingType, locale: 'tr' | 'en' | 'de'): string {
+  if (locale === 'de') return FRIENDLY_LABEL_DE[type] ?? FRIENDLY_LABEL[type].en;
   return locale === 'tr' ? FRIENDLY_LABEL[type].tr : FRIENDLY_LABEL[type].en;
 }
 
@@ -614,16 +615,112 @@ const FINDING_DETAIL: Record<FindingType, { tr: Detail; en: Detail }> = {
     { desc: 'Tekrarlanan aynı parametre sunucuda tutarsız işleniyor (HTTP Parameter Pollution).', how: 'Aynı parametre iki kez (`?p=A&p=B`) gönderilip tekil isteklerle karşılaştırıldı; işleniş farkı gözlendi — veri gönderilmedi, salt gözlem.', fix: 'Parametreleri tek-değer olarak normalize edin; sunucu/framework katmanları arası tutarlı ayrıştırma sağlayın.' },
     { desc: 'A duplicated parameter is parsed inconsistently on the server (HTTP Parameter Pollution).', how: 'The same parameter was sent twice (`?p=A&p=B`) and compared with single requests; a parsing difference was observed — no data submitted, observation only.', fix: 'Normalize parameters to a single value; ensure consistent parsing across server/framework layers.' }),
 };
-export function findingDetail(type: FindingType, locale: 'tr' | 'en'): Detail {
+// ————— (Almanya /de) Almanca ADDITIVE map'ler — mevcut tr/en tabloları DEĞİŞMEZ; eksikte en fallback.
+// P1: sqli/idor İş Etkisi'nde KVKK yerine DSGVO. Profesyonel Almanca güvenlik-rapor terminolojisi.
+const FINDING_IMPACT_DE: Partial<Record<FindingType, string>> = {
+  clickjacking: 'Die Seite kann unsichtbar in einen Frame eingebettet werden, um Nutzer zu unbeabsichtigten Aktionen zu verleiten (Clickjacking); schwächt Konto- und Transaktionssicherheit.',
+  mime_sniffing: 'Der Browser kann Inhaltstypen erraten und schädliche Inhalte ausführen, was die XSS-/Injection-Angriffsfläche vergrößert.',
+  csp_missing: 'Keine browserseitige Minderung gegen Content-Injection/XSS; injizierte Skripte können ausgeführt werden.',
+  referrer_policy: 'Adress-/Session-Informationen können an externe Links durchsickern; geringfügige Informationspreisgabe.',
+  hsts_missing: 'Ohne erzwungenes HTTPS kann der Verkehr per Man-in-the-Middle abgehört/umgeleitet werden.',
+  https_missing: 'Die Website antwortet nicht über HTTPS; der gesamte Verkehr wird im KLARTEXT übertragen. Ein Angreifer im selben Netzwerk kann mithören, Sessions/Passwörter stehlen oder Inhalte manipulieren; moderne Browser markieren die Seite als „Nicht sicher“.',
+  weak_tls: 'Schwache Cipher-Suites schwächen Vertraulichkeit und Forward Secrecy und ermöglichen Downgrade-Angriffe.',
+  weak_key: 'Die Schlüsselgröße begrenzt die langfristige kryptografische Stärke (kurzfristig akzeptabel); bei der Erneuerung verstärken.',
+  cert: 'Zertifikatsprobleme brechen die Vertrauenskette und verursachen Browser-Warnungen sowie MITM-Risiko.',
+  version_disclosure: 'Versions-/Technologie-Preisgabe hilft Angreifern, bekannte Schwachstellen dieser Komponente gezielt anzugreifen.',
+  verbose_error: 'Eine ausführliche Fehlerseite (Stacktrace / Framework-Version / Serverpfad) offenbart die interne Struktur und erleichtert Folgeangriffe.',
+  exposed_files: 'Sensible Dateien (Quellcode, Backups, Secrets) sind offengelegt; Risiko der Preisgabe von Zugangsdaten/Geheimnissen.',
+  spf: 'Fehlendes/lockeres SPF ermöglicht gefälschte E-Mails von Ihrer Domain (Spoofing/Phishing); Marken- und Betrugsrisiko.',
+  dmarc: 'Ohne DMARC-Richtlinie werden gefälschte E-Mails nicht blockiert; Phishing- und Reputationsrisiko.',
+  dkim: 'Ohne DKIM-Signatur kann die Integrität ausgehender E-Mails nicht überprüft werden; Spoofing wird erleichtert.',
+  dnssec: 'Ohne DNSSEC können DNS-Antworten gefälscht werden, um Nutzer auf schädliche Server umzuleiten.',
+  cors: 'Eine lockere CORS-Richtlinie kann anderen Ursprüngen erlauben, Nutzerdaten über credentialisierte Anfragen zu lesen; schwächt Session-/Datensicherheit.',
+  cookie_flags: 'Fehlende Cookie-Flags (HttpOnly/Secure/SameSite) ermöglichen Session-Diebstahl per XSS oder Klartext-Leck; Risiko der Kontoübernahme.',
+  sqli: 'Unbefugter Zugriff/Änderung von Kunden-/Kontodatensätzen in der Datenbank möglich; Risiko von Datenpanne, **Verstoß gegen die DSGVO** und Vertrauensverlust.',
+  xss: 'Durch Ausführen von Skript im Browser des Opfers sind Session-Diebstahl/Identitätsvortäuschung und Kontoübernahme möglich.',
+  idor: 'Durch Manipulation eines ID-Parameters kann auf Datensätze anderer Nutzer zugegriffen werden; Risiko massenhafter Datenpreisgabe und eines **Verstoßes gegen die DSGVO**.',
+  ssrf: 'Der Server kann gezwungen werden, interne Dienste oder Cloud-Metadaten anzufragen; Risiko interner Preisgabe und lateraler Bewegung.',
+  open_redirect: 'Nutzer können über Ihre vertrauenswürdige Domain auf schädliche Seiten umgeleitet werden; Phishing- und Reputationsrisiko.',
+  rce: 'Indikator für Befehls-/Codeausführung auf dem Server — höchste Auswirkung: Risiko der vollständigen Systemübernahme und des Datenverlusts.',
+  file_upload: 'Uneingeschränkter Upload kann eine schädliche Datei auf dem Server platzieren und ausführen; Risiko der Systemübernahme.',
+  business_logic: 'Manipulation von Workflow/Autorisierung (z. B. Schritt-Überspringen, clientseitige Wert-Manipulation, unbefugte Aktion) kann den Geschäftsprozess oder die Datenintegrität schädigen; bei einem Finanz-/Transaktionsfluss kann ein finanzieller Verlust entstehen.',
+  race: 'Eine Race Condition kann Einmal-Vorgänge (Gutscheine/Guthaben) doppelt verarbeiten; direktes Risiko finanziellen Verlusts.',
+  forced_browsing: 'Ein unbefugter Nutzer kann Admin-/versteckte Endpunkte erreichen; Risiko unbefugter Datenansicht/-änderung und Insider-Missbrauch.',
+  weak_logout: 'Bleibt die Session nach dem Logout gültig, kann eine gestohlene/geteilte Session wiederverwendet werden; Kontoübernahme auf gemeinsam genutzten Geräten.',
+  session_fixation: 'Ein Angreifer kann die Session-ID fixieren und die Session des Opfers übernehmen.',
+  jwt: 'Ein schwaches/unsigniertes (alg=none) JWT kann Rechteausweitung oder Identitätsvortäuschung ermöglichen.',
+  privilege_escalation: 'Ein Standardnutzer kann seine Rechte überschreiten und privilegierte Aktionen ausführen; Risiko von Insider-Missbrauch und Datengefährdung.',
+  login_bypass: 'Eine Umgehung der Authentifizierung kann unbefugten Zugriff ermöglichen; Konto- und Datensicherheit direkt gefährdet.',
+  exposed_api_docs: 'Offengelegte API-Dokumentation zeigt die Angriffsfläche und das Endpunkt-Schema und erleichtert gezielte Angriffe.',
+  staging_exposure: 'Eine im Internet erreichbare Staging-/Altumgebung ist weniger geschützt und birgt Risiken der Datenpreisgabe und eines Brückenkopfs.',
+  stale_subdomain: 'Ein nicht gewartetes/vergessenes Asset kann mangels Patches bekannten Schwachstellen ausgesetzt sein.',
+  outdated_component: 'Eine veraltete Komponente ist bekannten CVEs ausgesetzt; Risiko gezielter Angriffe.',
+  subdomain_takeover: 'Eine auf eine „dangling“ Ressource zeigende Subdomain kann von einem Angreifer übernommen werden; Phishing- und Reputationsrisiko.',
+  csrf: 'Fehlendes Anti-CSRF-Token / SameSite; über die Nutzer-Session können unbeabsichtigte Aktionen ausgelöst werden (CSRF).',
+  session_in_url: 'Die Session-ID wird in der URL übertragen; sie kann über Verlauf, Referrer und Logs durchsickern und Session-Diebstahl ermöglichen.',
+  weak_session: 'Die Session-ID erscheint schwach/vorhersehbar, was das Risiko der Session-Übernahme erhöht.',
+  user_enum: 'Die Anwendung unterscheidet gültige/ungültige Nutzer durch abweichende Antworten; ermöglicht Konto-Enumeration und gezielte Angriffe.',
+  default_creds: 'Indikator, dass Standard-/schwache Zugangsdaten akzeptiert werden; kann zu direktem unbefugtem Zugriff führen.',
+  no_lockout: 'Keine Sperrung/Drosselung nach wiederholt fehlgeschlagenen Anmeldungen beobachtet; anfällig für Brute-Force.',
+  weak_pw_policy: 'Indikator für schwache Passwortrichtlinie (kurze/gängige Passwörter akzeptiert); erhöht das Risiko der Kontoübernahme.',
+  weak_pw_reset: 'Schwäche-Indikator im Passwort-Reset-Flow (erratbares Token / Nutzerpreisgabe); Risiko der Kontoübernahme.',
+  host_header: 'Indikator, dass der Host-Header in Antworten/Logik reflektiert wird; kann Reset-Poisoning und Cache-Poisoning ermöglichen.',
+  http_method: 'Indikator für unnötige/gefährliche HTTP-Methoden (TRACE/PUT/DELETE); vergrößert die Angriffsfläche.',
+  web_cache: 'Indikator, dass sensible Antworten cachebar sind / unkeyed Header-Reflexion; Cache-Poisoning oder Datenleck.',
+  comment_leak: 'Interne Informationen (TODO, interne IP, Pfade) durchsickern über HTML-/JS-Kommentare oder Metadaten; erleichtert die Angreifer-Aufklärung.',
+  mixed_content: 'HTTP-Ressourcen auf einer HTTPS-Seite geladen (Mixed Content); MITM-Injection/-Abhören und Browser-Warnungen.',
+  cloud_exposure: 'Ein auflistbarer Cloud-Storage-Bucket kann sensible Dateien offenlegen; Risiko der Datenpreisgabe.',
+  caa: 'Ohne CAA-Eintrag kann jede beliebige Zertifizierungsstelle ein Zertifikat für Ihre Domain ausstellen; erhöht das Missbrauchsrisiko.',
+  mta_sts: 'Ohne durchgesetztes MTA-STS kann die E-Mail-Übertragung auf unverschlüsselte Verbindungen herabgestuft werden.',
+  client_storage: 'Sensible Daten im Client-Storage (localStorage/sessionStorage) sind per XSS/geteiltem Gerät zugänglich; Risiko der Datenpreisgabe.',
+  postmessage: 'Unsicherer postMessage-Origin (Wildcard) kann das Lesen/Einschleusen von Daten durch andere Ursprünge ermöglichen.',
+  sri: 'Fehlende Subresource Integrity (SRI); ein kompromittiertes Drittanbieter-Skript kann unbemerkt schädlichen Code ausführen.',
+  tabnabbing: 'Reverse Tabnabbing (kein rel=noopener); die geöffnete Seite kann die ursprüngliche Registerkarte auf eine Phishing-Seite umleiten.',
+  excessive_data: 'Übermäßige Datenpreisgabe über die API (BOPLA); mehr Felder als nötig werden zurückgegeben, was das Datenleck-Risiko erhöht.',
+  rate_limit: 'Kein API-Rate-Limit; anfällig für Brute-Force, Enumeration und Ressourcenerschöpfung.',
+  shadow_api: 'Eine Shadow-/veraltete API-Version kann ungepatchte Schwachstellen enthalten; erweitert die Angriffsfläche.',
+  graphql_introspection: 'Aktivierte GraphQL-Introspection legt das gesamte Schema offen und erleichtert gezielte Angriffe.',
+  csp_weak: 'Schwache CSP (unsafe-inline/eval); die XSS-Minderung ist wirkungslos, injizierte Skripte können ausgeführt werden.',
+  permissions_policy: 'Fehlende Permissions-Policy; Browser-Funktionen (Kamera/Mikrofon/Geolokalisierung) sind nicht eingeschränkt.',
+  lfi: 'Path-Traversal-/LFI-Indikator; es kann auf Dateien außerhalb des vorgesehenen Verzeichnisses zugegriffen werden (Serverdateien/Secrets).',
+  ssti: 'Template-Injection-(SSTI)-Indikator; kann bis zu serverseitiger Codeausführung eskalieren.',
+  hpp: 'HTTP Parameter Pollution (HPP); doppelte Parameter werden inkonsistent geparst und können Sicherheitskontrollen umgehen.',
+};
+const FRIENDLY_LABEL_DE: Partial<Record<FindingType, string>> = {
+  clickjacking: 'Fehlendes X-Frame-Options (Clickjacking)', mime_sniffing: 'Fehlendes X-Content-Type-Options', csp_missing: 'Fehlende Content-Security-Policy',
+  referrer_policy: 'Fehlende Referrer-Policy', hsts_missing: 'Fehlendes HSTS', https_missing: 'HTTPS nicht unterstützt (Klartext-Übertragung)',
+  weak_tls: 'Schwache TLS-Cipher-Konfiguration', weak_key: 'Schwache Zertifikat-Schlüsselgröße', cert: 'Zertifikat-Konfigurationsproblem',
+  version_disclosure: 'Versions-/Technologie-Preisgabe', verbose_error: 'Informationspreisgabe durch ausführliche Fehlerseite', exposed_files: 'Offengelegte sensible Datei',
+  spf: 'Fehlender/schwacher SPF-Eintrag', dmarc: 'Fehlender DMARC-Eintrag', dkim: 'Fehlende DKIM-Signatur', dnssec: 'DNSSEC nicht aktiviert',
+  cors: 'Lockere CORS-Konfiguration', cookie_flags: 'Fehlende Cookie-Sicherheits-Flags', sqli: 'SQL-Injection-Indikator', xss: 'Reflected-XSS-Indikator',
+  idor: 'IDOR-Indikator', ssrf: 'SSRF-Indikator', open_redirect: 'Open Redirect', rce: 'Befehls-/Codeausführungs-Indikator', file_upload: 'Indikator für uneingeschränkten Datei-Upload',
+  business_logic: 'Geschäftslogik-/Autorisierungs-Indikator (erweiterte Analyse)', race: 'Race-/Mass-Assignment-Indikator', forced_browsing: 'Unbefugter Endpunkt-Zugriff (Forced Browsing)',
+  weak_logout: 'Schwache Session-Invalidierung', session_fixation: 'Session Fixation', jwt: 'JWT-/Token-Sicherheitsindikator', privilege_escalation: 'Rechteausweitungs-Indikator',
+  login_bypass: 'Authentifizierungs-Bypass-Indikator', exposed_api_docs: 'Offengelegte API-Dokumentation', staging_exposure: 'Im Internet erreichbare Staging-Umgebung',
+  stale_subdomain: 'Nicht gewartete Subdomain', outdated_component: 'Veraltete Komponente (CVE)', subdomain_takeover: 'Subdomain-Takeover-Risiko',
+  csrf: 'Fehlender CSRF-Schutz', session_in_url: 'Session-ID in der URL', weak_session: 'Schwache Session-ID-Entropie', user_enum: 'Nutzer-Enumeration-Indikator',
+  default_creds: 'Standard-Zugangsdaten-Indikator', no_lockout: 'Keine Kontosperrung / kein Brute-Force-Schutz', weak_pw_policy: 'Schwache Passwortrichtlinie', weak_pw_reset: 'Schwacher Passwort-Reset-Flow',
+  host_header: 'Host-Header-Injection-Indikator', http_method: 'Gefährliche HTTP-Methode aktiviert', web_cache: 'Web-Cache-/sensibles Caching-Indikator', comment_leak: 'Informationsleck durch Kommentar/Metadaten',
+  mixed_content: 'Mixed Content (HTTP-Ressource)', cloud_exposure: 'Auflistbarer Cloud-Storage-Bucket', caa: 'Fehlender CAA-Eintrag', mta_sts: 'MTA-STS nicht durchgesetzt',
+  client_storage: 'Sensible Daten im Client-Storage', postmessage: 'Unsicherer postMessage-Origin', sri: 'Fehlende Subresource Integrity (SRI)', tabnabbing: 'Reverse Tabnabbing (kein rel=noopener)',
+  excessive_data: 'Übermäßige Datenpreisgabe (API/BOPLA)', rate_limit: 'Kein API-Rate-Limit', shadow_api: 'Shadow-/veraltete API-Version', graphql_introspection: 'GraphQL-Introspection aktiviert',
+  csp_weak: 'Schwache CSP (unsafe-inline/eval)', permissions_policy: 'Fehlende Permissions-Policy', lfi: 'Path-Traversal-/LFI-Indikator', ssti: 'Template-Injection-(SSTI)-Indikator', hpp: 'HTTP Parameter Pollution (HPP)',
+};
+// FINDING_DETAIL_DE: chunk 3b'de doldurulacak (desc/how/fix); şimdilik boş → findingDetail en'e düşer.
+const FINDING_DETAIL_DE: Partial<Record<FindingType, Detail>> = {};
+
+export function findingDetail(type: FindingType, locale: 'tr' | 'en' | 'de'): Detail {
+  if (locale === 'de') return FINDING_DETAIL_DE[type] ?? FINDING_DETAIL[type].en;
   return locale === 'tr' ? FINDING_DETAIL[type].tr : FINDING_DETAIL[type].en;
 }
 
 // Başlık -> { İş Etkisi, CWE, OWASP } (locale). Eşleme yoksa null (UYDURMA YOK).
-export function lookupByType(type: FindingType, locale: 'tr' | 'en'): { impact: string; cwe: string; owasp: string; type: FindingType; label: string } {
+export function lookupByType(type: FindingType, locale: 'tr' | 'en' | 'de'): { impact: string; cwe: string; owasp: string; type: FindingType; label: string } {
   const e = FINDING_TAXONOMY[type];
-  return { impact: locale === 'tr' ? e.tr : e.en, cwe: e.cwe, owasp: e.owasp, type, label: friendlyLabel(type, locale) };
+  const impact = locale === 'de' ? (FINDING_IMPACT_DE[type] ?? e.en) : locale === 'tr' ? e.tr : e.en;
+  return { impact, cwe: e.cwe, owasp: e.owasp, type, label: friendlyLabel(type, locale) };
 }
-export function lookupFinding(title: string, locale: 'tr' | 'en'): { impact: string; cwe: string; owasp: string; type: FindingType; label: string } | null {
+export function lookupFinding(title: string, locale: 'tr' | 'en' | 'de'): { impact: string; cwe: string; owasp: string; type: FindingType; label: string } | null {
   const type = classifyFinding(title);
   if (!type) return null;
   return lookupByType(type, locale);

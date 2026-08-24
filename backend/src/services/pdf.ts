@@ -389,7 +389,7 @@ export function parseFindings(md: string, locale: 'tr' | 'en' | 'de'): { rows: F
       // Kanıt en sona bırakılır: başlık/bölümden sınıflanan bulgular (ör. "CSP eksik") kanıttaki
       // yabancı kelimeden (XSS) etkilenmez; yalnız hiç sınıflanamayan satırlar kanıta düşer.
       const fullRowText = c.filter((_, idx) => idx !== sevCol && idx !== confCol).map(stripMd).join(' ');
-      const info = lookupFinding(classifyText, locale === 'de' ? 'en' : locale) ?? lookupFinding(curSection, locale === 'de' ? 'en' : locale) ?? lookupFinding(fullRowText, locale === 'de' ? 'en' : locale);
+      const info = lookupFinding(classifyText, locale) ?? lookupFinding(curSection, locale) ?? lookupFinding(fullRowText, locale);
       const title = info ? info.label : (cleanTitle(rawName) || cleanTitle(curSection) || rawName);
       // Uç nokta: entry kolonundan (nameCol'dan farklıysa). "GET /rest/..." gibi.
       let endpoint = endpointCol !== -1 && endpointCol !== nameCol ? stripMd(c[endpointCol] ?? '') : '';
@@ -539,8 +539,8 @@ function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en' | 'de'): str
     : { state: 'State: Open', ep: 'Affected point', desc: 'Description', how: 'How it was detected', impact: 'Business Impact', fix: 'Recommended Fix', ref: 'Reference' };
   sorted.forEach((f, idx) => {
     if (!f.type) return; // UYDURMA YOK — sınıflanmadıysa kart yazma (bulgu 2.2'de yine görünür)
-    const info = lookupByType(f.type, locale === 'de' ? 'en' : locale);
-    const det = findingDetail(f.type, locale === 'de' ? 'en' : locale);
+    const info = lookupByType(f.type, locale);
+    const det = findingDetail(f.type, locale);
     const sm = SEV_META[f.sev];
     // Açıklama = türe-özgü tanım + (varsa) GERÇEK uç nokta. NASIL TESPİT = önce GERÇEK kanıt (taranan
     // veriden), yoksa türe-özgü zararsız-gösterge yedeği. ÇALIŞAN EXPLOIT YOK — yalnız gösterge.
