@@ -15,23 +15,29 @@ export function generateStaticParams() {
 }
 
 // (SEO) Ana sayfa — bölgeye göre BENZERSİZ başlık/açıklama + canonical + OG (dürüst dil; "otonom pentest" YOK).
+// (Çok-bölge) 3-yönlü metin: de → Almanca, tr → Türkçe, diğer → İngilizce.
+function pick3(lang: string, trText: string, deText: string, enText: string): string {
+  return lang === 'de' ? deText : lang === 'tr' ? trText : enText;
+}
+
 export function generateMetadata({ params }: { params: { region: string } }): Metadata {
   const region = isRegionCode(params.region) ? getRegion(params.region) : getRegion('tr');
-  const tr = region.lang === 'tr';
   // (SEO) Başlık 50-60, açıklama 150-160 karakterde tutulur (Google kırpması olmasın) — dürüst
   // "resmi pentest değil" ibaresi korunur.
-  const title = tr
-    ? 'CyberTestify — Dakikalar İçinde AI Güvenlik Taraması'
-    : 'CyberTestify — AI-Assisted Website Security Scan';
-  const description = tr
-    ? 'Yapay zekâ destekli otomatik web güvenlik ön değerlendirmesi (resmi pentest değil). Alan adınızı doğrulayın, paketinizi seçin, şifreli raporunuzu alın.'
-    : 'AI-assisted automated website security pre-assessment (not a formal pentest). Verify your domain, pick a package, get your encrypted report.';
+  const title = pick3(region.lang,
+    'CyberTestify — Dakikalar İçinde AI Güvenlik Taraması',
+    'CyberTestify — KI-gestützter Website-Sicherheitsscan',
+    'CyberTestify — AI-Assisted Website Security Scan');
+  const description = pick3(region.lang,
+    'Yapay zekâ destekli otomatik web güvenlik ön değerlendirmesi (resmi pentest değil). Alan adınızı doğrulayın, paketinizi seçin, şifreli raporunuzu alın.',
+    'KI-gestützte automatisierte Website-Sicherheits-Vorabbewertung (kein formeller Pentest). Domain verifizieren, Paket wählen, verschlüsselten Bericht erhalten.',
+    'AI-assisted automated website security pre-assessment (not a formal pentest). Verify your domain, pick a package, get your encrypted report.');
   const url = `${SITE}/${region.code}`;
   return {
     title,
     description,
     alternates: { canonical: url },
-    openGraph: { type: 'website', siteName: 'CyberTestify', url, title, description, locale: tr ? 'tr_TR' : 'en_US' },
+    openGraph: { type: 'website', siteName: 'CyberTestify', url, title, description, locale: region.lang === 'tr' ? 'tr_TR' : region.lang === 'de' ? 'de_DE' : 'en_US' },
     twitter: { card: 'summary_large_image', title, description },
   };
 }
@@ -53,6 +59,15 @@ const FAQ_EN = [
   { q: 'How long does it take?', a: 'Deterministic packages usually finish in seconds to minutes; authenticated/comprehensive packages can take longer. Time varies by package and target.' },
   { q: 'Is this a formal penetration test?', a: 'No. CyberTestify is a security pre-assessment service; it is not a substitute for a formal penetration test or compliance audit and does not provide certification.' },
 ];
+// (Almanya /de) FAQ — Almanca; veri koruma sorusunda KVKK yerine DSGVO.
+const FAQ_DE = [
+  { q: 'Was genau macht CyberTestify?', a: 'Es führt eine KI-gestützte, automatisierte Sicherheits-Vorabbewertung Ihrer Website durch: deterministische Sicherheitsprüfungen plus KI-gestützte Behebungsempfehlungen für Befunde. Es ersetzt keinen formellen Pentest/kein Audit.' },
+  { q: 'Wer kann den Bericht sehen?', a: 'Ihr Bericht ist Ende-zu-Ende-verschlüsselt und wird nur mit einem für Sie einmaligen Zugangscode geöffnet. Niemand sonst kann darauf zugreifen.' },
+  { q: 'Welches Paket ist das richtige für mich?', a: 'Wählen Sie den Basis-Scan für einen schnellen Überblick oder das passende Paket für externe Oberfläche, Erkundung oder authentifizierte Tiefenprüfungen. Umfang und Festpreis jedes Pakets stehen klar auf der Preisseite.' },
+  { q: 'Sind meine Daten sicher?', a: 'Scans erreichen nur die per DNS verifizierte Domain (Scope-Sperre). Angetroffene personenbezogene Daten werden automatisch maskiert, bevor sie die KI erreichen; die Verarbeitung erfolgt DSGVO-konform.' },
+  { q: 'Wie lange dauert es?', a: 'Deterministische Pakete sind meist in Sekunden bis Minuten fertig; authentifizierte/umfassende Pakete können länger dauern. Die Dauer hängt von Paket und Ziel ab.' },
+  { q: 'Ist das ein formeller Penetrationstest?', a: 'Nein. CyberTestify ist ein Dienst zur Sicherheits-Vorabbewertung; er ersetzt keinen formellen Penetrationstest und kein Compliance-Audit und stellt keine Zertifizierung aus.' },
+];
 
 // (LANSMAN KAMPANYASI) AI Çözüm Önerileri kısa süreliğine ÜCRETSİZ. Kapatmak için
 // NEXT_PUBLIC_AI_FIX_FREE_CAMPAIGN=false (env tanımsızsa varsayılan: AÇIK/gösterilir).
@@ -61,6 +76,7 @@ const AI_FIX_FREE_CAMPAIGN = process.env.NEXT_PUBLIC_AI_FIX_FREE_CAMPAIGN !== 'f
 function CampaignBanner({ region }: { region: RegionConfig }) {
   if (!AI_FIX_FREE_CAMPAIGN) return null;
   const tr = region.lang === 'tr';
+  const de = region.lang === 'de';
   return (
     <Link
       href={`/${region.code}/packages`}
@@ -70,21 +86,19 @@ function CampaignBanner({ region }: { region: RegionConfig }) {
     >
       <div className="container-page flex flex-wrap items-center justify-center gap-x-3 gap-y-1 py-2.5 text-center text-sm font-semibold">
         <span className="rounded-pill bg-white/20 px-2.5 py-0.5 text-xs font-extrabold tracking-wide">
-          {tr ? 'KAMPANYAYA ÖZEL' : 'LAUNCH OFFER'}
+          {pick3(region.lang, 'KAMPANYAYA ÖZEL', 'AKTIONSANGEBOT', 'LAUNCH OFFER')}
         </span>
         <span>
           {tr ? (
-            <>
-              Kısa süreliğine <strong>tüm raporlarda AI Çözüm Önerileri ÜCRETSİZ</strong>
-            </>
+            <>Kısa süreliğine <strong>tüm raporlarda AI Çözüm Önerileri ÜCRETSİZ</strong></>
+          ) : de ? (
+            <>Für kurze Zeit <strong>KI-Lösungsempfehlungen KOSTENLOS</strong> in jedem Bericht</>
           ) : (
-            <>
-              For a limited time <strong>AI Fix Suggestions are FREE</strong> on every report
-            </>
+            <>For a limited time <strong>AI Fix Suggestions are FREE</strong> on every report</>
           )}
         </span>
         <span className="inline-flex items-center gap-1 underline decoration-white/50 underline-offset-2 group-hover:decoration-white">
-          {tr ? 'Paketleri gör' : 'View packages'}
+          {pick3(region.lang, 'Paketleri gör', 'Pakete ansehen', 'View packages')}
           <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
         </span>
       </div>
@@ -219,31 +233,36 @@ function WhyUs({ d }: { d: Dict }) {
 // YOK — "tipik tarayıcılar" gibi genel, savunulabilir bir çerçeve (dürüstlük disiplini).
 function SolutionSection({ region }: { region: RegionConfig }) {
   const tr = region.lang === 'tr';
-  const others = tr
+  const others = region.lang === 'de'
+    ? ['Liefert ein langes PDF und eine Liste von Befunden', 'Technischer Jargon — Priorisierung & Recherche bleiben bei Ihnen', 'Wie Sie es beheben, bleibt Ihnen überlassen']
+    : tr
     ? ['Uzun bir PDF ve bulgu listesi verir', 'Teknik jargon — önceliklendirme ve araştırma sizde', 'Nasıl düzelteceğinizi bulmak size kalır']
     : ['Hands you a long PDF and a list of findings', 'Technical jargon — prioritizing & research is on you', 'Figuring out how to fix it is left to you'];
-  const us = tr
+  const us = region.lang === 'de'
+    ? ['Einsatzbereiter Fix-Code für jeden Befund, plattform-spezifisch', 'Nginx · Apache · IIS · Vercel · Cloudflare…', 'Kopieren–Einfügen und die Lücke in Minuten schließen']
+    : tr
     ? ['Her bulgu için platformunuza özel, hazır düzeltme kodu', 'Nginx · Apache · IIS · Vercel · Cloudflare…', 'Kopyala–yapıştır uygula, dakikalar içinde kapat']
     : ['Ready-to-apply fix code for every finding', 'Nginx · Apache · IIS · Vercel · Cloudflare…', 'Copy–paste and close the gap in minutes'];
   return (
     <section id="cozum" className="scroll-mt-20 bg-gradient-to-b from-brand-50/50 to-white py-20">
       <div className="container-page">
         <div className="mx-auto max-w-2xl text-center">
-          <p className="eyebrow">{tr ? 'Bizi ayıran şey' : 'What sets us apart'}</p>
+          <p className="eyebrow">{pick3(region.lang, 'Bizi ayıran şey', 'Was uns auszeichnet', 'What sets us apart')}</p>
           <h2 className="mt-3 text-3xl font-extrabold text-brand sm:text-4xl">
-            {tr ? 'Sadece “sorun var” demeyiz — çözümü de veririz' : 'We don’t just flag problems — we hand you the fix'}
+            {pick3(region.lang, 'Sadece “sorun var” demeyiz — çözümü de veririz', 'Wir zeigen nicht nur Probleme — wir liefern die Lösung', 'We don’t just flag problems — we hand you the fix')}
           </h2>
           <p className="mt-4 text-ink-soft">
-            {tr
-              ? 'Çoğu tarayıcı bulguları listeler ve gerisini size bırakır. Biz her bulgu için yapay zekâ destekli, platformunuza özel ve uygulamaya hazır düzeltme kodu üretiriz.'
-              : 'Most scanners list findings and leave the rest to you. For every finding we generate AI-assisted, platform-specific, ready-to-apply fix code.'}
+            {pick3(region.lang,
+              'Çoğu tarayıcı bulguları listeler ve gerisini size bırakır. Biz her bulgu için yapay zekâ destekli, platformunuza özel ve uygulamaya hazır düzeltme kodu üretiriz.',
+              'Die meisten Scanner listen Befunde auf und überlassen Ihnen den Rest. Für jeden Befund erzeugen wir KI-gestützten, plattform-spezifischen, einsatzbereiten Fix-Code.',
+              'Most scanners list findings and leave the rest to you. For every finding we generate AI-assisted, platform-specific, ready-to-apply fix code.')}
           </p>
         </div>
 
         <div className="mx-auto mt-12 grid max-w-4xl items-stretch gap-6 lg:grid-cols-2">
           {/* Tipik tarayıcılar */}
           <div className="card border-dashed p-6">
-            <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">{tr ? 'Tipik tarayıcılar' : 'Typical scanners'}</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">{pick3(region.lang, 'Tipik tarayıcılar', 'Typische Scanner', 'Typical scanners')}</p>
             <ul className="mt-4 space-y-3 text-sm text-ink-soft">
               {others.map((t) => (
                 <li key={t} className="flex items-start gap-2.5">
@@ -275,7 +294,7 @@ function SolutionSection({ region }: { region: RegionConfig }) {
             <span className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
             <span className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
-            <span className="ml-2">{tr ? 'Örnek düzeltme · Nginx — eksik güvenlik başlıkları' : 'Example fix · Nginx — missing security headers'}</span>
+            <span className="ml-2">{pick3(region.lang, 'Örnek düzeltme · Nginx — eksik güvenlik başlıkları', 'Beispiel-Fix · Nginx — fehlende Sicherheitsheader', 'Example fix · Nginx — missing security headers')}</span>
           </div>
           <pre className="overflow-x-auto bg-[#0e2a27] px-4 py-4 font-mono text-[12.5px] leading-relaxed text-emerald-200/90">
 {`add_header X-Frame-Options "SAMEORIGIN" always;
@@ -284,9 +303,10 @@ add_header Content-Security-Policy "default-src 'self'" always;`}
           </pre>
         </div>
         <p className="mx-auto mt-3 max-w-3xl text-center text-xs text-ink-muted">
-          {tr
-            ? 'Raporunuzdaki her bulgu, tam olarak böyle uygulamaya hazır bir düzeltmeyle gelir.'
-            : 'Every finding in your report comes with a ready-to-apply fix exactly like this.'}
+          {pick3(region.lang,
+            'Raporunuzdaki her bulgu, tam olarak böyle uygulamaya hazır bir düzeltmeyle gelir.',
+            'Jeder Befund in Ihrem Bericht kommt mit einem einsatzbereiten Fix genau wie diesem.',
+            'Every finding in your report comes with a ready-to-apply fix exactly like this.')}
         </p>
       </div>
     </section>
@@ -316,8 +336,7 @@ function FinalCTA({ d, region }: { d: Dict; region: RegionConfig }) {
 }
 
 function Faq({ region }: { region: RegionConfig }) {
-  const tr = region.lang === 'tr';
-  const items = tr ? FAQ_TR : FAQ_EN;
+  const items = region.lang === 'de' ? FAQ_DE : region.lang === 'tr' ? FAQ_TR : FAQ_EN;
   const faqLd = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
@@ -331,9 +350,9 @@ function Faq({ region }: { region: RegionConfig }) {
     <section className="border-t border-line bg-white">
       <div className="container-page py-16 sm:py-20">
         <div className="mx-auto max-w-3xl">
-          <p className="eyebrow text-center">{tr ? 'Sık Sorulan Sorular' : 'FAQ'}</p>
+          <p className="eyebrow text-center">{pick3(region.lang, 'Sık Sorulan Sorular', 'Häufige Fragen', 'FAQ')}</p>
           <h2 className="mt-2 text-center text-2xl font-extrabold text-brand sm:text-3xl">
-            {tr ? 'Merak edilenler' : 'Frequently asked questions'}
+            {pick3(region.lang, 'Merak edilenler', 'Häufig gestellte Fragen', 'Frequently asked questions')}
           </h2>
           <dl className="mt-8 divide-y divide-line">
             {items.map((it) => (

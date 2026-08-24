@@ -27,7 +27,7 @@ export function generateMetadata({ params }: { params: { region: string } }) {
     title: d.metaTitle,
     description: d.metaDesc,
     alternates: { canonical: url },
-    openGraph: { type: 'website', siteName: 'CyberTestify', url, title: d.metaTitle, description: d.metaDesc, locale: region.lang === 'tr' ? 'tr_TR' : 'en_US' },
+    openGraph: { type: 'website', siteName: 'CyberTestify', url, title: d.metaTitle, description: d.metaDesc, locale: region.lang === 'tr' ? 'tr_TR' : region.lang === 'de' ? 'de_DE' : 'en_US' },
     twitter: { card: 'summary_large_image', title: d.metaTitle, description: d.metaDesc },
   };
 }
@@ -64,6 +64,9 @@ export default async function PackagesPage({ params }: { params: { region: strin
   // BASINDA gosterilir (ayriksi "6. paket" degil). Diger tekil paketler UI'da GORUNMEZ;
   // yalnizca ornek raporlari (PDF) sunulur.
   const tr = region.code === 'tr';
+  // (Çok-bölge) 3-yönlü metin seçimi: tr → Türkçe, de → Almanca, diğer (us/ae) → İngilizce.
+  // Böylece /de'de İngilizce yerine Almanca gösterilir; /tr metni HİÇ değişmez.
+  const t3 = (trText: string, deText: string, enText: string) => (region.lang === 'de' ? deText : tr ? trText : enText);
   const basit = packages.find((p) => p.key === 'basit_tarama');
   // Ornek rapor: PAKET/BUNDLE bazinda TEK PDF (tek tek kontrol DEGIL). basit + aktif bundle'lar.
   const sampleItems: Array<{ key: string; displayName: string }> = [];
@@ -120,21 +123,24 @@ export default async function PackagesPage({ params }: { params: { region: strin
       <section className="container-page py-16">
         {indicative && (
           <p className="mb-8 rounded-card border border-accent/40 bg-accent-soft/40 px-4 py-3 text-center text-sm text-ink-soft">
-            Prices are indicative and will be regionally calibrated before launch in this region.
+            {region.lang === 'de'
+              ? 'Die Preise sind Richtwerte und werden vor dem Start in dieser Region regional kalibriert.'
+              : 'Prices are indicative and will be regionally calibrated before launch in this region.'}
           </p>
         )}
 
         {bundles.length > 0 && (
           <div className="mb-14">
             <div className="mb-8 text-center">
-              <p className="eyebrow">{tr ? 'Paketlerimiz' : 'Our Packages'}</p>
+              <p className="eyebrow">{t3('Paketlerimiz', 'Unsere Pakete', 'Our Packages')}</p>
               <h2 className="mt-2 text-2xl font-extrabold text-brand sm:text-3xl">
-                {tr ? 'İhtiyacınıza uygun paketi seçin' : 'Choose the package that fits you'}
+                {t3('İhtiyacınıza uygun paketi seçin', 'Wählen Sie das passende Paket', 'Choose the package that fits you')}
               </h2>
               <p className="mx-auto mt-2 max-w-xl text-sm text-ink-soft">
-                {tr
-                  ? 'Her paket ilgili kontrolleri birlikte, indirimli sunar. Hızlı bir ön bakış için Basit Tarama ile başlayabilirsiniz.'
-                  : 'Each package bundles its checks together at a discount. Start with the Basic Scan for a quick preview.'}
+                {t3(
+                  'Her paket ilgili kontrolleri birlikte, indirimli sunar. Hızlı bir ön bakış için Basit Tarama ile başlayabilirsiniz.',
+                  'Jedes Paket bündelt die passenden Prüfungen zu einem vergünstigten Preis. Für einen schnellen Überblick starten Sie mit dem Basis-Scan.',
+                  'Each package bundles its checks together at a discount. Start with the Basic Scan for a quick preview.')}
               </p>
             </div>
             <div className="grid items-stretch gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -142,29 +148,32 @@ export default async function PackagesPage({ params }: { params: { region: strin
               {basit && !basit.comingSoon && (
                 <div className="card relative flex flex-col border-2 border-line p-6">
                   <span className="absolute -top-3 left-6 rounded-pill bg-ink-soft px-3 py-1 text-xs font-bold text-white">
-                    {tr ? 'Giriş' : 'Entry'}
+                    {t3('Giriş', 'Einstieg', 'Entry')}
                   </span>
                   <h3 className="text-lg font-bold text-brand">{basit.displayName}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-                    {tr
-                      ? 'Web sitenizin dış güvenlik duruşunu hızlıca ölçmek ve temel riskleri kapatmak için ideal başlangıç paketi.'
-                      : 'The ideal starter package to quickly gauge your site’s external security posture and close basic risks.'}
+                    {t3(
+                      'Web sitenizin dış güvenlik duruşunu hızlıca ölçmek ve temel riskleri kapatmak için ideal başlangıç paketi.',
+                      'Das ideale Einstiegspaket, um die externe Sicherheitslage Ihrer Website schnell einzuschätzen und grundlegende Risiken zu schließen.',
+                      'The ideal starter package to quickly gauge your site’s external security posture and close basic risks.')}
                   </p>
                   <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
-                    <span className="font-semibold">{tr ? 'Kapsam' : 'Scope'}:</span>{' '}
-                    {tr
-                      ? 'HTTP güvenlik başlıkları · SSL/TLS yapılandırması · Sunucu & teknoloji ifşası · Temel yapılandırma dosyaları (robots.txt, assetlinks) · Platforma özel hazır düzeltme kodları (Nginx, IIS, Vercel vb.).'
-                      : 'HTTP security headers · SSL/TLS configuration · Server & tech disclosure · Basic config files (robots.txt, assetlinks) · Platform-specific ready-to-use fix snippets (Nginx, IIS, Vercel, etc.).'}
+                    <span className="font-semibold">{t3('Kapsam', 'Umfang', 'Scope')}:</span>{' '}
+                    {t3(
+                      'HTTP güvenlik başlıkları · SSL/TLS yapılandırması · Sunucu & teknoloji ifşası · Temel yapılandırma dosyaları (robots.txt, assetlinks) · Platforma özel hazır düzeltme kodları (Nginx, IIS, Vercel vb.).',
+                      'HTTP-Sicherheitsheader · SSL/TLS-Konfiguration · Server- & Technologie-Preisgabe · Grundlegende Konfigurationsdateien (robots.txt, assetlinks) · Plattform-spezifische, einsatzbereite Fix-Snippets (Nginx, IIS, Vercel usw.).',
+                      'HTTP security headers · SSL/TLS configuration · Server & tech disclosure · Basic config files (robots.txt, assetlinks) · Platform-specific ready-to-use fix snippets (Nginx, IIS, Vercel, etc.).')}
                   </div>
                   <div className="mt-4 flex-1">
                     <div>
                       <span className="text-3xl font-extrabold text-ink">{formatMoney(basit.priceMinorUnit, region)}</span>
-                      <span className="ml-1 text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahil' : 'incl. tax'}</span>
+                      <span className="ml-1 text-xs text-ink-muted">{t3('KDV Dahil', 'inkl. MwSt.', 'incl. tax')}</span>
                     </div>
                     <div className="mt-1.5 text-[11px] text-ink-soft">
-                      {tr
-                        ? 'Dış yüzey ön-değerlendirmesidir; aktif sızma testi veya derinlemesine kod denetimi içermez.'
-                        : 'An external-surface pre-assessment; no active penetration test or in-depth code audit.'}
+                      {t3(
+                        'Dış yüzey ön-değerlendirmesidir; aktif sızma testi veya derinlemesine kod denetimi içermez.',
+                        'Eine Vorabbewertung der externen Oberfläche; kein aktiver Penetrationstest und keine tiefe Code-Prüfung.',
+                        'An external-surface pre-assessment; no active penetration test or in-depth code audit.')}
                     </div>
                   </div>
                   <a
@@ -177,10 +186,10 @@ export default async function PackagesPage({ params }: { params: { region: strin
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                       <path d="M14 2v6h6" />
                     </svg>
-                    {tr ? 'Örnek raporu gör' : 'View sample report'}
+                    {t3('Örnek raporu gör', 'Musterbericht ansehen', 'View sample report')}
                   </a>
                   <Link href={`/verify?package=${basit.key}`} className="btn-outline mt-3 w-full">
-                    {tr ? 'Satın Al' : 'Buy Now'}
+                    {t3('Satın Al', 'Jetzt kaufen', 'Buy Now')}
                   </Link>
                 </div>
               )}
@@ -202,51 +211,59 @@ export default async function PackagesPage({ params }: { params: { region: strin
                   >
                     {b.comingSoon ? (
                       <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
-                        {tr ? 'Yakında' : 'Soon'}
+                        {t3('Yakında', 'Bald', 'Soon')}
                       </span>
                     ) : flagship ? (
                       <span className="absolute -top-3 left-6 flex items-center gap-1.5">
                         <span className="whitespace-nowrap rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
-                          ★ {tr ? 'En Kapsamlı Paket' : 'Most Complete'}
+                          ★ {t3('En Kapsamlı Paket', 'Umfangreichstes Paket', 'Most Complete')}
                         </span>
                         {hasSaving && (
                           <span className="whitespace-nowrap rounded-pill bg-accent px-2.5 py-1 text-xs font-bold text-white">
-                            %{savedPct} {tr ? 'avantaj' : 'off'}
+                            %{savedPct} {t3('avantaj', 'Rabatt', 'off')}
                           </span>
                         )}
                       </span>
                     ) : popular ? (
                       <span className="absolute -top-3 left-6 flex items-center gap-1.5">
                         <span className="whitespace-nowrap rounded-pill bg-accent px-3 py-1 text-xs font-bold text-white">
-                          ★ {tr ? 'Popüler' : 'Popular'}
+                          ★ {t3('Popüler', 'Beliebt', 'Popular')}
                         </span>
                         {hasSaving && (
                           <span className="whitespace-nowrap rounded-pill bg-brand px-2.5 py-1 text-xs font-bold text-white">
-                            %{savedPct} {tr ? 'avantaj' : 'off'}
+                            %{savedPct} {t3('avantaj', 'Rabatt', 'off')}
                           </span>
                         )}
                       </span>
                     ) : hasSaving ? (
                       <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
-                        %{savedPct} {tr ? 'avantaj' : 'off'}
+                        %{savedPct} {t3('avantaj', 'Rabatt', 'off')}
                       </span>
                     ) : null}
                     <h3 className="text-lg font-bold text-brand">{b.displayName}</h3>
                     <p className="mt-2 text-sm leading-relaxed text-ink-soft">{renderEmphasis(b.description)}</p>
                     {b.selectable ? (
                       <div className="mt-3 rounded-card border border-accent/40 bg-accent-soft/30 px-3 py-2 text-xs text-ink-soft">
-                        <span className="font-semibold">{region.code === 'tr' ? 'İçerik seçilebilir' : 'Content is selectable'}</span>{' '}
-                        — {region.code === 'tr'
-                          ? `${(b.selectableModules ?? []).map((m) => m.displayName).join(' / ')}'den istediğinizi seçin`
-                          : `pick any of ${(b.selectableModules ?? []).map((m) => m.displayName).join(' / ')}`}
+                        <span className="font-semibold">{t3('İçerik seçilebilir', 'Inhalt wählbar', 'Content is selectable')}</span>{' '}
+                        — {t3(
+                          `${(b.selectableModules ?? []).map((m) => m.displayName).join(' / ')}'den istediğinizi seçin`,
+                          `wählen Sie beliebige aus ${(b.selectableModules ?? []).map((m) => m.displayName).join(' / ')}`,
+                          `pick any of ${(b.selectableModules ?? []).map((m) => m.displayName).join(' / ')}`)}
                       </div>
                     ) : b.key === 'bundle_recon' ? (
                       // (Keşif) İçindekiler = gerçek kapsam maddeleri (üye adları değil). CT ayrı teslimat
                       // DEĞİL — subdomain envanterinin yöntemi olarak 1. maddenin içinde (ikinci kez sayma).
                       <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
-                        <span className="font-semibold">{tr ? 'İçindekiler' : 'Includes'}:</span>
+                        <span className="font-semibold">{t3('İçindekiler', 'Enthält', 'Includes')}:</span>
                         <ul className="mt-1.5 space-y-1">
-                          {(tr
+                          {(region.lang === 'de'
+                            ? [
+                                'Scan auf aufgegebene Subdomains (Subdomain Takeover) — Subdomain-Inventar aus Certificate-Transparency-Logs',
+                                'Erkennung öffentlicher API- / Swagger-Dokumentation',
+                                'CMS- & Technologie-Fingerprint-Analyse',
+                                'Erkennung administrativer/sensibler Pfade aus der Sitemap',
+                              ]
+                            : tr
                             ? [
                                 'Terk edilmiş alt domain (Subdomain Takeover) taraması — Certificate Transparency loglarından alt domain envanteri',
                                 'Açık API / Swagger dokümantasyon keşfi',
@@ -267,18 +284,29 @@ export default async function PackagesPage({ params }: { params: { region: strin
                           ))}
                         </ul>
                         <p className="mt-2 border-t border-line/60 pt-2 text-[11px] italic text-ink-muted">
-                          {tr
-                            ? 'Pasif dış yüzey keşfidir; aktif uç nokta enjeksiyonu veya kimlik doğrulamalı test içermez.'
-                            : 'Passive external-surface discovery; no active endpoint injection or authenticated testing.'}
+                          {t3(
+                            'Pasif dış yüzey keşfidir; aktif uç nokta enjeksiyonu veya kimlik doğrulamalı test içermez.',
+                            'Passive Erkundung der externen Oberfläche; keine aktive Endpunkt-Injection und keine authentifizierten Tests.',
+                            'Passive external-surface discovery; no active endpoint injection or authenticated testing.')}
                         </p>
                       </div>
                     ) : b.key === 'bundle_full_pentest' ? (
                       // (Tam Kapsamlı) İncelenen alanlar = gerçekten çalıştırdığımız kapsam (Faz 0–5).
                       // Üye adları yerine dürüst kapsam maddeleri + sınırlar/güvence.
                       <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
-                        <span className="font-semibold">{tr ? 'İncelenen alanlar' : 'What we examine'}:</span>
+                        <span className="font-semibold">{t3('İncelenen alanlar', 'Was wir prüfen', 'What we examine')}:</span>
                         <ul className="mt-1.5 space-y-1">
-                          {(tr
+                          {(region.lang === 'de'
+                            ? [
+                                'Authentifizierter Tiefen-Scan — Cookie/Session/Autorisierung, authentifizierte Injection (SQLi/XSS) und IDOR-Indikatoren, Forced Browsing, Rechteausweitung, mehrstufige Geschäftslogik',
+                                'Client-Side & JS-Analyse — JS-Bundle-/Secret-Scan, Source-Map-Preisgabe, bekannte verwundbare Bibliotheken, DOM-XSS/postMessage/Browser-Storage, SRI / Reverse-Tabnabbing / Open-Redirect',
+                                'Session, CSRF & Authentifizierungs-Tiefe — CSRF, Session-Entropie/Fixation, Konto-Enumeration, schwache Sperrung, Passwortrichtlinie, MFA-Beobachtung',
+                                'API-Sicherheit (OWASP API Top 10) — BOLA/BFLA, übermäßige Datenpreisgabe (BOPLA), Rate-Limit, Shadow-API-Versionen, GraphQL-Introspection',
+                                'CORS, Sicherheitsheader & TLS — CORS-Fehlkonfiguration, HSTS / Clickjacking / CSP-Schwäche, TLS-Protokoll- und Cipher-Konfiguration',
+                                'Konfiguration & Preisgabe — Backup-/Altdateien, Admin-Oberflächen, Host-Header-Injection, HTTP-Methoden-Erkennung, Cache-Indikatoren, Kommentar-/Metadaten-Leck',
+                                'E-Mail, DNS & Subdomain — DMARC/SPF/DKIM-Richtlinienstärke, MTA-STS, DNSSEC, CAA, Subdomain-Takeover (Dangling DNS)',
+                              ]
+                            : tr
                             ? [
                                 'Kimlik Doğrulamalı Derin Tarama — çerez/oturum/yetki, authenticated enjeksiyon (SQLi/XSS) ve IDOR göstergeleri, forced browsing, yetki yükseltme, çok-adımlı iş mantığı',
                                 'Client-Side & JS Analizi — JS bundle/sır taraması, source map ifşası, bilinen zafiyetli kütüphaneler, DOM-XSS/postMessage/tarayıcı-depolama, SRI / reverse-tabnabbing / open-redirect',
@@ -305,19 +333,21 @@ export default async function PackagesPage({ params }: { params: { region: strin
                           ))}
                         </ul>
                         <p className="mt-2 border-t border-line/60 pt-2 text-[11px] text-ink-muted">
-                          {tr
-                            ? 'Sınırlar & güvence: “Kanıtla, istismar etme.” Gerçek veri değiştirme/silme veya ödeme tamamlama kod seviyesinde engellidir. Cross-account (başka kullanıcının verisi) IDOR kapsam dışıdır. Kimlik bilgileriniz şifreli/geçici saklanır, tarama bitince silinir; yetkilendirme beyanı zorunludur.'
-                            : 'Limits & assurance: “Prove, don’t exploit.” Real data changes/deletion or payment completion are blocked at the code level. Cross-account IDOR (another user’s data) is out of scope. Credentials are stored encrypted/temporarily and deleted after the scan; an authorization declaration is required.'}
+                          {t3(
+                            'Sınırlar & güvence: “Kanıtla, istismar etme.” Gerçek veri değiştirme/silme veya ödeme tamamlama kod seviyesinde engellidir. Cross-account (başka kullanıcının verisi) IDOR kapsam dışıdır. Kimlik bilgileriniz şifreli/geçici saklanır, tarama bitince silinir; yetkilendirme beyanı zorunludur.',
+                            'Grenzen & Zusicherung: „Nachweisen, nicht ausnutzen.“ Echte Datenänderung/-löschung oder Zahlungsabschluss sind auf Code-Ebene blockiert. Cross-Account-IDOR (Daten anderer Nutzer) ist außerhalb des Scope. Zugangsdaten werden verschlüsselt/temporär gespeichert und nach dem Scan gelöscht; eine Autorisierungserklärung ist erforderlich.',
+                            'Limits & assurance: “Prove, don’t exploit.” Real data changes/deletion or payment completion are blocked at the code level. Cross-account IDOR (another user’s data) is out of scope. Credentials are stored encrypted/temporarily and deleted after the scan; an authorization declaration is required.')}
                         </p>
                         <p className="mt-1.5 text-[11px] italic text-ink-muted">
-                          {tr
-                            ? 'Önemli — TEST hesabı: 2FA’sız, sınırlı yetkili, ana/üretim hesabınız olmayan, tek kullanımlık bir hesap gerekir. Kapsam notu: sonuçlar hedefin mimarisine göre değişir; authenticated yüzeyi sınırlı/SPA ağırlıklı sitelerde bazı kontroller “kapsam dışı / incelenemedi” raporlanır — bu normaldir.'
-                            : 'Important — TEST account: a no-2FA, least-privilege, single-use account that is NOT your production account. Scope note: results vary with the target’s architecture; on sites with limited authenticated surface/SPA, some checks are reported as “out of scope / not scanned” — this is normal.'}
+                          {t3(
+                            'Önemli — TEST hesabı: 2FA’sız, sınırlı yetkili, ana/üretim hesabınız olmayan, tek kullanımlık bir hesap gerekir. Kapsam notu: sonuçlar hedefin mimarisine göre değişir; authenticated yüzeyi sınırlı/SPA ağırlıklı sitelerde bazı kontroller “kapsam dışı / incelenemedi” raporlanır — bu normaldir.',
+                            'Wichtig — TEST-Konto: Es wird ein Einmal-Konto ohne 2FA, mit minimalen Rechten und NICHT Ihr Produktivkonto benötigt. Hinweis zum Umfang: Ergebnisse hängen von der Architektur des Ziels ab; bei Seiten mit begrenzter authentifizierter Oberfläche/SPA werden einige Prüfungen als „außerhalb des Scope / nicht geprüft“ berichtet — das ist normal.',
+                            'Important — TEST account: a no-2FA, least-privilege, single-use account that is NOT your production account. Scope note: results vary with the target’s architecture; on sites with limited authenticated surface/SPA, some checks are reported as “out of scope / not scanned” — this is normal.')}
                         </p>
                       </div>
                     ) : b.members.length > 0 ? (
                       <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
-                        <span className="font-semibold">{region.code === 'tr' ? 'İçindekiler' : 'Includes'}:</span>{' '}
+                        <span className="font-semibold">{t3('İçindekiler', 'Enthält', 'Includes')}:</span>{' '}
                         {b.members.map((m) => m.displayName).join(' · ')}
                       </div>
                     ) : null}
@@ -326,19 +356,21 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         b.contactOnly ? (
                           <div>
                             <span className="text-xl font-extrabold text-ink">
-                              {region.code === 'tr' ? 'Kuruma özel teklif' : 'Custom enterprise quote'}
+                              {t3('Kuruma özel teklif', 'Individuelles Unternehmensangebot', 'Custom enterprise quote')}
                             </span>
                             <p className="mt-1 text-xs text-ink-soft">
-                              {region.code === 'tr'
-                                ? 'Self-servis değildir; kapsam ve yetkilendirme önceden birlikte belirlenir.'
-                                : 'Not self-service; scope and authorization are agreed in advance.'}
+                              {t3(
+                                'Self-servis değildir; kapsam ve yetkilendirme önceden birlikte belirlenir.',
+                                'Kein Self-Service; Umfang und Autorisierung werden vorab gemeinsam festgelegt.',
+                                'Not self-service; scope and authorization are agreed in advance.')}
                             </p>
                           </div>
                         ) : (
                           <p className="text-sm text-ink-soft">
-                            {region.code === 'tr'
-                              ? 'Bu kombine paket yakında açılacak; içindeki kontroller olgunlaştıkça sunulacak.'
-                              : 'This bundle is coming soon; offered as its checks mature.'}
+                            {t3(
+                              'Bu kombine paket yakında açılacak; içindeki kontroller olgunlaştıkça sunulacak.',
+                              'Dieses Paket wird bald verfügbar sein; es wird angeboten, sobald seine Prüfungen ausgereift sind.',
+                              'This bundle is coming soon; offered as its checks mature.')}
                           </p>
                         )
                       ) : (
@@ -349,16 +381,16 @@ export default async function PackagesPage({ params }: { params: { region: strin
                               <span className="text-sm text-ink-muted line-through">{formatMoney(b.originalMinorUnit, region)}</span>
                             )}
                             <span className="text-3xl font-extrabold text-ink">{formatMoney(b.amountMinorUnit, region)}</span>
-                            <span className="text-xs text-ink-muted">{region.currency === 'TRY' ? 'KDV Dahil' : 'incl. tax'}</span>
+                            <span className="text-xs text-ink-muted">{t3('KDV Dahil', 'inkl. MwSt.', 'incl. tax')}</span>
                           </div>
                           <div className="mt-1 text-[11px] text-ink-soft">
-                            {tr ? 'Ödeme sonrası kısa süre içinde başlar' : 'Starts shortly after payment'}
+                            {t3('Ödeme sonrası kısa süre içinde başlar', 'Startet kurz nach der Zahlung', 'Starts shortly after payment')}
                           </div>
                         </>
                       )}
                     </div>
                     {b.comingSoon ? (
-                      <span className="btn-ghost mt-6 w-full cursor-default">{region.code === 'tr' ? 'Yakında' : 'Coming soon'}</span>
+                      <span className="btn-ghost mt-6 w-full cursor-default">{t3('Yakında', 'Bald verfügbar', 'Coming soon')}</span>
                     ) : (
                       <>
                         <a
@@ -371,10 +403,10 @@ export default async function PackagesPage({ params }: { params: { region: strin
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                             <path d="M14 2v6h6" />
                           </svg>
-                          {region.code === 'tr' ? 'Örnek raporu gör' : 'View sample report'}
+                          {t3('Örnek raporu gör', 'Musterbericht ansehen', 'View sample report')}
                         </a>
                         <Link href={`/verify?bundle=${b.key}`} className="btn-primary mt-3 w-full">
-                          {region.code === 'tr' ? 'Satın Al' : 'Buy Now'}
+                          {t3('Satın Al', 'Jetzt kaufen', 'Buy Now')}
                         </Link>
                       </>
                     )}
@@ -399,14 +431,15 @@ export default async function PackagesPage({ params }: { params: { region: strin
         {sampleItems.length > 0 && (
           <div className="mb-14">
             <div className="mb-6 text-center">
-              <p className="eyebrow">{tr ? 'Örnek Raporlar' : 'Sample Reports'}</p>
+              <p className="eyebrow">{t3('Örnek Raporlar', 'Musterberichte', 'Sample Reports')}</p>
               <h2 className="mt-2 text-2xl font-extrabold text-brand sm:text-3xl">
-                {tr ? 'Ne alacağınızı önceden görün' : 'See what you get'}
+                {t3('Ne alacağınızı önceden görün', 'Sehen Sie vorab, was Sie erhalten', 'See what you get')}
               </h2>
               <p className="mx-auto mt-2 max-w-xl text-sm text-ink-soft">
-                {tr
-                  ? 'Her paketin örnek raporunu, satın almadan PDF olarak inceleyin.'
-                  : 'Preview each package’s sample report as a PDF before buying.'}
+                {t3(
+                  'Her paketin örnek raporunu, satın almadan PDF olarak inceleyin.',
+                  'Sehen Sie den Musterbericht jedes Pakets vor dem Kauf als PDF an.',
+                  'Preview each package’s sample report as a PDF before buying.')}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
