@@ -103,32 +103,39 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
   const [price, setPrice] = useState<Awaited<ReturnType<typeof api.betaS1Price>> | null>(null);
   const [priceErr, setPriceErr] = useState<string | null>(null);
 
-  const [own, setOwn] = useState(false);
-  const [risk, setRisk] = useState(false);
-  const [distance, setDistance] = useState(false);
-  const [withdrawal, setWithdrawal] = useState(false);
-  const [cross, setCross] = useState(false);
+  // (Paketlerdeki gibi) 2 GRUP onay: (1) Genel kabul, (2) açık rızalar (cayma feragati + KVKK m.9 yurt dışı AI).
+  const [gGen, setGGen] = useState(false);
+  const [gAck, setGAck] = useState(false);
+  const consentsOk = gGen && gAck;
 
   const [promo, setPromo] = useState('');
   const [buying, setBuying] = useState(false);
   const [buyErr, setBuyErr] = useState<string | null>(null);
 
-  const canBuy = !!price && own && risk && distance && withdrawal && cross;
-
   // Domain değişince eski fiyatı geçersiz kıl (yanlış fiyatla satın alma olmasın).
   function onDomainChange(v: string) { setDomain(v); if (price) setPrice(null); }
 
-  async function loadPrice(e: React.FormEvent) {
-    e.preventDefault();
+  async function doLoadPrice(): Promise<boolean> {
     setPriceErr(null); setPrice(null); setPriceLoading(true);
-    try { setPrice(await api.betaS1Price(domain.trim())); }
-    catch (err) { setPriceErr((err as Error).message); }
+    try { setPrice(await api.betaS1Price(domain.trim())); return true; }
+    catch (err) { setPriceErr((err as Error).message || 'Alan adı kontrol edilemedi. Lütfen geçerli, herkese açık bir alan adı girin.'); return false; }
     finally { setPriceLoading(false); }
   }
 
-  async function buy() {
+  // "Kontrol et" — domain'i doğrula + fiyatı göster (müşteri-dostu uyarılar; log değil).
+  function onCheck(e: React.FormEvent) {
+    e.preventDefault();
     setBuyErr(null);
-    if (!canBuy) { setBuyErr('Önce fiyatı hesaplayın ve tüm onayları işaretleyin.'); return; }
+    if (domain.trim().length < 3) { setPriceErr('Lütfen geçerli bir alan adı girin (ör. ornek.com).'); return; }
+    void doLoadPrice();
+  }
+
+  // "Taramayı başlat" — 1. tık: fiyatı göster; 2. tık: onaylar + ödeme/başlatma.
+  async function onStart() {
+    setBuyErr(null);
+    if (domain.trim().length < 3) { setBuyErr('Lütfen geçerli bir alan adı girin (ör. ornek.com).'); return; }
+    if (!price) { await doLoadPrice(); return; } // ilk tık: fiyatı hesapla+göster, henüz başlatma
+    if (!consentsOk) { setBuyErr('Devam etmek için aşağıdaki onay kutularının tümünü işaretleyin.'); return; }
     setBuying(true);
     try {
       const dom = await api.createDomain(domain.trim()); // idempotent — kayıtlıysa mevcut domainId döner
@@ -145,18 +152,18 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
       if (order.paymentPageUrl) { window.location.href = order.paymentPageUrl; return; }
       window.location.href = `/dashboard/${order.orderId}`;
     } catch (err) {
-      const msg = (err as Error).message || 'Satın alma başlatılamadı.';
+      const msg = (err as Error).message || '';
       if (/401|oturum|giriş yap|unauthor/i.test(msg)) {
         window.location.href = `/login?next=${encodeURIComponent('/otonom-red-team')}`;
         return;
       }
-      setBuyErr(msg);
+      setBuyErr(msg || 'İşlem tamamlanamadı, lütfen tekrar deneyin.');
     } finally { setBuying(false); }
   }
 
   const chk = (v: boolean, set: (b: boolean) => void, label: React.ReactNode) => (
-    <label className="flex items-start gap-2 text-sm text-ink-soft">
-      <input type="checkbox" className="mt-0.5" checked={v} onChange={(e) => set(e.target.checked)} />
+    <label className={`flex items-start gap-3 rounded-card border p-3.5 text-sm text-ink-soft transition ${v ? 'border-brand-200 bg-brand-50/50' : 'border-amber-300 bg-amber-50/40'}`}>
+      <input type="checkbox" className="mt-0.5 h-4 w-4 accent-brand" checked={v} onChange={(e) => set(e.target.checked)} />
       <span>{label}</span>
     </label>
   );
@@ -188,13 +195,13 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
         </div>
       </fieldset>
 
-      {/* Domain → karmaşıklık-bazlı NET fiyat */}
-      <form onSubmit={loadPrice} className="mt-6">
+      {/* Domain → "Kontrol et" (doğrula + karmaşıklık-bazlı NET fiyat) */}
+      <form onSubmit={onCheck} className="mt-6">
         <label className="label" htmlFor="rt-domain">Hedef alan adı</label>
         <div className="flex gap-2">
           <input id="rt-domain" className="field flex-1" value={domain} onChange={(e) => onDomainChange(e.target.value)} placeholder="ornek.com" />
           <button type="submit" disabled={priceLoading || domain.trim().length < 3} className="btn btn-outline shrink-0">
-            {priceLoading ? 'Hesaplanıyor…' : 'Fiyatı gör'}
+            {priceLoading ? 'Kontrol ediliyor…' : 'Kontrol et'}
           </button>
         </div>
         {priceErr && <p className="form-error mt-1">{priceErr}</p>}
@@ -210,13 +217,19 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
         )}
       </form>
 
-      {/* Zorunlu onaylar (siparişle aynı hukuki set) */}
+      {/* Zorunlu onaylar — paketlerdeki gibi 2 GRUP (aynı hukuki metin) */}
       <div className="mt-6 space-y-2.5">
-        {chk(own, setOwn, 'Hedef alan adının/altyapının sahibi veya yetkili temsilcisiyim; bu testi yürütmeye yetkim var.')}
-        {chk(risk, setRisk, 'Bunun DENEYSEL, deterministik-olmayan bir tarama olduğunu ve resmi bir sızma testi/denetim yerine geçmediğini kabul ediyorum.')}
-        {chk(distance, setDistance, <>Mesafeli Satış Sözleşmesi ve Ön Bilgilendirme Formu'nu okudum, onaylıyorum.</>)}
-        {chk(withdrawal, setWithdrawal, 'Hizmet ödemeden hemen sonra başladığı için cayma hakkımdan feragat ediyorum.')}
-        {chk(cross, setCross, 'Tarama verimin, güvenlik analizi için yurt dışındaki (ABD) yapay zekâ sağlayıcısına aktarılmasına açık rıza veriyorum (KVKK m.9).')}
+        {chk(gGen, setGGen, <>
+          <strong>Okudum, onaylıyorum:</strong> Bu alan adının <strong>ve altyapısının</strong> sahibi/yetkilisiyim ve bu hedefe <strong>otonom bir güvenlik testi</strong> yapılmasına rıza gösteriyorum;{' '}
+          <a href="/legal/on-bilgilendirme" target="_blank" rel="noopener noreferrer" className="font-semibold text-accent-600 underline">Ön Bilgilendirme</a>,{' '}
+          <a href="/legal/mesafeli-satis" target="_blank" rel="noopener noreferrer" className="font-semibold text-accent-600 underline">Mesafeli Satış</a>,{' '}
+          <a href="/legal/iptal-iade" target="_blank" rel="noopener noreferrer" className="font-semibold text-accent-600 underline">İptal/İade</a> koşullarını ve{' '}
+          <a href="/legal/gizlilik" target="_blank" rel="noopener noreferrer" className="font-semibold text-accent-600 underline">Gizlilik Politikası</a> /{' '}
+          <a href="/legal/kvkk-aydinlatma" target="_blank" rel="noopener noreferrer" className="font-semibold text-accent-600 underline">KVKK Aydınlatma Metni</a>’ni okudum, kabul ediyorum. Bunun <strong>DENEYSEL</strong>, deterministik-olmayan bir tarama olduğunu ve resmî bir sızma testi/denetim yerine geçmediğini kabul ediyorum.
+        </>)}
+        {chk(gAck, setGAck, <>
+          <strong>Cayma hakkı & yurt dışı AI:</strong> Hizmetin cayma süresi dolmadan <strong>onayımla derhal başlatılmasını</strong> istiyorum ve <strong>cayma hakkımı kaybedeceğimi</strong> kabul ediyorum; ayrıca tarama verilerimin analiz için <strong>yurt dışında yerleşik bir yapay zekâ hizmetine</strong> aktarılmasına açık rıza gösteriyorum (KVKK m.9).
+        </>)}
       </div>
 
       {/* Promosyon kodu (opsiyonel) — kod GÖSTERİLMEZ, boş alan (6 paket akışıyla aynı). */}
@@ -226,8 +239,8 @@ function Panel({ d, onLock }: { d: D; onLock: () => void }) {
       </div>
 
       {buyErr && <p className="form-error mt-3">{buyErr}</p>}
-      <button type="button" onClick={buy} disabled={buying || !canBuy} className="btn btn-primary mt-4 w-full">
-        {buying ? 'Yönlendiriliyor…' : !price ? 'Önce fiyatı görün' : promo.trim() ? 'Kodu Uygula ve Başlat' : `₺${price.priceTL.toLocaleString('tr-TR')} — Öde ve Başlat`}
+      <button type="button" onClick={onStart} disabled={buying || priceLoading} className="btn btn-primary mt-4 w-full">
+        {buying ? 'Yönlendiriliyor…' : priceLoading ? 'Kontrol ediliyor…' : 'Taramayı Başlat'}
       </button>
     </div>
   );

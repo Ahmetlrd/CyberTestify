@@ -100,7 +100,7 @@ const AUTH_GATE_IDX: Record<string, number> = { bundle_full_pentest: 0 };
 const SECONDS_PER_PHASE = 9; // her faz ~9 sn; son "çalışan" fazda durur (bitiş gerçek durumdan gelir)
 
 export function LiveScanPhases({
-  hostname, feed, startedAt, packageKey, queued, authConfirmedAt,
+  hostname, feed, startedAt, packageKey, queued, authConfirmedAt, secondsPerPhase,
 }: {
   hostname: string;
   feed: Array<{ seq: number; text: string }>;
@@ -108,7 +108,9 @@ export function LiveScanPhases({
   packageKey?: string | null;
   queued?: boolean;
   authConfirmedAt?: string | null; // backend'den: login GERÇEKTEN ne zaman doğrulandı (bkz AUTH_GATE_IDX)
+  secondsPerPhase?: number; // (S1) uzun-süren koşularda faz cadence'ını yavaşlat (varsayılan 9sn)
 }) {
+  const perPhase = secondsPerPhase && secondsPerPhase > 0 ? secondsPerPhase : SECONDS_PER_PHASE;
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -134,7 +136,7 @@ export function LiveScanPhases({
   const PHASES = phasesFor(packageKey);
   const startMs = startedAt ? new Date(startedAt).getTime() : now;
   const elapsed = Math.max(0, (now - startMs) / 1000); // sn — YENİLEMEDEN bağımsız (gerçek başlangıçtan)
-  const rawIdx = Math.min(Math.floor(elapsed / SECONDS_PER_PHASE), PHASES.length - 1);
+  const rawIdx = Math.min(Math.floor(elapsed / perPhase), PHASES.length - 1);
   // (MANTIK TUTARLILIĞI) Login-fazlı paket: gate index'ine ULAŞINCA, backend'in GERÇEK authConfirmedAt
   // damgası gelmeden ÖTESİNE SAHTE zamanlayıcıyla GEÇİLMEZ — orada bekler (spinner). Damga gelince
   // KALAN fazlar o GERÇEK andan itibaren ilerler (hâlâ tahmini süre ama artık gerçek bir olaya bağlı).

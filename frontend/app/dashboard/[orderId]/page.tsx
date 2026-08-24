@@ -267,8 +267,14 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       )}
 
       {active && (() => {
+        // (S1 OTONOM RED TEAM) Ayrı motor — Flow YOK. Fazları ödeme (paidAt) çıpasından ilerlet; koşu
+        // ~20-30dk sürdüğü için cadence YAVAŞ (faz başına ~4dk) → "rapor hazırlanıyor"a erken atlamaz.
+        const isS1 = order?.packageKey === 'redteam_s1';
         // (Sırada) Tarama HENÜZ başlamadıysa (kuyrukta veya flow başlamamış): ilerleme YOK, "başlatılıyor".
-        const notStarted = status === 'scan_queued' || status === 'paid' || !order?.flow?.startedAt;
+        const notStarted = isS1
+          ? status === 'scan_queued' || status === 'paid' // S1: dispatch olunca scan_running → ilerler
+          : status === 'scan_queued' || status === 'paid' || !order?.flow?.startedAt;
+        const s1Started = order?.paidAt ?? order?.createdAt;
         return (
         <>
           {/* Tek bilgilendirme satırı — kuyruk/başka tarama detayı verilmez; "başlatılıyor" başlık + terminal yeterli. */}
@@ -285,7 +291,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               <span className="h-3 w-3 rounded-full bg-emerald-400/70" />
               <span className="ml-3 text-xs font-medium text-white/40">cybertestify — live scan</span>
             </div>
-            <LiveScanPhases hostname={hostname} feed={notStarted ? [] : feed} startedAt={order?.flow?.startedAt} packageKey={order?.packageKey} queued={notStarted} authConfirmedAt={order?.flow?.authConfirmedAt} />
+            <LiveScanPhases hostname={hostname} feed={isS1 ? [] : (notStarted ? [] : feed)} startedAt={isS1 ? s1Started : order?.flow?.startedAt} packageKey={order?.packageKey} queued={notStarted} authConfirmedAt={order?.flow?.authConfirmedAt} secondsPerPhase={isS1 ? 240 : undefined} />
             <div className="border-t border-white/10 px-5 py-3 text-xs text-white/40">
               Teknik loglar güvenlik ve gizlilik nedeniyle gizlenmiştir; yalnızca genel aktivite gösterilir.
             </div>

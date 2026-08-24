@@ -59,6 +59,15 @@ export async function enqueueOrStartScan(orderId: string) {
     return { queued: false as const, held: true as const };
   }
 
+  // (S1 OTONOM RED TEAM) Ayrı, izole droplet motoru — 6-paketin PAYLAŞIMLI PentAGI concurrency'si
+  // (hasActiveScan) ve CyberTestify egress-proxy sağlığı (assertEgressProxyHealthy) BURADA UYGULANMAZ.
+  // Aksi halde başka bir 6-paket taraması aktifken S1 kuyruğa takılır ya da proxy sağlıksızsa S1 haksız
+  // yere BAŞARISIZ olurdu (S1 o proxy'i kullanmaz). Doğrudan dispatch'e git.
+  if (gate?.package.key === 'redteam_s1') {
+    const flow = await startScanForOrder(orderId);
+    return { queued: false as const, flow };
+  }
+
   // Aktif tarama varsa nasilsa kuyruga alacagiz; yoksa hemen baslatmadan ONCE
   // egress proxy saglikli mi kontrol et (kuyruga alinan siparisler promote
   // sirasinda ayrica kontrol edilir).
