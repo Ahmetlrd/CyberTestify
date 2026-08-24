@@ -78,6 +78,21 @@ const L = {
     assessMedium: 'This scan surfaced important security findings that should be addressed in the near term.',
     assessLow: 'This scan did not surface a serious/critical vulnerability; the report lists improvement opportunities.',
   },
+  de: {
+    brandTagline: 'Automatisierter Sicherheits-Scan-Bericht',
+    target: 'Ziel', pkg: 'Paket', date: 'Datum',
+    fixTitle: 'KI-Lösungsempfehlungen',
+    fixLocked: 'Dieser Premium-Abschnitt enthält für JEDEN oben festgestellten Befund eine Schritt-für-Schritt-Behebung sowie einsatzbereite Konfigurationsbeispiele (Nginx-/Servereinstellungen, Sicherheitsheader usw.).',
+    fixLockedCta: '🔓 Erwerben Sie das Add-on „KI-Lösungsempfehlungen“, um ihn freizuschalten.',
+    fixEmpty: 'Für diesen Scan konnten keine detaillierten Behebungsempfehlungen erzeugt werden. Das Add-on „KI-Lösungsempfehlungen“ liefert für jeden Befund eine Schritt-für-Schritt-Behebung und einsatzbereite Konfigurationsbeispiele.',
+    footerLegal: 'Automatisierter Sicherheits-Scan-Bericht — kein offizielles Audit / keine Zertifizierung. Vertraulich.',
+    page: 'Seite',
+    assessTitle: 'Gesamtbewertung',
+    riskHigh: 'Hohes Risiko', riskMedium: 'Mittleres Risiko', riskMediumHigh: 'Mittleres bis hohes Risiko', riskLow: 'Geringes Risiko',
+    assessHigh: 'Dieser Scan hat kritische Sicherheitsbefunde zutage gefördert, die umgehendes Handeln erfordern; sie sollten priorisiert werden.',
+    assessMedium: 'Dieser Scan hat wichtige Sicherheitsbefunde zutage gefördert, die kurzfristig behoben werden sollten.',
+    assessLow: 'Dieser Scan hat keine schwerwiegende/kritische Schwachstelle zutage gefördert; der Bericht listet Verbesserungsmöglichkeiten auf.',
+  },
 } as const;
 
 // Rapor metnindeki siddet sinyallerinden GENEL RISK seviyesi turetir (ek LLM YOK).
@@ -85,7 +100,7 @@ const L = {
 // oncelikle etiketli bulgu siddeti ("Siddet: Orta" / "Severity: High") aranir, yoksa
 // negasyonla-elenen bolum basliklari. applicability ("Uygulanabilirlik: YUKSEK") sayilmaz.
 function assessRisk(md: string, locale: 'tr' | 'en' | 'de'): { level: 'high' | 'medium' | 'low'; label: string; sentence: string } {
-  const t = L[locale === 'de' ? 'en' : locale];
+  const t = L[locale];
   // (a) etiketli bulgu siddeti: "Siddet/Şiddet/Severity: <kw>" — en guvenilir sinyal.
   const labeled = (kw: string) => new RegExp(`(ş|s)iddet\\s*[:：]\\s*[*_> ]*(${kw})|severity\\s*[:：]\\s*[*_> ]*(${kw})`, 'i');
   // (b) bolum basligi "<kw> SEVIYE" / "<kw> (..)" — ama yakininda "yok/tespit edilmemis/none" varsa SAYMA.
@@ -156,25 +171,26 @@ function parseBasitHeaders(md: string): { present: Set<string>; absent: Set<stri
 export function assessBasit(
   md: string,
   t: { riskHigh: string; riskMedium: string; riskMediumHigh: string; riskLow: string; assessHigh: string; assessMedium: string; assessLow: string },
+  locale: 'tr' | 'en' | 'de' = 'tr',
 ): { level: 'high' | 'medium-high' | 'medium' | 'low'; label: string; sentence: string } {
   const mk = (level: 'high' | 'medium-high' | 'medium' | 'low') => ({
     level,
     label: level === 'high' ? t.riskHigh : level === 'medium-high' ? t.riskMediumHigh : level === 'medium' ? t.riskMedium : t.riskLow,
     sentence:
       level === 'high'
-        ? 'Ziyaretçilere doğrudan güvenlik uyarısı gösterebilecek acil bir sorun (ör. sertifika süresi/hostname) tespit edildi; öncelikli olarak giderilmesi önerilir.'
+        ? p3(locale, 'Ziyaretçilere doğrudan güvenlik uyarısı gösterebilecek acil bir sorun (ör. sertifika süresi/hostname) tespit edildi; öncelikli olarak giderilmesi önerilir.', 'An urgent issue that can show visitors a direct security warning (e.g. certificate validity/hostname) was detected; it should be fixed with priority.', 'Ein dringendes Problem, das Besuchern eine direkte Sicherheitswarnung anzeigen kann (z. B. Zertifikatsgültigkeit/Hostname), wurde festgestellt; es sollte vorrangig behoben werden.')
         : level === 'medium-high'
-          ? 'Öncelikli giderilmesi önerilen, tek başına yüksek etkili bir yapılandırma eksikliği tespit edildi.'
+          ? p3(locale, 'Öncelikli giderilmesi önerilen, tek başına yüksek etkili bir yapılandırma eksikliği tespit edildi.', 'A single high-impact configuration gap recommended for priority remediation was detected.', 'Eine einzelne, stark wirksame Konfigurationslücke wurde festgestellt, deren vorrangige Behebung empfohlen wird.')
           : level === 'medium'
-            ? 'Öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri tespit edildi; taşıma güvenliği (TLS) genel olarak sağlam.'
-            : 'Ciddi/kritik bir güvenlik açığı öne çıkmadı; rapor yalnızca küçük iyileştirme fırsatlarını listeler.',
+            ? p3(locale, 'Öncelikli giderilmesi önerilen önemli güvenlik başlığı eksiklikleri tespit edildi; taşıma güvenliği (TLS) genel olarak sağlam.', 'Important security-header gaps recommended for priority remediation were detected; transport security (TLS) is generally sound.', 'Wichtige Lücken bei Sicherheitsheadern wurden festgestellt, deren vorrangige Behebung empfohlen wird; die Transportsicherheit (TLS) ist insgesamt solide.')
+            : p3(locale, 'Ciddi/kritik bir güvenlik açığı öne çıkmadı; rapor yalnızca küçük iyileştirme fırsatlarını listeler.', 'No serious/critical vulnerability stood out; the report lists only minor improvement opportunities.', 'Es ist keine schwerwiegende/kritische Schwachstelle hervorgetreten; der Bericht listet nur geringfügige Verbesserungsmöglichkeiten auf.'),
   });
 
   // (0) TARANAMADI/İNCELENEMEDİ: hedefe hiç ulaşılamadıysa bu "temiz/düşük" DEĞİLDİR. Nötr bir
   //     "İncelenemedi" rozeti göster (amber; ASLA yeşil-düşük). "Güvenli" imasından kaçınır.
   // NOT: Türkçe "İ" (U+0130) JS'te /i flag'iyle "i"ye eşlenmez -> önce tr-locale ile küçült.
   if (/risk\s*seviyesi\s*[:：]\s*\*{0,2}\s*incelenemedi|tarama\s*(yap[ıi]lamad|y[uü]r[uü]t[uü]lemed)|ula[şs][ıi]lamad[ıi][ğg][ıi] i[çc]in kontrol/.test(md.slice(0, 1500).toLocaleLowerCase('tr'))) {
-    return { level: 'medium', label: 'İncelenemedi', sentence: 'Hedefe ulaşılamadığı için tarama yürütülemedi; bu sonuç sitenin GÜVENLİ olduğu anlamına GELMEZ. Erişim sağlanınca yeniden taranmalıdır.' };
+    return { level: 'medium', label: p3(locale, 'İncelenemedi', 'Not scanned', 'Nicht geprüft'), sentence: p3(locale, 'Hedefe ulaşılamadığı için tarama yürütülemedi; bu sonuç sitenin GÜVENLİ olduğu anlamına GELMEZ. Erişim sağlanınca yeniden taranmalıdır.', 'The scan could not run because the target was unreachable; this result does NOT mean the site is SECURE. It should be re-scanned once reachable.', 'Der Scan konnte nicht ausgeführt werden, da das Ziel nicht erreichbar war; dieses Ergebnis bedeutet NICHT, dass die Website SICHER ist. Sie sollte erneut gescannt werden, sobald sie erreichbar ist.') };
   }
 
   // (1) Rapor KOD-yazimi oldugundan GENEL DEĞERLENDİRME'deki ACIK "Risk Seviyesi: X"i oku —
@@ -423,12 +439,19 @@ export function parseFindings(md: string, locale: 'tr' | 'en' | 'de'): { rows: F
   return { rows, counts };
 }
 
-const SEV_META: Record<Sev, { tr: string; en: string; cls: string }> = {
-  critical: { tr: 'Kritik', en: 'Critical', cls: 'sev-critical' },
-  high: { tr: 'Yüksek', en: 'High', cls: 'sev-high' },
-  medium: { tr: 'Orta', en: 'Medium', cls: 'sev-medium' },
-  low: { tr: 'Düşük', en: 'Low', cls: 'sev-low' },
+const SEV_META: Record<Sev, { tr: string; en: string; de: string; cls: string }> = {
+  critical: { tr: 'Kritik', en: 'Critical', de: 'Kritisch', cls: 'sev-critical' },
+  high: { tr: 'Yüksek', en: 'High', de: 'Hoch', cls: 'sev-high' },
+  medium: { tr: 'Orta', en: 'Medium', de: 'Mittel', cls: 'sev-medium' },
+  low: { tr: 'Düşük', en: 'Low', de: 'Niedrig', cls: 'sev-low' },
 };
+// (Çok-bölge) 3-yönlü seçim: de → Almanca, tr → Türkçe, diğer → İngilizce.
+function p3(locale: 'tr' | 'en' | 'de', tr: string, en: string, de: string): string {
+  return locale === 'de' ? de : locale === 'tr' ? tr : en;
+}
+function sevText(s: Sev, locale: 'tr' | 'en' | 'de'): string {
+  return locale === 'de' ? SEV_META[s].de : locale === 'tr' ? SEV_META[s].tr : SEV_META[s].en;
+}
 
 // 2.1 Zafiyet Dağılımı — gerçek sayılardan bar grafiği + sayı tablosu (0'lar da çizilir, dürüst).
 function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en' | 'de', unscannable = false): string {
@@ -437,15 +460,15 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en' | 'd
   const total = order.reduce((a, s) => a + counts[s], 0);
   const bars = order.map((s) => {
     const h = Math.round((counts[s] / max) * 80); // px (maks 80)
-    return `<div class="dist-col"><div class="dist-num">${counts[s]}</div><div class="dist-bar ${SEV_META[s].cls}-bg" style="height:${h}px"></div><div class="dist-lbl">${locale === 'tr' ? SEV_META[s].tr : SEV_META[s].en}</div></div>`;
+    return `<div class="dist-col"><div class="dist-num">${counts[s]}</div><div class="dist-bar ${SEV_META[s].cls}-bg" style="height:${h}px"></div><div class="dist-lbl">${sevText(s, locale)}</div></div>`;
   }).join('');
   // (DÜRÜSTLÜK) Hedefe ulaşılamadıysa 0/0/0/0 "temiz" DEĞİL "incelenemedi"dir — açıkça belirt.
   const intro = unscannable
-    ? (locale === 'tr' ? '⚠️ Kontroller anlamlı şekilde çalıştırılamadı (hedefe ulaşılamadı veya test edilebilir bir yüzey/giriş noktası bulunamadı); aşağıdaki sıfırlar bir güvenlik değerlendirmesi <strong>DEĞİLDİR</strong> (0 = incelenemedi, “temiz” değil).' : '⚠️ Checks could not run meaningfully (target unreachable, or no testable surface/entry point found); the zeros below are <strong>NOT</strong> a security assessment (0 = not scanned, not "clean").')
+    ? p3(locale, '⚠️ Kontroller anlamlı şekilde çalıştırılamadı (hedefe ulaşılamadı veya test edilebilir bir yüzey/giriş noktası bulunamadı); aşağıdaki sıfırlar bir güvenlik değerlendirmesi <strong>DEĞİLDİR</strong> (0 = incelenemedi, “temiz” değil).', '⚠️ Checks could not run meaningfully (target unreachable, or no testable surface/entry point found); the zeros below are <strong>NOT</strong> a security assessment (0 = not scanned, not "clean").', '⚠️ Die Prüfungen konnten nicht sinnvoll ausgeführt werden (Ziel nicht erreichbar oder keine testbare Oberfläche/kein Einstiegspunkt gefunden); die Nullen unten sind <strong>KEINE</strong> Sicherheitsbewertung (0 = nicht geprüft, nicht „sauber“).')
     : total === 0
-    ? (locale === 'tr' ? 'Bu taramada açık bir zafiyet göstergesi tespit edilmedi. Çalıştırılan kontroller ve gözlemler aşağıdaki bölümlerde ayrıntılıdır.' : 'No open vulnerability indicator was detected in this scan. Executed checks and observations are detailed in the sections below.')
-    : (locale === 'tr' ? `Bu taramada toplam <strong>${total}</strong> bulgu göstergesi tespit edildi; şiddet dağılımı aşağıdadır.` : `A total of <strong>${total}</strong> finding indicators were detected; the severity distribution is below.`);
-  return `<h2 id="s-dist">${locale === 'tr' ? '2.1 Zafiyet Dağılımı' : '2.1 Vulnerability Distribution'}</h2>
+    ? p3(locale, 'Bu taramada açık bir zafiyet göstergesi tespit edilmedi. Çalıştırılan kontroller ve gözlemler aşağıdaki bölümlerde ayrıntılıdır.', 'No open vulnerability indicator was detected in this scan. Executed checks and observations are detailed in the sections below.', 'In diesem Scan wurde kein offener Schwachstellen-Indikator festgestellt. Die ausgeführten Prüfungen und Beobachtungen sind in den folgenden Abschnitten detailliert.')
+    : p3(locale, `Bu taramada toplam <strong>${total}</strong> bulgu göstergesi tespit edildi; şiddet dağılımı aşağıdadır.`, `A total of <strong>${total}</strong> finding indicators were detected; the severity distribution is below.`, `In diesem Scan wurden insgesamt <strong>${total}</strong> Befund-Indikatoren festgestellt; die Verteilung nach Schweregrad ist unten dargestellt.`);
+  return `<h2 id="s-dist">${p3(locale, '2.1 Zafiyet Dağılımı', '2.1 Vulnerability Distribution', '2.1 Schwachstellenverteilung')}</h2>
   <div class="dist-chart">${bars}</div>
   <p>${intro}</p>`;
 }
@@ -454,14 +477,14 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en' | 'd
 function buildMasterTable(rows: Finding[], locale: 'tr' | 'en' | 'de', unscannable = false): string {
   const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const sorted = [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]);
-  const head = locale === 'tr' ? ['ID', 'Başlık', 'Durum', 'Şiddet'] : ['ID', 'Title', 'State', 'Severity'];
-  const open = locale === 'tr' ? 'Açık' : 'Open';
+  const head = locale === 'de' ? ['ID', 'Titel', 'Status', 'Schweregrad'] : locale === 'tr' ? ['ID', 'Başlık', 'Durum', 'Şiddet'] : ['ID', 'Title', 'State', 'Severity'];
+  const open = p3(locale, 'Açık', 'Open', 'Offen');
   let body: string;
   if (unscannable) {
     // (DÜRÜSTLÜK) Hedefe ulaşılamadı -> "Temiz" satırı YERİNE açık uyarı; nötr gri "İncelenemedi" (risk rengi YOK).
-    body = `<tr><td>—</td><td colspan="2">${locale === 'tr' ? 'Kontroller anlamlı şekilde çalıştırılamadı (hedefe ulaşılamadı veya test edilebilir bir yüzey/giriş noktası bulunamadı) — sonuç değerlendirilemez (“güvenli/temiz” anlamına gelmez).' : 'Checks could not run meaningfully (target unreachable, or no testable surface/entry point found) — result cannot be assessed (does not mean "safe/clean").'}</td><td><span class="sev-badge" style="background:#6B7280">${locale === 'tr' ? 'İncelenemedi' : 'Not scanned'}</span></td></tr>`;
+    body = `<tr><td>—</td><td colspan="2">${p3(locale, 'Kontroller anlamlı şekilde çalıştırılamadı (hedefe ulaşılamadı veya test edilebilir bir yüzey/giriş noktası bulunamadı) — sonuç değerlendirilemez (“güvenli/temiz” anlamına gelmez).', 'Checks could not run meaningfully (target unreachable, or no testable surface/entry point found) — result cannot be assessed (does not mean "safe/clean").', 'Die Prüfungen konnten nicht sinnvoll ausgeführt werden (Ziel nicht erreichbar oder keine testbare Oberfläche/kein Einstiegspunkt gefunden) — das Ergebnis lässt sich nicht bewerten (bedeutet nicht „sicher/sauber“).')}</td><td><span class="sev-badge" style="background:#6B7280">${p3(locale, 'İncelenemedi', 'Not scanned', 'Nicht geprüft')}</span></td></tr>`;
   } else if (sorted.length === 0) {
-    body = `<tr><td>—</td><td colspan="2">${locale === 'tr' ? 'Bu taramada açık zafiyet göstergesi tespit edilmedi.' : 'No open vulnerability indicator detected in this scan.'}</td><td><span class="sev-badge" style="background:#1C6B60">${locale === 'tr' ? 'Temiz' : 'Clean'}</span></td></tr>`;
+    body = `<tr><td>—</td><td colspan="2">${p3(locale, 'Bu taramada açık zafiyet göstergesi tespit edilmedi.', 'No open vulnerability indicator detected in this scan.', 'In diesem Scan wurde kein offener Schwachstellen-Indikator festgestellt.')}</td><td><span class="sev-badge" style="background:#1C6B60">${p3(locale, 'Temiz', 'Clean', 'Sauber')}</span></td></tr>`;
   } else {
     body = sorted.map((f, idx) => {
       const sm = SEV_META[f.sev];
@@ -469,12 +492,12 @@ function buildMasterTable(rows: Finding[], locale: 'tr' | 'en' | 'de', unscannab
       // DÜŞÜK/dolaylı güven -> master'da AÇIKÇA işaretle (detay kartıyla sınırlı kalmasın). Hem "Güven"
       // kolonundan hem de kanıt metnindeki "DOLAYLI/ZAYIF GÖSTERGE" ifadesinden tespit et (sağlam).
       const lowConf = /d[üu][şs][üu]k|low/i.test(f.confidence ?? '') || /dolayl[ıi][\s/]*zay[ıi]f g[öo]sterge|zay[ıi]f g[öo]sterge|doğrudan.*kan[ıi]t.*de[ğg]il/i.test(f.evidence ?? '');
-      const confTag = lowConf ? ` <span class="mt-ep">· güven: düşük (dolaylı gösterge)</span>` : '';
+      const confTag = lowConf ? ` <span class="mt-ep">· ${p3(locale, 'güven: düşük (dolaylı gösterge)', 'confidence: low (indirect indicator)', 'Konfidenz: niedrig (indirekter Indikator)')}</span>` : '';
       const titleCell = (f.endpoint ? `${escapeHtml(f.title)} <span class="mt-ep">— ${escapeHtml(f.endpoint)}</span>` : escapeHtml(f.title)) + confTag;
-      return `<tr><td>CT-${idx + 1}</td><td>${titleCell}</td><td>${open}</td><td class="${sm.cls}"><span class="sev-badge">${locale === 'tr' ? sm.tr : sm.en}</span></td></tr>`;
+      return `<tr><td>CT-${idx + 1}</td><td>${titleCell}</td><td>${open}</td><td class="${sm.cls}"><span class="sev-badge">${sevText(f.sev, locale)}</span></td></tr>`;
     }).join('');
   }
-  return `<h2 id="s-master">${locale === 'tr' ? '2.2 Master Bulgu Tablosu' : '2.2 Master Findings Table'}</h2>
+  return `<h2 id="s-master">${p3(locale, '2.2 Master Bulgu Tablosu', '2.2 Master Findings Table', '2.2 Master-Befundtabelle')}</h2>
   <table class="master"><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
@@ -484,24 +507,34 @@ function buildMasterTable(rows: Finding[], locale: 'tr' | 'en' | 'de', unscannab
 // (Faz 9 — SUNUM) Yönetim Kararı call-out: master COUNTS'tan türer (yeni veri/severity YOK).
 function buildManagementDecision(counts: Record<Sev, number>, locale: 'tr' | 'en' | 'de'): string {
   const hi = counts.critical + counts.high;
-  const title = locale === 'tr' ? 'Yönetim Kararı' : 'Management Decision';
+  const title = p3(locale, 'Yönetim Kararı', 'Management Decision', 'Management-Entscheidung');
   let body: string;
-  if (hi > 0) body = locale === 'tr'
-    ? `Öncelikli ele alınması gereken <strong>${hi}</strong> yüksek/kritik seviyeli gösterge tespit edildi; bunlar için acil bir düzeltme planı önerilir. Orta/düşük göstergeler planlı iyileştirmeyle giderilebilir.`
-    : `<strong>${hi}</strong> high/critical indicator(s) requiring priority attention were found; an urgent remediation plan is recommended. Medium/low items can be addressed via planned improvement.`;
-  else if (counts.medium > 0) body = locale === 'tr'
-    ? 'Doğrulanmış kritik/yüksek bir bulgu <strong>öne çıkmadı</strong>; tespit edilen orta/düşük göstergeler planlı bir iyileştirme döngüsüyle giderilebilir.'
-    : 'No confirmed critical/high finding <strong>stood out</strong>; the medium/low indicators can be addressed in a planned improvement cycle.';
-  else body = locale === 'tr'
-    ? 'Bu taramada doğrulanmış kritik/yüksek/orta seviyeli bir gösterge <strong>öne çıkmadı</strong>. Sonuçlar hedefin yüzeyine göre değişir; düzenli tekrar önerilir.'
-    : 'No confirmed critical/high/medium indicator <strong>stood out</strong> in this scan. Results vary by target surface; periodic re-scanning is recommended.';
+  if (hi > 0) body = p3(locale,
+    `Öncelikli ele alınması gereken <strong>${hi}</strong> yüksek/kritik seviyeli gösterge tespit edildi; bunlar için acil bir düzeltme planı önerilir. Orta/düşük göstergeler planlı iyileştirmeyle giderilebilir.`,
+    `<strong>${hi}</strong> high/critical indicator(s) requiring priority attention were found; an urgent remediation plan is recommended. Medium/low items can be addressed via planned improvement.`,
+    `Es wurden <strong>${hi}</strong> Indikator(en) mit hohem/kritischem Schweregrad festgestellt, die vorrangig zu behandeln sind; ein dringender Behebungsplan wird empfohlen. Mittlere/geringe Punkte können durch geplante Verbesserung behoben werden.`);
+  else if (counts.medium > 0) body = p3(locale,
+    'Doğrulanmış kritik/yüksek bir bulgu <strong>öne çıkmadı</strong>; tespit edilen orta/düşük göstergeler planlı bir iyileştirme döngüsüyle giderilebilir.',
+    'No confirmed critical/high finding <strong>stood out</strong>; the medium/low indicators can be addressed in a planned improvement cycle.',
+    'Kein bestätigter kritischer/hoher Befund ist <strong>hervorgetreten</strong>; die festgestellten mittleren/geringen Indikatoren können in einem geplanten Verbesserungszyklus behoben werden.');
+  else body = p3(locale,
+    'Bu taramada doğrulanmış kritik/yüksek/orta seviyeli bir gösterge <strong>öne çıkmadı</strong>. Sonuçlar hedefin yüzeyine göre değişir; düzenli tekrar önerilir.',
+    'No confirmed critical/high/medium indicator <strong>stood out</strong> in this scan. Results vary by target surface; periodic re-scanning is recommended.',
+    'In diesem Scan ist kein bestätigter Indikator mit kritischem/hohem/mittlerem Schweregrad <strong>hervorgetreten</strong>. Die Ergebnisse hängen von der Oberfläche des Ziels ab; regelmäßige Wiederholung wird empfohlen.');
   return `<div class="mgmt-box"><div class="mgmt-t">${hi > 0 ? '⚡ ' : ''}${title}</div><p>${body}</p></div>`;
 }
 
 // (Faz 9 — SUNUM) Statik/deterministik Metodoloji + Risk Derecelendirme Kriterleri tabloları (yeni veri YOK).
 function buildMethodologyTables(locale: 'tr' | 'en' | 'de'): string {
   const tr = locale === 'tr';
-  const mRows = (tr
+  const de = locale === 'de';
+  const mRows = (de
+    ? [['Erkundung', 'Die externe Oberfläche, Seiten und (bei SPAs) echte Endpunkte/Parameter aus dem JS-Bundle werden extrahiert.'],
+       ['Automatische Erkennung', 'Auf der ermittelten Oberfläche werden deterministische, sichere (read-only) Indikatoren gesucht.'],
+       ['Manuell-deterministische Verifizierung', 'Befunde werden mit code-basierten Regeln verifiziert; „nachweisen, nicht ausnutzen“.'],
+       ['Autorisierung & Session', 'Im authentifizierten Paket werden Cookie/Session/Autorisierung und die Post-Login-Oberfläche geprüft.'],
+       ['Konfiguration', 'Header-, TLS-, E-Mail-/DNS- und Preisgabe-Konfigurationen werden beobachtet.']]
+    : tr
     ? [['Keşif', 'Hedefin dış yüzeyi, sayfaları ve (SPA ise) JS bundle\'ından gerçek uç/parametreler çıkarılır.'],
        ['Otomatik tespit', 'Keşfedilen yüzeyde deterministik, güvenli (read-only) göstergeler aranır.'],
        ['Manuel-deterministik doğrulama', 'Bulgular kod-tabanlı kurallarla doğrulanır; “kanıtla, istismar etme”.'],
@@ -513,7 +546,12 @@ function buildMethodologyTables(locale: 'tr' | 'en' | 'de'): string {
        ['Authz & session', 'In the authenticated package, cookie/session/authorization and post-login surface are examined.'],
        ['Configuration', 'Header, TLS, email/DNS and exposure configurations are observed.']]
   ).map((r) => `<tr><td>${escapeHtml(r[0])}</td><td>${escapeHtml(r[1])}</td></tr>`).join('');
-  const rRows = (tr
+  const rRows = (de
+    ? [['critical', 'Kritisch', 'Direkt/leicht ausnutzbarer Indikator mit erheblicher Daten-/Zugriffsauswirkung.'],
+       ['high', 'Hoch', 'Hervorstechender, vorrangig zu behebender starker Indikator.'],
+       ['medium', 'Mittel', 'Erfordert Aufmerksamkeit; kontextabhängige Verifizierung empfohlen.'],
+       ['low', 'Niedrig', 'Härtungs-/Reifegrad-Chance; niedrige Priorität.']]
+    : tr
     ? [['critical', 'Kritik', 'Doğrudan/kolay istismar edilebilen, ciddi veri/erişim etkisi olan gösterge.'],
        ['high', 'Yüksek', 'Öne çıkan, öncelikli giderilmesi gereken güçlü gösterge.'],
        ['medium', 'Orta', 'Dikkat gerektiren, bağlama göre doğrulanması önerilen gösterge.'],
@@ -523,18 +561,20 @@ function buildMethodologyTables(locale: 'tr' | 'en' | 'de'): string {
        ['medium', 'Medium', 'Requires attention; context-dependent verification recommended.'],
        ['low', 'Low', 'Hardening/maturity opportunity; low priority.']]
   ).map((r) => `<tr><td><span class="sev-chip chip-${r[0]}">${escapeHtml(r[1])}</span></td><td>${escapeHtml(r[2])}</td></tr>`).join('');
-  return `<h3 class="pres-h3">${tr ? 'Metodoloji' : 'Methodology'}</h3>
-    <table class="pres-table"><thead><tr><th>${tr ? 'Aşama' : 'Stage'}</th><th>${tr ? 'Açıklama' : 'Description'}</th></tr></thead><tbody>${mRows}</tbody></table>
-    <h3 class="pres-h3">${tr ? 'Risk Derecelendirme Kriterleri' : 'Risk Rating Criteria'}</h3>
-    <table class="pres-table"><thead><tr><th>${tr ? 'Şiddet' : 'Severity'}</th><th>${tr ? 'Tanım' : 'Definition'}</th></tr></thead><tbody>${rRows}</tbody></table>
-    <p class="pres-note">${tr ? 'Şiddet yalnız bant etiketidir (sayısal CVSS skoru kullanılmaz); tüm bulgular “gösterge, doğrulama gerekir” çerçevesindedir.' : 'Severity is a band label only (no numeric CVSS score); all findings are framed as “indicator, verification required”.'}</p>`;
+  return `<h3 class="pres-h3">${p3(locale, 'Metodoloji', 'Methodology', 'Methodik')}</h3>
+    <table class="pres-table"><thead><tr><th>${p3(locale, 'Aşama', 'Stage', 'Phase')}</th><th>${p3(locale, 'Açıklama', 'Description', 'Beschreibung')}</th></tr></thead><tbody>${mRows}</tbody></table>
+    <h3 class="pres-h3">${p3(locale, 'Risk Derecelendirme Kriterleri', 'Risk Rating Criteria', 'Risikobewertungskriterien')}</h3>
+    <table class="pres-table"><thead><tr><th>${p3(locale, 'Şiddet', 'Severity', 'Schweregrad')}</th><th>${p3(locale, 'Tanım', 'Definition', 'Definition')}</th></tr></thead><tbody>${rRows}</tbody></table>
+    <p class="pres-note">${p3(locale, 'Şiddet yalnız bant etiketidir (sayısal CVSS skoru kullanılmaz); tüm bulgular “gösterge, doğrulama gerekir” çerçevesindedir.', 'Severity is a band label only (no numeric CVSS score); all findings are framed as “indicator, verification required”.', 'Der Schweregrad ist nur ein Bandlabel (kein numerischer CVSS-Score); alle Befunde sind als „Indikator, Verifizierung erforderlich“ gerahmt.')}</p>`;
 }
 
 function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en' | 'de'): string {
   const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const sorted = [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]);
   const blocks: string[] = [];
-  const L = locale === 'tr'
+  const L = locale === 'de'
+    ? { state: 'Status: Offen', ep: 'Betroffener Punkt', desc: 'Beschreibung', how: 'Wie es erkannt wurde', impact: 'Geschäftliche Auswirkung', fix: 'Empfohlene Behebung', ref: 'Referenz' }
+    : locale === 'tr'
     ? { state: 'Durum: Açık', ep: 'Etkilenen nokta', desc: 'Açıklama', how: 'Nasıl Tespit Edildi', impact: 'İş Etkisi', fix: 'Çözüm Önerisi', ref: 'Referans' }
     : { state: 'State: Open', ep: 'Affected point', desc: 'Description', how: 'How it was detected', impact: 'Business Impact', fix: 'Recommended Fix', ref: 'Reference' };
   sorted.forEach((f, idx) => {
@@ -545,7 +585,7 @@ function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en' | 'de'): str
     // Açıklama = türe-özgü tanım + (varsa) GERÇEK uç nokta. NASIL TESPİT = önce GERÇEK kanıt (taranan
     // veriden), yoksa türe-özgü zararsız-gösterge yedeği. ÇALIŞAN EXPLOIT YOK — yalnız gösterge.
     const howText = (f.evidence && f.evidence.length > 8) ? f.evidence : det.how;
-    const sevLabel = (locale === 'tr' ? sm.tr : sm.en).toLocaleUpperCase(locale === 'tr' ? 'tr' : 'en');
+    const sevLabel = sevText(f.sev, locale).toLocaleUpperCase(locale === 'de' ? 'de' : locale === 'tr' ? 'tr' : 'en');
     blocks.push(`<div class="finding-block fb-${f.sev}">
       <h3 id="s-fb-${idx + 1}"><span class="sev-chip chip-${f.sev}">[${sevLabel}]</span> CT-${idx + 1} · ${escapeHtml(f.title)}</h3>
       <div class="fb-meta">${L.state}</div>
@@ -553,12 +593,12 @@ function buildDetailedFindings(rows: Finding[], locale: 'tr' | 'en' | 'de'): str
       <p class="fb-row"><strong>${L.desc}:</strong> ${escapeHtml(det.desc)}</p>
       <p class="fb-row"><strong>${L.how}:</strong> ${escapeHtml(howText)}</p>
       <p class="fb-row"><strong>${L.impact}:</strong> ${escapeHtml(info.impact)}</p>
-      <div class="fix-box"><div class="fix-box-t">${locale === 'tr' ? 'Önerilen Düzeltme' : 'Recommended Fix'}</div><div class="fix-box-b">${escapeHtml(det.fix)}</div></div>
+      <div class="fix-box"><div class="fix-box-t">${p3(locale, 'Önerilen Düzeltme', 'Recommended Fix', 'Empfohlene Behebung')}</div><div class="fix-box-b">${escapeHtml(det.fix)}</div></div>
       <p class="finding-ref"><strong>${L.ref}:</strong> ${escapeHtml(info.cwe)} · OWASP ${escapeHtml(info.owasp)}</p>
     </div>`);
   });
   if (!blocks.length) return '';
-  return `<h2 id="s-detail">${locale === 'tr' ? '2.3 Detaylı Bulgular' : '2.3 Detailed Findings'}</h2>${blocks.join('')}`;
+  return `<h2 id="s-detail">${p3(locale, '2.3 Detaylı Bulgular', '2.3 Detailed Findings', '2.3 Detaillierte Befunde')}</h2>${blocks.join('')}`;
 }
 
 // (YÖNETİCİ ÖZETİ) İyileştirme Öncelikleri — parse edilen GERÇEK bulgulardan DETERMİNİSTİK 3 grup:
@@ -576,11 +616,11 @@ function buildPriorities(rows: Finding[], locale: 'tr' | 'en' | 'de'): string {
     else process.push(name);
   });
   const grp = (title: string, items: string[]) => items.length ? `<p class="pri-grp"><strong>${title}:</strong> ${escapeHtml(items.join('; '))}.</p>` : '';
-  const body = grp(locale === 'tr' ? '⚡ En Acil / Öncelikli' : '⚡ Most Urgent', urgent)
-    + grp(locale === 'tr' ? '🛠 Hızlı Kazanım (sunucu yapılandırması, ~1-2 gün)' : '🛠 Quick Wins (~1-2 days)', quick)
-    + grp(locale === 'tr' ? '🗓 Orta Vadeli / Süreç (manuel doğrulama veya kod/mimari)' : '🗓 Medium-term / Process', process);
+  const body = grp(p3(locale, '⚡ En Acil / Öncelikli', '⚡ Most Urgent', '⚡ Am dringendsten'), urgent)
+    + grp(p3(locale, '🛠 Hızlı Kazanım (sunucu yapılandırması, ~1-2 gün)', '🛠 Quick Wins (~1-2 days)', '🛠 Schnelle Erfolge (Serverkonfiguration, ~1-2 Tage)'), quick)
+    + grp(p3(locale, '🗓 Orta Vadeli / Süreç (manuel doğrulama veya kod/mimari)', '🗓 Medium-term / Process', '🗓 Mittelfristig / Prozess (manuelle Verifizierung oder Code/Architektur)'), process);
   if (!body) return '';
-  return `<div class="priorities"><h3>${locale === 'tr' ? 'İyileştirme Öncelikleri' : 'Improvement Priorities'}</h3>${body}</div>`;
+  return `<div class="priorities"><h3>${p3(locale, 'İyileştirme Öncelikleri', 'Improvement Priorities', 'Verbesserungsprioritäten')}</h3>${body}</div>`;
 }
 
 // (PREMIUM) Pozitif Güvence — "KONTROL ÖZETİ" tablosunda TEMİZ (✓ / kanıt yok / gösterge yok /
@@ -616,36 +656,37 @@ function buildPositiveAssurance(md: string, locale: 'tr' | 'en' | 'de'): string 
     }
   }
   if (clean.length < 2) return ''; // tek/hiç temiz kontrolde blok gösterme
-  return `<div class="assurance"><h3>${locale === 'tr' ? 'Pozitif Güvence' : 'Positive Assurance'}</h3>
+  return `<div class="assurance"><h3>${p3(locale, 'Pozitif Güvence', 'Positive Assurance', 'Positive Zusicherung')}</h3>
   <p>${locale === 'tr'
     ? `Şu kontroller çalıştırıldı ve belirgin bir zafiyet göstergesi bulunamadı: ${escapeHtml(clean.join(', '))}. Bu alanlar, tarama anındaki gözlemlerde temiz görünmektedir (kesin güvence için düzenli tekrar önerilir).`
     : `The following controls were executed with no significant vulnerability indicator: ${escapeHtml(clean.join(', '))}.`}</p></div>`;
 }
 
 // Ek — Sözlük: yalnız RAPORDA GEÇEN terimler (bloat yok).
-const GLOSSARY_TERMS: Array<{ re: RegExp; term: string; tr: string; en: string }> = [
-  { re: /\bSQLi\b|SQL enjeksiyon|SQL Injection/i, term: 'SQL Injection', tr: 'Kullanıcı girdisinin veritabanı sorgusuna karışabildiği bir enjeksiyon zafiyeti.', en: 'An injection flaw where user input reaches a database query.' },
-  { re: /\bXSS\b|Cross-Site Scripting|yans[ıi]yan/i, term: 'XSS', tr: 'Cross-Site Scripting — sayfaya kötü amaçlı betik enjekte edilebilmesi.', en: 'Cross-Site Scripting — injection of malicious scripts into pages.' },
-  { re: /\bIDOR\b/i, term: 'IDOR', tr: 'Yetkisiz Nesne Erişimi — kimlik parametresiyle başka kaydın erişilebilmesi.', en: 'Insecure Direct Object Reference — accessing others’ records via ID manipulation.' },
-  { re: /\bSSRF\b/i, term: 'SSRF', tr: 'Server-Side Request Forgery — sunucuyu istenmeyen isteklere zorlama.', en: 'Server-Side Request Forgery.' },
-  { re: /\bCSRF\b/i, term: 'CSRF', tr: 'Cross-Site Request Forgery — kullanıcının istemsiz işlem yapmasını sağlama.', en: 'Cross-Site Request Forgery.' },
-  { re: /\bCWE\b/i, term: 'CWE', tr: 'Common Weakness Enumeration — zafiyet türleri sınıflandırması.', en: 'Common Weakness Enumeration.' },
-  { re: /\bOWASP\b/i, term: 'OWASP', tr: 'Açık web uygulama güvenliği topluluğu; Top 10 ve test kılavuzlarıyla bilinir.', en: 'Open Web Application Security Project.' },
-  { re: /\bTLS\b|SSL/i, term: 'TLS', tr: 'Taşıma katmanı şifrelemesi (HTTPS’in temeli).', en: 'Transport Layer Security.' },
-  { re: /\bHSTS\b|Strict-Transport-Security/i, term: 'HSTS', tr: 'Tarayıcıyı yalnız HTTPS kullanmaya zorlayan güvenlik başlığı.', en: 'HTTP Strict Transport Security header.' },
-  { re: /\bCSP\b|Content-Security-Policy/i, term: 'CSP', tr: 'İçerik Güvenlik Politikası — XSS/enjeksiyon azaltma başlığı.', en: 'Content Security Policy.' },
-  { re: /\bCORS\b/i, term: 'CORS', tr: 'Kaynaklar-arası paylaşım politikası; gevşek yapılandırma risklidir.', en: 'Cross-Origin Resource Sharing.' },
-  { re: /\bJWT\b/i, term: 'JWT', tr: 'JSON Web Token — oturum/yetki taşıyan imzalı belirteç.', en: 'JSON Web Token.' },
-  { re: /\bKVKK\b/i, term: 'KVKK', tr: 'Kişisel Verilerin Korunması Kanunu (Türkiye).', en: 'Turkish Personal Data Protection Law.' },
-  { re: /VERB[İi]S/i, term: 'VERBİS', tr: 'Veri Sorumluları Sicil Bilgi Sistemi (KVKK kayıt sistemi).', en: 'Turkish data controllers’ registry.' },
-  { re: /clickjacking|X-Frame-Options/i, term: 'Clickjacking', tr: 'Sayfanın görünmez iframe içine alınıp kullanıcı tıklamalarının kandırılması.', en: 'Tricking clicks via invisible framing.' },
-  { re: /forced browsing|yetki y[üu]kseltme/i, term: 'Forced Browsing', tr: 'Menüde olmayan (ör. yönetici) uç noktalara URL bilerek erişme.', en: 'Accessing hidden endpoints by guessing URLs.' },
+const GLOSSARY_TERMS: Array<{ re: RegExp; term: string; tr: string; en: string; de: string }> = [
+  { re: /\bSQLi\b|SQL enjeksiyon|SQL Injection/i, term: 'SQL Injection', tr: 'Kullanıcı girdisinin veritabanı sorgusuna karışabildiği bir enjeksiyon zafiyeti.', en: 'An injection flaw where user input reaches a database query.', de: 'Eine Injection-Schwachstelle, bei der Nutzereingaben in eine Datenbankabfrage gelangen.' },
+  { re: /\bXSS\b|Cross-Site Scripting|yans[ıi]yan/i, term: 'XSS', tr: 'Cross-Site Scripting — sayfaya kötü amaçlı betik enjekte edilebilmesi.', en: 'Cross-Site Scripting — injection of malicious scripts into pages.', de: 'Cross-Site Scripting — das Einschleusen schädlicher Skripte in Seiten.' },
+  { re: /\bIDOR\b/i, term: 'IDOR', tr: 'Yetkisiz Nesne Erişimi — kimlik parametresiyle başka kaydın erişilebilmesi.', en: 'Insecure Direct Object Reference — accessing others’ records via ID manipulation.', de: 'Insecure Direct Object Reference — Zugriff auf fremde Datensätze durch ID-Manipulation.' },
+  { re: /\bSSRF\b/i, term: 'SSRF', tr: 'Server-Side Request Forgery — sunucuyu istenmeyen isteklere zorlama.', en: 'Server-Side Request Forgery.', de: 'Server-Side Request Forgery — den Server zu unerwünschten Anfragen zwingen.' },
+  { re: /\bCSRF\b/i, term: 'CSRF', tr: 'Cross-Site Request Forgery — kullanıcının istemsiz işlem yapmasını sağlama.', en: 'Cross-Site Request Forgery.', de: 'Cross-Site Request Forgery — den Nutzer zu unbeabsichtigten Aktionen bringen.' },
+  { re: /\bCWE\b/i, term: 'CWE', tr: 'Common Weakness Enumeration — zafiyet türleri sınıflandırması.', en: 'Common Weakness Enumeration.', de: 'Common Weakness Enumeration — Klassifizierung von Schwachstellentypen.' },
+  { re: /\bOWASP\b/i, term: 'OWASP', tr: 'Açık web uygulama güvenliği topluluğu; Top 10 ve test kılavuzlarıyla bilinir.', en: 'Open Web Application Security Project.', de: 'Open Web Application Security Project; bekannt für die Top 10 und Testleitfäden.' },
+  { re: /\bTLS\b|SSL/i, term: 'TLS', tr: 'Taşıma katmanı şifrelemesi (HTTPS’in temeli).', en: 'Transport Layer Security.', de: 'Transport Layer Security (Grundlage von HTTPS).' },
+  { re: /\bHSTS\b|Strict-Transport-Security/i, term: 'HSTS', tr: 'Tarayıcıyı yalnız HTTPS kullanmaya zorlayan güvenlik başlığı.', en: 'HTTP Strict Transport Security header.', de: 'Sicherheitsheader, der den Browser zwingt, nur HTTPS zu verwenden.' },
+  { re: /\bCSP\b|Content-Security-Policy/i, term: 'CSP', tr: 'İçerik Güvenlik Politikası — XSS/enjeksiyon azaltma başlığı.', en: 'Content Security Policy.', de: 'Content Security Policy — Header zur Minderung von XSS/Injection.' },
+  { re: /\bCORS\b/i, term: 'CORS', tr: 'Kaynaklar-arası paylaşım politikası; gevşek yapılandırma risklidir.', en: 'Cross-Origin Resource Sharing.', de: 'Cross-Origin Resource Sharing; eine lockere Konfiguration ist riskant.' },
+  { re: /\bJWT\b/i, term: 'JWT', tr: 'JSON Web Token — oturum/yetki taşıyan imzalı belirteç.', en: 'JSON Web Token.', de: 'JSON Web Token — signiertes Token, das Session/Berechtigung trägt.' },
+  { re: /\bKVKK\b/i, term: 'KVKK', tr: 'Kişisel Verilerin Korunması Kanunu (Türkiye).', en: 'Turkish Personal Data Protection Law.', de: '' },
+  { re: /VERB[İi]S/i, term: 'VERBİS', tr: 'Veri Sorumluları Sicil Bilgi Sistemi (KVKK kayıt sistemi).', en: 'Turkish data controllers’ registry.', de: '' },
+  { re: /clickjacking|X-Frame-Options/i, term: 'Clickjacking', tr: 'Sayfanın görünmez iframe içine alınıp kullanıcı tıklamalarının kandırılması.', en: 'Tricking clicks via invisible framing.', de: 'Klicks werden durch unsichtbares Framing getäuscht.' },
+  { re: /forced browsing|yetki y[üu]kseltme/i, term: 'Forced Browsing', tr: 'Menüde olmayan (ör. yönetici) uç noktalara URL bilerek erişme.', en: 'Accessing hidden endpoints by guessing URLs.', de: 'Zugriff auf versteckte Endpunkte durch Erraten von URLs.' },
 ];
 function buildGlossary(md: string, locale: 'tr' | 'en' | 'de'): string {
-  const hits = GLOSSARY_TERMS.filter((g) => g.re.test(md));
+  // (P1/acceptance) /de'de KVKK/VERBİS terimleri sözlükte GÖSTERİLMEZ (de === '' ile işaretli → elenir).
+  const hits = GLOSSARY_TERMS.filter((g) => g.re.test(md)).filter((g) => !(locale === 'de' && g.de === ''));
   if (hits.length === 0) return '';
-  const rows = hits.map((g) => `<tr><td><strong>${escapeHtml(g.term)}</strong></td><td>${escapeHtml(locale === 'tr' ? g.tr : g.en)}</td></tr>`).join('');
-  return `<h2 id="s-glossary">${locale === 'tr' ? 'Ek — Sözlük' : 'Appendix — Glossary'}</h2>
+  const rows = hits.map((g) => `<tr><td><strong>${escapeHtml(g.term)}</strong></td><td>${escapeHtml(p3(locale, g.tr, g.en, g.de || g.en))}</td></tr>`).join('');
+  return `<h2 id="s-glossary">${p3(locale, 'Ek — Sözlük', 'Appendix — Glossary', 'Anhang — Glossar')}</h2>
   <table class="glossary"><tbody>${rows}</tbody></table>`;
 }
 
@@ -673,7 +714,7 @@ function buildTocPage(entries: { id: string; text: string }[], locale: 'tr' | 'e
     const sub = /^\d+\.\d+\s/.test(e.text.trim());
     return `<div class="toc-row${sub ? ' toc-sub' : ''}"><a href="#${e.id}">${escapeHtml(e.text)}</a></div>`;
   }).join('');
-  return `<div class="toc-page"><h1>${locale === 'tr' ? 'İçindekiler' : 'Table of Contents'}</h1>${rows}</div>`;
+  return `<div class="toc-page"><h1>${p3(locale, 'İçindekiler', 'Table of Contents', 'Inhaltsverzeichnis')}</h1>${rows}</div>`;
 }
 
 // Tekrar eden AYNI blockquote'ları (ör. her kontrolden sonra kelime-kelime tekrarlanan
@@ -720,8 +761,8 @@ function scopeOutControlsFromTable(md: string): Set<string> {
 }
 
 export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOptions): string {
-  const t = L[meta.locale === 'de' ? 'en' : meta.locale];
-  const dateStr = meta.createdAt.toLocaleDateString(meta.locale === 'tr' ? 'tr-TR' : 'en-GB', {
+  const t = L[meta.locale];
+  const dateStr = meta.createdAt.toLocaleDateString(meta.locale === 'tr' ? 'tr-TR' : meta.locale === 'de' ? 'de-DE' : 'en-GB', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
 
@@ -790,7 +831,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     // severity-tabanli assessRisk. Boylece "metin Orta der ama kutu Düşük" tutarsizligi olmaz.
     // Deterministik (kod-yazimi) paketler GENEL DEĞERLENDİRME'ye acik "Risk Seviyesi: X" yazar;
     // assessBasit once onu okur -> rozet metinle GARANTI tutarli. Digerlerinde severity-tabanli.
-    const risk = DETERMINISTIC_PDF_PKGS.has(meta.packageKey ?? '') ? assessBasit(effectiveMd, t) : assessRisk(effectiveMd, meta.locale);
+    const risk = DETERMINISTIC_PDF_PKGS.has(meta.packageKey ?? '') ? assessBasit(effectiveMd, t, meta.locale) : assessRisk(effectiveMd, meta.locale);
     // (bundle_surface) Ust kutu cumlesi = GENEL DEĞERLENDİRME govde cumlesi (worst-case ALANA
     // ozgu, koddan uretilen) — sabit/gelisiguzel "ör. sertifika/hostname" ornegi YERINE gercek
     // bulgu. Boylece kutu <-> YÖNETİCİ ÖZETİ/GENEL DEĞERLENDİRME HER ZAMAN tutarli. (Yalniz
@@ -804,7 +845,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     // indir -> rozet ↔ master TUTARLI. (Orta/Düşük dokunulmaz; Basit'in "Temiz+Orta" hali korunur.)
     if (parsed && parsed.rows.length === 0 && (risk.level === 'high' || risk.level === 'medium-high')) {
       risk.level = 'medium';
-      risk.label = meta.locale === 'tr' ? 'İyileştirilebilir' : 'Improvable';
+      risk.label = meta.locale === 'de' ? 'Verbesserungsfähig' : meta.locale === 'tr' ? 'İyileştirilebilir' : 'Improvable';
     }
     assessBox = `<div class="assess assess-${risk.level}">
     <div class="assess-head"><span class="assess-title">${escapeHtml(t.assessTitle)}</span>
@@ -1105,8 +1146,8 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
       <div class="cover-sub">${escapeHtml(meta.hostname)} &nbsp;·&nbsp; ${escapeHtml(meta.packageName)}</div>
       <div class="cover-seal">
         <div class="seal-title">${escapeHtml(sealTitle)}</div>
-        <div class="seal-row">${meta.locale === 'tr' ? 'Rapor No' : 'Report No'}: <strong>${reportNo}</strong></div>
-        <div class="seal-row">${meta.locale === 'tr' ? 'Doğrulama Kodu' : 'Verification Code'}: <strong>${verifyCode}</strong></div>
+        <div class="seal-row">${p3(meta.locale, 'Rapor No', 'Report No', 'Bericht-Nr.')}: <strong>${reportNo}</strong></div>
+        <div class="seal-row">${p3(meta.locale, 'Doğrulama Kodu', 'Verification Code', 'Verifizierungscode')}: <strong>${verifyCode}</strong></div>
         ${opts.hideDate ? '' : `<div class="seal-row">${escapeHtml(t.date)}: ${escapeHtml(dateStr)}</div>`}
       </div>
     </div>
@@ -1124,7 +1165,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     <div><div class="k">${escapeHtml(t.target)}</div><div class="v">${escapeHtml(meta.hostname)}</div></div>
     <div><div class="k">${escapeHtml(t.pkg)}</div><div class="v">${escapeHtml(meta.packageName)}</div></div>
     ${opts.hideDate ? '' : `<div><div class="k">${escapeHtml(t.date)}</div><div class="v">${escapeHtml(dateStr)}</div></div>`}
-    <div><div class="k">${meta.locale === 'tr' ? 'Rapor No' : 'Report No'}</div><div class="v">${reportNo}</div></div>
+    <div><div class="k">${p3(meta.locale, 'Rapor No', 'Report No', 'Bericht-Nr.')}</div><div class="v">${reportNo}</div></div>
   </div>
   <div class="content">${contentInner}</div>
   <script>
@@ -1169,9 +1210,9 @@ export async function renderReportPdf(
   opts: ReportPdfOptions = {},
 ): Promise<Buffer> {
   const html = buildHtml(bodyMarkdown, meta, opts);
-  const t = L[meta.locale === 'de' ? 'en' : meta.locale];
+  const t = L[meta.locale];
   const { reportNo } = reportIdentifiers(meta.hostname, meta.createdAt, opts.hideDate);
-  const confidential = meta.locale === 'tr' ? 'Gizli' : 'Confidential';
+  const confidential = p3(meta.locale, 'Gizli', 'Confidential', 'Vertraulich');
 
   const browser = await puppeteer.launch({
     executablePath: CHROMIUM_PATH,

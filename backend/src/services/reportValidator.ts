@@ -81,7 +81,7 @@ export function validateAndRepairReport(
   // --- R4: Rozet = Dağılım = Master tutarlılığı (regresyon sigortası) ---
   if (!isCompliance) {
     const t = { riskHigh: 'Yüksek Risk', riskMedium: 'Orta Risk', riskMediumHigh: 'Orta-Yüksek Risk', riskLow: 'Düşük Risk', assessHigh: '', assessMedium: '', assessLow: '' };
-    const badge = assessBasit(md, t);
+    const badge = assessBasit(md, t, loc);
     const isIncelenemedi = /incelenemedi/i.test(badge.label.toLocaleLowerCase('tr'));
     if (!isIncelenemedi) {
       const masterMax = parsed2.rows.reduce((m, r) => Math.max(m, rank[r.sev] ?? 0), 0);
