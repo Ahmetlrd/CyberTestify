@@ -36,11 +36,22 @@ const uaeVat: InvoicingProvider = {
   },
 };
 
+// (Almanya lansmanı) EUR faturalandırma — İSKELET. Alman/AB KDV (%19 standart) + GoBD/§14 UStG
+// fatura alanları gerçek entegrasyonda doldurulacak; para/tarih Alman formatında (Intl 'de-DE':
+// 1.234,56 €, gün.ay.yıl). Gerçek € tutarları ve KDV oranı iş kararı — burada uydurulmaz.
+const deVat: InvoicingProvider = {
+  method: 'de_vat',
+  async generateInvoice(orderId) {
+    console.log(`[invoicing:de_vat] (iskelet) Sipariş ${orderId} için AB/Alman KDV faturası (EUR, de-DE format) — placeholder.`);
+  },
+};
+
 // Para birimi -> faturalandırma yöntemi (tek yerde; dağıtık if YOK).
 const BY_CURRENCY: Record<string, InvoicingProvider> = {
   TRY: earsiv,
   USD: usReceipt,
   AED: uaeVat,
+  EUR: deVat,
 };
 
 export function getInvoicingProvider(currency: string): InvoicingProvider {

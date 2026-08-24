@@ -19,5 +19,9 @@ function intlProvider(): PaymentProvider {
 // middleware'de yapilir (Accept-Language/geo/cookie); burasi yalniz bölge->saglayici.
 export function getPaymentProvider(region: string): PaymentProvider {
   if (region === 'tr') return iyzicoProvider;
+  // (Almanya lansmanı — kullanıcı kararı) /de → iyzico + EUR (Paddle/Stripe DEĞİL). iyzico isteğe
+  // göre order.currency'den EUR işler (bkz iyzico.ts iyziCurrency). NOT: iyzico MoR olmadığından
+  // AB-KDV beyanı satıcıya aittir — bilinçli iş kararı.
+  if (region === 'de') return iyzicoProvider;
   return intlProvider();
 }

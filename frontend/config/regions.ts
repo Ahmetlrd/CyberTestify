@@ -9,7 +9,7 @@
  * (bkz HANDOFF.md → çok-bölge notu).
  */
 
-export const REGION_CODES = ['tr', 'us', 'ae'] as const;
+export const REGION_CODES = ['tr', 'us', 'ae', 'de'] as const;
 export type RegionCode = (typeof REGION_CODES)[number];
 
 export const DEFAULT_REGION: RegionCode = 'tr';
@@ -74,6 +74,25 @@ export const REGIONS: Record<RegionCode, RegionConfig> = {
     invoicingMethod: 'uae_vat',
     supportEmail: 'support@cybertestify.com',
     companyLegalName: '[Legal Entity — UAE]',
+    legalReady: false,
+  },
+  // (Almanya lansmanı — FAZ 1) Altyapı hazır ama /de HENÜZ GÖRÜNMEZ (VISIBLE_REGION_CODES'a
+  // eklenmedi) — site %100 Almanca olana kadar gerçek ziyaretçiye açılmaz (kabul kriteri: /de'de
+  // Türkçe sızmasın). GEÇİCİ olarak lang:'en' → Almanca sözlük (DICTS.de) Faz 2'de yazılınca 'de'
+  // olur; locale:'de-DE' şimdiden doğru → fiyat/sayı Alman formatında (€1.234,56). Ödeme: iyzico+EUR
+  // (kullanıcı kararı). companyLegalName Impressum ile doldurulacak (kullanıcıdan gerçek bilgi).
+  de: {
+    code: 'de',
+    label: 'Deutschland',
+    flag: '🇩🇪',
+    locale: 'de-DE',
+    lang: 'en', // GEÇİCİ (Faz 2'de 'de'); Almanca Dict hazır olana kadar İngilizce fallback (Türkçe DEĞİL)
+    dir: 'ltr',
+    currency: 'EUR',
+    paymentProvider: 'iyzico', // kullanıcı kararı: /de → iyzico + EUR (Paddle/Stripe değil)
+    invoicingMethod: 'de_vat',
+    supportEmail: 'support@cybertestify.com',
+    companyLegalName: '[Impressum — DE: kullanıcı sağlayacak]',
     legalReady: false,
   },
 };

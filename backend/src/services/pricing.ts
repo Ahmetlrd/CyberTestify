@@ -6,7 +6,7 @@ import { SCAN_PACKAGES } from './scanPackages.js';
  * placeholder — gercek pazar kalibrasyonu Vedat tarafindan yapilacak (bkz HANDOFF).
  * Yeni bolge = REGION_CURRENCY + ESTIMATED'e satir eklemek yeterli.
  */
-export const REGION_CURRENCY: Record<string, string> = { tr: 'TRY', us: 'USD', ae: 'AED' };
+export const REGION_CURRENCY: Record<string, string> = { tr: 'TRY', us: 'USD', ae: 'AED', de: 'EUR' };
 
 /**
  * GECICI TEST OVERRIDE — env TEST_PRICE_OVERRIDE_MINOR set ise TUM fiyatlar (tekil paket,
@@ -41,6 +41,15 @@ const USD_CENTS: Record<string, number> = {
   autonomous_pentest: 10900, // $109 (hafif advisory — dusuk etiket)
 };
 
+// (Almanya lansmanı — FAZ 1) EUR fiyatları KUR ÇEVRİMİYLE OTOMATİK HESAPLANMAZ — Vedat'ın gireceği
+// BAĞIMSIZ € tutarlarıdır (kurus/cent = €1 -> 100). Bu tablo ŞİMDİLİK BOŞ; /de görünür olmadan
+// (VISIBLE_REGION_CODES) önce buraya paket-başı gerçek EUR-cent değerleri girilecek. Boşken 'de'
+// REGIONAL_PRICING'de undefined kalır ve getPricing güvenli şekilde TR tutarına düşer (currency EUR) —
+// bu YALNIZ /de gizliyken geçerli bir placeholder'dır; canlıya çıkmadan doldurulmalıdır.
+const EUR_CENTS: Record<string, number> = {
+  // basit_tarama: 1900, // örnek — GERÇEK rakamları Vedat girecek
+};
+
 const TRY_PER_USD = 47.5; // yaklasik kur — USD turetimi icin
 const AED_PER_USD = 3.67; // sabit (BAE dirhemi USD'ye peg)
 
@@ -53,7 +62,10 @@ function usdCentsFor(key: string, tryMinor: number): number {
 export const REGIONAL_PRICING: Record<string, Record<string, number>> = Object.fromEntries(
   SCAN_PACKAGES.map((p) => {
     const us = usdCentsFor(p.key, p.priceMinorUnit);
-    return [p.key, { tr: p.priceMinorUnit, us, ae: Math.round(us * AED_PER_USD) }];
+    // de: yalnız EUR_CENTS'te AÇIKÇA girilmişse konur (kur türevi YOK); girilmemişse undefined →
+    // getPricing TR tutarına düşer (yalnız /de gizliyken geçerli placeholder).
+    const de = EUR_CENTS[p.key];
+    return [p.key, { tr: p.priceMinorUnit, us, ae: Math.round(us * AED_PER_USD), ...(de != null ? { de } : {}) }];
   }),
 );
 

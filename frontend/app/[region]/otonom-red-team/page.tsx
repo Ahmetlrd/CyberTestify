@@ -36,6 +36,9 @@ const LEVEL_ACCENT = ['#34d399', '#F5A623', '#f87171'];
 
 export default function OtonomRedTeamPage({ params }: { params: { region: string } }) {
   if (!isRegionCode(params.region)) notFound();
+  // (Almanya lansmanı — P3) S1 Otonom AI Red Team /de'de HİÇ görünmez/erişilemez. Bölge 'de' ise
+  // sayfa 404 döner (S1 yalnız GDPR-uyumlu hukuki/ürün çalışması sonrası /de'ye açılacaksa buradan kaldırılır).
+  if (params.region === 'de') notFound();
   const region = getRegion(params.region);
   const d = getDict(region).otonom;
   const packagesHref = `/${region.code}/packages`;

@@ -16,6 +16,21 @@ import { sendOrderConfirmation } from '../mailer.js';
  * işletmeler için standart merchant hesabı açmayı desteklemiyor.
  */
 
+// (Çok-bölge) iyzico'ya gönderilecek para birimi order.currency'den map edilir (eskiden sabit TRY'ydi).
+// /de → EUR (kullanıcı kararı: /de iyzico + EUR). Bilinmeyen/eksik → TRY güvenli düşüş. iyzico tipi
+// TRY/USD/EUR/GBP destekler (types/iyzipay.d.ts). NOT: AB müşterisine iyzico ile satışta AB-KDV/MoR
+// yükümlülüğü satıcıdadır (iyzico MoR değil) — bu bir iş/uyum kararıdır, kod tarafı EUR'u işler.
+function iyziCurrency(currency: string | null | undefined): string {
+  const map: Record<string, string> = {
+    TRY: Iyzipay.CURRENCY.TRY, USD: Iyzipay.CURRENCY.USD, EUR: Iyzipay.CURRENCY.EUR, GBP: Iyzipay.CURRENCY.GBP,
+  };
+  return map[(currency ?? 'TRY').toUpperCase()] ?? Iyzipay.CURRENCY.TRY;
+}
+// Ödeme formu dili: order.locale 'tr' → TR, aksi (en/de-fallback) → EN.
+function iyziLocale(locale: string | null | undefined): string {
+  return locale === 'tr' ? Iyzipay.LOCALE.TR : Iyzipay.LOCALE.EN;
+}
+
 function client(): Iyzipay {
   return new Iyzipay({ apiKey: config.iyzico.apiKey, secretKey: config.iyzico.secretKey, uri: config.iyzico.baseUrl });
 }
@@ -64,11 +79,11 @@ export const iyzicoProvider: PaymentProvider = {
     const { name, surname } = splitName(order.customer.fullName, order.customer.email);
 
     const request: Record<string, unknown> = {
-      locale: Iyzipay.LOCALE.TR,
+      locale: iyziLocale(order.locale),
       conversationId,
       price,
       paidPrice: price,
-      currency: Iyzipay.CURRENCY.TRY,
+      currency: iyziCurrency(order.currency),
       basketId: order.id,
       paymentGroup: Iyzipay.PAYMENT_GROUP.PRODUCT,
       // Odeme sonrasi iyzico buraya POST eder (token ile). Public API URL uzerinden.
@@ -154,11 +169,11 @@ export async function initiateBundlePayment(orderIds: string[]): Promise<CreateP
   const { name, surname } = splitName(buyer.fullName, buyer.email);
 
   const request: Record<string, unknown> = {
-    locale: Iyzipay.LOCALE.TR,
+    locale: iyziLocale(orders[0].locale),
     conversationId: groupId,
     price: totalStr,
     paidPrice: totalStr,
-    currency: Iyzipay.CURRENCY.TRY,
+    currency: iyziCurrency(orders[0].currency),
     basketId: groupId,
     paymentGroup: Iyzipay.PAYMENT_GROUP.PRODUCT,
     callbackUrl: `${config.publicApiUrl}/payments/iyzico/callback`,
@@ -220,11 +235,11 @@ export async function initiateFixSuggestionPayment(orderId: string, amountMinor:
   const groupId = crypto.randomUUID();
   const { name, surname } = splitName(order.customer.fullName, order.customer.email);
   const request: Record<string, unknown> = {
-    locale: Iyzipay.LOCALE.TR,
+    locale: iyziLocale(order.locale),
     conversationId: groupId,
     price: priceStr,
     paidPrice: priceStr,
-    currency: Iyzipay.CURRENCY.TRY,
+    currency: iyziCurrency(order.currency),
     basketId: groupId,
     paymentGroup: Iyzipay.PAYMENT_GROUP.PRODUCT,
     callbackUrl: `${config.publicApiUrl}/payments/iyzico/callback`,
