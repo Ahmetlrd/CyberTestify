@@ -65,9 +65,16 @@ export async function reapStuckFlows() {
   // olusum sirasinda cokme, tutarsiz durum) — normalde scan_running her zaman bir
   // running flow'a eslik eder. Baslangic toleransindan sonra bunu scan_failed yap;
   // aksi halde musteri panelinde sonsuza kadar "tarama calisiyor" gorunur.
+  //
+  // (S1 MUAFIYETI — KRITIK) S1 Otonom Red Team siparisleri PentAGI Flow KULLANMAZ; ayri
+  // RedTeamJob motoruyla kosarlar (izole droplet). Bu yuzden S1 icin 'scan_running + flow yok'
+  // NORMALDIR — droplet provisioning DAKIKALAR surer. redTeamJob: null suzgeci olmadan watchdog
+  // 60sn grace sonrasi gercek-kosan S1 siparisini yanlislikla scan_failed yapardi (musteri ekraninda
+  // "Tarama tamamlanamadi" cikarken admin panelinde droplet hala provisioning'de). RedTeamJob'lu
+  // siparisler burada ele ALINMAZ — onlarin yasam dongusunu runner/kill-switch/watchdog-D5 yonetir.
   const graceCutoff = new Date(nowMs - config.emptyScanGraceSeconds * 1000);
   const orphanOrders = await prisma.order.findMany({
-    where: { status: 'scan_running', flow: null, createdAt: { lt: graceCutoff } },
+    where: { status: 'scan_running', flow: null, redTeamJob: null, createdAt: { lt: graceCutoff } },
     select: { id: true, scheduledScanId: true },
   });
   for (const o of orphanOrders) {
