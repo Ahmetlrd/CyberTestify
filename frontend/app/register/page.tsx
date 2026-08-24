@@ -8,9 +8,43 @@ import { PasswordInput } from '../../components/PasswordInput';
 import { GoogleButton } from '../../components/GoogleButton';
 import { Turnstile, type TurnstileHandle } from '../../components/Turnstile';
 import { useRef } from 'react';
+import { readRegionCookie } from '../../lib/region';
+import { getRegion } from '../../config/regions';
+
+// (Çok-bölge) Client sayfa; dili cookie'den (hydration-safe). /de'de onay metni AGB+Datenschutz'a
+// bağlanır (KVKK DEĞİL); doğrulama mesajları Almanca.
+const T = {
+  tr: {
+    title: 'Hesap Oluştur', subtitle: 'Doğrulama ücretsiz — dakikalar içinde başlayın.',
+    google: 'Google ile kaydol', or: 'veya', email: 'E-posta',
+    password: 'Şifre (en az 8 karakter)', confirm: 'Şifre (Tekrar)', mismatch: 'Şifreler eşleşmiyor.',
+    termsPre: '', link1: 'Kullanım Koşulları', termsMid: "'nı ve ", link2: 'KVKK Aydınlatma Metni', termsPost: "'ni okudum, kabul ediyorum.",
+    errMismatch: 'Şifreler eşleşmiyor — lütfen iki alana da aynı şifreyi girin.',
+    errTerms: 'Devam etmek için Kullanım Koşulları ve KVKK Aydınlatma Metni onayı gereklidir.',
+    errCaptcha: 'Lütfen doğrulama kutusunu tamamlayın.',
+    submitting: 'Kaydolunuyor…', waiting: 'Doğrulama bekleniyor…', submit: 'Kayıt ol',
+    haveAccount: 'Zaten hesabınız var mı?', login: 'Giriş yapın',
+    link1Href: '/legal/kullanim-kosullari', link2Href: '/legal/kvkk-aydinlatma',
+  },
+  de: {
+    title: 'Konto erstellen', subtitle: 'Die Verifizierung ist kostenlos — starten Sie in Minuten.',
+    google: 'Mit Google registrieren', or: 'oder', email: 'E-Mail',
+    password: 'Passwort (mindestens 8 Zeichen)', confirm: 'Passwort (Wiederholung)', mismatch: 'Passwörter stimmen nicht überein.',
+    termsPre: 'Ich habe die ', link1: 'AGB', termsMid: ' und die ', link2: 'Datenschutzerklärung', termsPost: ' gelesen und akzeptiere sie.',
+    errMismatch: 'Passwörter stimmen nicht überein — bitte geben Sie in beide Felder dasselbe Passwort ein.',
+    errTerms: 'Zum Fortfahren ist die Zustimmung zu den AGB und der Datenschutzerklärung erforderlich.',
+    errCaptcha: 'Bitte schließen Sie die Verifizierung ab.',
+    submitting: 'Registrierung läuft…', waiting: 'Verifizierung ausstehend…', submit: 'Registrieren',
+    haveAccount: 'Bereits ein Konto?', login: 'Anmelden',
+    link1Href: '/de/legal/agb', link2Href: '/de/legal/datenschutz',
+  },
+} as const;
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [lang, setLang] = useState<'tr' | 'de'>('tr');
+  useEffect(() => { setLang(getRegion(readRegionCookie()).lang === 'de' ? 'de' : 'tr'); }, []);
+  const t = T[lang];
   // ?next: satın-alma akışında paket niyeti kayıt sonrası da korunsun (yoksa /verify).
   const next = useSearchParams().get('next') || '/verify';
   useEffect(() => {
@@ -32,15 +66,15 @@ export default function RegisterPage() {
     setError(null);
     // Sifre tekrari client-side dogrulama — eslesmiyorsa gonderme.
     if (password !== confirm) {
-      setError('Şifreler eşleşmiyor — lütfen iki alana da aynı şifreyi girin.');
+      setError(t.errMismatch);
       return;
     }
     if (!terms) {
-      setError('Devam etmek için Kullanım Koşulları ve KVKK Aydınlatma Metni onayı gereklidir.');
+      setError(t.errTerms);
       return;
     }
     if (!token) {
-      setError('Lütfen doğrulama kutusunu tamamlayın.');
+      setError(t.errCaptcha);
       return;
     }
     setBusy(true);
@@ -60,25 +94,25 @@ export default function RegisterPage() {
   return (
     <main className="container-page max-w-md py-16">
       <div className="card p-8">
-        <h1 className="text-2xl font-extrabold text-brand">Hesap Oluştur</h1>
-        <p className="mt-1 text-sm text-ink-muted">Doğrulama ücretsiz — dakikalar içinde başlayın.</p>
+        <h1 className="text-2xl font-extrabold text-brand">{t.title}</h1>
+        <p className="mt-1 text-sm text-ink-muted">{t.subtitle}</p>
         <div className="mt-6">
-          <GoogleButton next={next} label="Google ile kaydol" />
+          <GoogleButton next={next} label={t.google} />
         </div>
         <div className="my-5 flex items-center gap-3 text-xs text-ink-muted">
-          <span className="h-px flex-1 bg-line" /> veya <span className="h-px flex-1 bg-line" />
+          <span className="h-px flex-1 bg-line" /> {t.or} <span className="h-px flex-1 bg-line" />
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="label">E-posta</label>
+            <label className="label">{t.email}</label>
             <input type="email" required className="field" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div>
-            <label className="label">Şifre (en az 8 karakter)</label>
+            <label className="label">{t.password}</label>
             <PasswordInput required minLength={8} autoComplete="new-password" value={password} onChange={setPassword} />
           </div>
           <div>
-            <label className="label">Şifre (Tekrar)</label>
+            <label className="label">{t.confirm}</label>
             <PasswordInput
               required
               minLength={8}
@@ -87,21 +121,18 @@ export default function RegisterPage() {
               onChange={setConfirm}
             />
             {confirm.length > 0 && confirm !== password && (
-              <p className="mt-1 text-xs text-red-600">Şifreler eşleşmiyor.</p>
+              <p className="mt-1 text-xs text-red-600">{t.mismatch}</p>
             )}
           </div>
 
           <label className="flex items-start gap-2.5 text-sm text-ink-soft">
             <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} className="mt-0.5 h-4 w-4 accent-brand" />
             <span>
-              <Link href="/legal/kullanim-kosullari" target="_blank" className="text-accent-600 underline">
-                Kullanım Koşulları
-              </Link>
-              &apos;nı ve{' '}
-              <Link href="/legal/kvkk-aydinlatma" target="_blank" className="text-accent-600 underline">
-                KVKK Aydınlatma Metni
-              </Link>
-              &apos;ni okudum, kabul ediyorum.
+              {t.termsPre}
+              <Link href={t.link1Href} target="_blank" className="text-accent-600 underline">{t.link1}</Link>
+              {t.termsMid}
+              <Link href={t.link2Href} target="_blank" className="text-accent-600 underline">{t.link2}</Link>
+              {t.termsPost}
             </span>
           </label>
 
@@ -110,14 +141,14 @@ export default function RegisterPage() {
 
           {error && <p className="form-error">{error}</p>}
           <button type="submit" disabled={!terms || !token || busy} className="btn-primary w-full disabled:opacity-60">
-            {busy ? 'Kaydolunuyor…' : !token ? 'Doğrulama bekleniyor…' : 'Kayıt ol'}
+            {busy ? t.submitting : !token ? t.waiting : t.submit}
           </button>
         </form>
       </div>
       <p className="mt-5 text-center text-sm text-ink-soft">
-        Zaten hesabınız var mı?{' '}
+        {t.haveAccount}{' '}
         <Link href={`/login?next=${encodeURIComponent(next)}`} className="font-semibold text-accent-600 hover:underline">
-          Giriş yapın
+          {t.login}
         </Link>
       </p>
     </main>
