@@ -65,7 +65,7 @@ export async function collectApiSecurityEvidence(host: string, session: AuthSess
   await resolveOrigin(host).catch(() => null);
   const origin = cachedOriginUrl(host);
   const corpus = await fetchClientCorpus(host);
-  if (!corpus.reachable) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: [t('Ana sayfa çekilemedi — API güvenliği bu hedef için **kapsam dışıdır**.', 'Startseite konnte nicht abgerufen werden — die API-Sicherheit ist für dieses Ziel **außerhalb des Geltungsbereichs**.')] };
+  if (!corpus.reachable) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: [t('Ana sayfa çekilemedi — API güvenliği bu hedef için **kapsam dışıdır**.', 'Startseite konnte nicht abgerufen werden — die API-Sicherheit ist für dieses Ziel **außerhalb des Geltungsbereichs**.', 'The home page could not be fetched — API security is **out of scope** for this target.')] };
   const shellHash = md5(corpus.homeHtml);
   const authHeaders = applyAuthHeaders({}, session);
   let probes = 1;
@@ -100,24 +100,24 @@ export async function collectApiSecurityEvidence(host: string, session: AuthSess
   // ---- SÜTUN 0 SCOPING: gerçek API yoksa TÜM bölüm kapsam dışı (hayalet-bulgu önleme) ----
   if (realApi.length === 0 && !graphqlUrl) {
     return { ok: true, pagesScanned: 1, inputsFound: 0, probesSent: probes, findings: [], stopped: null,
-      notes: [t(`Aynı-origin, JSON dönen (SPA catch-all shell OLMAYAN) gerçek bir sunucu REST/GraphQL API ucu bu hedefte gözlemlenmedi (istemci-SDK/Firebase/SPA) — API güvenliği kontrolleri bu hedef için **kapsam dışıdır**.`, `Kein echter, Same-Origin, JSON liefernder (KEINE SPA-Catch-all-Shell) Server-REST-/GraphQL-API-Endpunkt bei diesem Ziel beobachtet (Client-SDK/Firebase/SPA) — die API-Sicherheitsprüfungen sind für dieses Ziel **außerhalb des Geltungsbereichs**.`)] };
+      notes: [t(`Aynı-origin, JSON dönen (SPA catch-all shell OLMAYAN) gerçek bir sunucu REST/GraphQL API ucu bu hedefte gözlemlenmedi (istemci-SDK/Firebase/SPA) — API güvenliği kontrolleri bu hedef için **kapsam dışıdır**.`, `Kein echter, Same-Origin, JSON liefernder (KEINE SPA-Catch-all-Shell) Server-REST-/GraphQL-API-Endpunkt bei diesem Ziel beobachtet (Client-SDK/Firebase/SPA) — die API-Sicherheitsprüfungen sind für dieses Ziel **außerhalb des Geltungsbereichs**.`, `No real same-origin, JSON-returning (NOT an SPA catch-all shell) server REST/GraphQL API endpoint was observed on this target (client-SDK/Firebase/SPA) — the API security checks are **out of scope** for this target.`)] };
   }
 
   // ---- F1: BOLA/BFLA çapraz-referans (tekrar probe YOK) ----
-  notes.push(t('BOLA/BFLA (OWASP API1/API5 — nesne/fonksiyon-seviyesi yetki) **Authenticated IDOR** ve **Forced Browsing** bölümlerinde değerlendirilmiştir (çift bulgu önlemek için burada tekrar probe edilmedi).', 'BOLA/BFLA (OWASP API1/API5 — Objekt-/Funktionsebenen-Autorisierung) wurde in den Abschnitten **Authenticated IDOR** und **Forced Browsing** bewertet (zur Vermeidung doppelter Befunde hier nicht erneut geprüft).'));
+  notes.push(t('BOLA/BFLA (OWASP API1/API5 — nesne/fonksiyon-seviyesi yetki) **Authenticated IDOR** ve **Forced Browsing** bölümlerinde değerlendirilmiştir (çift bulgu önlemek için burada tekrar probe edilmedi).', 'BOLA/BFLA (OWASP API1/API5 — Objekt-/Funktionsebenen-Autorisierung) wurde in den Abschnitten **Authenticated IDOR** und **Forced Browsing** bewertet (zur Vermeidung doppelter Befunde hier nicht erneut geprüft).', 'BOLA/BFLA (OWASP API1/API5 — object/function-level authorization) was evaluated in the **Authenticated IDOR** and **Forced Browsing** sections (not re-probed here to avoid duplicate findings).'));
 
   // ---- F2: AŞIRI VERİ İFŞASI / BOPLA (API3) — gerçek API yanıtlarında hassas/aşırı alan ----
   for (const api of realApi) {
     const sens = api.body.match(SENSITIVE_FIELD_RE);
     const over = api.body.match(OVEREXPOSED_FIELD_RE);
     if (sens) findings.push({
-      check: 'excessive_data_exposure', inputPoint: api.path, vulnerable: true, technique: 'aşırı veri ifşası / BOPLA (API3) — yanıt alan gözlemi',
-      evidence: `API yanıtı (\`${api.path}\`) **hassas alan** içeriyor (\`${sens[1]}\`) — değer REDAKTE. İstemciye gönderilen yanıt gerekenden fazla/hassas veri ifşa ediyor (parola-hash/sır/token vb.). Sunucuda alan-allowlist (response DTO) uygulanmalı.`,
+      check: 'excessive_data_exposure', inputPoint: api.path, vulnerable: true, technique: (en ? 'excessive data exposure / BOPLA (API3) — response field observation' : 'aşırı veri ifşası / BOPLA (API3) — yanıt alan gözlemi'),
+      evidence: (en ? `The API response (\`${api.path}\`) contains a **sensitive field** (\`${sens[1]}\`) — value REDACTED. The response sent to the client exposes more/sensitive data than needed (password-hash/secret/token etc.). A field allowlist (response DTO) should be applied server-side.` : `API yanıtı (\`${api.path}\`) **hassas alan** içeriyor (\`${sens[1]}\`) — değer REDAKTE. İstemciye gönderilen yanıt gerekenden fazla/hassas veri ifşa ediyor (parola-hash/sır/token vb.). Sunucuda alan-allowlist (response DTO) uygulanmalı.`),
       confidence: 'high', severity: 'high', sideEffectRisk: 'none',
     });
     else if (over) findings.push({
-      check: 'excessive_data_exposure', inputPoint: api.path, vulnerable: true, technique: 'aşırı veri ifşası / BOPLA (API3) — yanıt alan gözlemi',
-      evidence: `API yanıtı (\`${api.path}\`) UI'nin ihtiyaç duymadığı iç/aşırı alan içeriyor (\`${over[1]}\`) — iç ID/rol/durum alanları istemciye sızıyor (gösterge). Yanıtı yalnız gereken alanlarla sınırlayın (allowlist DTO).`,
+      check: 'excessive_data_exposure', inputPoint: api.path, vulnerable: true, technique: (en ? 'excessive data exposure / BOPLA (API3) — response field observation' : 'aşırı veri ifşası / BOPLA (API3) — yanıt alan gözlemi'),
+      evidence: (en ? `The API response (\`${api.path}\`) contains internal/excessive fields the UI does not need (\`${over[1]}\`) — internal ID/role/status fields leak to the client (an indicator). Restrict the response to only the needed fields (allowlist DTO).` : `API yanıtı (\`${api.path}\`) UI'nin ihtiyaç duymadığı iç/aşırı alan içeriyor (\`${over[1]}\`) — iç ID/rol/durum alanları istemciye sızıyor (gösterge). Yanıtı yalnız gereken alanlarla sınırlayın (allowlist DTO).`),
       confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
     });
   }
@@ -133,10 +133,10 @@ export async function collectApiSecurityEvidence(host: string, session: AuthSess
       if (r.status === 429 || r.headers.get('retry-after') || /ratelimit-remaining|x-rate-limit/i.test([...r.headers.keys()].join(','))) { limited = true; break; }
       if (r.status >= 500 || (times.length > 2 && r.ms > times[0] * 4 && r.ms > 2000)) { stopped = true; break; } // hedefi yorma — dur
     }
-    if (limited) notes.push(t('API rate-limit gözlemlendi (429 / rate-limit başlığı) — olumlu.', 'API-Rate-Limit beobachtet (429 / Rate-Limit-Header) — positiv.'));
+    if (limited) notes.push(t('API rate-limit gözlemlendi (429 / rate-limit başlığı) — olumlu.', 'API-Rate-Limit beobachtet (429 / Rate-Limit-Header) — positiv.', 'API rate-limit observed (429 / rate-limit header) — positive.'));
     else if (!stopped) findings.push({
-      check: 'no_rate_limit', inputPoint: new URL(realApi[0].path, origin).pathname, vulnerable: true, technique: 'API rate-limit / kısıtlanmamış tüketim gözlemi (modest burst — DoS değil)',
-      evidence: `Bir API ucuna (\`${new URL(realApi[0].path, origin).pathname}\`) art arda ${times.length} istek sonrası **429 veya rate-limit başlığı gözlenmedi** — kısıtlanmamış kaynak tüketimi (API4) göstergesi (brute-force/scraping/DoS'a açık olabilir). Hedef yorulmadı (modest burst). Rate-limit + kota önerilir.`,
+      check: 'no_rate_limit', inputPoint: new URL(realApi[0].path, origin).pathname, vulnerable: true, technique: (en ? 'API rate-limit / unrestricted consumption observation (modest burst — not DoS)' : 'API rate-limit / kısıtlanmamış tüketim gözlemi (modest burst — DoS değil)'),
+      evidence: (en ? `After ${times.length} consecutive requests to an API endpoint (\`${new URL(realApi[0].path, origin).pathname}\`), **no 429 or rate-limit header was observed** — an unrestricted resource consumption (API4) indicator (may be exposed to brute-force/scraping/DoS). The target was not exhausted (modest burst). Rate-limit + quota are recommended.` : `Bir API ucuna (\`${new URL(realApi[0].path, origin).pathname}\`) art arda ${times.length} istek sonrası **429 veya rate-limit başlığı gözlenmedi** — kısıtlanmamış kaynak tüketimi (API4) göstergesi (brute-force/scraping/DoS'a açık olabilir). Hedef yorulmadı (modest burst). Rate-limit + kota önerilir.`),
       confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
     });
   }
@@ -151,8 +151,8 @@ export async function collectApiSecurityEvidence(host: string, session: AuthSess
     versionsSeen.push(v);
   }
   if (versionsSeen.length >= 2) findings.push({
-    check: 'shadow_api_version', inputPoint: versionsSeen.join(', '), vulnerable: true, technique: 'shadow / deprecated API sürümü gözlemi (güvenli GET)',
-    evidence: `Birden fazla API sürüm ucu aynı anda erişilebilir (\`${versionsSeen.join('`, `')}\`) — eski/gölge sürümler yamasız kalıp saldırı yüzeyini genişletebilir (API9). Kullanılmayan sürümleri kapatın/kaldırın. Gösterge.`,
+    check: 'shadow_api_version', inputPoint: versionsSeen.join(', '), vulnerable: true, technique: (en ? 'shadow / deprecated API version observation (safe GET)' : 'shadow / deprecated API sürümü gözlemi (güvenli GET)'),
+    evidence: (en ? `Multiple API version endpoints are accessible at once (\`${versionsSeen.join('`, `')}\`) — old/shadow versions may remain unpatched and widen the attack surface (API9). Disable/remove unused versions. An indicator.` : `Birden fazla API sürüm ucu aynı anda erişilebilir (\`${versionsSeen.join('`, `')}\`) — eski/gölge sürümler yamasız kalıp saldırı yüzeyini genişletebilir (API9). Kullanılmayan sürümleri kapatın/kaldırın. Gösterge.`),
     confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
   });
 
@@ -161,13 +161,13 @@ export async function collectApiSecurityEvidence(host: string, session: AuthSess
     const introspect = JSON.stringify({ query: '{__schema{types{name}}}' });
     const r = await probe(graphqlUrl, { method: 'POST', headers: { ...authHeaders, 'content-type': 'application/json' }, body: introspect, label: 'F5 GraphQL introspection' }); probes++;
     if (r && r.status < 400 && /"__schema"|"types"\s*:\s*\[/.test(r.text)) findings.push({
-      check: 'graphql_introspection', inputPoint: new URL(graphqlUrl).pathname, vulnerable: true, technique: 'GraphQL introspection açıklığı (read-only sorgu; mutasyon YOK)',
-      evidence: `GraphQL ucu (\`${new URL(graphqlUrl).pathname}\`) **introspection açık** — tüm şema (tipler/alanlar/mutasyonlar) dışarıya ifşa oluyor, saldırı yüzeyini haritalar. Üretimde introspection kapatılmalı. (Yalnız şema sorgulandı; veri değiştirilmedi.)`,
+      check: 'graphql_introspection', inputPoint: new URL(graphqlUrl).pathname, vulnerable: true, technique: (en ? 'GraphQL introspection exposure (read-only query; NO mutation)' : 'GraphQL introspection açıklığı (read-only sorgu; mutasyon YOK)'),
+      evidence: (en ? `The GraphQL endpoint (\`${new URL(graphqlUrl).pathname}\`) has **introspection enabled** — the entire schema (types/fields/mutations) is exposed externally, mapping the attack surface. Introspection should be disabled in production. (Only the schema was queried; no data was modified.)` : `GraphQL ucu (\`${new URL(graphqlUrl).pathname}\`) **introspection açık** — tüm şema (tipler/alanlar/mutasyonlar) dışarıya ifşa oluyor, saldırı yüzeyini haritalar. Üretimde introspection kapatılmalı. (Yalnız şema sorgulandı; veri değiştirilmedi.)`),
       confidence: 'high', severity: 'medium', sideEffectRisk: 'none',
     });
-    else notes.push(t('GraphQL ucu gözlemlendi ancak introspection kapalı/erişilemez görünüyor (olumlu).', 'GraphQL-Endpunkt beobachtet, aber Introspection erscheint deaktiviert/nicht erreichbar (positiv).'));
+    else notes.push(t('GraphQL ucu gözlemlendi ancak introspection kapalı/erişilemez görünüyor (olumlu).', 'GraphQL-Endpunkt beobachtet, aber Introspection erscheint deaktiviert/nicht erreichbar (positiv).', 'A GraphQL endpoint was observed but introspection appears disabled/unreachable (positive).'));
   }
 
-  notes.push(t(`Keşfedilen gerçek API ucu: **${realApi.length}**${graphqlUrl ? ' + GraphQL' : ''} (aynı-origin, JSON, SPA-shell olmayan). Denenen: **${probes}** güvenli prob (yalnız GET + read-only introspection; mutasyon/veri-değiştirme/DoS YOK).`, `Entdeckte echte API-Endpunkte: **${realApi.length}**${graphqlUrl ? ' + GraphQL' : ''} (Same-Origin, JSON, keine SPA-Shell). Durchgeführt: **${probes}** sichere Proben (nur GET + Read-only-Introspection; KEINE Mutation/Datenänderung/DoS).`));
+  notes.push(t(`Keşfedilen gerçek API ucu: **${realApi.length}**${graphqlUrl ? ' + GraphQL' : ''} (aynı-origin, JSON, SPA-shell olmayan). Denenen: **${probes}** güvenli prob (yalnız GET + read-only introspection; mutasyon/veri-değiştirme/DoS YOK).`, `Entdeckte echte API-Endpunkte: **${realApi.length}**${graphqlUrl ? ' + GraphQL' : ''} (Same-Origin, JSON, keine SPA-Shell). Durchgeführt: **${probes}** sichere Proben (nur GET + Read-only-Introspection; KEINE Mutation/Datenänderung/DoS).`, `Discovered real API endpoints: **${realApi.length}**${graphqlUrl ? ' + GraphQL' : ''} (same-origin, JSON, not an SPA shell). Performed: **${probes}** safe probes (GET + read-only introspection only; NO mutation/data-change/DoS).`));
   return { ok: true, pagesScanned: 1, inputsFound: realApi.length + (graphqlUrl ? 1 : 0), probesSent: probes, findings, stopped: null, notes };
 }
