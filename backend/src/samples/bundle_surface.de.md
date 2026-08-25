@@ -182,6 +182,9 @@ Auch die Bereiche ohne Befund eingeschlossen, wurden die Kontrollen der externen
 | DNS- & E-Mail-Sicherheit | ⚠️ Befund vorhanden (Mittel — oben im Detail) |
 | CORS- & Cookie-Sicherheit | ✅ Kein Problem gefunden |
 | CSP-Analyse (Content Security Policy) | ⚠️ Befund vorhanden (Mittel — oben im Detail) |
+| Verzeichnisauflistung (autoindex / „Index of /") · CWE-548 | ✅ 6 Verzeichnisse geprüft, keine Auflistung |
+| Ausführlicher Fehler / Serverpfad-Offenlegung · CWE-209 | ✅ Kein Indikator gefunden |
+| autocomplete-Richtlinie im Passwortfeld · CWE-522 | ✅ Angemessen / kein Passwortfeld beobachtet |
 
 > **Drei-Zustands-Unterscheidung (Ehrlichkeit):** ✅ *Kein Problem gefunden* = Kontrolle lief, Ergebnis sauber · ⚠️ *Befund vorhanden* = oben im Detail · ⚠️ *Nicht prüfbar* = keine Daten erhebbar (bedeutet NICHT sicher).
 

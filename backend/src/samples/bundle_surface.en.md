@@ -182,6 +182,9 @@ Including the areas with no finding, the external-surface checks were genuinely 
 | DNS & Email Security | ⚠️ Finding present (Medium — detailed above) |
 | CORS & Cookie Security | ✅ No issue found |
 | CSP (Content Security Policy) Analysis | ⚠️ Finding present (Medium — detailed above) |
+| Directory listing (autoindex / "Index of /") · CWE-548 | ✅ 6 directories tried, no listing |
+| Verbose error / server-path disclosure · CWE-209 | ✅ No indicator found |
+| Password-field autocomplete policy · CWE-522 | ✅ Appropriate / no password field observed |
 
 > **Three-state distinction (honesty):** ✅ *No issue found* = the check ran and came back clean · ⚠️ *Finding present* = detailed above · ⚠️ *Not assessable* = no data could be collected (does NOT mean secure).
 

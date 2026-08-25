@@ -107,6 +107,8 @@ Reconnaissance comes out clean on most healthy targets; this section also makes 
 | Subdomain Takeover Scan | ✅ 0 subdomain records checked; no takeover indicator found |
 | API & Swagger Reconnaissance | ✅ 12 paths checked (12 fixed + 0 sitemap candidates, from 2 pages); no publicly accessible API schema found |
 | CMS / Framework CVE Match | ✅ No known CMS/framework fingerprint detected |
+| Server/Software Banner → Known CVE | ⚠️ 21 known CVEs in banner version (PHP 7.1.26) |
+| Sitemap + robots.txt path reconnaissance | ✅ 0 paths derived from the sitemap + robots.txt Disallow tried (existence only); no sensitive/administrative endpoint found |
 
 > **Three-state distinction (honesty):** ✅ *No indicator found* = method ran, clean · ⚠️ *Indicator present* = detailed above · ⚠️ *Not assessable* = no data collectable (does NOT mean secure).
 

@@ -182,6 +182,9 @@ Bulgu çıkmayan alanlar da dâhil, dış-yüzey kontrolleri ana sayfa dâhil **
 | DNS & E-posta Güvenliği | ⚠️ Bulgu var (Orta — yukarıda ayrıntılı) |
 | CORS & Çerez Güvenliği | ✅ Sorun bulunmadı |
 | CSP (İçerik Güvenlik Politikası) Analizi | ⚠️ Bulgu var (Orta — yukarıda ayrıntılı) |
+| Dizin listeleme (autoindex / “Index of /”) · CWE-548 | ✅ 6 dizin denendi, listeleme yok |
+| Ayrıntılı hata / sunucu-yol ifşası · CWE-209 | ✅ Gösterge bulunamadı |
+| Parola alanı autocomplete politikası · CWE-522 | ✅ Uygun / parola alanı gözlenmedi |
 
 > **Üç-durum ayrımı (dürüstlük):** ✅ *Sorun bulunmadı* = kontrol çalıştı, temiz çıktı · ⚠️ *Bulgu var* = yukarıda detaylı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).
 

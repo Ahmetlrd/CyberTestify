@@ -809,10 +809,21 @@ export function combineSurfaceAreas(
         : t(`⚠️ Bulgu var (${RW[lv]} — yukarıda ayrıntılı)`, `⚠️ Befund vorhanden (${RW[lv]} — oben im Detail)`, `⚠️ Finding present (${RW[lv]} — detailed above)`);
     return `| ${title} | ${state} |`;
   }).join('\n');
+  // (Faz 4 — DÜRÜSTLÜK) Ek pasif alt-kontroller (dizin listeleme/hata ifşası/autocomplete, CWE-548/209/522)
+  // pozitif güvence tablosunda da AÇIKÇA görünsün — TEMİZKEN BİLE "denendi". State, header alanının
+  // "EK BİLGİ-SIZINTISI GÖZLEMLERİ" üç-durum tablosundaki HÜCRENİN AYNISIDIR (uydurma yok).
+  const extraAssurance: string[] = [];
+  for (const r of results) {
+    if (!r) continue;
+    for (const line of r.findings.split('\n')) {
+      if (/^\|.*CWE-(?:548|209|522).*\|.*\|\s*$/.test(line)) extraAssurance.push(line.trim());
+    }
+  }
+  const assuranceRowsAll = extraAssurance.length ? `${assuranceRows}\n${extraAssurance.join('\n')}` : assuranceRows;
   const assuranceSection = en
     ? `## POSITIVE ASSURANCE — AREAS CHECKED\n\n` +
       `Including the areas with no finding, the external-surface checks were genuinely run across **${pageCount} unique pages** including the home page. The table below also shows the "no issue found" results transparently:\n\n` +
-      `| Control area | Result |\n|---------------|-------|\n${assuranceRows}\n\n` +
+      `| Control area | Result |\n|---------------|-------|\n${assuranceRowsAll}\n\n` +
       `> **Three-state distinction (honesty):** ✅ *No issue found* = the check ran and came back clean · ⚠️ *Finding present* = detailed above · ⚠️ *Not assessable* = no data could be collected (does NOT mean secure).\n\n` +
       `### What this package DOES and DOES NOT check\n\n` +
       `**DOES (passive — only page retrieval via GET + harmless Origin/DNS query):** TLS/certificate, HTTP security headers, CORS policy, cookie flags (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS/email records (SPF/DKIM/DMARC/DNSSEC), exposed sensitive files (incl. common backup patterns), directory listing (autoindex), verbose-error/server-path disclosure (redacted), password-field autocomplete policy, outdated/unsupported software versions — across the ${pageCount} discovered pages.\n\n` +
@@ -820,14 +831,14 @@ export function combineSurfaceAreas(
     : de
     ? `## POSITIVE ZUSICHERUNG — GEPRÜFTE BEREICHE\n\n` +
       `Auch die Bereiche ohne Befund eingeschlossen, wurden die Kontrollen der externen Angriffsfläche tatsächlich auf **${pageCount} einzigartigen Seiten** einschließlich der Startseite ausgeführt. Die folgende Tabelle zeigt auch die „kein Problem gefunden"-Ergebnisse transparent:\n\n` +
-      `| Kontrollbereich | Ergebnis |\n|---------------|-------|\n${assuranceRows}\n\n` +
+      `| Kontrollbereich | Ergebnis |\n|---------------|-------|\n${assuranceRowsAll}\n\n` +
       `> **Drei-Zustands-Unterscheidung (Ehrlichkeit):** ✅ *Kein Problem gefunden* = Kontrolle lief, Ergebnis sauber · ⚠️ *Befund vorhanden* = oben im Detail · ⚠️ *Nicht prüfbar* = keine Daten erhebbar (bedeutet NICHT sicher).\n\n` +
       `### Was dieses Paket prüft — und was NICHT\n\n` +
       `**PRÜFT (passiv — nur Seitenabruf per GET + harmlose Origin-/DNS-Abfrage):** TLS/Zertifikat, HTTP-Sicherheits-Header, CORS-Richtlinie, Cookie-Flags (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS-/E-Mail-Einträge (SPF/DKIM/DMARC/DNSSEC), offenliegende sensible Dateien (inkl. gängiger Backup-Muster), Verzeichnisauflistung (autoindex), ausführliche-Fehler-/Serverpfad-Offenlegung (redigiert), autocomplete-Richtlinie im Passwortfeld, veraltete/nicht unterstützte Softwareversionen — auf den ${pageCount} entdeckten Seiten.\n\n` +
       `**PRÜFT NICHT:** Aktive Schwachstellenverifikation (Payload-/Probe-Versuche wie SQLi/XSS/IDOR), authentifizierte Ablauftests, Missbrauch der Geschäftslogik. Diese gehören zum Umfang der Pakete **Aktive Verifikation** und **Umfassender Pentest**. Dieser Bericht beruht auf passiver Beobachtung; die Aussage „kein Befund" in einem Bereich **BEWEIST NICHT**, dass er sicher ist, da kein aktiver Exploit versucht wurde — sie zeigt lediglich, dass die von außen beobachtete Konfiguration sauber ist.\n\n`
     : `## POZİTİF GÜVENCE — KONTROL EDİLEN ALANLAR\n\n` +
       `Bulgu çıkmayan alanlar da dâhil, dış-yüzey kontrolleri ana sayfa dâhil **${pageCount} benzersiz sayfada** gerçekten çalıştırıldı. Aşağıdaki tablo, "sorun bulunamadı" sonuçlarını da şeffaf biçimde gösterir:\n\n` +
-      `| Kontrol Alanı | Sonuç |\n|---------------|-------|\n${assuranceRows}\n\n` +
+      `| Kontrol Alanı | Sonuç |\n|---------------|-------|\n${assuranceRowsAll}\n\n` +
       `> **Üç-durum ayrımı (dürüstlük):** ✅ *Sorun bulunmadı* = kontrol çalıştı, temiz çıktı · ⚠️ *Bulgu var* = yukarıda detaylı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).\n\n` +
       `### Bu paket NE kontrol EDER, NE ETMEZ\n\n` +
       `**EDER (pasif — yalnız GET ile sayfa çekme + zararsız Origin/DNS sorgusu):** TLS/sertifika, HTTP güvenlik başlıkları, CORS politikası, çerez bayrakları (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS/e-posta kayıtları (SPF/DKIM/DMARC/DNSSEC), açıkta hassas dosya (yaygın yedek kalıpları dâhil), dizin listeleme (autoindex), ayrıntılı-hata/sunucu-yol ifşası (redakte), parola alanı autocomplete politikası, eski/desteksiz yazılım sürümü — keşfedilen ${pageCount} sayfada.\n\n` +

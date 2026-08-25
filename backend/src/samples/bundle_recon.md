@@ -107,6 +107,8 @@ Keşif çoğu sağlıklı hedefte temiz çıkar; bu bölüm "bir şey bulunamad�
 | Subdomain-Takeover Taraması | ✅ 0 alt domain kaydı denendi; devralma göstergesi bulunamadı |
 | API & Swagger Keşfi | ✅ 12 yol denendi (12 sabit + 0 site-haritası adayı, 2 sayfadan); herkese açık API şeması bulunamadı |
 | CMS / Framework CVE Eşleşmesi | ✅ Bilinen bir CMS/çatı parmak izi tespit edilmedi |
+| Sunucu/Yazılım Banner → Bilinen CVE | ⚠️ Banner sürümünde 21 bilinen CVE (PHP 7.1.26) |
+| Site haritası + robots.txt yol keşfi | ✅ Site haritası + robots.txt Disallow’dan türetilen 0 yol denendi (yalnız varlık); hassas/idari uç bulunamadı |
 
 > **Üç-durum ayrımı (dürüstlük):** ✅ *Gösterge bulunamadı* = yöntem çalıştı, temiz · ⚠️ *Gösterge var* = yukarıda ayrıntılı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).
 

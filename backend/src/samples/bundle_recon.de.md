@@ -107,6 +107,8 @@ Die Erkundung fällt bei den meisten gesunden Zielen sauber aus; dieser Abschnit
 | Subdomain-Takeover-Prüfung | ✅ 0 Subdomain-Einträge geprüft; kein Übernahme-Indikator gefunden |
 | API- & Swagger-Erkundung | ✅ 12 Pfade geprüft (12 fest + 0 Sitemap-Kandidaten, aus 2 Seiten); kein öffentlich zugängliches API-Schema gefunden |
 | CMS-/Framework-CVE-Abgleich | ✅ Kein bekannter CMS-/Framework-Fingerabdruck festgestellt |
+| Server-/Software-Banner → Bekannte CVE | ⚠️ 21 bekannte CVE in Banner-Version (PHP 7.1.26) |
+| Sitemap- + robots.txt-Pfaderkundung | ✅ 0 aus Sitemap + robots.txt-Disallow abgeleitete Pfade geprüft (nur Existenz); kein sensibler/administrativer Endpunkt gefunden |
 
 > **Drei-Zustands-Unterscheidung (Ehrlichkeit):** ✅ *Kein Indikator gefunden* = Methode lief, sauber · ⚠️ *Indikator vorhanden* = oben im Detail · ⚠️ *Nicht prüfbar* = keine Daten erhebbar (bedeutet NICHT sicher).
 
