@@ -14,6 +14,7 @@ import { buildActivityFeed } from './services/activityFeed.js';
 import { promoteQueued } from './services/orchestrator.js';
 import { checkEgressProxyHealth } from './services/egressHealth.js';
 import { runDueSchedules, recordScheduleOutcome } from './services/schedules.js';
+import { syncUsomCatalog, USOM_SYNC_INTERVAL_MS } from './services/usomSync.js';
 import { reapStuckFlows } from './services/watchdog.js';
 
 // Fail-fast: kapsam kilidi konfigurasyonu eksik/gecersizse hemen dur.
@@ -51,6 +52,7 @@ async function teardownFlowContainer(pentagiFlowId: string) {
 // Sipariş henüz terminal DEĞİLSE net biçimde başarısız işaretle (kimlik bilgisi tüketilmiş olabilir).
 const TERMINAL_ORDER = new Set(['scan_failed', 'scan_completed', 'report_delivered', 'report_purged', 'scope_violation', 'refunded']);
 let lastLogRetentionAt = 0; // (gözlemlenebilirlik) log retention'ı günde bir kez çalıştırmak için guard
+let lastUsomSyncAt = 0;      // (USOM/SGB) katalog senkronunu USOM_SYNC_INTERVAL_MS'de bir çalıştırmak için guard (restart-güvenli: idempotent upsert)
 async function failOrderIfPending(orderId: string, reason: string): Promise<void> {
   const o = await prisma.order.findUnique({ where: { id: orderId }, select: { status: true } });
   if (!o || TERMINAL_ORDER.has(o.status)) return;
@@ -454,6 +456,18 @@ async function main() {
       await publishDailyIfDue();
     } catch (err) {
       console.error('[worker] Blog gunluk yayin sirasinda hata:', err);
+    }
+    try {
+      // (USOM/SGB) Katalog senkronu — kritik yol DIŞINDA, USOM_SYNC_INTERVAL_MS'de bir. Erisilemezse
+      // sessizce atlanir; onceki katalog korunur (tarama etkilenmez). Idempotent upsert (restart-guvenli).
+      if (Date.now() - lastUsomSyncAt > USOM_SYNC_INTERVAL_MS) {
+        lastUsomSyncAt = Date.now();
+        const r = await syncUsomCatalog();
+        if (r.ok) console.log(`[worker] USOM katalog senkronu: ${r.upserted}/${r.fetched} bildirim islendi.`);
+        else { lastUsomSyncAt = 0; console.warn('[worker] USOM akisi erisilemedi; onceki katalog korunuyor (tarama etkilenmez).'); }
+      }
+    } catch (err) {
+      console.error('[worker] USOM katalog senkronu sirasinda hata (yine de devam):', err);
     }
     try {
       // Zamani gelen periyodik taramalari tetikle (normal siparis akisi, concurrency=1).

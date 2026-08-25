@@ -60,18 +60,21 @@ function vLt(a: string, b: string): boolean {
 }
 
 // Dış-yüzey gözlemlenebilir bildirim sayısı (eşlenebilir alt küme — dürüstlük metni için).
-export const USOM_OBSERVABLE_COUNT = USOM_CATALOG.filter((a) => a.match.kind !== 'none').length;
+export const observableCount = (catalog: UsomAdvisory[] = USOM_CATALOG): number =>
+  catalog.filter((a) => a.match.kind !== 'none').length;
+export const USOM_OBSERVABLE_COUNT = observableCount(USOM_CATALOG);
 
 /**
  * Mevcut Keşif parmak-izini (CMS + banner) katalogla eşler. İstismar/sürüm-tahmini YOK — yalnız
  * "bu ürün/teknoloji dışarıdan görüldü mü" + (doğrulanmış aralık VARSA) sürüm karşılaştırması.
+ * `catalog` verilmezse statik seed kullanılır (otomatik-senkron loadUsomCatalog ile birleşiği geçer).
  */
 export function matchUsom(fp: {
   cms?: { cms?: string; version?: string };
   banners: Array<{ product: string; version: string }>;
-}): UsomHit[] {
+}, catalog: UsomAdvisory[] = USOM_CATALOG): UsomHit[] {
   const hits: UsomHit[] = [];
-  for (const adv of USOM_CATALOG) {
+  for (const adv of catalog) {
     if (adv.match.kind === 'banner') {
       const wantProduct = adv.match.product;
       const b = fp.banners.find((x) => x.product === wantProduct);

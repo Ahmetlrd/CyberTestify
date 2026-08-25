@@ -13,7 +13,8 @@
  * TR/DE'de AYNIDIR; 'en' branch'inde kod-içi yorumlar İngilizce'ye çevrilir (kod/komut aynı kalır).
  */
 import { collectReconEvidence, type ReconEvidence, type SubEvidence, type ApiEvidence, type CmsEvidence, type BannerCve } from './reconEvidence.js';
-import { matchUsom, USOM_CATALOG, USOM_OBSERVABLE_COUNT, type UsomHit } from './usomCatalog.js';
+import { matchUsom, USOM_CATALOG, observableCount, type UsomHit, type UsomAdvisory } from './usomCatalog.js';
+import { loadUsomCatalog, usomLastSyncAt } from './usomSync.js';
 import { resolveOrigin } from './surfaceEvidence.js';
 
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
@@ -591,11 +592,13 @@ function bestPracticesSection(locale: string): string {
 // USOM/SGB bildirim kataloğuyla DETERMİNİSTİK eşler. LLM YOK; %100 backend şablon. İstismar YOK.
 // Bölüm yalnız locale==='tr' iken çağrılır (aşağıda); /de-/en'de HİÇ üretilmez.
 // ======================================================================================
-function usomHitsFor(ev: ReconEvidence): UsomHit[] {
+function usomHitsFor(ev: ReconEvidence, catalog: UsomAdvisory[]): UsomHit[] {
   const banners = (ev.bannerCves ?? []).map((b) => ({ product: b.product, version: b.version }));
-  return matchUsom({ cms: ev.cms.ok ? { cms: ev.cms.cms, version: ev.cms.version } : undefined, banners });
+  return matchUsom({ cms: ev.cms.ok ? { cms: ev.cms.cms, version: ev.cms.version } : undefined, banners }, catalog);
 }
-function buildUsomSection(hits: UsomHit[]): string {
+function buildUsomSection(hits: UsomHit[], catalog: UsomAdvisory[], lastSync: Date | null): string {
+  const total = catalog.length;
+  const observable = observableCount(catalog);
   const stateCell = (h: UsomHit): string =>
     h.state === 'range'
       ? `⚠️ Etkilenen aralıkta olabilir${h.observedVersion ? ` (görülen sürüm ${h.observedVersion})` : ''}`
@@ -606,7 +609,8 @@ function buildUsomSection(hits: UsomHit[]): string {
   // Marka/hukuk disclaimer'ı — bölümün BAŞINDA belirgin.
   body += `> **Bağımsız eşleme — resmî statü değildir:** Bu, bağımsız bir eşleme hizmetidir; SGB/USOM ile **resmî bir bağı, onayı veya yetkilendirmesi YOKTUR**. "SGB onaylı", "resmî/ulusal tarama" veya "zorunlu kontrol" DEĞİLDİR; resmî denetim/sertifikasyon yerine geçmez. Yalnız kamuya açık bildirimlerle eşleme yapar.\n\n`;
   // Dışarıdan-gözlemlenebilir alt küme dürüstlüğü.
-  body += `**Kapsam (dürüstlük):** Katalogda **${USOM_CATALOG.length}** gerçek bildirim var; bunların **yalnız ${USOM_OBSERVABLE_COUNT} tanesi dışarıdan gözlemlenebilir** ürüne (ör. Apache/nginx/PHP sunucu banner'ı, WordPress/Joomla/Drupal CMS) aittir ve eşlenebilir. Bir ürünün sürümü dışarıdan görülemiyorsa (ör. bir güvenlik cihazı/uç-nokta ürünü) eşleme YAPILMAZ — bu bölüm katalogun tamamının değil, yalnız dış-yüzeyden görülebilen alt kümenin durumunu gösterir. Sürüm banner'dan gizlenebildiği ve backport yamalar sürüm dizesini değiştirmediği için **"kesin etkileniyorsunuz" ASLA denmez** — çıktı yalnız bir GÖSTERGEDİR.\n\n`;
+  body += `**Kapsam (dürüstlük):** Katalogda **${total}** gerçek bildirim var; bunların **yalnız ${observable} tanesi dışarıdan gözlemlenebilir** ürüne (ör. Apache/nginx/PHP sunucu banner'ı, WordPress/Joomla/Drupal CMS) aittir ve eşlenebilir. Bir ürünün sürümü dışarıdan görülemiyorsa (ör. bir güvenlik cihazı/uç-nokta ürünü) eşleme YAPILMAZ — bu bölüm katalogun tamamının değil, yalnız dış-yüzeyden görülebilen alt kümenin durumunu gösterir. Sürüm banner'dan gizlenebildiği ve backport yamalar sürüm dizesini değiştirmediği için **"kesin etkileniyorsunuz" ASLA denmez** — çıktı yalnız bir GÖSTERGEDİR.\n\n`;
+  if (lastSync) body += `_Katalog son güncelleme: ${lastSync.toISOString().slice(0, 10)} (kamuya açık USOM/SGB akışından otomatik senkron)._\n\n`;
   body += `> **Üç-durum (dürüstlük):** ✅ *Sinyal yok* = bu bildirimin imzası hedefte görülmedi · ⚠️ *Sinyal var — sürüm doğrulanamadı* = ürün/teknoloji görüldü ama etkilenen sürümde olup olmadığı dışarıdan doğrulanamıyor · ⚠️ *Etkilenen aralıkta olabilir* = yalnız güvenilir sürüm sinyali etkilenen aralığa düşerse.\n\n`;
 
   if (hits.length) {
@@ -617,7 +621,7 @@ function buildUsomSection(hits: UsomHit[]): string {
     }
     body += `\n> **Önerilen resmî çözüm (özet):** İlgili ürünü, kaynak bildirimde belirtilen güncel/yamalı sürüme yükseltin ve sürüm/teknoloji ifşasını azaltın. Kesin durum için bağlı bildirimi inceleyin ve sürümünüzü içeriden doğrulayın.\n\n`;
   } else {
-    body += `✅ **Eşleşme yok:** Katalogdaki dış-gözlemlenebilir **${USOM_OBSERVABLE_COUNT}** bildirimin hiçbirinin imzası (CMS/sunucu-banner) hedefte görülmedi. Bu, hedefin bu bildirimlerden ETKİLENMEDİĞİNİ KANITLAMAZ; yalnız dış-yüzeyde ilgili ürün/sürüm sinyalinin gözlemlenmediğini gösterir.\n\n`;
+    body += `✅ **Eşleşme yok:** Katalogdaki dış-gözlemlenebilir **${observable}** bildirimin hiçbirinin imzası (CMS/sunucu-banner) hedefte görülmedi. Bu, hedefin bu bildirimlerden ETKİLENMEDİĞİNİ KANITLAMAZ; yalnız dış-yüzeyde ilgili ürün/sürüm sinyalinin gözlemlenmediğini gösterir.\n\n`;
   }
   return body;
 }
@@ -625,7 +629,7 @@ function buildUsomSection(hits: UsomHit[]): string {
 // ======================================================================================
 // BIRLESTIRME
 // ======================================================================================
-export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean }, locale: string = 'tr'): { findings: string; fixText: string } | null {
+export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean; usomCatalog?: UsomAdvisory[]; usomLastSync?: Date | null }, locale: string = 'tr'): { findings: string; fixText: string } | null {
   // Ucu de veri toplayamadiysa fallback.
   if (!ev.sub.ok && !ev.api.ok && !ev.cms.ok) return null;
   const httpOnly = opts?.httpOnly ?? false;
@@ -727,11 +731,13 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
     ? t(`⚠️ ${minedSensExists} idari-görünümlü yol erişilebilir (yetki testi Aktif Doğrulama kapsamı)`, `⚠️ ${minedSensExists} administrativ wirkende Pfade erreichbar (Berechtigungsprüfung im Umfang der Aktiven Verifikation)`, `⚠️ ${minedSensExists} administrative-looking paths accessible (authorisation testing within Active Verification scope)`)
     : t(`✅ Site haritası + robots.txt Disallow’dan türetilen ${minedN} yol denendi (yalnız varlık); hassas/idari uç bulunamadı`, `✅ ${minedN} aus Sitemap + robots.txt-Disallow abgeleitete Pfade geprüft (nur Existenz); kein sensibler/administrativer Endpunkt gefunden`, `✅ ${minedN} paths derived from the sitemap + robots.txt Disallow tried (existence only); no sensitive/administrative endpoint found`);
   // (USOM/SGB — YALNIZCA /tr) parmak-izi ↔ kamuya açık bildirim eşlemesi; bölüm + güvence satırı yalnız Türkçe.
-  const usomHits: UsomHit[] = locale === 'tr' ? usomHitsFor(ev) : [];
-  const usomSection = locale === 'tr' ? buildUsomSection(usomHits) : '';
+  // Katalog: opts ile geçen otomatik-senkron birleşiği (yoksa statik seed). /de-/en'de hiç değinilmez.
+  const usomCatalog = opts?.usomCatalog ?? USOM_CATALOG;
+  const usomHits: UsomHit[] = locale === 'tr' ? usomHitsFor(ev, usomCatalog) : [];
+  const usomSection = locale === 'tr' ? buildUsomSection(usomHits, usomCatalog, opts?.usomLastSync ?? null) : '';
   const usomRow = usomHits.length
     ? `⚠️ ${usomHits.length} kamuya açık bildirim imzası gözlemlendi (sürüm doğrulanamadı — gösterge)`
-    : `✅ ${USOM_OBSERVABLE_COUNT} dış-gözlemlenebilir bildirim tarandı; eşleşme bulunamadı`;
+    : `✅ ${observableCount(usomCatalog)} dış-gözlemlenebilir bildirim tarandı; eşleşme bulunamadı`;
   const usomAssuranceRow = locale === 'tr' ? `\n| USOM/SGB Bildirim Eşlemesi | ${usomRow} |` : '';
 
   const assuranceSection = en
@@ -778,8 +784,12 @@ export async function generateBundleReconReport(host: string, locale: string = '
   const o = await resolveOrigin(host);
   if (!o.reachable) return unscannableReconReport(host, locale);
   const ev = await collectReconEvidence(host, locale);
+  // (USOM/SGB — YALNIZCA /tr) Otomatik-senkron katalog + son güncelleme tarihini yükle (DB erişilemezse
+  // statik seed'e düşer — buildUsomSection bunu birleştirir). /de-/en'de yüklenmez (bölüm hiç yok).
+  const usomCatalog = locale === 'tr' ? await loadUsomCatalog().catch(() => USOM_CATALOG) : undefined;
+  const usomLastSync = locale === 'tr' ? await usomLastSyncAt().catch(() => null) : null;
   // Hiçbir keşif alanı veri toplayamadıysa -> "İncelenemedi" (null->Düşük fallback DEĞİL).
-  return combineReconAreas(ev, { httpOnly: !o.httpsWorks }, locale) ?? unscannableReconReport(host, locale);
+  return combineReconAreas(ev, { httpOnly: !o.httpsWorks, usomCatalog, usomLastSync }, locale) ?? unscannableReconReport(host, locale);
 }
 
 function unscannableReconReport(host: string, locale: string = 'tr'): { findings: string; fixText: string } {

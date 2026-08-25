@@ -637,3 +637,22 @@ model ReportAccessLog {
   @@index([adminId])
   @@index([at])
 }
+
+// (Keşif — USOM/SGB Bildirim Eşlemesi) Kamuya açık USOM/SGB bildirim kataloğu; worker'daki
+// zamanlanmış görev siberguvenlik.gov.tr/api/incident akışından IDEMPOTENT upsert eder (anahtar: trNo).
+// İmza (matchKind/matchKey) DETERMİNİSTİK allowlist ile türetilir (LLM YOK). Rapor bu tabloyu
+// statik seed'le birleştirip okur; senkron başarısızsa son başarılı hâl korunur (tarama bloklanmaz).
+model UsomAdvisory {
+  id          Int       @id @default(autoincrement())
+  trNo        String    @unique // TR-YY-NNNN (büyük harf)
+  title       String
+  url         String
+  publishedAt DateTime?
+  matchKind   String    // 'banner' | 'cms' | 'none' (deterministik allowlist)
+  matchKey    String?   // ör. 'Apache httpd' | 'WordPress' (matchKind !== 'none' ise dolu)
+  cve         String?   // bildirim metninden regex ile (varsa) — olgusal
+  versionLt   String?   // güvenilir çıkarılamıyorsa boş → "sürüm doğrulanamadı"
+  syncedAt    DateTime  @default(now())
+
+  @@index([matchKind])
+}

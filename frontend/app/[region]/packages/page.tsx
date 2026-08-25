@@ -209,6 +209,12 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         : 'border-2 border-accent/40'
                     } ${b.comingSoon ? 'opacity-90' : ''}`}
                   >
+                    {/* (USOM/SGB — YALNIZCA /tr) Keşif paketine dikkat-çekici olgusal rozet; /de-/en'de yok. */}
+                    {tr && b.key === 'bundle_recon' && !b.comingSoon && (
+                      <span className="absolute -top-3 right-6 whitespace-nowrap rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white shadow-sm">
+                        USOM Eşleme
+                      </span>
+                    )}
                     {b.comingSoon ? (
                       <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
                         {t3('Yakında', 'Bald', 'Soon')}
