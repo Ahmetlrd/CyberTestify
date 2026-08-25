@@ -12,7 +12,7 @@
  * rapor gövdesi (Sie-form, „…" tırnak). 'en' → İngilizce (UK) rapor gövdesi. Kod bloğu (``` fence) içi
  * TR/DE'de AYNIDIR; 'en' branch'inde kod-içi yorumlar İngilizce'ye çevrilir (kod/komut aynı kalır).
  */
-import { collectReconEvidence, type ReconEvidence, type SubEvidence, type ApiEvidence, type CmsEvidence } from './reconEvidence.js';
+import { collectReconEvidence, type ReconEvidence, type SubEvidence, type ApiEvidence, type CmsEvidence, type BannerCve } from './reconEvidence.js';
 import { resolveOrigin } from './surfaceEvidence.js';
 
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
@@ -310,8 +310,8 @@ function buildApiArea(ev: ApiEvidence, locale: string = 'tr'): Area {
   // (BÖLÜM 1 — SİTE HARİTASI BESLEMESİ) Keşfedilen sayfalardan çıkarılan API/idari-görünümlü aday yollar.
   if (ev.minedTried && ev.minedTried.length) {
     const sensFound = ev.minedTried.filter((m) => m.status === 200 && m.sensitive);
-    lines.push(t(`### Site haritasından türetilen yol adayları (${ev.pagesScanned} sayfadan ${ev.minedTried.length} aday)\n`, `### Aus der Sitemap abgeleitete Pfadkandidaten (${ev.minedTried.length} Kandidaten aus ${ev.pagesScanned} Seiten)\n`, `### Path candidates derived from the sitemap (${ev.minedTried.length} candidates from ${ev.pagesScanned} pages)\n`));
-    lines.push(t('Sabit liste **dışında**, keşfedilen sayfalardaki link/script/form referanslarından çıkarılan API/idari-görünümlü yollar da GET ile **yalnız varlık** açısından denendi (payload/enjeksiyon YOK — Keşif yalnız "bu uç var mı" tespiti yapar):', 'Über die feste Liste **hinaus** wurden auch aus Link-/Skript-/Formularverweisen der entdeckten Seiten extrahierte API-/administrativ wirkende Pfade per GET **nur auf Existenz** geprüft (KEIN Payload/keine Injektion — die Erkundung stellt nur fest, „ob dieser Endpunkt existiert"):', 'Beyond the fixed list, API/administrative-looking paths extracted from link/script/form references on the discovered pages were also checked via GET **for existence only** (NO payload/injection — reconnaissance only determines “whether this endpoint exists”):'));
+    lines.push(t(`### Site haritası + robots.txt'ten türetilen yol adayları (${ev.pagesScanned} sayfadan ${ev.minedTried.length} aday)\n`, `### Aus Sitemap + robots.txt abgeleitete Pfadkandidaten (${ev.minedTried.length} Kandidaten aus ${ev.pagesScanned} Seiten)\n`, `### Path candidates derived from the sitemap + robots.txt (${ev.minedTried.length} candidates from ${ev.pagesScanned} pages)\n`));
+    lines.push(t('Sabit liste **dışında**, keşfedilen sayfalardaki link/script/form referansları **ve `/robots.txt` Disallow girdileri**nden çıkarılan API/idari-görünümlü yollar da GET ile **yalnız varlık** açısından denendi (payload/enjeksiyon YOK — Keşif yalnız "bu uç var mı" tespiti yapar; içerik dökülmez):', 'Über die feste Liste **hinaus** wurden auch aus Link-/Skript-/Formularverweisen der entdeckten Seiten **und den `Disallow`-Einträgen der `/robots.txt`** extrahierte API-/administrativ wirkende Pfade per GET **nur auf Existenz** geprüft (KEIN Payload/keine Injektion — die Erkundung stellt nur fest, „ob dieser Endpunkt existiert“; kein Inhalt wird ausgegeben):', 'Beyond the fixed list, API/administrative-looking paths extracted from link/script/form references on the discovered pages **and the `Disallow` entries of `/robots.txt`** were also checked via GET **for existence only** (NO payload/injection — reconnaissance only determines “whether this endpoint exists”; no content is dumped):'));
     lines.push('');
     lines.push(t('| Aday Yol | Kaynak sayfa | HTTP | Not |', '| Kandidatenpfad | Quellseite | HTTP | Hinweis |', '| Candidate Path | Source page | HTTP | Note |'));
     lines.push('|----------|--------------|------|-----|');
@@ -415,15 +415,21 @@ function cveLevel(ev: CmsEvidence): Level {
   return 'low';
 }
 
-function buildCmsArea(ev: CmsEvidence, locale: string = 'tr'): Area {
+function buildCmsArea(ev: CmsEvidence, bannerCves: BannerCve[] = [], locale: string = 'tr'): Area {
   const de = locale === 'de';
   const en = locale === 'en';
   const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const cmsTitle = t('CMS & Bilinen CVE Taraması', 'CMS- & bekannte-CVE-Prüfung', 'CMS & known CVE Scan');
-  const level = cveLevel(ev);
+  // (B.2) Banner (Server/PHP) sürümü CVE'leri de alan seviyesine katkı verir.
+  const banHits = bannerCves.filter((b) => b.cveOk && b.cveTotal > 0);
+  const banCritHigh = banHits.reduce((n, b) => n + b.cves.filter((c) => c.severity === 'CRITICAL' || c.severity === 'HIGH' || c.score >= 7).length, 0);
+  let level = cveLevel(ev);
+  if (banCritHigh > 0) level = 'high';
+  else if (banHits.length && level === 'low') level = 'medium';
   const critHigh = ev.cves.filter((c) => c.severity === 'CRITICAL' || c.severity === 'HIGH' || c.score >= 7).length;
+  const banClause = banHits.length ? t(` · sunucu/yazılım sürümünde ${banHits.reduce((n, b) => n + b.cveTotal, 0)} bilinen CVE`, ` · ${banHits.reduce((n, b) => n + b.cveTotal, 0)} bekannte CVE in der Server-/Software-Version`, ` · ${banHits.reduce((n, b) => n + b.cveTotal, 0)} known CVEs in the server/software version`) : '';
 
-  const headline = !ev.cms
+  const headline = (!ev.cms
     ? t('Bilinen bir CMS parmak izi tespit edilmedi', 'Kein bekannter CMS-Fingerabdruck festgestellt', 'No known CMS fingerprint detected')
     : critHigh
       ? t(`${ev.cms}${ev.version ? ` ${ev.version}` : ''} — ${critHigh} yüksek/kritik CVE ile eşleşiyor`, `${ev.cms}${ev.version ? ` ${ev.version}` : ''} — Übereinstimmung mit ${critHigh} hohen/kritischen CVEs`, `${ev.cms}${ev.version ? ` ${ev.version}` : ''} — matches ${critHigh} high/critical CVEs`)
@@ -431,7 +437,7 @@ function buildCmsArea(ev: CmsEvidence, locale: string = 'tr'): Area {
         ? t(`${ev.cms}${ev.version ? ` ${ev.version}` : ''} — ${ev.cveTotal} bilinen CVE ile eşleşiyor`, `${ev.cms}${ev.version ? ` ${ev.version}` : ''} — Übereinstimmung mit ${ev.cveTotal} bekannten CVEs`, `${ev.cms}${ev.version ? ` ${ev.version}` : ''} — matches ${ev.cveTotal} known CVEs`)
         : ev.version
           ? t(`${ev.cms} ${ev.version} tespit edildi; eşleşen CVE bulunamadı`, `${ev.cms} ${ev.version} erkannt; keine passende CVE gefunden`, `${ev.cms} ${ev.version} detected; no matching CVE found`)
-          : t(`${ev.cms} tespit edildi; sürüm belirlenemedi`, `${ev.cms} erkannt; Version nicht bestimmbar`, `${ev.cms} detected; version could not be determined`);
+          : t(`${ev.cms} tespit edildi; sürüm belirlenemedi`, `${ev.cms} erkannt; Version nicht bestimmbar`, `${ev.cms} detected; version could not be determined`)) + banClause;
 
   const lines: string[] = [];
   // Metodoloji — her durumda goster (seffaflik).
@@ -479,6 +485,30 @@ function buildCmsArea(ev: CmsEvidence, locale: string = 'tr'): Area {
       lines.push('');
     }
   }
+  // (B.2) Banner sürümü → bilinen CVE (NVD) — sunucu/yazılım banner'ından çıkan sürüm için CVE listesi.
+  // Üç-durum ŞEFFAF: banner yok → gözlenmedi; NVD yanıtsız → sorgulanamadı (temiz değil); eşleşme yok → temiz.
+  lines.push(t('### Sunucu/Yazılım Banner Sürümü — Bilinen CVE (NVD)\n', '### Server-/Software-Banner-Version — Bekannte CVE (NVD)\n', '### Server/Software Banner Version — Known CVE (NVD)\n'));
+  if (!bannerCves.length) {
+    lines.push(t('Sunucu/yazılım banner\'ında (Server / X-Powered-By) sürüm-taşıyan bir imza gözlenmedi — CVE eşlemesi için sürüm gereklidir. (Sürümü gizlemek olumlu bir sertleştirmedir.)', 'Im Server-/Software-Banner (Server / X-Powered-By) wurde keine versionsverratende Signatur beobachtet — für die CVE-Zuordnung ist die Version erforderlich. (Das Verbergen der Version ist eine positive Härtung.)', 'No version-bearing signature was observed in the server/software banner (Server / X-Powered-By) — the version is required for CVE mapping. (Hiding the version is a positive hardening.)'));
+  } else {
+    lines.push(t(`Banner'dan çıkan sürüm(ler) NVD'ye bağlandı (istismar/doğrulama YOK — yalnız "bu sürüm için bilinen CVE var mı" göstergesi):`, `Die aus dem Banner ermittelte(n) Version(en) wurden mit der NVD abgeglichen (KEINE Ausnutzung/Verifikation — nur der Indikator „gibt es bekannte CVEs für diese Version"):`, `The version(s) derived from the banner were matched against the NVD (NO exploitation/verification — only the "are there known CVEs for this version" indicator):`));
+    lines.push('');
+    lines.push(t('| Yazılım/Sürüm | NVD sonucu | Örnek CVE |', '| Software/Version | NVD-Ergebnis | Beispiel-CVE |', '| Software/Version | NVD result | Example CVE |'));
+    lines.push('|-----|-------|-------|');
+    for (const b of bannerCves) {
+      const res = !b.cveOk
+        ? t('sorgulanamadı (temiz DEĞİL)', 'nicht abfragbar (NICHT sauber)', 'not queryable (NOT clean)')
+        : b.cveTotal === 0
+          ? t('✅ eşleşen CVE yok', '✅ keine passende CVE', '✅ no matching CVE')
+          : t(`⚠️ ${b.cveTotal} bilinen CVE`, `⚠️ ${b.cveTotal} bekannte CVE`, `⚠️ ${b.cveTotal} known CVEs`);
+      const sample = b.cves.length ? `[${b.cves[0].id}](https://nvd.nist.gov/vuln/detail/${b.cves[0].id})${b.cves[0].score ? ` (CVSS ${b.cves[0].score})` : ''}` : '—';
+      lines.push(`| ${b.product} ${b.version} | ${res} | ${sample} |`);
+    }
+    lines.push('');
+    lines.push(cautionCve(locale));
+    lines.push('');
+  }
+
   lines.push(t('> Kapsam: Pasif parmak izi + NVD üzerinden bilinen-CVE eşlemesi. Hiçbir CVE **istismar edilmemiş/doğrulanmamıştır**.', '> Umfang: Passiver Fingerabdruck + CVE-Zuordnung über die NVD. Keine CVE wurde **ausgenutzt/verifiziert**.', '> Scope: Passive fingerprint + known-CVE mapping via the NVD. No CVE was **exploited/verified**.'));
 
   const fixText = !ev.cms
@@ -566,7 +596,7 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
   const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const RW = en ? RISK_WORD_EN : de ? RISK_WORD_DE : RISK_WORD;
 
-  const areas: Area[] = [buildSubArea(ev.sub, locale), buildApiArea(ev.api, locale), buildCmsArea(ev.cms, locale)];
+  const areas: Area[] = [buildSubArea(ev.sub, locale), buildApiArea(ev.api, locale), buildCmsArea(ev.cms, ev.bannerCves, locale)];
 
   // Risk siralamasi YALNIZ veri toplanabilen alanlar uzerinden (veri-kaynagi-basarisiz alan riske
   // dahil edilmez; "temiz" gibi sayilmaz — surface'in null-alan davranisiyla tutarli).
@@ -649,7 +679,7 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
       `| Reconnaissance Area | Result |\n|-------------|-------|\n| Subdomain Takeover Scan | ${subRow} |\n| API & Swagger Reconnaissance | ${apiRow} |\n| CMS / Framework CVE Match | ${cmsRow} |${minedSensExists ? `\n| Sitemap path reconnaissance | ⚠️ ${minedSensExists} administrative-looking paths accessible (authorisation testing within Active Verification scope) |` : ''}\n\n` +
       `> **Three-state distinction (honesty):** ✅ *No indicator found* = method ran, clean · ⚠️ *Indicator present* = detailed above · ⚠️ *Not assessable* = no data collectable (does NOT mean secure).\n\n` +
       `### What this package assesses — and what it does NOT\n\n` +
-      `**ASSESSES (passive reconnaissance — GET only, external sources):** subdomain inventory + takeover (dangling CNAME), publicly accessible API/Swagger/OpenAPI document, CMS/framework fingerprint + known CVE match (NVD), EXISTENCE determination of API/administrative-looking paths derived from the sitemap — across ${paScanned} pages.\n\n` +
+      `**ASSESSES (passive reconnaissance — GET only, external sources):** subdomain inventory + takeover (dangling CNAME), publicly accessible API/Swagger/OpenAPI document, CMS/framework and server/software banner (Apache/nginx/PHP) fingerprint + known CVE match (NVD), EXISTENCE determination of API/administrative-looking paths derived from the sitemap + robots.txt Disallow entries — across ${paScanned} pages.\n\n` +
       `**DOES NOT ASSESS:** active injection/IDOR/XSS verification and authorisation testing of discovered endpoints (**Active Verification / Full Pentest** scope), HTTP security header/CORS/cookie/CSP details (**Basic Scan / External Attack Surface** scope), GDPR/PCI/ISO framework mapping (**Compliance** scope). The statement “no indicator found” in an area **DOES NOT PROVE** you are secure — it only shows that no indicator emerged with the passive methods checked.\n\n`
     : de
     ? `## POSITIVE ZUSICHERUNG — GEPRÜFTE ERKUNDUNGSMETHODEN\n\n` +
@@ -657,14 +687,14 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
       `| Erkundungsbereich | Ergebnis |\n|-------------|-------|\n| Subdomain-Takeover-Prüfung | ${subRow} |\n| API- & Swagger-Erkundung | ${apiRow} |\n| CMS-/Framework-CVE-Abgleich | ${cmsRow} |${minedSensExists ? `\n| Sitemap-Pfaderkundung | ⚠️ ${minedSensExists} administrativ wirkende Pfade erreichbar (Berechtigungsprüfung im Umfang der Aktiven Verifikation) |` : ''}\n\n` +
       `> **Drei-Zustands-Unterscheidung (Ehrlichkeit):** ✅ *Kein Indikator gefunden* = Methode lief, sauber · ⚠️ *Indikator vorhanden* = oben im Detail · ⚠️ *Nicht prüfbar* = keine Daten erhebbar (bedeutet NICHT sicher).\n\n` +
       `### Was dieses Paket bewertet — und was NICHT\n\n` +
-      `**BEWERTET (passive Erkundung — nur GET, externe Quellen):** Subdomain-Inventar + Übernahme (dangling CNAME), öffentlich zugängliches API-/Swagger-/OpenAPI-Dokument, CMS-/Framework-Fingerabdruck + bekannte CVE-Übereinstimmung (NVD), EXISTENZ-Feststellung aus der Sitemap abgeleiteter API-/administrativ wirkender Pfade — über ${paScanned} Seiten.\n\n` +
+      `**BEWERTET (passive Erkundung — nur GET, externe Quellen):** Subdomain-Inventar + Übernahme (dangling CNAME), öffentlich zugängliches API-/Swagger-/OpenAPI-Dokument, CMS-/Framework- und Server-/Software-Banner-Fingerabdruck (Apache/nginx/PHP) + bekannte CVE-Übereinstimmung (NVD), EXISTENZ-Feststellung aus Sitemap + robots.txt-Disallow abgeleiteter API-/administrativ wirkender Pfade — über ${paScanned} Seiten.\n\n` +
       `**BEWERTET NICHT:** aktive Injektions-/IDOR-/XSS-Verifikation und Berechtigungsprüfung entdeckter Endpunkte (Umfang **Aktive Verifikation / Umfassender Pentest**), HTTP-Sicherheits-Header-/CORS-/Cookie-/CSP-Details (Umfang **Basis-Scan / Externe Angriffsfläche**), DSGVO/PCI/ISO-Rahmenzuordnung (Umfang **Compliance**). Die Aussage „kein Indikator gefunden" in einem Bereich **BEWEIST NICHT**, dass Sie sicher sind — sie zeigt nur, dass mit den geprüften passiven Methoden kein Indikator auftrat.\n\n`
     : `## POZİTİF GÜVENCE — DENENEN KEŞİF YÖNTEMLERİ\n\n` +
       `Keşif çoğu sağlıklı hedefte temiz çıkar; bu bölüm "bir şey bulunamadı" sonucunu da ŞEFFAF kılar — GERÇEKTEN ne denendiğini gösterir (ana sayfa dâhil **${paScanned} sayfa** site haritası dahil):\n\n` +
       `| Keşif Alanı | Sonuç |\n|-------------|-------|\n| Subdomain-Takeover Taraması | ${subRow} |\n| API & Swagger Keşfi | ${apiRow} |\n| CMS / Framework CVE Eşleşmesi | ${cmsRow} |${minedSensExists ? `\n| Site-haritası yol keşfi | ⚠️ ${minedSensExists} idari-görünümlü yol erişilebilir (yetki testi Aktif Doğrulama kapsamı) |` : ''}\n\n` +
       `> **Üç-durum ayrımı (dürüstlük):** ✅ *Gösterge bulunamadı* = yöntem çalıştı, temiz · ⚠️ *Gösterge var* = yukarıda ayrıntılı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).\n\n` +
       `### Bu paket NE değerlendirir, NE değerlendirmez\n\n` +
-      `**DEĞERLENDİRİR (pasif keşif — yalnız GET, dış kaynak):** alt domain envanteri + devralma (dangling CNAME), herkese açık API/Swagger/OpenAPI dokümanı, CMS/çatı parmak izi + bilinen CVE eşleşmesi (NVD), site haritasından türeyen API/idari-görünümlü yolların VARLIK tespiti — ${paScanned} sayfa üzerinden.\n\n` +
+      `**DEĞERLENDİRİR (pasif keşif — yalnız GET, dış kaynak):** alt domain envanteri + devralma (dangling CNAME), herkese açık API/Swagger/OpenAPI dokümanı, CMS/çatı ve sunucu/yazılım banner (Apache/nginx/PHP) parmak izi + bilinen CVE eşleşmesi (NVD), site haritası + robots.txt Disallow'dan türeyen API/idari-görünümlü yolların VARLIK tespiti — ${paScanned} sayfa üzerinden.\n\n` +
       `**DEĞERLENDİRMEZ:** aktif enjeksiyon/IDOR/XSS doğrulaması ve keşfedilen uçlara yetki testi (**Aktif Doğrulama / Tam Pentest** kapsamı), HTTP güvenlik başlığı/CORS/çerez/CSP detayı (**Basit Tarama / Dış Yüzey** kapsamı), KVKK/PCI/ISO çerçeve-eşleme (**Uyum** kapsamı). Bir alanda "gösterge bulunamadı" ifadesi **güvenli olduğunuzu KANITLAMAZ** — yalnız denenen pasif yöntemlerle bir gösterge çıkmadığını gösterir.\n\n`;
 
   const findings =

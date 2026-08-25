@@ -270,6 +270,25 @@ export function minePathCandidatesFromPages(pages: PageEvidence[], host: string)
   return [...out.values()].slice(0, 15);
 }
 
+// (B.1 — robots.txt → gizli path keşfi) robots.txt okunur, Disallow girdilerinden türeyen path'ler
+// mevcut keşif listesine eklenir (aynı VARLIK/GET gözlemi; içerik dökülmez). Yalnız pasif okuma.
+export async function mineRobotsDisallow(host: string): Promise<Array<{ path: string; source: string; sensitive: boolean; api: boolean }>> {
+  const out = new Map<string, { path: string; source: string; sensitive: boolean; api: boolean }>();
+  const r = await safeGet(`${cachedOriginUrl(host)}/robots.txt`);
+  if (!r.ok || r.status !== 200 || !r.text || /<(!doctype|html)\b/i.test(r.text.trimStart())) return []; // yok / catch-all HTML
+  for (const line of r.text.split(/\r?\n/)) {
+    const m = line.match(/^\s*Disallow\s*:\s*(\S+)/i);
+    if (!m) continue;
+    let p = m[1].trim();
+    if (!p.startsWith('/') || p.length < 2 || p.length > 80) continue;
+    p = p.replace(/\*.*$/, '').replace(/\$$/, ''); // basit desen sadeleştirme
+    if (p.length < 2 || out.size >= 12) continue;
+    const key = p.replace(/\/+$/, '');
+    if (!out.has(key)) out.set(key, { path: p, source: 'robots.txt', sensitive: SENSITIVE_RE.test(p), api: API_LIKE_RE.test(p) });
+  }
+  return [...out.values()];
+}
+
 function parseOpenApi(path: string, json: unknown): ApiSpec | null {
   const doc = json as Record<string, any>;
   if (!doc || typeof doc !== 'object') return null;
@@ -555,20 +574,53 @@ export async function collectCms(host: string, http?: HttpEvidence): Promise<Cms
 }
 
 // ======================================================================================
+// (B.2 — Banner sürüm → bilinen CVE listesi) Sunucu/yazılım banner'ından (Server, X-Powered-By)
+// çıkarılan sürüm NVD'ye bağlanır; eşleşen CVE'ler LİSTE olarak gösterilir. İstismar/doğrulama YOK
+// — yalnız "bu sürüm için bilinen CVE var mı" göstergesi (CMS-CVE ile aynı NVD mantığı). NVD yanıt
+// vermezse "sorgulanamadı" (temiz değil), mevcut davranış korunur.
+// ======================================================================================
+export type BannerCve = { product: string; version: string; cpeQueried: string; cveOk: boolean; cveTotal: number; cves: CveItem[] };
+const BANNER_CPE: Array<{ product: string; re: RegExp; cpeProd: string }> = [
+  { product: 'Apache httpd', re: /Apache\/(\d+\.\d+\.\d+)/i, cpeProd: 'apache:http_server' },
+  { product: 'nginx', re: /nginx\/(\d+\.\d+(?:\.\d+)?)/i, cpeProd: 'nginx:nginx' },
+  { product: 'PHP', re: /PHP\/(\d+\.\d+\.\d+)/i, cpeProd: 'php:php' },
+];
+function detectBanners(http: HttpEvidence): Array<{ product: string; version: string; cpeProd: string }> {
+  const hay = `${http.headers.get('server') ?? ''} ${http.headers.get('x-powered-by') ?? ''}`;
+  const out: Array<{ product: string; version: string; cpeProd: string }> = [];
+  for (const b of BANNER_CPE) { const m = hay.match(b.re); if (m) out.push({ product: b.product, version: m[1], cpeProd: b.cpeProd }); }
+  return out.slice(0, 3);
+}
+export async function collectBannerCves(host: string, http?: HttpEvidence): Promise<BannerCve[]> {
+  const page = http ?? (await collectHttp(host));
+  if (!page.ok) return [];
+  const banners = detectBanners(page);
+  return pMap(banners, 3, async (b): Promise<BannerCve> => {
+    const res = await nvdLookup(b.cpeProd, b.version).catch(() => ({ ok: false, total: 0, cves: [] as CveItem[] }));
+    return { product: b.product, version: b.version, cpeQueried: `${b.cpeProd}:${b.version}`, cveOk: res.ok, cveTotal: res.total, cves: res.cves };
+  });
+}
+
+// ======================================================================================
 // TUM KESIF KANITI (tek noktadan; uc alan paralel)
 // ======================================================================================
-export type ReconEvidence = { host: string; sub: SubEvidence; api: ApiEvidence; cms: CmsEvidence };
+export type ReconEvidence = { host: string; sub: SubEvidence; api: ApiEvidence; cms: CmsEvidence; bannerCves: BannerCve[] };
 
 export async function collectReconEvidence(host: string): Promise<ReconEvidence> {
   const http = await collectHttp(host);
   // (BÖLÜM 1) PAYLAŞILAN site haritası (in-flight cache — Dış Yüzey/Uyum ile AYNI crawl, tekrar GET seli
   // YOK) -> API/idari-görünümlü yol adaylarını çıkar ve API/Swagger keşfini ZENGİNLEŞTİR (sabit listeye EK).
   const pages = await collectPages(host).catch(() => [] as PageEvidence[]);
-  const mined = minePathCandidatesFromPages(pages, host);
-  const [sub, api, cms] = await Promise.all([
+  // (B.1) Site-haritası adayları + robots.txt Disallow türevleri BİRLİKTE keşif listesine girer.
+  const minedPages = minePathCandidatesFromPages(pages, host);
+  const robotsPaths = await mineRobotsDisallow(host).catch(() => [] as Array<{ path: string; source: string; sensitive: boolean; api: boolean }>);
+  const seen = new Set(minedPages.map((c) => c.path.replace(/\/+$/, '')));
+  const mined = [...minedPages, ...robotsPaths.filter((c) => !seen.has(c.path.replace(/\/+$/, '')))].slice(0, 22);
+  const [sub, api, cms, bannerCves] = await Promise.all([
     collectSubdomains(host).catch(() => ({ ok: false, dataSource: 'unavailable', total: 0, resolved: 0, subdomains: [], cnames: [], managedCnames: [], dangling: [] } as SubEvidence)),
     collectApi(host, mined, Math.max(1, pages.length)).catch(() => ({ ok: false, tried: [], reachable: [], pagesScanned: Math.max(1, pages.length), minedTried: [] } as ApiEvidence)),
     collectCms(host, http).catch(() => ({ ok: false, evidence: [], extras: [], cveOk: false, cveTotal: 0, cves: [] } as CmsEvidence)),
+    collectBannerCves(host, http).catch(() => [] as BannerCve[]),
   ]);
-  return { host, sub, api, cms };
+  return { host, sub, api, cms, bannerCves };
 }
