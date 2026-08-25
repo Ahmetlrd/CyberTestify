@@ -42,8 +42,9 @@ function entropyBits(v: string): number {
 }
 
 // ---- Saf analiz çekirdeği (BİRİM TEST edilebilir) ----
-export function analyzeSessionSecurity(cookies: SessCookie[], homeHtml: string, de: boolean = false): { findings: VFinding[]; notes: string[] } {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export function analyzeSessionSecurity(cookies: SessCookie[], homeHtml: string, locale: string = 'tr'): { findings: VFinding[]; notes: string[] } {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const findings: VFinding[] = [];
   const notes: string[] = [];
 
@@ -99,8 +100,9 @@ export function analyzeSessionSecurity(cookies: SessCookie[], homeHtml: string, 
   return { findings, notes };
 }
 
-export async function collectSessionDepthEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectSessionDepthEvidence(host: string, session: AuthSession, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const corpus = await fetchClientCorpus(host);
   const flagByName = new Map<string, CookieFlag>((session.cookieFlags ?? []).map((f) => [f.name, f]));
   // GERÇEK sunucu Set-Cookie oturum çerezi: hem cookieFlags'te (Set-Cookie'den) hem Cookie header'ında değeri olan.
@@ -116,7 +118,7 @@ export async function collectSessionDepthEvidence(host: string, session: AuthSes
     };
   }
 
-  const { findings, notes } = analyzeSessionSecurity(serverSessionCookies, corpus.homeHtml, de);
+  const { findings, notes } = analyzeSessionSecurity(serverSessionCookies, corpus.homeHtml, locale);
 
   // ---- 3) OTURUM URL'DE (SESS-04) — session id URL/query'de ifşa mı ----
   const urlParamHit = corpus.homeHtml.match(/[?&](sid|jsessionid|phpsessid|session_?id|sess|asp\.?net_?sessionid|cfid|cftoken)=/i);

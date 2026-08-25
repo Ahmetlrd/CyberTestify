@@ -26,8 +26,9 @@ const DOMFORM_PRIV_NAME_RE = /^(role|roles|isadmin|is[_-]?admin|admin|privilege|
 const DOMFORM_PRICE_NAME_RE = /^(price|amount|total|cost|fiyat|tutar|qty|quantity|adet|discount|indirim|coupon|kupon|miktar|balance|credit|bakiye)$/i;
 
 /** (İŞ 2) domForm'da istemciye AÇIĞA ÇIKMIŞ bir yetki alanı (role/isAdmin/...) var mı? SALT-OKUNUR gözlem. */
-function domFormPrivObservation(dom: { url: string; fields: string[]; interesting: string[] }, de: boolean = false): VFinding | null {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+function domFormPrivObservation(dom: { url: string; fields: string[]; interesting: string[] }, locale: string = 'tr'): VFinding | null {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const priv = dom.interesting.filter((f) => DOMFORM_PRIV_NAME_RE.test(f));
   if (!priv.length) return null; // yetki alanı DOM'da açığa çıkmamış -> gösterge yok (dürüst)
   let ip = dom.url; try { const u = new URL(dom.url); ip = `${u.pathname}${u.hash}` || dom.url; } catch { /* yoksay */ }
@@ -82,8 +83,9 @@ function deriveAgentStatus(surf: Surface, scenarios: AuthAgentSuggestion[] | nul
 // ======================================================================================
 // D.1 — YETKİ YÜKSELTME (privilege escalation) DOĞRULAMA
 // ======================================================================================
-async function massAssignObservation(ctx: ProbeCtx, host: string, action: string, fields: string[], de: boolean = false): Promise<VFinding | null> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+async function massAssignObservation(ctx: ProbeCtx, host: string, action: string, fields: string[], locale: string = 'tr'): Promise<VFinding | null> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   // BACKEND-BİRİNCİL GUARD: hesap-değiştiren/checkout hedefine ASLA yazma.
   if (AUTH_WRITE_BLOCKLIST_RE.test(action)) return null;
   // (İş 3) Aktif Doğrulama'daki formCategory sınıflandırıcısıyla AYNI kapı: YASAK tür (kayıt/iletişim/
@@ -106,8 +108,9 @@ async function massAssignObservation(ctx: ProbeCtx, host: string, action: string
   return null;
 }
 
-export async function collectPrivilegeEscalationEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectPrivilegeEscalationEvidence(host: string, session: AuthSession, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const surf = await discoverSurface(host, session);
   if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.')] };
   const ctx = new ProbeCtx();
@@ -126,10 +129,10 @@ export async function collectPrivilegeEscalationEvidence(host: string, session: 
     const forb = forbiddenFormReason(action, fields); const cat = formCategory(action, fields);
     if (forb) notes.push(t(`Mass-assignment adayı form (${p}) YASAK türe girdiğinden gerçek POST'tan hariç tutuldu: ${forb}. Bu kontrol için güvenle test edilebilir bir yetki formu değildir.`, `Das Mass-Assignment-Kandidatenformular (${p}) wurde vom tatsächlichen POST ausgeschlossen, da es zu einem VERBOTENEN Typ gehört: ${forb}. Für diese Prüfung ist es kein sicher testbares Berechtigungsformular.`));
     else if (cat === 'login' || cat === 'search') notes.push(t(`Aday form (${p}, ${cat}) yetki-yükseltme/over-posting hedefi değildir — atlandı.`, `Das Kandidatenformular (${p}, ${cat}) ist kein Ziel für Rechteausweitung/Over-Posting — übersprungen.`));
-    else { detProbed = true; probedActions.add(action); const f = await massAssignObservation(ctx, host, action, fields, de); if (f) findings.push(f); }
+    else { detProbed = true; probedActions.add(action); const f = await massAssignObservation(ctx, host, action, fields, locale); if (f) findings.push(f); }
   }
   //  (b) DOM'da açığa çıkmış yetki alanları (salt-okunur gözlem; İSTEK YOK) — her zaman.
-  for (const dom of surf.domForms) { const f = domFormPrivObservation(dom, de); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) { findings.push(f); detProbed = true; } }
+  for (const dom of surf.domForms) { const f = domFormPrivObservation(dom, locale); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) { findings.push(f); detProbed = true; } }
 
   // (YARDIMCI/İKİNCİL) advisory — ek aday seçerse deterministik güvenli probe'dan geçirilir. Kanıt DEĞİL.
   const advisorOn = authAdvisorAllowed(host); // (deney) advisory VARSAYILAN KAPALI — yalnız izin verilen hedeflerde
@@ -140,12 +143,12 @@ export async function collectPrivilegeEscalationEvidence(host: string, session: 
     for (const s of scenarios.filter((x) => x.check === 'privilege_escalation').slice(0, 3)) {
       if (ctx.stopped) break;
       const dom = surf.domForms.find((d) => s.inputPoint.includes(d.url));
-      if (dom) { const f = domFormPrivObservation(dom, de); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) { findings.push(f); detProbed = true; } continue; }
+      if (dom) { const f = domFormPrivObservation(dom, locale); if (f && !findings.some((x) => x.inputPoint === f.inputPoint)) { findings.push(f); detProbed = true; } continue; }
       const action = absUrl(host, s.inputPoint.replace(/^\w+\s+/, '').split('?')[0]);
       if (!action || probedActions.has(action)) continue;
       const fields = surf.massAssignForm && surf.massAssignForm.action === action ? surf.massAssignForm.fields : ['email', 'username'];
       probedActions.add(action);
-      const f = await massAssignObservation(ctx, host, action, fields, de); // içi YASAK/login/arama guard'lı
+      const f = await massAssignObservation(ctx, host, action, fields, locale); // içi YASAK/login/arama guard'lı
       if (f) { f.technique = t('AI advisory seçti + backend güvenli uyguladı: ', 'Von KI-Advisory ausgewählt + vom Backend sicher ausgeführt: ') + f.technique; findings.push(f); detProbed = true; }
     }
   }
@@ -166,8 +169,9 @@ export async function collectPrivilegeEscalationEvidence(host: string, session: 
 // ======================================================================================
 // D.2 — ÇOK-ADIMLI İŞ MANTIĞI (GET-only gözlem; ödeme/checkout TAMAMLAMA YOK)
 // ======================================================================================
-export async function collectMultiStepBusinessLogicEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectMultiStepBusinessLogicEvidence(host: string, session: AuthSession, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const surf = await discoverSurface(host, session);
   if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.')] };
   const ctx = new ProbeCtx();

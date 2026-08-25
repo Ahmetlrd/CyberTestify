@@ -57,8 +57,9 @@ async function probeRedirectLocation(url: string): Promise<{ status: number; loc
 
 const isExternalTo = (u: string, host: string): boolean => { try { return new URL(u, `https://${host}/`).hostname.toLowerCase() !== host.toLowerCase(); } catch { return false; } };
 
-export async function collectClientSideEvidence(host: string, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectClientSideEvidence(host: string, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const findings: VFinding[] = [];
   const notes: string[] = [];
   const c = await fetchClientCorpus(host);

@@ -211,14 +211,15 @@ function detectLib(url: string, body: string): { lib: string; display: string; v
 export { detectLib, matchVuln };
 
 // (Doğrulama için) tek metni tarayıp GERÇEK-sır bulgularını + public-by-design etiketlerini döndürür.
-export function scanTextForSecrets(text: string, where = 'test', de: boolean = false): { findings: VFinding[]; publicByDesign: string[] } {
+export function scanTextForSecrets(text: string, where = 'test', locale: string = 'tr'): { findings: VFinding[]; publicByDesign: string[] } {
   const findings: VFinding[] = []; const publicSeen = new Set<string>();
-  scanSecrets(text, where, findings, publicSeen, de);
+  scanSecrets(text, where, findings, publicSeen, locale);
   return { findings, publicByDesign: [...publicSeen] };
 }
 
-export async function collectJsAnalysisEvidence(host: string, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectJsAnalysisEvidence(host: string, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const findings: VFinding[] = [];
   const notes: string[] = [];
   const c = await fetchClientCorpus(host);
@@ -233,12 +234,12 @@ export async function collectJsAnalysisEvidence(host: string, de: boolean = fals
   let mapsTried = 0, probes = c.fetches;
 
   // INLINE script'ler: sır + public-by-design.
-  for (const [i, code] of c.inlineScripts.entries()) scanSecrets(code, `inline-script#${i + 1}`, findings, publicSeen, de);
+  for (const [i, code] of c.inlineScripts.entries()) scanSecrets(code, `inline-script#${i + 1}`, findings, publicSeen, locale);
 
   // SAME-ORIGIN JS: A) sır, B) source-map, C) kütüphane.
   for (const f of c.sameOriginJs) {
     const short = (() => { try { return new URL(f.url).pathname.split('/').pop() || f.url; } catch { return f.url; } })();
-    scanSecrets(f.body, short, findings, publicSeen, de);
+    scanSecrets(f.body, short, findings, publicSeen, locale);
     if (mapsTried < MAX_MAP_TRIES) {
       const mapUrl = sourceMapUrl(f.url, f.body);
       if (mapUrl) {
@@ -307,7 +308,8 @@ function sourceMapUrl(jsUrl: string, body: string): string | null {
 }
 
 // A) tek metinde sır tara — GERÇEK sır → finding; public-by-design → publicSeen (bilgilendirici).
-function scanSecrets(text: string, where: string, findings: VFinding[], publicSeen: Set<string>, de: boolean = false): void {
+function scanSecrets(text: string, where: string, findings: VFinding[], publicSeen: Set<string>, locale: string = 'tr'): void {
+  const de = locale === 'de';
   for (const rule of PUBLIC_BY_DESIGN_RULES) {
     rule.re.lastIndex = 0;
     if (rule.re.test(text)) publicSeen.add(de ? rule.labelDe : rule.label);

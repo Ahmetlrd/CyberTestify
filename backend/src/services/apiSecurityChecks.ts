@@ -58,8 +58,9 @@ export function mineApiPaths(text: string): string[] {
 const SENSITIVE_FIELD_RE = /"(password|passwordHash|pwd|hash|salt|ssn|tckn|creditcard|cardnumber|cvv|secret|privatekey|api[_-]?key|access[_-]?token|refresh[_-]?token|otpsecret|totpsecret)"\s*:/i;
 const OVEREXPOSED_FIELD_RE = /"(isadmin|is_admin|role|roles|isdeleted|deletedat|internalid|internal_id|_id|adminflag)"\s*:/i;
 
-export async function collectApiSecurityEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectApiSecurityEvidence(host: string, session: AuthSession, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const findings: VFinding[] = []; const notes: string[] = [];
   await resolveOrigin(host).catch(() => null);
   const origin = cachedOriginUrl(host);

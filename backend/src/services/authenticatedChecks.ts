@@ -28,8 +28,9 @@ function abs(host: string, p: string): string | null {
 // ======================================================================================
 // A) Oturum çerezi bayrakları — login yanıtındaki Set-Cookie'lerin güvenlik bayrakları (ağ yok).
 // ======================================================================================
-export function collectCookieFlagsEvidence(session: AuthSession, de: boolean = false): ActiveCheckEvidence {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export function collectCookieFlagsEvidence(session: AuthSession, locale: string = 'tr'): ActiveCheckEvidence {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const findings: VFinding[] = [];
   const notes: string[] = [];
   const flags = session.cookieFlags ?? [];
@@ -66,8 +67,9 @@ export function collectCookieFlagsEvidence(session: AuthSession, de: boolean = f
 // ======================================================================================
 // B) Session fixation — login ÖNCESİ session id, login SONRASI ile AYNI mı? (tek unauth GET)
 // ======================================================================================
-export async function collectSessionFixationEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectSessionFixationEvidence(host: string, session: AuthSession, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const notes: string[] = [];
   const findings: VFinding[] = [];
   const postCookies = (session.cookie ?? '').split(';').map((s) => s.trim()).filter(Boolean);
@@ -120,8 +122,9 @@ function looksAuthed(status: number, text: string): boolean {
   return !/unauthorized|forbidden|access denied|please log ?in|invalid token|jwt (expired|malformed)/i.test(head);
 }
 
-export async function collectLogoutEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectLogoutEvidence(host: string, session: AuthSession, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const notes: string[] = [];
   const findings: VFinding[] = [];
   const ctx = new ProbeCtx();
@@ -193,8 +196,9 @@ const ADMIN_PATHS = [
   '/api/Users', '/rest/products/reviews', '/metrics', '/actuator', '/actuator/env',
   '/admin/api', '/api/management', '/console', '/api/config', '/rest/admin/application-version',
 ];
-export async function collectForcedBrowsingEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectForcedBrowsingEvidence(host: string, session: AuthSession, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const notes: string[] = [];
   const findings: VFinding[] = [];
   const ctx = new ProbeCtx();

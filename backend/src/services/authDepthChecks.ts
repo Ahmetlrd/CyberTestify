@@ -37,8 +37,9 @@ async function isRealLoginEndpoint(loginUrl: string | null, homeShell: string): 
 }
 
 // Güvenlik-sorusu tabanlı reset GERÇEK bir sunucu ucu mu? (var-olmayan e-posta ile GET; e-posta gitmez.)
-async function observeSecurityQuestionReset(host: string, r: string, de: boolean = false): Promise<{ real: boolean; finding: VFinding | null }> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+async function observeSecurityQuestionReset(host: string, r: string, locale: string = 'tr'): Promise<{ real: boolean; finding: VFinding | null }> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const secQ = new URL('/rest/user/security-question', `${cachedOriginUrl(host)}/`).toString();
   const sq = await probe(`${secQ}?email=${encodeURIComponent(`ct-reset-${r}@example.invalid`)}`, { label: 'reset: security-question gözlemi (var-olmayan e-posta)' });
   const real = !!sq && sq.status >= 200 && sq.status < 400 && /question|soru|"id"\s*:/i.test(sq.text) && !/<!doctype|<html[\s>]/i.test(sq.text.slice(0, 200));
@@ -110,8 +111,9 @@ function findEndpoint(homeHtml: string, host: string, kws: RegExp, wellKnown: st
   return wellKnown.length ? new URL(wellKnown[0], `${cachedOriginUrl(host)}/`).toString() : null;
 }
 
-export async function collectAuthDepthEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectAuthDepthEvidence(host: string, session: AuthSession, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const findings: VFinding[] = [];
   const notes: string[] = [];
   await resolveOrigin(host).catch(() => null);
@@ -129,7 +131,7 @@ export async function collectAuthDepthEvidence(host: string, session: AuthSessio
   // sahte uca 5 başarısız login atıp "lockout yok" gibi HAYALET bulgu ÜRETİLMEZ (nomorelink bug'ı).
   const homeShell = homeHtml ? md5(homeHtml) : '';
   const loginRealistic = await isRealLoginEndpoint(loginUrl, homeShell); probes++;
-  const resetReal = await observeSecurityQuestionReset(host, rand(), de); probes++;
+  const resetReal = await observeSecurityQuestionReset(host, rand(), locale); probes++;
   if (!loginRealistic && !resetReal.real) {
     return { ok: true, pagesScanned: 1, inputsFound: 0, probesSent: probes, findings: [], stopped: null,
       notes: [t('Uygulanabilir bir SUNUCU kimlik-doğrulama uç noktası (login/reset/register) bu hedefte gözlemlenmedi — guessed uçlar SPA catch-all shell / 404 döndü (istemci-taraflı/SPA veya Firebase auth). Kimlik-doğrulama derinliği kontrolleri bu hedef için **kapsam dışıdır**.', 'Bei diesem Ziel wurde kein anwendbarer SERVER-Authentifizierungs-Endpunkt (Login/Reset/Register) beobachtet — die geratenen Endpunkte gaben ein SPA-Catch-all-Shell / 404 zurück (clientseitig/SPA oder Firebase-Auth). Die Prüfungen zur Authentifizierungstiefe sind für dieses Ziel **außerhalb des Geltungsbereichs**.')] };

@@ -51,13 +51,14 @@ export class ProbeCtx {
   authHeaders?: Record<string, string>;
   // (GÖZLEMLENEBİLİRLİK) log adımı adı (hangi kontrol probe atıyor). Collector set eder (ör. "Enjeksiyon Doğrulama").
   label = 'Aktif prob';
-  // (Çok-bölge) müşteriye dönen devre-kesici not metni Almanca istenirse true. Collector set eder.
-  de = false;
+  // (Çok-bölge) müşteriye dönen devre-kesici not metni locale'e göre. Collector set eder ('tr'|'de'|'en').
+  locale: string = 'tr';
+  private m(tr: string, de: string, en: string): string { return this.locale === 'de' ? de : this.locale === 'en' ? en : tr; }
   private last = 0;
   async fetchOnce(url: string, opts: { method?: 'GET' | 'POST'; body?: string; contentType?: string; expectSlow?: boolean } = {}): Promise<ProbeResult | null> {
     if (this.stopped) return null;
     if (this.sent >= MAX_PROBES_PER_CHECK) {
-      this.stopped = this.de ? `Obergrenze der Gesamtsonden (${MAX_PROBES_PER_CHECK}) erreicht — automatisch gestoppt.` : `Toplam prob üst sınırına (${MAX_PROBES_PER_CHECK}) ulaşıldı — otomatik durduruldu.`;
+      this.stopped = this.m(`Toplam prob üst sınırına (${MAX_PROBES_PER_CHECK}) ulaşıldı — otomatik durduruldu.`, `Obergrenze der Gesamtsonden (${MAX_PROBES_PER_CHECK}) erreicht — automatisch gestoppt.`, `Total probe upper limit (${MAX_PROBES_PER_CHECK}) reached — automatically stopped.`);
       logScanStep({ step: this.label, level: 'circuit_breaker', summary: this.stopped });
       return null;
     }
@@ -77,18 +78,18 @@ export class ProbeCtx {
       const buf = Buffer.from(await res.arrayBuffer());
       const text = (buf.length > 200_000 ? buf.subarray(0, 200_000) : buf).toString('utf-8');
       // --- Devre kesici degerlendirmesi ---
-      if (res.status >= 500) { this.consec5xx++; if (this.consec5xx >= 5) this.stopped = this.de ? 'Das Ziel hat 5-mal hintereinander 5xx zurückgegeben (wir könnten dem Ziel schaden — automatisch gestoppt).' : 'Hedef art arda 5+ kez 5xx döndürdü (hedefe zarar veriyor olabiliriz — otomatik durduruldu).'; }
+      if (res.status >= 500) { this.consec5xx++; if (this.consec5xx >= 5) this.stopped = this.m('Hedef art arda 5+ kez 5xx döndürdü (hedefe zarar veriyor olabiliriz — otomatik durduruldu).', 'Das Ziel hat 5-mal hintereinander 5xx zurückgegeben (wir könnten dem Ziel schaden — automatisch gestoppt).', 'The target returned 5xx 5+ times in a row (we may be harming the target — automatically stopped).'); }
       else this.consec5xx = 0;
-      if (res.status === 429) this.stopped = this.de ? 'Das Ziel hat 429 (Ratenbegrenzung) zurückgegeben — automatisch gestoppt.' : 'Hedef 429 (hız sınırı) döndürdü — otomatik durduruldu.';
-      if (res.status === 403 && /cloudflare|access denied|request blocked|web application firewall|mod_security|incapsula|sucuri|forbidden/i.test(text)) this.stopped = this.de ? 'WAF/Firewall-Blockade (403) erkannt — diese Prüfung wurde gestoppt.' : 'WAF/güvenlik duvarı bloğu (403) algılandı — bu kontrol durduruldu.';
-      if (!opts.expectSlow && this.baseline > 0 && ms > SLOW_FACTOR * this.baseline && ms > SLOW_FLOOR_MS) this.stopped = this.de ? `Die Antwortzeit hat das ${SLOW_FACTOR}-Fache der Baseline überschritten (das Ziel wird langsamer — automatisch gestoppt).` : `Yanıt süresi baseline'ın ${SLOW_FACTOR} katını aştı (hedef yavaşlıyor — otomatik durduruldu).`;
+      if (res.status === 429) this.stopped = this.m('Hedef 429 (hız sınırı) döndürdü — otomatik durduruldu.', 'Das Ziel hat 429 (Ratenbegrenzung) zurückgegeben — automatisch gestoppt.', 'The target returned 429 (rate limit) — automatically stopped.');
+      if (res.status === 403 && /cloudflare|access denied|request blocked|web application firewall|mod_security|incapsula|sucuri|forbidden/i.test(text)) this.stopped = this.m('WAF/güvenlik duvarı bloğu (403) algılandı — bu kontrol durduruldu.', 'WAF/Firewall-Blockade (403) erkannt — diese Prüfung wurde gestoppt.', 'WAF/firewall block (403) detected — this check was stopped.');
+      if (!opts.expectSlow && this.baseline > 0 && ms > SLOW_FACTOR * this.baseline && ms > SLOW_FLOOR_MS) this.stopped = this.m(`Yanıt süresi baseline'ın ${SLOW_FACTOR} katını aştı (hedef yavaşlıyor — otomatik durduruldu).`, `Die Antwortzeit hat das ${SLOW_FACTOR}-Fache der Baseline überschritten (das Ziel wird langsamer — automatisch gestoppt).`, `Response time exceeded ${SLOW_FACTOR}× the baseline (the target is slowing down — automatically stopped).`);
       // (GÖZLEMLENEBİLİRLİK) her prob: method+URL (maskeli) + status + süre + boyut. body loglanmaz.
       logScanStep({ step: this.label, method: opts.method ?? 'GET', url, status: res.status, durationMs: ms, sizeBytes: buf.length, level: this.stopped ? 'circuit_breaker' : res.status >= 500 ? 'warn' : 'info', summary: this.stopped ?? undefined });
       return { status: res.status, ms, text, len: buf.length };
     } catch (err) {
       this.sent++;
       const ms = Date.now() - t0;
-      logScanStep({ step: this.label, method: opts.method ?? 'GET', url, status: 0, durationMs: ms, level: 'error', summary: `İstek hatası: ${String((err as Error)?.name ?? 'err')}` });
+      logScanStep({ step: this.label, method: opts.method ?? 'GET', url, status: 0, durationMs: ms, level: 'error', summary: `${this.m('İstek hatası', 'Anfragefehler', 'Request error')}: ${String((err as Error)?.name ?? 'err')}` });
       return { status: 0, ms, text: '', len: 0 };
     } finally {
       clearTimeout(timer);
@@ -184,14 +185,23 @@ const FORBIDDEN_REASON_DE: Record<string, string> = {
   payment: 'Warenkorb/Zahlung/Checkout (finanzielle Auswirkung)',
   subscribe: 'Abonnement/Newsletter (dauerhafte Eintragung + E-Mail)',
 };
+const FORBIDDEN_REASON_EN: Record<string, string> = {
+  comment: 'comment/message posting (creates permanent content)',
+  contact: 'contact form (sends a real e-mail)',
+  signup: 'registration/account creation (creates a permanent account)',
+  password_reset: 'password reset (triggers e-mail/SMS to a real user)',
+  payment: 'cart/payment/checkout (financial impact)',
+  subscribe: 'subscription/newsletter (permanent sign-up + e-mail)',
+};
 // Okunur YASAK sebep metni (locale'e göre).
-function forbiddenReasonText(cat: string, de: boolean): string {
-  return (de ? FORBIDDEN_REASON_DE[cat] : FORBIDDEN_REASON[cat]) ?? cat;
+function forbiddenReasonText(cat: string, locale: string | boolean): string {
+  const de = locale === true || locale === 'de', en = locale === 'en';
+  return (de ? FORBIDDEN_REASON_DE[cat] : en ? FORBIDDEN_REASON_EN[cat] : FORBIDDEN_REASON[cat]) ?? cat;
 }
 // Ortak kapı: form YASAK türe giriyorsa okunur sebep, değilse null (POST'a izin var).
-export function forbiddenFormReason(action: string, fields: string[], de = false): string | null {
+export function forbiddenFormReason(action: string, fields: string[], locale: string | boolean = false): string | null {
   const cat = formCategory(action, fields);
-  return FORBIDDEN_FORM_CATS.has(cat) ? forbiddenReasonText(cat, de) : null;
+  return FORBIDDEN_FORM_CATS.has(cat) ? forbiddenReasonText(cat, locale) : null;
 }
 export function formCategory(action: string, fields: string[]): FormCategory {
   const hay = (action + ' ' + fields.join(' ')).toLowerCase();
@@ -835,14 +845,17 @@ export function discoverSurface(host: string, session?: AuthSession): Promise<Su
 // SPA/JS-render uyari notu — giris noktasi bulunamayan taramalarda yaniltici olmamak icin.
 // method=headless ise SPA render EDILDI -> "gercekten yok" (daha guclu temiz); method=static+jsRendered
 // ise render EDILEMEDI -> "bilmiyoruz" (kapsam sinirli).
-export function spaHint(surf: Surface, de = false): string {
+export function spaHint(surf: Surface, locale: string | boolean = false): string {
   if (!surf.jsRendered) return '';
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const de = locale === true || locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS: string) => (de ? deS : en ? enS : trS);
   if (surf.method === 'headless')
     return t(' **Not:** Hedef JavaScript ile render edilen (SPA) bir uygulamadır ve bu tarama sayfalar **headless tarayıcı ile render edilerek** yapılmıştır; buna rağmen test edilebilir giriş noktası bulunamaması, render sonrası sayfada gerçekten giriş noktası olmadığını gösterir (ham-HTML sınırlaması değil — daha güçlü bir "temiz" göstergesi; yine de kimlik-doğrulamalı akışlar kapsam dışıdır).',
-      ' **Hinweis:** Das Ziel ist eine per JavaScript gerenderte (SPA) Anwendung und dieser Scan wurde durchgeführt, indem die Seiten **mit einem Headless-Browser gerendert** wurden; dass dennoch kein prüfbarer Eingabepunkt gefunden wurde, zeigt, dass nach dem Rendering wirklich kein Eingabepunkt auf der Seite vorhanden ist (keine Roh-HTML-Beschränkung — ein stärkerer „sauber"-Indikator; authentifizierte Abläufe liegen dennoch außerhalb des Geltungsbereichs).');
+      ' **Hinweis:** Das Ziel ist eine per JavaScript gerenderte (SPA) Anwendung und dieser Scan wurde durchgeführt, indem die Seiten **mit einem Headless-Browser gerendert** wurden; dass dennoch kein prüfbarer Eingabepunkt gefunden wurde, zeigt, dass nach dem Rendering wirklich kein Eingabepunkt auf der Seite vorhanden ist (keine Roh-HTML-Beschränkung — ein stärkerer „sauber"-Indikator; authentifizierte Abläufe liegen dennoch außerhalb des Geltungsbereichs).',
+      ' **Note:** The target is a JavaScript-rendered (SPA) application and this scan was performed by **rendering the pages with a headless browser**; that no testable input point was found even so shows that there really is no input point on the page after rendering (not a raw-HTML limitation — a stronger "clean" indicator; authenticated flows are nonetheless out of scope).');
   return t(' **Not:** Hedef büyük olasılıkla JavaScript ile render edilen (SPA) bir uygulamadır; menü/bağlantı ve formlar tarayıcıda oluşturulduğundan ham-HTML taramasında giriş noktaları görünmeyebilir — headless render bu taramada kullanılamadı, bu nedenle kapsam sınırlıdır ve "giriş noktası bulunamadı" güvenlik kanıtı değildir.',
-    ' **Hinweis:** Das Ziel ist höchstwahrscheinlich eine per JavaScript gerenderte (SPA) Anwendung; da Menüs/Links und Formulare im Browser erzeugt werden, sind die Eingabepunkte beim Roh-HTML-Scan möglicherweise nicht sichtbar — das Headless-Rendering konnte bei diesem Scan nicht verwendet werden, daher ist der Geltungsbereich begrenzt und „kein Eingabepunkt gefunden" ist kein Sicherheitsnachweis.');
+    ' **Hinweis:** Das Ziel ist höchstwahrscheinlich eine per JavaScript gerenderte (SPA) Anwendung; da Menüs/Links und Formulare im Browser erzeugt werden, sind die Eingabepunkte beim Roh-HTML-Scan möglicherweise nicht sichtbar — das Headless-Rendering konnte bei diesem Scan nicht verwendet werden, daher ist der Geltungsbereich begrenzt und „kein Eingabepunkt gefunden" ist kein Sicherheitsnachweis.',
+    ' **Note:** The target is most likely a JavaScript-rendered (SPA) application; since menus/links and forms are generated in the browser, input points may not be visible in a raw-HTML scan — headless rendering could not be used in this scan, so the scope is limited and "no input point found" is not a security proof.');
 }
 
 // ======================================================================================
@@ -951,18 +964,22 @@ export async function quickScopeSignal(host: string): Promise<ScopeSignal> {
 }
 
 // Kesif yontemi seffaflik notu (rapor icin).
-export function discoveryMethodNote(surf: Surface, de = false): string {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export function discoveryMethodNote(surf: Surface, locale: string | boolean = false): string {
+  const de = locale === true || locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS: string) => (de ? deS : en ? enS : trS);
   const base = surf.method === 'headless'
     ? t('Bu tarama, JavaScript ile render edilen (SPA) hedef tespit edildiği için sayfalar **headless tarayıcı ile render edilerek** gerçekleştirilmiştir.',
-        'Da ein per JavaScript gerendertes (SPA) Ziel erkannt wurde, wurde dieser Scan durchgeführt, indem die Seiten **mit einem Headless-Browser gerendert** wurden.')
+        'Da ein per JavaScript gerendertes (SPA) Ziel erkannt wurde, wurde dieser Scan durchgeführt, indem die Seiten **mit einem Headless-Browser gerendert** wurden.',
+        'Because a JavaScript-rendered (SPA) target was detected, this scan was performed by **rendering the pages with a headless browser**.')
     : t('Standart HTML taraması yeterli kapsam sağladığından JavaScript render (headless) kullanılmadı.',
-        'Da der Standard-HTML-Scan ausreichende Abdeckung bot, wurde kein JavaScript-Rendering (Headless) verwendet.');
+        'Da der Standard-HTML-Scan ausreichende Abdeckung bot, wurde kein JavaScript-Rendering (Headless) verwendet.',
+        'Since the standard HTML scan provided sufficient coverage, JavaScript rendering (headless) was not used.');
   const spa = surf.spaApiDiscovery;
   if (spa && spa.candidates > 0) {
     return base + t(
       ` SPA JS analizi ile **${spa.candidates}** API ucu adayı çıkarıldı, **${spa.validated}** doğrulandı ve test edilebilir yüzeye eklendi` + (spa.shellEliminated ? ` (${spa.shellEliminated} SPA-catch-all shell elendi)` : '') + '.',
-      ` Durch SPA-JS-Analyse wurden **${spa.candidates}** API-Endpunkt-Kandidaten extrahiert, **${spa.validated}** validiert und der prüfbaren Oberfläche hinzugefügt` + (spa.shellEliminated ? ` (${spa.shellEliminated} SPA-Catch-all-Shell eliminiert)` : '') + '.');
+      ` Durch SPA-JS-Analyse wurden **${spa.candidates}** API-Endpunkt-Kandidaten extrahiert, **${spa.validated}** validiert und der prüfbaren Oberfläche hinzugefügt` + (spa.shellEliminated ? ` (${spa.shellEliminated} SPA-Catch-all-Shell eliminiert)` : '') + '.',
+      ` Through SPA JS analysis, **${spa.candidates}** API endpoint candidates were extracted, **${spa.validated}** validated and added to the testable surface` + (spa.shellEliminated ? ` (${spa.shellEliminated} SPA catch-all shell eliminated)` : '') + '.');
   }
   return base;
 }
@@ -994,13 +1011,14 @@ const XSS_PAYLOADS = [`${XSS_MARKER}"><cxmark>`, `${XSS_MARKER}'><cxmark>`, `${X
 const INJ_MAX_INPUTS = 26; // (İş B.1) giris noktasi kapsami +%30 (20->26); devre kesici/rate-limit AYNEN korunur
 const INJ_PATH_MAX = 16;   // (İş B.1) path-ID uc noktasi ust siniri 12->16
 
-export async function collectInjectionEvidence(host: string, session?: AuthSession, de = false): Promise<InjEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectInjectionEvidence(host: string, session?: AuthSession, locale: string = 'tr'): Promise<InjEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const surf = await discoverSurface(host, session);
-  if (!surf.ok) return { ok: false, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: 0, inputsFound: 0, inputsTested: 0, probesSent: 0, payloadsSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi (bağlantı kurulamadı).', 'Die Startseite des Ziels konnte nicht abgerufen werden (keine Verbindung).')], formsTested: 0, formsSkipped: [] };
+  if (!surf.ok) return { ok: false, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: 0, inputsFound: 0, inputsTested: 0, probesSent: 0, payloadsSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi (bağlantı kurulamadı).', 'Die Startseite des Ziels konnte nicht abgerufen werden (keine Verbindung).', 'The target home page could not be fetched (no connection).')], formsTested: 0, formsSkipped: [] };
   const inputs = surf.inputs.slice(0, INJ_MAX_INPUTS);
   const ctx = new ProbeCtx();
-  ctx.de = de;
+  ctx.locale = locale;
   ctx.label = "Enjeksiyon (SQLi/XSS) Doğrulama";
   if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
   const findings: InjFinding[] = [];
@@ -1142,10 +1160,10 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
 
   if (ctx.stopped) notes.push(ctx.stopped);
   const totalTestable = inputs.length + pathEps.length;
-  if (!totalTestable) notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada test edilebilir GET parametresi, form alanı veya path uç noktası bulunamadı (giriş noktası yok).`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein prüfbarer GET-Parameter, kein Formularfeld und kein Pfad-Endpunkt gefunden (kein Eingabepunkt).`) + spaHint(surf, de));
+  if (!totalTestable) notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada test edilebilir GET parametresi, form alanı veya path uç noktası bulunamadı (giriş noktası yok).`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein prüfbarer GET-Parameter, kein Formularfeld und kein Pfad-Endpunkt gefunden (kein Eingabepunkt).`, `No testable GET parameter, form field or path endpoint was found across the ${surf.pagesScanned} unique pages scanned (no input point).`) + spaHint(surf, locale));
   const seenSkip = new Set<string>();
   const formsSkipped = [...skippedForms.entries()].map(([action, reason]) => { let p = action; try { p = new URL(action).pathname; } catch { /* ham */ } return { action: p, reason }; }).filter((f) => { const k = `${f.action}|${f.reason}`; if (seenSkip.has(k)) return false; seenSkip.add(k); return true; });
-  if (formsSkipped.length) notes.push(t(`Güvenlik gereği ${formsSkipped.length} form gerçek POST testinden HARİÇ tutuldu (kalıcı yan etki riski): ${formsSkipped.map((f) => `${f.action} (${f.reason})`).join('; ')}.`, `Aus Sicherheitsgründen wurden ${formsSkipped.length} Formulare vom echten POST-Test AUSGESCHLOSSEN (Risiko dauerhafter Nebenwirkungen): ${formsSkipped.map((f) => `${f.action} (${f.reason})`).join('; ')}.`));
+  if (formsSkipped.length) notes.push(t(`Güvenlik gereği ${formsSkipped.length} form gerçek POST testinden HARİÇ tutuldu (kalıcı yan etki riski): ${formsSkipped.map((f) => `${f.action} (${f.reason})`).join('; ')}.`, `Aus Sicherheitsgründen wurden ${formsSkipped.length} Formulare vom echten POST-Test AUSGESCHLOSSEN (Risiko dauerhafter Nebenwirkungen): ${formsSkipped.map((f) => `${f.action} (${f.reason})`).join('; ')}.`, `For safety, ${formsSkipped.length} forms were EXCLUDED from the real POST test (risk of permanent side effects): ${formsSkipped.map((f) => `${f.action} (${f.reason})`).join('; ')}.`));
   return { ok: true, baseUrl: `${cachedOriginUrl(host)}/`, pagesScanned: surf.pagesScanned, inputsFound: totalTestable, inputsTested: tested + pathTested, probesSent: ctx.sent, payloadsSent: payloads, findings, stopped: ctx.stopped, notes, verboseError: verboseError ?? undefined, formsTested: testedFormActions.size, formsSkipped };
 }
 
@@ -1289,13 +1307,14 @@ function looksLikeNotFound(status: number, text: string): boolean {
   return /not found|bulunamadı|404|access denied|erişim engellendi|oturum aç|login required/i.test(text.slice(0, 2000));
 }
 
-export async function collectIdorEvidence(host: string, session?: AuthSession, de = false): Promise<IdorEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectIdorEvidence(host: string, session?: AuthSession, locale: string = 'tr'): Promise<IdorEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const surf = await discoverSurface(host, session);
-  if (!surf.ok) return { ok: false, pagesScanned: 0, candidates: 0, endpointsTested: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi (bağlantı kurulamadı).', 'Die Startseite des Ziels konnte nicht abgerufen werden (keine Verbindung).')] };
+  if (!surf.ok) return { ok: false, pagesScanned: 0, candidates: 0, endpointsTested: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi (bağlantı kurulamadı).', 'Die Startseite des Ziels konnte nicht abgerufen werden (keine Verbindung).', 'The target home page could not be fetched (no connection).')] };
   const eps = idorCandidatesFrom(surf).slice(0, IDOR_MAX); // (İş B.2) tüm id-parametreli GET uçları
   const ctx = new ProbeCtx();
-  ctx.de = de;
+  ctx.locale = locale;
   ctx.label = "Yetkisiz Erişim (IDOR) Doğrulama";
   if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
   const findings: IdorFinding[] = [];
@@ -1385,7 +1404,7 @@ export async function collectIdorEvidence(host: string, session?: AuthSession, d
   }
 
   const totalCandidates = eps.length + derivedBases.length;
-  if (derivedBases.length) { const dp = (() => { try { return new URL(derivedBases[0]).pathname; } catch { return derivedBases[0]; } })(); notes.push(t(`Ayrıca **${derivedBases.length}** koleksiyon-benzeri uçtan (ör. \`${dp}\`) sıralı sayısal ID'ler (\`/{1..${DERIVE_IDS_PER_BASE}}\`) türetilip GET ile içerik-farkı yöntemiyle test edildi.`, `Zusätzlich wurden aus **${derivedBases.length}** sammlungsähnlichen Endpunkten (z. B. \`${dp}\`) sequenzielle numerische IDs (\`/{1..${DERIVE_IDS_PER_BASE}}\`) abgeleitet und per GET mit der Inhaltsvergleichsmethode getestet.`)); }
+  if (derivedBases.length) { const dp = (() => { try { return new URL(derivedBases[0]).pathname; } catch { return derivedBases[0]; } })(); notes.push(t(`Ayrıca **${derivedBases.length}** koleksiyon-benzeri uçtan (ör. \`${dp}\`) sıralı sayısal ID'ler (\`/{1..${DERIVE_IDS_PER_BASE}}\`) türetilip GET ile içerik-farkı yöntemiyle test edildi.`, `Zusätzlich wurden aus **${derivedBases.length}** sammlungsähnlichen Endpunkten (z. B. \`${dp}\`) sequenzielle numerische IDs (\`/{1..${DERIVE_IDS_PER_BASE}}\`) abgeleitet und per GET mit der Inhaltsvergleichsmethode getestet.`, `In addition, sequential numeric IDs (\`/{1..${DERIVE_IDS_PER_BASE}}\`) were derived from **${derivedBases.length}** collection-like endpoints (e.g. \`${dp}\`) and tested via GET using the content-difference method.`)); }
   if (ctx.stopped) notes.push(ctx.stopped);
   // (İş 2 — DÜRÜSTLÜK) Authenticated numaralandırılabilir yüzey (hesap seçim formu vb.) BULUNDUYSA:
   // "giriş noktası yok" DEME. Ama otomatik neighbor-IDOR ÇALIŞTIRMA — kullanıcının KENDİ hesapları
@@ -1395,9 +1414,10 @@ export async function collectIdorEvidence(host: string, session?: AuthSession, d
     const s = enumSel[0]; let p = s.action; try { p = new URL(s.action).pathname; } catch { /* ham */ }
     const smp = s.sample.slice(0, 3).join(', ');
     notes.push(t(`Authenticated numaralandırılabilir kaynak yüzeyi BULUNDU: \`${p}?${s.param}=<değer>\` (${s.count} değerli seçim formu; ör. ${smp}…). Bu, hesap/kayıt seçimi gibi ID-tabanlı bir yüzeydir. Kullanıcının KENDİ kaynaklarına erişimi YETKİLİDİR (IDOR değil); asıl risk olan **sahip olunmayan** bir ID'ye erişim (**cross-account IDOR**) iki ayrı hesap gerektirir ve bu paketin **kapsamı dışıdır** — kapsam-sözleşmeli Tam Kapsamlı Pentest ile test edilmelidir. Otomatik komşu-ID probu bu yüzeyde bilinçli olarak ÇALIŞTIRILMADI (yanlış-pozitif ve kapsam-dışı erişimi önlemek için).`,
-      `Authentifizierte enumerierbare Ressourcenoberfläche GEFUNDEN: \`${p}?${s.param}=<Wert>\` (Auswahlformular mit ${s.count} Werten; z. B. ${smp}…). Dies ist eine ID-basierte Oberfläche wie eine Konto-/Datensatzauswahl. Der Zugriff des Benutzers auf die EIGENEN Ressourcen ist AUTORISIERT (kein IDOR); das eigentliche Risiko — der Zugriff auf eine **nicht besessene** ID (**Cross-Account-IDOR**) — erfordert zwei separate Konten und liegt **außerhalb des Geltungsbereichs** dieses Pakets — es sollte mit einem geltungsbereichsvertraglichen vollständigen Pentest getestet werden. Die automatische Nachbar-ID-Sonde wurde auf dieser Oberfläche bewusst NICHT AUSGEFÜHRT (um Falsch-Positive und Zugriff außerhalb des Geltungsbereichs zu vermeiden).`));
+      `Authentifizierte enumerierbare Ressourcenoberfläche GEFUNDEN: \`${p}?${s.param}=<Wert>\` (Auswahlformular mit ${s.count} Werten; z. B. ${smp}…). Dies ist eine ID-basierte Oberfläche wie eine Konto-/Datensatzauswahl. Der Zugriff des Benutzers auf die EIGENEN Ressourcen ist AUTORISIERT (kein IDOR); das eigentliche Risiko — der Zugriff auf eine **nicht besessene** ID (**Cross-Account-IDOR**) — erfordert zwei separate Konten und liegt **außerhalb des Geltungsbereichs** dieses Pakets — es sollte mit einem geltungsbereichsvertraglichen vollständigen Pentest getestet werden. Die automatische Nachbar-ID-Sonde wurde auf dieser Oberfläche bewusst NICHT AUSGEFÜHRT (um Falsch-Positive und Zugriff außerhalb des Geltungsbereichs zu vermeiden).`,
+      `An authenticated enumerable resource surface was FOUND: \`${p}?${s.param}=<value>\` (${s.count}-value selection form; e.g. ${smp}…). This is an ID-based surface such as account/record selection. The user IS authorized to access their OWN resources (not IDOR); the real risk — accessing an ID **not owned** (**cross-account IDOR**) — requires two separate accounts and is **outside the scope** of this package; it should be tested with a scope-contracted Full-Scope Pentest. The automatic neighbouring-ID probe was deliberately NOT run on this surface (to avoid false positives and out-of-scope access).`));
   } else if (!totalCandidates) {
-    notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada sayısal/tahmin-edilebilir ID içeren bir uç nokta (ör. \`?id=123\`, \`/user/45\`) veya sıralı ID türetilebilecek koleksiyon ucu bulunamadı.`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein Endpunkt mit numerischer/vorhersehbarer ID (z. B. \`?id=123\`, \`/user/45\`) oder ein Sammlungs-Endpunkt, aus dem sequenzielle IDs ableitbar wären, gefunden.`) + spaHint(surf, de));
+    notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada sayısal/tahmin-edilebilir ID içeren bir uç nokta (ör. \`?id=123\`, \`/user/45\`) veya sıralı ID türetilebilecek koleksiyon ucu bulunamadı.`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein Endpunkt mit numerischer/vorhersehbarer ID (z. B. \`?id=123\`, \`/user/45\`) oder ein Sammlungs-Endpunkt, aus dem sequenzielle IDs ableitbar wären, gefunden.`, `No endpoint with a numeric/predictable ID (e.g. \`?id=123\`, \`/user/45\`) or a collection endpoint from which sequential IDs could be derived was found across the ${surf.pagesScanned} unique pages scanned.`) + spaHint(surf, locale));
   }
   const reportedCandidates = totalCandidates + enumSel.length; // yüzey bulunduysa "giriş noktası yok" DEME
   // (İş 2 tutarlılık) Rapor, "yüzey bulundu ama cross-account kapsam dışı" durumunu "temiz" ile KARIŞTIRMASIN.
@@ -1482,13 +1502,14 @@ function isInternalHost(hostname: string): boolean {
 // ======================================================================================
 const FETCH_PARAM_RE = /(^|_)(url|uri|link|webhook|callback|image|img|src|source|dest|destination|redirect|redir|feed|proxy|fetch|load|domain|site|target|host|page|ref|next|return|continue|file|path|preview|thumb|avatar|logo)$/i;
 
-export async function collectSsrfEvidence(host: string, session?: AuthSession, de = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectSsrfEvidence(host: string, session?: AuthSession, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const surf = await discoverSurface(host, session);
-  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.')] };
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.', 'The target home page could not be fetched.')] };
   const inputs = surf.inputs.filter((ip) => FETCH_PARAM_RE.test(ip.param)).slice(0, 6);
   const ctx = new ProbeCtx();
-  ctx.de = de;
+  ctx.locale = locale;
   if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
   const findings: VFinding[] = [];
   const notes: string[] = [];
@@ -1498,7 +1519,7 @@ export async function collectSsrfEvidence(host: string, session?: AuthSession, d
   for (const ip of inputs) {
     if (ctx.stopped) break;
     // (FORM-POST GÜVENLİK KAPISI) YASAK türdeki forma gerçek POST atma.
-    if (ip.method === 'POST' && ip.source === 'form' && forbiddenFormReason(ip.action, Object.keys(ip.params), de)) continue;
+    if (ip.method === 'POST' && ip.source === 'form' && forbiddenFormReason(ip.action, Object.keys(ip.params), locale)) continue;
     const token = randToken();
     const echoUrl = `${OOB_ECHO_BASE}/oob/echo/${token}`;
     // HARD-GUARD: probe URL yalniz kendi echo host'umuz olabilir; ic ag ASLA.
@@ -1513,7 +1534,7 @@ export async function collectSsrfEvidence(host: string, session?: AuthSession, d
     }
   }
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!inputs.length) notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada sunucu-taraflı fetch tetikleyebilecek bir parametre (url/webhook/image vb.) bulunamadı.`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein Parameter gefunden, der einen serverseitigen Fetch auslösen könnte (url/webhook/image usw.).`) + spaHint(surf, de));
+  if (!inputs.length) notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada sunucu-taraflı fetch tetikleyebilecek bir parametre (url/webhook/image vb.) bulunamadı.`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein Parameter gefunden, der einen serverseitigen Fetch auslösen könnte (url/webhook/image usw.).`, `No parameter that could trigger a server-side fetch (url/webhook/image etc.) was found across the ${surf.pagesScanned} unique pages scanned.`) + spaHint(surf, locale));
   return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: inputs.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }
 
@@ -1523,13 +1544,14 @@ export async function collectSsrfEvidence(host: string, session?: AuthSession, d
 // HARD-GUARD: yalniz bu sabit, zararsiz gecikme payload'lari. Dosya/ag/komut YOK.
 const RCE_SLEEP_PAYLOADS = [`; sleep ${SLEEP_S} #`, `| sleep ${SLEEP_S}`, `$(sleep ${SLEEP_S})`, `\`sleep ${SLEEP_S}\``];
 
-export async function collectRceEvidence(host: string, session?: AuthSession, de = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectRceEvidence(host: string, session?: AuthSession, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const surf = await discoverSurface(host, session);
-  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.')] };
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.', 'The target home page could not be fetched.')] };
   const inputs = surf.inputs.slice(0, 4);
   const ctx = new ProbeCtx();
-  ctx.de = de;
+  ctx.locale = locale;
   if (session) ctx.authHeaders = applyAuthHeaders({}, session); // (FAZ C) authenticated probe
   const findings: VFinding[] = [];
   const notes: string[] = [];
@@ -1539,7 +1561,7 @@ export async function collectRceEvidence(host: string, session?: AuthSession, de
   for (const ip of inputs) {
     if (ctx.stopped) break;
     // (FORM-POST GÜVENLİK KAPISI) YASAK türdeki forma gerçek POST atma.
-    if (ip.method === 'POST' && ip.source === 'form' && forbiddenFormReason(ip.action, Object.keys(ip.params), de)) continue;
+    if (ip.method === 'POST' && ip.source === 'form' && forbiddenFormReason(ip.action, Object.keys(ip.params), locale)) continue;
     const label = `${ip.method} ${new URL(ip.action).pathname}?${ip.param}`;
     let hit = false;
     for (const payload of RCE_SLEEP_PAYLOADS.slice(0, 3)) { // input basina en fazla 3 zaman-tabanli deneme, retry YOK
@@ -1555,7 +1577,7 @@ export async function collectRceEvidence(host: string, session?: AuthSession, de
     }
   }
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!inputs.length) notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada komuta ulaşabilecek bir giriş parametresi bulunamadı.`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein Eingabeparameter gefunden, der einen Befehl erreichen könnte.`) + spaHint(surf, de));
+  if (!inputs.length) notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada komuta ulaşabilecek bir giriş parametresi bulunamadı.`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein Eingabeparameter gefunden, der einen Befehl erreichen könnte.`, `No input parameter that could reach a command was found across the ${surf.pagesScanned} unique pages scanned.`) + spaHint(surf, locale));
   return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: inputs.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }
 
@@ -1587,13 +1609,14 @@ function buildMultipart(fileField: string, filename: string, fileType: string, f
 }
 const UPLOAD_REJECT_RE = /(not allowed|invalid file|unsupported|desteklenmeyen|geçersiz dosya|izin veril|reddedild|file type|yalnızca|only .* allowed|hata|error)/i;
 
-export async function collectFileUploadEvidence(host: string, de = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectFileUploadEvidence(host: string, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const surf = await discoverSurface(host);
-  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.')] };
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.', 'The target home page could not be fetched.')] };
   const forms = surf.uploadForms.slice(0, 3);
   const ctx = new ProbeCtx();
-  ctx.de = de;
+  ctx.locale = locale;
   const findings: VFinding[] = [];
   const notes: string[] = [];
   const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
@@ -1603,7 +1626,7 @@ export async function collectFileUploadEvidence(host: string, de = false): Promi
     if (ctx.stopped) break;
     // (FORM-POST GÜVENLİK KAPISI) Yükleme formu aslında kayıt/iletişim/yorum formuysa (ör. avatar-yükleme
     // içeren signup, ekli iletişim formu) gerçek POST atma — kalıcı hesap/e-posta/kayıt yaratabilir.
-    if (forbiddenFormReason(f.action, [f.fileField, ...f.otherFields], de)) continue;
+    if (forbiddenFormReason(f.action, [f.fileField, ...f.otherFields], locale)) continue;
     // Zararsiz, INERT, cift-uzantili test dosyasi (calistirilamaz). GERI CAGIRILMAZ.
     const { body, contentType } = buildMultipart(f.fileField, 'cybertestify_probe.php.txt', 'text/plain', 'CYBERTESTIFY-UPLOAD-PROBE (inert, non-executable test file)', f.otherFields);
     const r = await ctx.fetchOnce(f.action, { method: 'POST', body, contentType }); // tek deneme, retry YOK
@@ -1615,9 +1638,9 @@ export async function collectFileUploadEvidence(host: string, de = false): Promi
     }
   }
   const netForms = forms.filter((f) => f.source === 'network').length;
-  if (netForms > 0) notes.push(t(`Bu kontrolde, DOM'daki \`<input type=file>\` formlarına **ek olarak**, JS render sırasında gözlemlenen ağ trafiğinden (multipart/form-data veya upload/file/avatar gibi yollar) **${netForms}** dosya-yükleme ucu keşfedilip test edildi.`, `In dieser Prüfung wurden **zusätzlich** zu den \`<input type=file>\`-Formularen im DOM aus dem während des JavaScript-Renderings beobachteten Netzwerkverkehr (multipart/form-data oder Pfade wie upload/file/avatar) **${netForms}** Datei-Upload-Endpunkte entdeckt und getestet.`));
+  if (netForms > 0) notes.push(t(`Bu kontrolde, DOM'daki \`<input type=file>\` formlarına **ek olarak**, JS render sırasında gözlemlenen ağ trafiğinden (multipart/form-data veya upload/file/avatar gibi yollar) **${netForms}** dosya-yükleme ucu keşfedilip test edildi.`, `In dieser Prüfung wurden **zusätzlich** zu den \`<input type=file>\`-Formularen im DOM aus dem während des JavaScript-Renderings beobachteten Netzwerkverkehr (multipart/form-data oder Pfade wie upload/file/avatar) **${netForms}** Datei-Upload-Endpunkte entdeckt und getestet.`, `In this check, **in addition** to the \`<input type=file>\` forms in the DOM, **${netForms}** file-upload endpoints were discovered and tested from the network traffic observed during JS rendering (multipart/form-data or paths like upload/file/avatar).`));
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!forms.length) notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada dosya yükleme formu (input type=file) veya ağ trafiğinde dosya-yükleme ucu bulunamadı.`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein Datei-Upload-Formular (input type=file) und kein Datei-Upload-Endpunkt im Netzwerkverkehr gefunden.`) + spaHint(surf, de));
+  if (!forms.length) notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada dosya yükleme formu (input type=file) veya ağ trafiğinde dosya-yükleme ucu bulunamadı.`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein Datei-Upload-Formular (input type=file) und kein Datei-Upload-Endpunkt im Netzwerkverkehr gefunden.`, `No file-upload form (input type=file) and no file-upload endpoint in the network traffic was found across the ${surf.pagesScanned} unique pages scanned.`) + spaHint(surf, locale));
   return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: forms.length, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
 }
 
@@ -1628,13 +1651,14 @@ export async function collectFileUploadEvidence(host: string, de = false): Promi
 const STEP_SKIP_RE = /\/(success|completed?|confirm(ation)?|thank[-_]?you|tesekkur|onay|basarili|receipt|invoice)\b/i;
 const PRICE_FIELD_RE = /name=["'](price|amount|total|cost|fiyat|tutar|qty|quantity|adet|miktar|discount|indirim)["']/i;
 
-export async function collectBusinessLogicEvidence(host: string, de = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectBusinessLogicEvidence(host: string, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const surf = await discoverSurface(host);
-  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.')] };
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.', 'The target home page could not be fetched.')] };
   const html = surf.homeHtml;
   const ctx = new ProbeCtx();
-  ctx.de = de;
+  ctx.locale = locale;
   const findings: VFinding[] = [];
   const notes: string[] = [];
 
@@ -1676,8 +1700,8 @@ export async function collectBusinessLogicEvidence(host: string, de = false): Pr
   }
 
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (agentUsed) notes.push(t('Bu kontrol, keşfedilen yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnızca yapılandırılmış öneri üretir; tüm istekler backend’in güvenli GET fonksiyonlarından geçer; advisory doğrudan HTTP atmaz).', 'Diese Prüfung wurde auf der entdeckten Oberfläche **mit KI-gestützter Advisory (einzelner LLM-Aufruf) analysiert** (die Advisory erzeugt nur strukturierte Empfehlungen; alle Anfragen laufen über die sicheren GET-Funktionen des Backends; die Advisory sendet keine direkten HTTP-Anfragen).'));
-  if (!findings.length) notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada gözlemlenebilir bir istemci-tarafı fiyat/miktar alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein beobachtbares clientseitiges Preis-/Mengenfeld und kein direkt zugänglicher „Bestätigen"-Schritt gefunden.`) + spaHint(surf, de));
+  if (agentUsed) notes.push(t('Bu kontrol, keşfedilen yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnızca yapılandırılmış öneri üretir; tüm istekler backend’in güvenli GET fonksiyonlarından geçer; advisory doğrudan HTTP atmaz).', 'Diese Prüfung wurde auf der entdeckten Oberfläche **mit KI-gestützter Advisory (einzelner LLM-Aufruf) analysiert** (die Advisory erzeugt nur strukturierte Empfehlungen; alle Anfragen laufen über die sicheren GET-Funktionen des Backends; die Advisory sendet keine direkten HTTP-Anfragen).', 'This check was **analysed with an AI-assisted advisory (a single LLM call)** over the discovered surface (the advisory produces only structured recommendations; all requests go through the backend’s safe GET functions; the advisory sends no direct HTTP requests).'));
+  if (!findings.length) notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada gözlemlenebilir bir istemci-tarafı fiyat/miktar alanı veya doğrudan erişilebilir "onay" adımı bulunamadı.`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein beobachtbares clientseitiges Preis-/Mengenfeld und kein direkt zugänglicher „Bestätigen"-Schritt gefunden.`, `No observable client-side price/quantity field and no directly accessible "confirmation" step was found across the ${surf.pagesScanned} unique pages scanned.`) + spaHint(surf, locale));
   return { ok: true, pagesScanned: surf.pagesScanned, inputsFound: (hiddenPrice ? 1 : 0) + links.size, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes, agentUsed };
 }
 
@@ -1703,13 +1727,14 @@ function discoverMassAssignForm(host: string, html: string): { action: string; f
   return null;
 }
 
-export async function collectRaceMassAssignEvidence(host: string, de = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectRaceMassAssignEvidence(host: string, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const surf = await discoverSurface(host);
-  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.')] };
+  if (!surf.ok) return { ok: false, pagesScanned: 0, inputsFound: 0, probesSent: 0, findings: [], stopped: null, notes: [t('Hedef ana sayfası çekilemedi.', 'Die Startseite des Ziels konnte nicht abgerufen werden.', 'The target home page could not be fetched.')] };
   const form = surf.massAssignForm;
   const ctx = new ProbeCtx();
-  ctx.de = de;
+  ctx.locale = locale;
   const findings: VFinding[] = [];
   const notes: string[] = [];
   const base = await ctx.fetchOnce(`${cachedOriginUrl(host)}/`);
@@ -1724,13 +1749,13 @@ export async function collectRaceMassAssignEvidence(host: string, de = false): P
   // nadirdir; yoksa bu kontrol o hedefte "İncelenemedi" (güvenli test edilebilir giriş noktası yok).
   const massCat = form ? formCategory(form.action, form.fields) : null;
   const massBlockReason = !form ? null
-    : (forbiddenFormReason(form.action, form.fields, de)
-       ?? (massCat === 'login' ? t('giriş (login) formu — mass-assignment/over-posting hedefi değildir (Giriş Baypası kontrolünde ayrıca test edilir)', 'Login-Formular — kein Ziel für Mass-Assignment/Over-Posting (wird in der Login-Bypass-Prüfung gesondert getestet)')
-           : massCat === 'search' ? t('arama/filtre formu — kayıt/güncelleme (over-posting) hedefi değildir', 'Such-/Filterformular — kein Ziel für Registrierung/Aktualisierung (Over-Posting)')
+    : (forbiddenFormReason(form.action, form.fields, locale)
+       ?? (massCat === 'login' ? t('giriş (login) formu — mass-assignment/over-posting hedefi değildir (Giriş Baypası kontrolünde ayrıca test edilir)', 'Login-Formular — kein Ziel für Mass-Assignment/Over-Posting (wird in der Login-Bypass-Prüfung gesondert getestet)', 'login form — not a target for mass-assignment/over-posting (also tested in the Login Bypass check)')
+           : massCat === 'search' ? t('arama/filtre formu — kayıt/güncelleme (over-posting) hedefi değildir', 'Such-/Filterformular — kein Ziel für Registrierung/Aktualisierung (Over-Posting)', 'search/filter form — not a target for registration/update (over-posting)')
            : null));
   if (form && massBlockReason) {
     let p = form.action; try { p = new URL(form.action).pathname; } catch { /* ham */ }
-    notes.push(t(`Mass-assignment adayı form (${p}) gerçek POST testinden HARİÇ tutuldu: ${massBlockReason}. Güvenli, YASAK olmayan bir kayıt/güncelleme (over-posting) giriş noktası bulunmadığından bu kontrol bu hedefte kimlik-doğrulaması olmadan güvenle test edilemedi (kimlik-doğrulamalı derin test Tam Kapsamlı Pentest kapsamındadır).`, `Das Mass-Assignment-Kandidatenformular (${p}) wurde vom echten POST-Test AUSGESCHLOSSEN: ${massBlockReason}. Da kein sicherer, nicht verbotener Registrierungs-/Aktualisierungs-Eingabepunkt (Over-Posting) gefunden wurde, konnte diese Prüfung bei diesem Ziel ohne Authentifizierung nicht sicher durchgeführt werden (die tiefe authentifizierte Prüfung fällt in den Umfang des vollständigen Pentests).`));
+    notes.push(t(`Mass-assignment adayı form (${p}) gerçek POST testinden HARİÇ tutuldu: ${massBlockReason}. Güvenli, YASAK olmayan bir kayıt/güncelleme (over-posting) giriş noktası bulunmadığından bu kontrol bu hedefte kimlik-doğrulaması olmadan güvenle test edilemedi (kimlik-doğrulamalı derin test Tam Kapsamlı Pentest kapsamındadır).`, `Das Mass-Assignment-Kandidatenformular (${p}) wurde vom echten POST-Test AUSGESCHLOSSEN: ${massBlockReason}. Da kein sicherer, nicht verbotener Registrierungs-/Aktualisierungs-Eingabepunkt (Over-Posting) gefunden wurde, konnte diese Prüfung bei diesem Ziel ohne Authentifizierung nicht sicher durchgeführt werden (die tiefe authentifizierte Prüfung fällt in den Umfang des vollständigen Pentests).`, `The mass-assignment candidate form (${p}) was EXCLUDED from the real POST test: ${massBlockReason}. Since no safe, non-forbidden registration/update (over-posting) input point was found, this check could not be safely run on this target without authentication (authenticated deep testing is part of the Full-Scope Pentest).`));
   }
   if (form && !massBlockReason) {
     // Sahte/test verisi + fazladan isAdmin/role alani. TEK POST, retry YOK.
@@ -1764,10 +1789,10 @@ export async function collectRaceMassAssignEvidence(host: string, de = false): P
   }
 
   // Race yüzeyi — otomatik yıkıcı paralel yazma YAPILMAZ (güvenlik); not olarak belirtilir.
-  notes.push(t('Race-condition (eşzamanlılık) testi, tüketilebilir bir kaynağı (kupon/stok) gerçekten değiştirme riski taşıdığından bu otomatik taramada **çalıştırılmadı**; güvenli/test edilebilir bir uç nokta ile manuel doğrulama önerilir.', 'Der Race-Condition-Test (Nebenläufigkeit) wurde in diesem automatischen Scan **nicht ausgeführt**, da er das Risiko birgt, eine verbrauchbare Ressource (Coupon/Bestand) tatsächlich zu verändern; eine manuelle Verifizierung mit einem sicheren/prüfbaren Endpunkt wird empfohlen.'));
-  if (agentUsed) notes.push(t('Bu kontrol, keşfedilen yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnızca yapılandırılmış öneri üretir; hiçbir yıkıcı/state-değiştiren istek advisory tarafından tetiklenmez, tüm istekler backend’in güvenli fonksiyonlarından geçer).', 'Diese Prüfung wurde auf der entdeckten Oberfläche **mit KI-gestützter Advisory (einzelner LLM-Aufruf) analysiert** (die Advisory erzeugt nur strukturierte Empfehlungen; keine zerstörerische/zustandsverändernde Anfrage wird durch die Advisory ausgelöst, alle Anfragen laufen über die sicheren Funktionen des Backends).'));
+  notes.push(t('Race-condition (eşzamanlılık) testi, tüketilebilir bir kaynağı (kupon/stok) gerçekten değiştirme riski taşıdığından bu otomatik taramada **çalıştırılmadı**; güvenli/test edilebilir bir uç nokta ile manuel doğrulama önerilir.', 'Der Race-Condition-Test (Nebenläufigkeit) wurde in diesem automatischen Scan **nicht ausgeführt**, da er das Risiko birgt, eine verbrauchbare Ressource (Coupon/Bestand) tatsächlich zu verändern; eine manuelle Verifizierung mit einem sicheren/prüfbaren Endpunkt wird empfohlen.', 'The race-condition (concurrency) test was **not run** in this automatic scan, as it carries the risk of actually altering a consumable resource (coupon/stock); manual verification with a safe/testable endpoint is recommended.'));
+  if (agentUsed) notes.push(t('Bu kontrol, keşfedilen yüzey üzerinde **yapay zekâ destekli advisory (tek LLM çağrısı) ile analiz edilmiştir** (advisory yalnızca yapılandırılmış öneri üretir; hiçbir yıkıcı/state-değiştiren istek advisory tarafından tetiklenmez, tüm istekler backend’in güvenli fonksiyonlarından geçer).', 'Diese Prüfung wurde auf der entdeckten Oberfläche **mit KI-gestützter Advisory (einzelner LLM-Aufruf) analysiert** (die Advisory erzeugt nur strukturierte Empfehlungen; keine zerstörerische/zustandsverändernde Anfrage wird durch die Advisory ausgelöst, alle Anfragen laufen über die sicheren Funktionen des Backends).', 'This check was **analysed with an AI-assisted advisory (a single LLM call)** over the discovered surface (the advisory produces only structured recommendations; no destructive/state-changing request is triggered by the advisory, all requests go through the backend’s safe functions).'));
   if (ctx.stopped) notes.push(ctx.stopped);
-  if (!form) notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada mass-assignment için uygun (tamamlama/ödeme dışı) kayıt/profil formu bulunamadı.`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein für Mass-Assignment geeignetes (nicht abschluss-/zahlungsbezogenes) Registrierungs-/Profilformular gefunden.`) + spaHint(surf, de));
+  if (!form) notes.push(t(`Taranan ${surf.pagesScanned} benzersiz sayfada mass-assignment için uygun (tamamlama/ödeme dışı) kayıt/profil formu bulunamadı.`, `Auf den ${surf.pagesScanned} gescannten einzigartigen Seiten wurde kein für Mass-Assignment geeignetes (nicht abschluss-/zahlungsbezogenes) Registrierungs-/Profilformular gefunden.`, `No registration/profile form suitable for mass-assignment (non-checkout/payment) was found across the ${surf.pagesScanned} unique pages scanned.`) + spaHint(surf, locale));
   // (İş A düzeltmesi) POST engellendiyse (yasak/login/arama) GERÇEK test yapılmadı -> inputsFound=0 ki
   // Pozitif Güvence/kontrol tablosu bunu "Temiz" değil "İncelenemedi/Kapsam dışı" göstersin (dürüstlük).
   const massTested = !!form && !massBlockReason;

@@ -46,8 +46,9 @@ function tlsHandshake(host: string, opts: tls.ConnectionOptions): Promise<Handsh
   });
 }
 
-export async function collectTransportSecurityEvidence(host: string, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectTransportSecurityEvidence(host: string, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const findings: VFinding[] = []; const notes: string[] = [];
   await resolveOrigin(host).catch(() => null);
   const origin = cachedOriginUrl(host);
@@ -125,8 +126,9 @@ export async function collectTransportSecurityEvidence(host: string, de: boolean
 }
 
 // ————————————————— H2 SUBDOMAIN TAKEOVER (dangling DNS) — collectSubdomains motorunu sarar —————————————————
-export async function collectSubdomainTakeoverEvidence(host: string, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectSubdomainTakeoverEvidence(host: string, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const findings: VFinding[] = []; const notes: string[] = [];
   const sub = await collectSubdomains(host).catch(() => null);
   if (!sub) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: [t('Subdomain takeover: alt-alan verisi toplanamadı — bu alt-kontrol sınırlı.', 'Subdomain-Übernahme: Subdomain-Daten konnten nicht erhoben werden — diese Teilprüfung ist eingeschränkt.')] };

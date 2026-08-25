@@ -7,7 +7,19 @@
  *   - pdf.buildMasterTable/buildDistribution -> "Temiz" YERİNE "İncelenemedi" uyarısı.
  * Tüm paketler (basit/surface/recon/compliance/active/full) aynı işareti kullanır.
  */
-export function unscannableReport(host: string, kind = 'kontroller', de = false): { findings: string; fixText: string } {
+export function unscannableReport(host: string, kind = 'kontroller', locale: string = 'tr'): { findings: string; fixText: string } {
+  const de = locale === 'de', en = locale === 'en';
+  if (en) {
+    const findings =
+      `## EXECUTIVE SUMMARY\n\n` +
+      `- **Overall risk level: Not assessable** — because the target (${host}) was unreachable, the ${kind} could not be run; no control was able to collect real data.\n` +
+      `- This result does **NOT** mean the website is SECURE; it only indicates that the controls could not be run.\n` +
+      `- **Recommended first step:** Verify that the domain is live and reachable from the outside, then repeat the scan.\n\n` +
+      `## OVERALL ASSESSMENT\n\n**Risk level: Not assessable**\n\n` +
+      `No connection could be established to the target's ports 443 (HTTPS) and 80 (HTTP) (timeout, connection refused, or firewall/access restriction). As a result the ${kind} could not be run and no control was able to collect real data. This report is **NOT** a "clean/secure" result; it should be re-scanned once access is possible.\n\n` +
+      `## IDENTIFIED RISKS\n\n_Because the target was unreachable, the controls could not be run — the result is not assessable._\n`;
+    return { findings, fixText: '' };
+  }
   if (de) {
     const findings =
       `## MANAGEMENTZUSAMMENFASSUNG\n\n` +

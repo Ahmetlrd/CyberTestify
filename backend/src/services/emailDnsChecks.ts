@@ -78,8 +78,9 @@ export function parseSpf(record: string): { all?: '-' | '~' | '?' | '+'; lookups
 
 const DKIM_SELECTORS = ['default', 'google', 'selector1', 'selector2', 'k1', 'mail', 'dkim', 's1', 's2', 'mandrill', 'mxvault'];
 
-export async function collectEmailDnsEvidence(host: string, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectEmailDnsEvidence(host: string, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const findings: VFinding[] = []; const notes: string[] = [];
   const org = getOrgDomain(host);
   let queries = 0;

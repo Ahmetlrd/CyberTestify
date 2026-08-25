@@ -78,8 +78,9 @@ export function scanCommentLeak(text: string, where: string): VFinding[] {
 }
 
 // ================= GRUP D: GİRDİ/HEADER =================
-export async function collectInputHeaderEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectInputHeaderEvidence(host: string, session: AuthSession, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   void session;
   const findings: VFinding[] = []; const notes: string[] = [];
   await resolveOrigin(host).catch(() => null);
@@ -157,8 +158,9 @@ export async function collectInputHeaderEvidence(host: string, session: AuthSess
 const BACKUP_PATHS = ['/.env', '/.env.bak', '/config.bak', '/config.php.bak', '/wp-config.php.bak', '/backup.zip', '/backup.tar.gz', '/db.sql', '/database.sql', '/.git/config', '/.svn/entries', '/.DS_Store', '/index.php~', '/app.js.map'];
 const ADMIN_PATHS = ['/admin', '/administrator', '/wp-admin/', '/admin/login', '/manager/html', '/phpmyadmin/', '/server-status', '/actuator', '/actuator/env', '/.git/', '/console'];
 
-export async function collectConfigExposureEvidence(host: string, session: AuthSession, de: boolean = false): Promise<ActiveCheckEvidence> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+export async function collectConfigExposureEvidence(host: string, session: AuthSession, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   void session;
   const findings: VFinding[] = []; const notes: string[] = [];
   const origin = cachedOriginUrl(host);
