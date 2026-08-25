@@ -99,7 +99,9 @@ const instantLimiter = rateLimit({
 });
 
 app.use('/auth', authLimiter, authRouter);
-app.use('/twofa', authLimiter, twofaRouter); // (2FA musteri) login-verify + ayarlar + nudge
+// (2FA musteri) login-verify + ayarlar + nudge. apiLimiter (300/dk) — status/nudge sayfa yuklemede
+// cagirilir; kod brute-force'u zaten HESAP-BAZLI kilit korur (5 yanlis → 15 dk), IP-limit sekonder.
+app.use('/twofa', apiLimiter, twofaRouter);
 app.use('/domains', apiLimiter, domainsRouter);
 app.use('/instant-scan', instantLimiter, instantRouter);
 app.use('/orders', apiLimiter, ordersRouter);
