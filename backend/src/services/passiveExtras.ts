@@ -97,9 +97,10 @@ async function txt(name: string): Promise<string[]> {
 
 // ---- DNS paketleri (dns_email) --------------------------------------------
 
-async function checkCaa(host: string, de: boolean = false): Promise<PassiveCheckResult> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
-  const id = 'caa', title = t('CAA Kaydı (Sertifika Yetkilisi Kısıtı)', 'CAA-Eintrag (Beschränkung der Zertifizierungsstelle)');
+async function checkCaa(host: string, locale: string = 'tr'): Promise<PassiveCheckResult> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
+  const id = 'caa', title = t('CAA Kaydı (Sertifika Yetkilisi Kısıtı)', 'CAA-Eintrag (Beschränkung der Zertifizierungsstelle)', 'CAA Record (Certificate Authority Restriction)');
   try {
     const domain = apexDomain(host);
     const recs = await dns.resolveCaa(domain).catch(() => [] as Array<Record<string, string>>);
@@ -107,45 +108,47 @@ async function checkCaa(host: string, de: boolean = false): Promise<PassiveCheck
       .map((r) => (r as Record<string, string>).issue || (r as Record<string, string>).issuewild)
       .filter(Boolean);
     if (!recs.length) {
-      return { id, title, status: 'absent', summary: t('CAA kaydı yok — herhangi bir sertifika yetkilisi (CA) bu domain için sertifika çıkarabilir.', 'Kein CAA-Eintrag vorhanden — jede Zertifizierungsstelle (CA) kann für diese Domain Zertifikate ausstellen.') };
+      return { id, title, status: 'absent', summary: t('CAA kaydı yok — herhangi bir sertifika yetkilisi (CA) bu domain için sertifika çıkarabilir.', 'Kein CAA-Eintrag vorhanden — jede Zertifizierungsstelle (CA) kann für diese Domain Zertifikate ausstellen.', 'No CAA record present — any certificate authority (CA) can issue certificates for this domain.') };
     }
     return {
       id, title, status: 'present',
-      summary: t(`CAA kaydı mevcut; sertifika çıkarımı ${issuers.length} yetkiliyle sınırlı.`, `CAA-Eintrag vorhanden; die Zertifikatsausstellung ist auf ${issuers.length} Zertifizierungsstelle(n) beschränkt.`),
+      summary: t(`CAA kaydı mevcut; sertifika çıkarımı ${issuers.length} yetkiliyle sınırlı.`, `CAA-Eintrag vorhanden; die Zertifikatsausstellung ist auf ${issuers.length} Zertifizierungsstelle(n) beschränkt.`, `CAA record present; certificate issuance is restricted to ${issuers.length} authority/authorities.`),
       details: { issuers, records: recs },
     };
   } catch (e) {
-    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`) };
+    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`, `Could not be checked: ${(e as Error).message}`) };
   }
 }
 
-async function checkBimi(host: string, de: boolean = false): Promise<PassiveCheckResult> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
-  const id = 'bimi', title = t('BIMI Kaydı', 'BIMI-Eintrag');
+async function checkBimi(host: string, locale: string = 'tr'): Promise<PassiveCheckResult> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
+  const id = 'bimi', title = t('BIMI Kaydı', 'BIMI-Eintrag', 'BIMI Record');
   try {
     const name = `default._bimi.${apexDomain(host)}`;
     const recs = await txt(name).catch(() => [] as string[]);
-    if (!recs.length) return { id, title, status: 'absent', summary: t('BIMI kaydı bulunamadı.', 'BIMI-Eintrag nicht gefunden.') };
+    if (!recs.length) return { id, title, status: 'absent', summary: t('BIMI kaydı bulunamadı.', 'BIMI-Eintrag nicht gefunden.', 'No BIMI record found.') };
     const rec = recs.find((r) => /v=BIMI1\b/i.test(r)) ?? recs[0];
     if (!/^v=BIMI1\b/i.test(rec.trim())) {
-      return { id, title, status: 'misconfigured', summary: t('BIMI TXT kaydı var ama "v=BIMI1;" ile başlamıyor.', 'BIMI-TXT-Eintrag vorhanden, beginnt aber nicht mit „v=BIMI1;".'), details: { record: rec } };
+      return { id, title, status: 'misconfigured', summary: t('BIMI TXT kaydı var ama "v=BIMI1;" ile başlamıyor.', 'BIMI-TXT-Eintrag vorhanden, beginnt aber nicht mit „v=BIMI1;".', 'BIMI TXT record present but does not begin with "v=BIMI1;".'), details: { record: rec } };
     }
-    return { id, title, status: 'present', summary: t('Geçerli BIMI kaydı mevcut.', 'Gültiger BIMI-Eintrag vorhanden.'), details: { record: rec } };
+    return { id, title, status: 'present', summary: t('Geçerli BIMI kaydı mevcut.', 'Gültiger BIMI-Eintrag vorhanden.', 'Valid BIMI record present.'), details: { record: rec } };
   } catch (e) {
-    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`) };
+    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`, `Could not be checked: ${(e as Error).message}`) };
   }
 }
 
-async function checkMtaSts(host: string, de: boolean = false): Promise<PassiveCheckResult> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
-  const id = 'mta_sts', title = t('MTA-STS (E-posta Aktarım Güvenliği)', 'MTA-STS (E-Mail-Übertragungssicherheit)');
+async function checkMtaSts(host: string, locale: string = 'tr'): Promise<PassiveCheckResult> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
+  const id = 'mta_sts', title = t('MTA-STS (E-posta Aktarım Güvenliği)', 'MTA-STS (E-Mail-Übertragungssicherheit)', 'MTA-STS (Email Transport Security)');
   try {
     const domain = apexDomain(host);
     const recs = await txt(`_mta-sts.${domain}`).catch(() => [] as string[]);
     const hasDns = recs.some((r) => /v=STSv1\b/i.test(r));
     const policy = await safeGet(`https://mta-sts.${domain}/.well-known/mta-sts.txt`, host);
     if (!hasDns && !policy.ok) {
-      return { id, title, status: 'absent', summary: t('MTA-STS DNS kaydı ve policy dosyası bulunamadı.', 'MTA-STS-DNS-Eintrag und Policy-Datei nicht gefunden.') };
+      return { id, title, status: 'absent', summary: t('MTA-STS DNS kaydı ve policy dosyası bulunamadı.', 'MTA-STS-DNS-Eintrag und Policy-Datei nicht gefunden.', 'MTA-STS DNS record and policy file not found.') };
     }
     const body = policy.text || '';
     const versionOk = /(^|\n)\s*version:\s*STSv1/i.test(body);
@@ -154,34 +157,36 @@ async function checkMtaSts(host: string, de: boolean = false): Promise<PassiveCh
     if (!hasDns || !policy.ok || !versionOk || !mode) {
       return {
         id, title, status: 'misconfigured',
-        summary: t('MTA-STS eksik/hatalı yapılandırılmış (DNS kaydı, policy dosyası veya version/mode satırı eksik).', 'MTA-STS unvollständig/fehlkonfiguriert (DNS-Eintrag, Policy-Datei oder version/mode-Zeile fehlt).'),
+        summary: t('MTA-STS eksik/hatalı yapılandırılmış (DNS kaydı, policy dosyası veya version/mode satırı eksik).', 'MTA-STS unvollständig/fehlkonfiguriert (DNS-Eintrag, Policy-Datei oder version/mode-Zeile fehlt).', 'MTA-STS incomplete/misconfigured (DNS record, policy file or version/mode line missing).'),
         details: { dnsRecord: hasDns, policyFetched: policy.ok, policyError: policy.error, versionOk, mode },
       };
     }
-    return { id, title, status: 'present', summary: t(`MTA-STS aktif (mode: ${mode}).`, `MTA-STS aktiv (mode: ${mode}).`), details: { mode } };
+    return { id, title, status: 'present', summary: t(`MTA-STS aktif (mode: ${mode}).`, `MTA-STS aktiv (mode: ${mode}).`, `MTA-STS active (mode: ${mode}).`), details: { mode } };
   } catch (e) {
-    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`) };
+    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`, `Could not be checked: ${(e as Error).message}`) };
   }
 }
 
-async function checkTlsRpt(host: string, de: boolean = false): Promise<PassiveCheckResult> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
-  const id = 'tls_rpt', title = t('TLS-RPT (SMTP TLS Raporlama)', 'TLS-RPT (SMTP-TLS-Berichterstattung)');
+async function checkTlsRpt(host: string, locale: string = 'tr'): Promise<PassiveCheckResult> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
+  const id = 'tls_rpt', title = t('TLS-RPT (SMTP TLS Raporlama)', 'TLS-RPT (SMTP-TLS-Berichterstattung)', 'TLS-RPT (SMTP TLS Reporting)');
   try {
     const recs = await txt(`_smtp._tls.${apexDomain(host)}`).catch(() => [] as string[]);
     const rec = recs.find((r) => /v=TLSRPTv1\b/i.test(r));
-    if (!rec) return { id, title, status: 'absent', summary: t('TLS-RPT kaydı bulunamadı.', 'TLS-RPT-Eintrag nicht gefunden.') };
-    return { id, title, status: 'present', summary: t('TLS-RPT kaydı mevcut.', 'TLS-RPT-Eintrag vorhanden.'), details: { record: rec } };
+    if (!rec) return { id, title, status: 'absent', summary: t('TLS-RPT kaydı bulunamadı.', 'TLS-RPT-Eintrag nicht gefunden.', 'No TLS-RPT record found.') };
+    return { id, title, status: 'present', summary: t('TLS-RPT kaydı mevcut.', 'TLS-RPT-Eintrag vorhanden.', 'TLS-RPT record present.'), details: { record: rec } };
   } catch (e) {
-    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`) };
+    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`, `Could not be checked: ${(e as Error).message}`) };
   }
 }
 
 // ---- header_leak ----------------------------------------------------------
 
-async function checkSecurityTxt(host: string, de: boolean = false): Promise<PassiveCheckResult> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
-  const id = 'security_txt', title = t('security.txt (Güvenlik İletişim Politikası)', 'security.txt (Sicherheits-Kontaktrichtlinie)');
+async function checkSecurityTxt(host: string, locale: string = 'tr'): Promise<PassiveCheckResult> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
+  const id = 'security_txt', title = t('security.txt (Güvenlik İletişim Politikası)', 'security.txt (Sicherheits-Kontaktrichtlinie)', 'security.txt (Security Contact Policy)');
   try {
     let r = await safeGet(`https://${host}/.well-known/security.txt`, host);
     let where = '/.well-known/security.txt';
@@ -189,16 +194,16 @@ async function checkSecurityTxt(host: string, de: boolean = false): Promise<Pass
       const legacy = await safeGet(`https://${host}/security.txt`, host);
       if (legacy.ok && legacy.text.trim()) { r = legacy; where = '/security.txt'; }
     }
-    if (!r.ok || !r.text.trim()) return { id, title, status: 'absent', summary: t('security.txt bulunamadı.', 'security.txt nicht gefunden.') };
+    if (!r.ok || !r.text.trim()) return { id, title, status: 'absent', summary: t('security.txt bulunamadı.', 'security.txt nicht gefunden.', 'security.txt not found.') };
     const hasContact = /(^|\n)\s*Contact:\s*\S+/i.test(r.text);
     const hasExpires = /(^|\n)\s*Expires:\s*\S+/i.test(r.text);
     if (!hasContact || !hasExpires) {
       const missing = [!hasContact && 'Contact', !hasExpires && 'Expires'].filter(Boolean).join(', ');
-      return { id, title, status: 'misconfigured', summary: t(`security.txt var ama zorunlu alan eksik: ${missing}.`, `security.txt vorhanden, aber Pflichtfeld fehlt: ${missing}.`), details: { location: where, hasContact, hasExpires } };
+      return { id, title, status: 'misconfigured', summary: t(`security.txt var ama zorunlu alan eksik: ${missing}.`, `security.txt vorhanden, aber Pflichtfeld fehlt: ${missing}.`, `security.txt present but a required field is missing: ${missing}.`), details: { location: where, hasContact, hasExpires } };
     }
-    return { id, title, status: 'present', summary: t(`security.txt geçerli (${where}).`, `security.txt gültig (${where}).`), details: { location: where } };
+    return { id, title, status: 'present', summary: t(`security.txt geçerli (${where}).`, `security.txt gültig (${where}).`, `security.txt valid (${where}).`), details: { location: where } };
   } catch (e) {
-    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`) };
+    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`, `Could not be checked: ${(e as Error).message}`) };
   }
 }
 
@@ -206,9 +211,10 @@ async function checkSecurityTxt(host: string, de: boolean = false): Promise<Pass
 const hstsCache = new Map<string, { at: number; status: PassiveCheckStatus; summary: string; details?: Record<string, unknown> }>();
 const HSTS_TTL_MS = 24 * 60 * 60 * 1000;
 
-async function checkHstsPreload(host: string, de: boolean = false): Promise<PassiveCheckResult> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
-  const id = 'hsts_preload', title = t('HSTS Preload Listesi Durumu', 'HSTS-Preload-Listenstatus');
+async function checkHstsPreload(host: string, locale: string = 'tr'): Promise<PassiveCheckResult> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
+  const id = 'hsts_preload', title = t('HSTS Preload Listesi Durumu', 'HSTS-Preload-Listenstatus', 'HSTS Preload List Status');
   const domain = apexDomain(host);
   const cached = hstsCache.get(domain);
   if (cached && Date.now() - cached.at < HSTS_TTL_MS) {
@@ -217,7 +223,7 @@ async function checkHstsPreload(host: string, de: boolean = false): Promise<Pass
   try {
     const r = await safeGet(`https://${HSTS_API}/api/v2/status?domain=${encodeURIComponent(domain)}`, host);
     if (!r.ok || !r.text) {
-      const out = { id, title, status: 'skipped' as const, summary: t('Preload listesi şu an kontrol edilemedi.', 'Die Preload-Liste konnte derzeit nicht geprüft werden.') };
+      const out = { id, title, status: 'skipped' as const, summary: t('Preload listesi şu an kontrol edilemedi.', 'Die Preload-Liste konnte derzeit nicht geprüft werden.', 'The preload list could not be checked at this time.') };
       return out;
     }
     const data = JSON.parse(r.text) as { status?: string };
@@ -225,37 +231,38 @@ async function checkHstsPreload(host: string, de: boolean = false): Promise<Pass
     const res = {
       status: (preloaded ? 'present' : 'absent') as PassiveCheckStatus,
       summary: preloaded
-        ? t('Domain, tarayıcı HSTS preload listesinde.', 'Die Domain befindet sich auf der HSTS-Preload-Liste des Browsers.')
-        : t(`Domain HSTS preload listesinde değil (durum: ${data.status ?? 'bilinmiyor'}).`, `Die Domain befindet sich nicht auf der HSTS-Preload-Liste (Status: ${data.status ?? 'unbekannt'}).`),
+        ? t('Domain, tarayıcı HSTS preload listesinde.', 'Die Domain befindet sich auf der HSTS-Preload-Liste des Browsers.', 'The domain is on the browser HSTS preload list.')
+        : t(`Domain HSTS preload listesinde değil (durum: ${data.status ?? 'bilinmiyor'}).`, `Die Domain befindet sich nicht auf der HSTS-Preload-Liste (Status: ${data.status ?? 'unbekannt'}).`, `The domain is not on the HSTS preload list (status: ${data.status ?? 'unknown'}).`),
       details: { hstsStatus: data.status },
     };
     hstsCache.set(domain, { at: Date.now(), ...res });
     return { id, title, ...res };
   } catch (e) {
-    return { id, title, status: 'skipped', summary: t(`Preload listesi kontrol edilemedi: ${(e as Error).message}`, `Preload-Liste konnte nicht geprüft werden: ${(e as Error).message}`) };
+    return { id, title, status: 'skipped', summary: t(`Preload listesi kontrol edilemedi: ${(e as Error).message}`, `Preload-Liste konnte nicht geprüft werden: ${(e as Error).message}`, `Preload list could not be checked: ${(e as Error).message}`) };
   }
 }
 
-async function checkMixedContent(host: string, de: boolean = false): Promise<PassiveCheckResult> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
-  const id = 'mixed_content', title = t('Karışık İçerik (Mixed Content)', 'Gemischter Inhalt (Mixed Content)');
+async function checkMixedContent(host: string, locale: string = 'tr'): Promise<PassiveCheckResult> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
+  const id = 'mixed_content', title = t('Karışık İçerik (Mixed Content)', 'Gemischter Inhalt (Mixed Content)', 'Mixed Content');
   try {
     const r = await safeGet(`https://${host}/`, host);
-    if (!r.ok || !r.text) return { id, title, status: 'error', summary: t(`Ana sayfa alınamadı: ${r.error ?? 'HTTP ' + r.status}`, `Startseite konnte nicht abgerufen werden: ${r.error ?? 'HTTP ' + r.status}`) };
+    if (!r.ok || !r.text) return { id, title, status: 'error', summary: t(`Ana sayfa alınamadı: ${r.error ?? 'HTTP ' + r.status}`, `Startseite konnte nicht abgerufen werden: ${r.error ?? 'HTTP ' + r.status}`, `Home page could not be retrieved: ${r.error ?? 'HTTP ' + r.status}`) };
     // Yalniz statik HTML: src/href attribute'larinda http:// (JS RENDER YOK).
     const matches = [...r.text.matchAll(/(?:src|href)\s*=\s*["'](http:\/\/[^"']+)["']/gi)].map((m) => m[1]);
     const unique = [...new Set(matches)];
-    if (!unique.length) return { id, title, status: 'absent', summary: t('Ana sayfada http:// ile başlayan karışık içerik kaynağı görülmedi.', 'Auf der Startseite wurde keine mit http:// beginnende gemischte Inhaltsquelle festgestellt.') };
+    if (!unique.length) return { id, title, status: 'absent', summary: t('Ana sayfada http:// ile başlayan karışık içerik kaynağı görülmedi.', 'Auf der Startseite wurde keine mit http:// beginnende gemischte Inhaltsquelle festgestellt.', 'No mixed-content resources beginning with http:// were observed on the home page.') };
     const shown = unique.slice(0, 20);
     const extra = unique.length - shown.length;
     return {
       id, title, status: 'misconfigured',
-      summary: t(`Ana sayfada ${unique.length} adet güvensiz (http://) kaynak referansı bulundu.`, `Auf der Startseite wurden ${unique.length} unsichere (http://) Ressourcenverweise gefunden.`),
+      summary: t(`Ana sayfada ${unique.length} adet güvensiz (http://) kaynak referansı bulundu.`, `Auf der Startseite wurden ${unique.length} unsichere (http://) Ressourcenverweise gefunden.`, `${unique.length} insecure (http://) resource reference(s) were found on the home page.`),
       details: { count: unique.length },
-      evidence: extra > 0 ? [...shown, t(`+${extra} tane daha`, `+${extra} weitere`)] : shown,
+      evidence: extra > 0 ? [...shown, t(`+${extra} tane daha`, `+${extra} weitere`, `+${extra} more`)] : shown,
     };
   } catch (e) {
-    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`) };
+    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`, `Could not be checked: ${(e as Error).message}`) };
   }
 }
 
@@ -360,9 +367,10 @@ const SENSITIVE_PATHS = ['/.git/config', '/.git/HEAD', '/.env', '/backup.zip', '
   '/ftp', '/backup', '/backups', '/uploads', '/files', '/admin', '/.svn/entries', '/.htaccess', '/config.php.bak', '/db.sql', '/dump.sql'];
 
 /** Deterministik hassas-dosya ifsasi kontrolu — classifyExposedFile ile catch-all/format ayrimi yapar. */
-async function checkExposedFiles(host: string, de: boolean = false): Promise<PassiveCheckResult> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
-  const id = 'exposed_files', title = t('Hassas Dosya İfşası (.git / .env / yedek)', 'Offenlegung sensibler Dateien (.git / .env / Backup)');
+async function checkExposedFiles(host: string, locale: string = 'tr'): Promise<PassiveCheckResult> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
+  const id = 'exposed_files', title = t('Hassas Dosya İfşası (.git / .env / yedek)', 'Offenlegung sensibler Dateien (.git / .env / Backup)', 'Sensitive File Exposure (.git / .env / backup)');
   try {
     const home = await safeGet(`https://${host}/`, host);
     const homepage = home.ok ? home.text : '';
@@ -370,37 +378,38 @@ async function checkExposedFiles(host: string, de: boolean = false): Promise<Pas
     const notes: string[] = [];
     for (const p of SENSITIVE_PATHS) {
       const r = await safeGet(`https://${host}${p}`, host);
-      const c = classifyExposedFile(p, r, homepage, de ? 'de' : 'tr');
+      const c = classifyExposedFile(p, r, homepage, locale);
       if (c.verdict === 'exposed') {
         exposed.push(p);
-        notes.push(t(`${p}: 🔴 AÇIK — ${c.reason}`, `${p}: 🔴 OFFEN — ${c.reason}`));
+        notes.push(t(`${p}: 🔴 AÇIK — ${c.reason}`, `${p}: 🔴 OFFEN — ${c.reason}`, `${p}: 🔴 EXPOSED — ${c.reason}`));
       } else if (r.status === 200) {
         // 200 dondu ama acik degil: raporda "neden acik degil" gorunsun (seffaflik).
-        notes.push(t(`${p}: HTTP 200 ama ${c.verdict === 'inconclusive' ? 'belirsiz' : 'erişilebilir değil'} — ${c.reason}`, `${p}: HTTP 200, aber ${c.verdict === 'inconclusive' ? 'unklar' : 'nicht erreichbar'} — ${c.reason}`));
+        notes.push(t(`${p}: HTTP 200 ama ${c.verdict === 'inconclusive' ? 'belirsiz' : 'erişilebilir değil'} — ${c.reason}`, `${p}: HTTP 200, aber ${c.verdict === 'inconclusive' ? 'unklar' : 'nicht erreichbar'} — ${c.reason}`, `${p}: HTTP 200 but ${c.verdict === 'inconclusive' ? 'inconclusive' : 'not reachable'} — ${c.reason}`));
       }
     }
     if (exposed.length) {
       return {
         id, title, status: 'misconfigured',
-        summary: t(`${exposed.length} hassas dosya GERÇEKTEN erişilebilir (içerik doğrulandı, catch-all DEĞİL): ${exposed.join(', ')}.`, `${exposed.length} sensible Datei(en) sind TATSÄCHLICH erreichbar (Inhalt bestätigt, KEIN Catch-all): ${exposed.join(', ')}.`),
+        summary: t(`${exposed.length} hassas dosya GERÇEKTEN erişilebilir (içerik doğrulandı, catch-all DEĞİL): ${exposed.join(', ')}.`, `${exposed.length} sensible Datei(en) sind TATSÄCHLICH erreichbar (Inhalt bestätigt, KEIN Catch-all): ${exposed.join(', ')}.`, `${exposed.length} sensitive file(s) are GENUINELY reachable (content verified, NOT catch-all): ${exposed.join(', ')}.`),
         details: { exposed },
         evidence: notes,
       };
     }
     return {
       id, title, status: 'absent',
-      summary: t('Yaygın hassas dosyaların hiçbiri gerçekten erişilebilir değil. (HTTP 200 dönenler catch-all/SPA veya yanlış format olduğundan açık SAYILMADI.)', 'Keine der gängigen sensiblen Dateien ist tatsächlich erreichbar. (Mit HTTP 200 zurückgegebene wurden aufgrund von Catch-all/SPA oder falschem Format NICHT als offen gewertet.)'),
+      summary: t('Yaygın hassas dosyaların hiçbiri gerçekten erişilebilir değil. (HTTP 200 dönenler catch-all/SPA veya yanlış format olduğundan açık SAYILMADI.)', 'Keine der gängigen sensiblen Dateien ist tatsächlich erreichbar. (Mit HTTP 200 zurückgegebene wurden aufgrund von Catch-all/SPA oder falschem Format NICHT als offen gewertet.)', 'None of the common sensitive files are genuinely reachable. (Those returning HTTP 200 were NOT counted as exposed because of catch-all/SPA behaviour or a mismatched format.)'),
       evidence: notes.length ? notes : undefined,
     };
   } catch (e) {
-    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`) };
+    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`, `Could not be checked: ${(e as Error).message}`) };
   }
 }
 
 // ---- basit_tarama ---------------------------------------------------------
 
-async function checkRobotsSitemap(host: string, de: boolean = false): Promise<PassiveCheckResult> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+async function checkRobotsSitemap(host: string, locale: string = 'tr'): Promise<PassiveCheckResult> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const id = 'robots_sitemap', title = 'robots.txt & sitemap.xml';
   try {
     const robots = await safeGet(`https://${host}/robots.txt`, host);
@@ -412,18 +421,18 @@ async function checkRobotsSitemap(host: string, de: boolean = false): Promise<Pa
     const urlCount = sitemap.ok ? (sitemap.text.match(/<loc>/gi)?.length ?? 0) : 0;
 
     if (!robots.ok && !sitemap.ok) {
-      return { id, title, status: 'absent', summary: t('robots.txt ve sitemap.xml bulunamadı.', 'robots.txt und sitemap.xml nicht gefunden.') };
+      return { id, title, status: 'absent', summary: t('robots.txt ve sitemap.xml bulunamadı.', 'robots.txt und sitemap.xml nicht gefunden.', 'robots.txt and sitemap.xml not found.') };
     }
     const shownDis = uniqDis.slice(0, 30);
     const extraDis = uniqDis.length - shownDis.length;
     return {
       id, title, status: 'present',
-      summary: t(`robots.txt ${robots.ok ? 'var' : 'yok'} (${uniqDis.length} Disallow yolu), sitemap.xml ${sitemap.ok ? `var (~${urlCount} URL)` : 'yok'}.`, `robots.txt ${robots.ok ? 'vorhanden' : 'fehlt'} (${uniqDis.length} Disallow-Pfad(e)), sitemap.xml ${sitemap.ok ? `vorhanden (~${urlCount} URL)` : 'fehlt'}.`),
+      summary: t(`robots.txt ${robots.ok ? 'var' : 'yok'} (${uniqDis.length} Disallow yolu), sitemap.xml ${sitemap.ok ? `var (~${urlCount} URL)` : 'yok'}.`, `robots.txt ${robots.ok ? 'vorhanden' : 'fehlt'} (${uniqDis.length} Disallow-Pfad(e)), sitemap.xml ${sitemap.ok ? `vorhanden (~${urlCount} URL)` : 'fehlt'}.`, `robots.txt ${robots.ok ? 'present' : 'absent'} (${uniqDis.length} Disallow path(s)), sitemap.xml ${sitemap.ok ? `present (~${urlCount} URLs)` : 'absent'}.`),
       details: { robotsFound: robots.ok, disallowCount: uniqDis.length, sitemapFound: sitemap.ok, sitemapUrlCount: urlCount },
-      evidence: shownDis.length ? (extraDis > 0 ? [...shownDis, t(`+${extraDis} tane daha`, `+${extraDis} weitere`)] : shownDis) : undefined,
+      evidence: shownDis.length ? (extraDis > 0 ? [...shownDis, t(`+${extraDis} tane daha`, `+${extraDis} weitere`, `+${extraDis} more`)] : shownDis) : undefined,
     };
   } catch (e) {
-    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`) };
+    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`, `Could not be checked: ${(e as Error).message}`) };
   }
 }
 
@@ -450,37 +459,39 @@ function assetContentPopulated(id: string, parsed: unknown): boolean {
   return false;
 }
 
-async function jsonAssetCheck(host: string, path: string, id: string, title: string, de: boolean = false): Promise<PassiveCheckResult> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+async function jsonAssetCheck(host: string, path: string, id: string, title: string, locale: string = 'tr'): Promise<PassiveCheckResult> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   try {
     const r = await safeGet(`https://${host}${path}`, host);
-    if (!r.ok || !r.text.trim()) return { id, title, status: 'absent', summary: t(`${path} bulunamadı.`, `${path} nicht gefunden.`) };
+    if (!r.ok || !r.text.trim()) return { id, title, status: 'absent', summary: t(`${path} bulunamadı.`, `${path} nicht gefunden.`, `${path} not found.`) };
     let parsed: unknown;
     try {
       parsed = JSON.parse(r.text);
     } catch {
-      return { id, title, status: 'misconfigured', summary: t(`${path} mevcut ama geçerli JSON değil.`, `${path} vorhanden, aber kein gültiges JSON.`), details: { location: path } };
+      return { id, title, status: 'misconfigured', summary: t(`${path} mevcut ama geçerli JSON değil.`, `${path} vorhanden, aber kein gültiges JSON.`, `${path} present but not valid JSON.`), details: { location: path } };
     }
     // "var" ≠ "geçerli/dolu": boş/default içerik fonksiyonel değildir.
     if (!assetContentPopulated(id, parsed)) {
-      return { id, title, status: 'misconfigured', summary: t(`${path} var ama boş/default (fonksiyonel değil) — geçerli kayıt içermiyor.`, `${path} vorhanden, aber leer/Standard (nicht funktional) — enthält keinen gültigen Eintrag.`), details: { location: path } };
+      return { id, title, status: 'misconfigured', summary: t(`${path} var ama boş/default (fonksiyonel değil) — geçerli kayıt içermiyor.`, `${path} vorhanden, aber leer/Standard (nicht funktional) — enthält keinen gültigen Eintrag.`, `${path} present but empty/default (non-functional) — contains no valid entry.`), details: { location: path } };
     }
-    return { id, title, status: 'present', summary: t(`${path} mevcut ve dolu/geçerli JSON.`, `${path} vorhanden und befülltes/gültiges JSON.`), details: { location: path } };
+    return { id, title, status: 'present', summary: t(`${path} mevcut ve dolu/geçerli JSON.`, `${path} vorhanden und befülltes/gültiges JSON.`, `${path} present and populated/valid JSON.`), details: { location: path } };
   } catch (e) {
-    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`) };
+    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`, `Could not be checked: ${(e as Error).message}`) };
   }
 }
 
-const checkAssetLinks = (host: string, de: boolean = false) =>
-  jsonAssetCheck(host, '/.well-known/assetlinks.json', 'assetlinks', 'Android Digital Asset Links', de);
-const checkAasa = (host: string, de: boolean = false) =>
-  jsonAssetCheck(host, '/.well-known/apple-app-site-association', 'apple_app_site_association', 'Apple App Site Association', de);
+const checkAssetLinks = (host: string, locale: string = 'tr') =>
+  jsonAssetCheck(host, '/.well-known/assetlinks.json', 'assetlinks', 'Android Digital Asset Links', locale);
+const checkAasa = (host: string, locale: string = 'tr') =>
+  jsonAssetCheck(host, '/.well-known/apple-app-site-association', 'apple_app_site_association', 'Apple App Site Association', locale);
 
 // ---- subdomain_takeover (CT log derin) ------------------------------------
 
-async function checkCtSubdomains(host: string, de: boolean = false): Promise<PassiveCheckResult> {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
-  const id = 'ct_subdomains', title = t('Sertifika Şeffaflığı — Keşfedilen Alt Alan Adları', 'Certificate Transparency — entdeckte Subdomains');
+async function checkCtSubdomains(host: string, locale: string = 'tr'): Promise<PassiveCheckResult> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
+  const id = 'ct_subdomains', title = t('Sertifika Şeffaflığı — Keşfedilen Alt Alan Adları', 'Certificate Transparency — entdeckte Subdomains', 'Certificate Transparency — Discovered Subdomains');
   try {
     const domain = apexDomain(host);
     // crt.sh referans allowlist'te; JSON ciktisi. (Not: bu host hstspreload degil ama
@@ -511,24 +522,24 @@ async function checkCtSubdomains(host: string, de: boolean = false): Promise<Pas
       clearTimeout(timer);
     }
     // crt.sh yanit vermediyse/bos dondu ise: "yok" DEME — "sorgulanamadi" (skipped) de.
-    if (!queried) return { id, title, status: 'skipped', summary: t('Sertifika Şeffaflığı logu (crt.sh) şu an sorgulanamadı; daha sonra tekrar denenebilir.', 'Das Certificate-Transparency-Log (crt.sh) konnte derzeit nicht abgefragt werden; ein erneuter Versuch ist später möglich.') };
-    if (!names.length) return { id, title, status: 'absent', summary: t('CT loglarında bu domaine ait benzersiz alt alan adı bulunamadı.', 'In den CT-Logs wurde keine eindeutige Subdomain für diese Domain gefunden.') };
+    if (!queried) return { id, title, status: 'skipped', summary: t('Sertifika Şeffaflığı logu (crt.sh) şu an sorgulanamadı; daha sonra tekrar denenebilir.', 'Das Certificate-Transparency-Log (crt.sh) konnte derzeit nicht abgefragt werden; ein erneuter Versuch ist später möglich.', 'The Certificate Transparency log (crt.sh) could not be queried at this time; it can be retried later.') };
+    if (!names.length) return { id, title, status: 'absent', summary: t('CT loglarında bu domaine ait benzersiz alt alan adı bulunamadı.', 'In den CT-Logs wurde keine eindeutige Subdomain für diese Domain gefunden.', 'No unique subdomain for this domain was found in the CT logs.') };
     const shown = names.slice(0, 100);
     const extra = names.length - shown.length;
     return {
       id, title, status: 'present',
-      summary: t(`Sertifika Şeffaflığı loglarından ${names.length} benzersiz alt alan adı keşfedildi (geçmiş dahil).`, `Aus den Certificate-Transparency-Logs wurden ${names.length} eindeutige Subdomains entdeckt (einschließlich Verlauf).`),
+      summary: t(`Sertifika Şeffaflığı loglarından ${names.length} benzersiz alt alan adı keşfedildi (geçmiş dahil).`, `Aus den Certificate-Transparency-Logs wurden ${names.length} eindeutige Subdomains entdeckt (einschließlich Verlauf).`, `${names.length} unique subdomain(s) were discovered from the Certificate Transparency logs (including historical).`),
       details: { count: names.length },
-      evidence: extra > 0 ? [...shown, t(`+${extra} tane daha`, `+${extra} weitere`)] : shown,
+      evidence: extra > 0 ? [...shown, t(`+${extra} tane daha`, `+${extra} weitere`, `+${extra} more`)] : shown,
     };
   } catch (e) {
-    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`) };
+    return { id, title, status: 'error', summary: t(`Kontrol edilemedi: ${(e as Error).message}`, `Konnte nicht geprüft werden: ${(e as Error).message}`, `Could not be checked: ${(e as Error).message}`) };
   }
 }
 
 // ---- paket -> kontrol eslemesi + runner -----------------------------------
 
-type CheckFn = (host: string, de?: boolean) => Promise<PassiveCheckResult>;
+type CheckFn = (host: string, locale?: string) => Promise<PassiveCheckResult>;
 
 const CHECKS_BY_PACKAGE: Record<string, CheckFn[]> = {
   dns_email: [checkCaa, checkBimi, checkMtaSts, checkTlsRpt],
@@ -546,14 +557,15 @@ export function hasPassiveExtras(packageKey: string): boolean {
 }
 
 /** Paket icin ek pasif kontrolleri IZOLE calistirir (biri patlarsa digerleri etkilenmez). */
-export async function runPassiveExtras(host: string, packageKey: string, de: boolean = false): Promise<PassiveCheckResult[]> {
+export async function runPassiveExtras(host: string, packageKey: string, locale: string = 'tr'): Promise<PassiveCheckResult[]> {
+  const de = locale === 'de', en = locale === 'en';
   const checks = CHECKS_BY_PACKAGE[packageKey];
   if (!checks?.length) return [];
-  const settled = await Promise.allSettled(checks.map((fn) => fn(host, de)));
+  const settled = await Promise.allSettled(checks.map((fn) => fn(host, locale)));
   return settled.map((s, i) =>
     s.status === 'fulfilled'
       ? s.value
-      : { id: `check_${i}`, title: de ? 'Zusätzliche Prüfung' : 'Ek Kontrol', status: 'error' as const, summary: de ? 'Die Prüfung ist unerwartet fehlgeschlagen.' : 'Kontrol beklenmedik şekilde başarısız oldu.' },
+      : { id: `check_${i}`, title: de ? 'Zusätzliche Prüfung' : en ? 'Additional Check' : 'Ek Kontrol', status: 'error' as const, summary: de ? 'Die Prüfung ist unerwartet fehlgeschlagen.' : en ? 'The check failed unexpectedly.' : 'Kontrol beklenmedik şekilde başarısız oldu.' },
   );
 }
 
@@ -571,11 +583,19 @@ const STATUS_LABEL_DE: Record<PassiveCheckStatus, string> = {
   error: '⚠️ Nicht prüfbar',
   skipped: '⏭️ Übersprungen',
 };
+const STATUS_LABEL_EN: Record<PassiveCheckStatus, string> = {
+  present: '🟢 Present',
+  absent: '⚪ Missing',
+  misconfigured: '🟠 Misconfiguration',
+  error: '⚠️ Not assessable',
+  skipped: '⏭️ Skipped',
+};
 
 /** PassiveCheckResult[] -> PDF/markdown "Ek Pasif Kontroller" bolumu (kod-tabanli, notr dil). */
-export function renderPassiveExtrasMarkdown(results: PassiveCheckResult[], de: boolean = false): string {
+export function renderPassiveExtrasMarkdown(results: PassiveCheckResult[], locale: string = 'tr'): string {
   if (!results.length) return '';
-  const SL = de ? STATUS_LABEL_DE : STATUS_LABEL;
+  const de = locale === 'de', en = locale === 'en';
+  const SL = de ? STATUS_LABEL_DE : en ? STATUS_LABEL_EN : STATUS_LABEL;
   const rows = results
     .map((r) => `| ${r.title} | ${SL[r.status]} | ${r.summary.replace(/\|/g, '\\|')} |`)
     .join('\n');
@@ -596,6 +616,20 @@ export function renderPassiveExtrasMarkdown(results: PassiveCheckResult[], de: b
       '',
       '| Prüfung | Status | Zusammenfassung |',
       '|---------|--------|-----------------|',
+      rows,
+      evidence ? '\n### Details\n\n' + evidence : '',
+    ].join('\n');
+  }
+
+  if (en) {
+    return [
+      '## Additional Passive Checks (automatic / code-based)',
+      '',
+      '> This section was produced NOT by an AI agent but by deterministic code; ' +
+        'it merely reports the presence/configuration status of externally observable records (it is not a compliance statement).',
+      '',
+      '| Check | Status | Summary |',
+      '|-------|--------|---------|',
       rows,
       evidence ? '\n### Details\n\n' + evidence : '',
     ].join('\n');

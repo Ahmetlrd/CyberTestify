@@ -433,8 +433,8 @@ export async function generateAndStoreReport(flowId: string) {
   let extrasBlock = '';
   try {
     if (hasPassiveExtras(flow.order.package.key)) {
-      const results = await runPassiveExtras(flow.order.domain.hostname, flow.order.package.key, locale === 'de');
-      const extrasMd = renderPassiveExtrasMarkdown(results, locale === 'de');
+      const results = await runPassiveExtras(flow.order.domain.hostname, flow.order.package.key, locale);
+      const extrasMd = renderPassiveExtrasMarkdown(results, locale);
       if (extrasMd.trim()) extrasBlock = `\n\n${PASSIVE_EXTRAS_DELIM}\n\n${extrasMd}`;
     }
   } catch (err) {
