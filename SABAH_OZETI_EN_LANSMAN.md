@@ -28,14 +28,24 @@
 
 ---
 
-## ⚠️ KISMİ / YAPILMADI (senin tarafında veya sonraki turda)
+## 🔁 İKİNCİ TUR (2026-08-25) — git doğrulama + surface/passiveExtras tamamlandı
 
-1. **`surfaceReports` (~%70 İngilizce, KARIŞIK):** SSL/TLS + header + DNS + CORS alanları İngilizce; **CSP alanı + fix-builder'lar hâlâ Türkçe/Almanca (48 çağrı).** bundle_surface raporu şu an KARIŞIK dilli. Tamamlanmalı.
-2. **`activeVerifyReports` + `authenticatedReports` + 12 kanıt modülü + activeVerifyEvidence + passiveExtras:** `en` YAPILMADI — bu paketler (Aktif Doğrulama, Tam Kapsamlı Pentest) raporu hâlâ Türkçe üretir. Bunlar en karmaşık generatorlar; elle bitmeli (ajan git-stash olayından sonra riskli).
-3. **GBP fiyatlar = PLACEHOLDER:** `pricing.ts GBP_CENTS` — EUR'dan ~0.86 oranıyla türetilmiş TAHMİNİ değerler. **Gerçek £ rakamlarını gir + `npm run seed` çalıştır.** Ara: `GBP_PER_EUR_PLACEHOLDER` / `PLACEHOLDER_KULLANICI_ONAYI_GEREKLI`.
-4. **UK işletme bilgisi:** business-info sayfası + Impressum-benzeri alanlar BOŞ. Companies Act 2006 bilgisi (şirket adı/adres/no/VAT) senden.
-5. **Yasal taslak onayı:** 4 UK sayfası avukata gösterilmeden yayına ALINMAMALI; onaylayınca `robots index:false` kaldır.
-6. **Örnek raporlar (.en.md):** /de'de yaptığımız gibi İngilizce örnek rapor gövdeleri YAZILMADI (sampleReports şu an en için TR/DE'ye düşer). İsteğe bağlı.
+**P1 GİT KURTARMA DOĞRULAMASI (bağımsız, temiz):** `git status` = "working tree clean"; `git stash list` = BOŞ; tüm /en faz commit'leri sırayla mevcut (a7287e9→…); backend+frontend `tsc --noEmit` TEMİZ; test dosyaları (piiRedaction/credentialRedaction) 2/2 PASS. **Hiçbir tutarsızlık/kayıp yok.**
+
+**surfaceReports TAM İngilizce (commit ...):** CSP alanı + 48 fix-builder çağrısı + bundle combiner + unscannable = %100 EN. `classifyExposedFile` locale-farkında yapıldı (exposed-file "reason" Türkçe sızıntısı düzeltildi). Kanıt: EN surface = 0 TR-char, honesty framework ✓, TR/DE regresyon temiz.
+
+**passiveExtras (Ek Pasif Kontroller) TAM İngilizce (commit ...):** 44 kontrol + STATUS_LABEL_EN + render chrome + runPassiveExtras/renderPassiveExtrasMarkdown locale + report.ts wiring. basit/header_leak/dns_email en extras bölümü artık temiz. Kanıt: EN passiveExtras = 0 TR-char.
+
+**Kanıt (3 paket, EN + honesty + TR-regresyon):** basit/surface/recon → EN-markers ✓, TR/DE-leak 0, TR-regresyon markers ✓ + EN/DE-leak 0. Live: /tr "Basit Tarama", /de "Basis-Scan", /en 307→/tr (gizli).
+
+## ⚠️ HÂLÂ YAPILMADI — DÜRÜST İŞARET
+
+1. **`activeVerifyReports` + `activeVerifyEvidence` + `authenticatedReports` + 12 kanıt modülü — `en` YAPILMADI.** Aktif Doğrulama ve Tam Kapsamlı Pentest paketleri /en'de raporu HÂLÂ TÜRKÇE üretir (karışık değil — TR'ye tutarlı düşüş). **Neden:** ~2.600 satır, 121+ çift-dilli çağrı + kanıt-katmanı imza değişimi. Bu turda ajan yaklaşımı 3 kez başarısız oldu (2× git-disaster + 1× kural-dışı paralel alt-ajan doğurma; hepsi yakalanıp `git stash pop`/`git checkout` ile kurtarıldı, kalıcı kayıp YOK). Kalanı ELLE bitirmek, tek oturumda /tr-/de'yi (paylaşılan kod) kırma riski taşıdığından — güvenlik>hız ilkesi + "yarım bırakma" gereği — **bilerek dokunmadım**; TR'de tutarlı halde bıraktım. Sonraki turda tek-tek (sıralı, ajansız) bitirilmeli.
+2. **P3 gerçek iyzico GBP test satın-alma:** Bu headless ortamdan GERÇEK kart/iyzico ödemesi YAPILAMAZ — 5 paketin gerçek satın-alma PDF'i ancak SEN (tarayıcı + kart, cookie region=en) ile alınabilir. Ben yerine rapor gövdelerini generator'dan üretip dil-sızıntısı + honesty-framework doğruladım (yukarı).
+3. **GBP fiyatlar = PLACEHOLDER** (EUR×~0.86). Gerçek £ + `npm run seed`. Ara: `GBP_PER_EUR_PLACEHOLDER`.
+4. **UK işletme bilgisi** (Companies Act 2006) BOŞ placeholder — senden.
+5. **4 UK yasal taslak** avukat onayı bekliyor; onaylayınca `robots index:false` kaldır.
+6. **VISIBLE_REGION_CODES'a 'en' EKLENMEDİ** — /en gizli (senin public-açma kararın).
 
 ---
 
