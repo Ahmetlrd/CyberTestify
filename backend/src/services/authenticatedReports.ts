@@ -289,6 +289,22 @@ const JS_ANALYSIS_CFG = {
   ],
   fixCleanDe: ['Bewahren Sie keine Geheimnisse in Client-JS auf; veröffentlichen Sie keine Source-Maps in der Produktion; halten Sie Bibliotheken aktuell und wenden Sie Abhängigkeitsscans an (proaktiv).'],
   cleanGenelDe: 'In den abgerufenen JS-Bundles wurde kein echtes Geheimnis, keine erreichbare Source-Map und keine bekannt anfällige (versionslesbare) Bibliothek beobachtet. Public-by-Design-Schlüssel (falls vorhanden) wurden oben informativ ausgewiesen.',
+  whatCheckedEn: [
+    'The JS bundles the page loads (script srcs + inline) were fetched and analysed **statically** — NO active exploitation, only download + read.',
+    '**A) Secret scan:** REAL secrets such as private keys, AWS/GCP credentials, Stripe **sk_live_**, GitHub/GitLab/Slack tokens, DB connection strings were searched for (values REDACTED).',
+    '**Public-by-design distinction:** Firebase apiKey, GTM/GA measurement id, Google Maps browser key, Stripe **pk_**, reCAPTCHA site key are public by design → NOT counted as "exposure/secret", listed only informationally.',
+    '**B) Source-map exposure:** `//# sourceMappingURL` comments + `.js.map` candidates were tried; a reachable `.map` → leakage of the original source code/tree.',
+    '**C) Known-vulnerable library:** loaded libraries + their VERSIONS were detected and CONSERVATIVELY matched against known CVEs; if the version could not be read safely, NO CVE match was made ("patch confirmation required" language; not "exploitable").',
+  ],
+  confidenceNoteEn: 'Everything is passive/static; library findings are version-based indicators (your distribution may be patched/backported — confirmation recommended).',
+  fixTitleEn: 'Client-Side / JS Security',
+  fixFoundEn: [
+    'Do not place REAL secrets in client JS; **rotate/invalidate** any detected immediately and use a server-side proxy + secret management (secret manager).',
+    'Do not publish source-maps in production (or restrict access); remove `.map` files from the public directory.',
+    'Upgrade vulnerable libraries to a current/patched version; add SRI + dependency scanning (retire.js/Dependabot).',
+  ],
+  fixCleanEn: ['Keep no secrets in client JS; do not publish source-maps in production; keep libraries current and apply dependency scanning (proactive).'],
+  cleanGenelEn: 'No real secret, reachable source-map or known-vulnerable (version-readable) library was observed in the fetched JS bundles. Public-by-design keys (if any) are separated informationally above.',
 };
 
 // (Faz 1-B) Client-Side Statik Analiz — 6 pasif kontrol (DOM-XSS gösterge / postMessage / storage /
@@ -335,6 +351,26 @@ const CLIENT_SIDE_CFG = {
   ],
   fixCleanDe: ['Verwenden Sie DOM-Sinks mit sicherer API + Sanitisierung; validieren Sie postMessage-Origin; bewahren Sie das Token in einem HttpOnly-Cookie auf; wenden Sie SRI + rel=noopener + Redirect-Allowlist an (proaktiv).'],
   cleanGenelDe: 'Bei der statischen Analyse wurde kein eindeutiger DOM-XSS-Indikator, kein unsicherer Message-Handler, kein Schreiben sensibler Daten in Storage, kein fehlendes SRI, kein Tabnabbing und keine offene Weiterleitung beobachtet.',
+  whatCheckedEn: [
+    '6 client-side checks were performed **statically** (NO active exploitation) on the same JS/HTML corpus.',
+    '**1) DOM-based XSS (indicator):** whether a dangerous sink (innerHTML/document.write/eval/.html()/location=) and a user-controlled source (location.hash/search, referrer, window.name) are in the SAME expression — **NOT proven XSS**, a low-confidence indicator (dynamic verification required).',
+    '**2) postMessage:** whether `message` event listeners perform an **event.origin check**.',
+    '**3) Browser storage:** writing of **sensitive data** (token/JWT/session) to localStorage/sessionStorage (static; value REDACTED).',
+    '**4) Missing SRI:** whether external script/style has an `integrity` attribute (supply chain).',
+    '**5) Reverse tabnabbing:** whether `target="_blank"` links have `rel="noopener/noreferrer"`.',
+    '**6) Open redirect:** a **single safe probe** to redirect parameters OBSERVED in the HTML — a harmless external URL was sent and Location observed; **the redirect was NOT followed**.',
+  ],
+  confidenceNoteEn: 'DOM-XSS findings are STATIC indicators (high false-positive potential; dynamic verification required). The others are deterministic observations.',
+  fixTitleEn: 'Client-Side Static Security',
+  fixFoundEn: [
+    'DOM-XSS: process user-controlled data with textContent + a safe API instead of innerHTML/eval/document.write; sanitise with DOMPurify if needed.',
+    'postMessage: validate `event.origin` with an allowlist in every `message` handler.',
+    'Storage: keep the session token in an **HttpOnly + Secure cookie** rather than localStorage.',
+    'SRI: add `integrity` + `crossorigin` to external script/style. Tabnabbing: `rel="noopener noreferrer"` on `target="_blank"` links.',
+    'Open redirect: restrict redirect targets server-side with an **allowlist**; do not redirect to external absolute URLs.',
+  ],
+  fixCleanEn: ['Use DOM sinks with a safe API + sanitisation; validate postMessage origin; keep the token in an HttpOnly cookie; apply SRI + rel=noopener + redirect allowlist (proactive).'],
+  cleanGenelEn: 'Static analysis observed no clear DOM-XSS indicator, insecure message handler, sensitive storage write, missing SRI, tabnabbing or open redirect.',
 };
 
 // (Faz 2-A) Kimlik-Doğrulama Derinliği — 9 kontrol. Güvenlik kuralları kod-seviyesinde (gerçek hesap
@@ -381,6 +417,26 @@ const AUTH_DEPTH_CFG = {
   ],
   fixCleanDe: ['Einheitliche Auth-Antworten, keine Standardkonten, Lockout/Rate-Limit + CAPTCHA, token-basierter Reset, starke Passwortrichtlinie, HTTPS-only-Login, no-store-Cache, MFA (proaktiv).'],
   cleanGenelDe: 'In den Authentifizierungstiefen-Prüfungen wurde kein eindeutiger Indikator für Enumeration, Standard-Zugangsdaten, schwaches Lockout, schwachen Reset oder unverschlüsselten Kanal beobachtet.',
+  whatCheckedEn: [
+    '9 authentication-depth checks (WSTG-ATHN/IDNT) — **safe, low volume**; NO brute-force/DoS.',
+    '**1) Account enumeration:** response difference for a valid (test account) vs invalid (random) user — one FAILED attempt each; creates no account.',
+    '**2) Default credentials:** a small fixed list (admin/admin etc.) — only a failed login; if accepted, the session is NOT used.',
+    '**3) Weak lockout/rate-limit:** a few failed attempts with a THROWAWAY (random) user — **a real account is NEVER locked**.',
+    '**4) Password reset:** mechanism observation (security question/token) — **NO real reset e-mail is TRIGGERED** (non-existent e-mail).',
+    '**5) Password/registration policy:** client-side observation only — **NO real registration is performed**.',
+    '**6) "Remember me" cookie · 7) Authenticated page cache (Cache-Control) · 8) MFA presence (informational) · 9) Credentials over an unencrypted channel (HTTP).**',
+  ],
+  confidenceNoteEn: 'Enumeration/lockout/reset findings are "indicators" (verification required). Safety: no real account was locked, no reset e-mail was sent, no registration was performed, and even if a successful login was found the session was not used.',
+  fixTitleEn: 'Authentication Hardening',
+  fixFoundEn: [
+    'Enumeration: return a **uniform** response/message/timing on login/reset/register (do not leak whether a user exists).',
+    'Default credentials: remove all default accounts / force a password change.',
+    'Lockout: apply an **account + IP-based rate-limit / temporary lock** on consecutive failed attempts; add CAPTCHA.',
+    'Password reset: **token-based** (single-use, short-lived), avoid security questions; do not use the Host header in the reset link.',
+    'Password policy: **min 8+ / complexity** server-side; unencrypted channel: perform login **over HTTPS only**; `Cache-Control: no-store` for sensitive pages; offer **MFA**.',
+  ],
+  fixCleanEn: ['Uniform auth responses, no default accounts, lockout/rate-limit + CAPTCHA, token-based reset, strong password policy, HTTPS-only login, no-store cache, MFA (proactive).'],
+  cleanGenelEn: 'The authentication-depth checks observed no clear indicator of enumeration, default credentials, weak lockout, weak reset or an unencrypted channel.',
 };
 
 // (Faz 2-B) Oturum Güvenliği Derinliği — 5 kontrol (CSRF/SameSite, session-id entropi, oturum-URL,
@@ -423,6 +479,24 @@ const SESSION_DEPTH_CFG = {
   ],
   fixCleanDe: ['Sitzungscookie mit SameSite + __Host--Prefix, 128-Bit zufällige Session-ID, keine Sitzung in der URL, Anti-CSRF-Token, angemessenes Timeout (proaktiv).'],
   cleanGenelDe: 'Ein serverseitiges Sitzungscookie wurde beobachtet, jedoch kein eindeutiger Indikator für fehlendes CSRF/SameSite, schwache Session-ID, URL-Offenlegung oder fehlenden Prefix gefunden.',
+  whatCheckedEn: [
+    'IF a REAL server-side session cookie (Set-Cookie session) is present, 5 session-management checks — all **read-only/observational** (NO state-changing submission / no real CSRF attack). On a bearer/JWT/token-based target this section is **out of scope**.',
+    '**1) CSRF (SESS-05):** observation of SameSite on the session cookie + anti-CSRF token in a state-changing POST form (static; form NOT submitted).',
+    '**2) Session-id entropy (SESS-01):** structural analysis of the session id (length/charset/entropy) — NO brute; if a JWT, left to a separate section.',
+    '**3) Session in URL (SESS-04):** whether the session id is exposed in the URL/query (jsessionid/sid etc.).',
+    '**4) Timeout / concurrent sessions (SESS-07/11):** an observational indicator (definitive test is manual).',
+    '**5) Cookie prefix (SESS-02):** whether the session cookie lacks a __Host-/__Secure- prefix.',
+  ],
+  confidenceNoteEn: 'Findings are "indicators" (no real CSRF attack/brute performed; token/session REDACTED). Without a server-side session cookie the checks are out of scope (token/JWT security in a separate section).',
+  fixTitleEn: 'Session Security Hardening',
+  fixFoundEn: [
+    'CSRF: add **SameSite=Lax/Strict** to the session cookie; require an **anti-CSRF token** (double-submit / synchronizer) on state-changing requests.',
+    'Session-id: use at least a **128-bit random** (CSPRNG) session id; do not use predictable/sequential values.',
+    'Session in URL: **never carry the session id in the URL/query** — only in an HttpOnly + Secure cookie.',
+    'Prefix: set the session cookie with the **`__Host-`** prefix (Secure + Path=/ + no Domain). Timeout: reasonable idle/absolute timeout + server-side invalidation.',
+  ],
+  fixCleanEn: ['Session cookie with SameSite + __Host- prefix, 128-bit random session id, no session in the URL, anti-CSRF token, reasonable timeout (proactive).'],
+  cleanGenelEn: 'A server-side session cookie was observed, but no clear indicator of missing CSRF/SameSite, a weak session-id, URL exposure or a missing prefix was found.',
 };
 
 // (Faz 3-A) Girdi & Header + Yapılandırma & İfşa derinliği — 10 kontrol (güvenli GET/OPTIONS/TRACE +
@@ -465,6 +539,24 @@ const INPUT_HEADER_CFG = {
   ],
   fixCleanDe: ['Host-Allowlist, TRACE deaktiviert, alle Ressourcen HTTPS, Ausgabe-Kodierung/Sanitisierung bei persistenten Eingaben, Parameter-Deduplizierung (proaktiv).'],
   cleanGenelDe: 'In den Eingabe-/Header-Prüfungen wurde kein eindeutiger Indikator für Host-Injection, offenes TRACE, Mixed Content oder HPP gefunden.',
+  whatCheckedEn: [
+    'Safe/read-only input & header checks (GET/OPTIONS/TRACE only — NO state-changing/destructive request).',
+    '**D1 Host header injection:** a spoofed `X-Forwarded-Host` was sent and reflection in the response observed (indicator).',
+    '**D2 HTTP parameter pollution:** the same parameter was repeated and the processing difference observed (observational).',
+    '**D3 HTTP methods / TRACE:** allowed-method discovery via OPTIONS + TRACE observation — **no PUT/DELETE SENT**.',
+    '**D4 Mixed content:** static detection of HTTP resources (script/img/iframe) on an HTTPS page.',
+    '**D5 Stored-XSS entry point:** CANDIDATE fields that could be reflected into a persistent context were flagged — **NO data was SENT/saved** (low confidence, dynamic verification required).',
+  ],
+  confidenceNoteEn: 'Host-injection/HPP/D5 are "indicator/candidate" (no real attack/submission performed). TRACE/mixed-content are deterministic observations.',
+  fixTitleEn: 'Input & Header Hardening',
+  fixFoundEn: [
+    'Host header: pin the Host/X-Forwarded-Host value with an **allowlist** in the application; do not use it to build absolute URLs.',
+    'HTTP methods: disable **TRACE**; enforce server-side authorization on state-changing methods.',
+    'Mixed content: move all resources to **HTTPS** (upgrade-insecure-requests / CSP).',
+    'Stored-XSS: apply output-encoding + sanitisation (DOMPurify) on persistent fields; process parameters as a single value against HPP.',
+  ],
+  fixCleanEn: ['Host allowlist, TRACE disabled, all resources HTTPS, output-encoding/sanitisation on persistent inputs, parameter de-duplication (proactive).'],
+  cleanGenelEn: 'The input/header checks found no clear indicator of Host injection, open TRACE, mixed content or HPP.',
 };
 const CONFIG_EXPOSURE_CFG = {
   title: 'Yapılandırma & İfşa Derinliği',
@@ -504,6 +596,24 @@ const CONFIG_EXPOSURE_CFG = {
   ],
   fixCleanDe: ['Backup/.git/.env außerhalb des Verzeichnisses, Admin-Oberfläche hinter Auth/Netzwerk, Bucket privat/Auflistung deaktiviert, Cache Vary korrekt, in der Produktion Kommentar/Metadaten sauber (proaktiv).'],
   cleanGenelDe: 'Es wurde keine erreichbare Backup-/Altdatei, keine offene Admin-Oberfläche, kein auflistbarer Bucket, kein Cache-Poisoning-Indikator und kein eindeutiges Kommentar-/Metadaten-Leck beobachtet.',
+  whatCheckedEn: [
+    'Safe GET + static configuration/exposure checks. Guessed paths that return an **SPA catch-all 200 (home-page shell)** are NOT counted as real — only genuinely reachable, DISTINCTIVE responses produce a finding (Column 0 provenance).',
+    '**E1 Backup/old file:** `.env/.bak/.sql/.git/config` etc. via safe GET (shell 200 filtered out).',
+    '**E2 Admin interface:** whether common management paths are externally reachable (same provenance).',
+    '**E3 Cloud storage:** public S3/GCS/Azure bucket reference in HTML/JS + whether it is **listable**.',
+    '**E4 Cache / poisoning indicator:** Cache-Control/Vary + unkeyed-header reflection (NO poisoning performed).',
+    '**E5 Comment & metadata leak:** dev comment / internal IP-hostname / server file path (static).',
+  ],
+  confidenceNoteEn: 'Backup/admin findings are produced only for genuinely reachable, NON-SPA-shell responses. Cache/host indicators are "indicators"; content/sensitive data REDACTED.',
+  fixTitleEn: 'Configuration & Exposure Hardening',
+  fixFoundEn: [
+    'Remove backup/old/`.git`/`.env` files from the public directory; block access at the web server.',
+    'Place management interfaces behind the network (IP allowlist/VPN) + authentication; do not expose them externally.',
+    'Cloud bucket: **disable list permission**, make sensitive objects private (public only for genuinely public assets).',
+    'Cache: do not reflect unkeyed input or add it to `Vary`. Comments: leave no dev comments/internal information in the production build.',
+  ],
+  fixCleanEn: ['Backup/.git/.env outside the directory, admin interface behind auth/network, bucket private/listing disabled, correct cache Vary, clean comments/metadata in production (proactive).'],
+  cleanGenelEn: 'No reachable backup/old file, open admin interface, listable bucket, cache-poisoning indicator or clear comment/metadata leak was observed.',
 };
 
 // (Faz 3-B) API Güvenliği Derinliği — OWASP API Top 10. Yalnız GERÇEK keşfedilmiş (JSON, SPA-shell
@@ -546,6 +656,24 @@ const API_SECURITY_CFG = {
   ],
   fixCleanDe: ['Objekt-/Funktionsberechtigung serverseitig, Antwort-DTO-Allowlist, Rate-Limit+Kontingent, alte Versionen deaktiviert, GraphQL-Introspection deaktiviert (proaktiv).'],
   cleanGenelDe: 'An den entdeckten API-Endpunkten wurde kein eindeutiger Indikator für übermäßige Datenoffenlegung, fehlendes Rate-Limit, Shadow-Version oder offene GraphQL-Introspection gefunden.',
+  whatCheckedEn: [
+    '5 checks on REAL API endpoints discovered from same-origin JS/HTML that return JSON (NOT an SPA catch-all shell) — all read-only. Without a real API (Firebase/client-SDK/SPA) this section is **out of scope**.',
+    '**F1 BOLA/BFLA (API1/API5):** object/function-level authorization — evaluated in the **Authenticated IDOR** + **Forced Browsing** sections (not re-probed here to avoid duplicate findings).',
+    '**F2 Excessive data exposure / BOPLA (API3):** sensitive/excessive field in the API response (password-hash/role/internal-ID) — value REDACTED.',
+    '**F3 Rate-limit (API4):** whether a 429/rate-limit header appears after a MODEST burst (NOT DoS) — the target was not exhausted.',
+    '**F4 Shadow/deprecated version (API9):** whether version endpoints like /v1,/v2,/api/v1 are reachable (SPA shell filtered out).',
+    '**F5 GraphQL introspection (APIT-99):** if a GraphQL endpoint exists, whether introspection is enabled — **read-only query; NO mutation**.',
+  ],
+  confidenceNoteEn: 'Findings are "indicators"; only at genuinely observed (JSON, non-SPA-shell) endpoints. Sensitive data REDACTED; no mutation/data-change/DoS performed.',
+  fixTitleEn: 'API Security Hardening',
+  fixFoundEn: [
+    'BOLA/BFLA: enforce object-ownership + function-role checks server-side on every API request (ID validity is not enough).',
+    'Excessive data: restrict responses with a **field allowlist (DTO)**; do not send password-hash/secret/internal-ID/role to the client.',
+    'Rate-limit: **rate-limit + quota** per account+IP+endpoint; a cost-based limit for heavy endpoints.',
+    'Version: disable unused/old API versions. GraphQL: **disable introspection in production**; add a query depth/complexity limit.',
+  ],
+  fixCleanEn: ['Object/function authorization server-side, response DTO allowlist, rate-limit+quota, old versions disabled, GraphQL introspection disabled (proactive).'],
+  cleanGenelEn: 'No clear indicator of excessive data exposure, missing rate-limit, shadow version or open GraphQL introspection was found at the discovered API endpoints.',
 };
 
 // (Faz 3-C) E-posta & DNS Derinliği — anti-spoofing + DNS bütünlüğü. Pasif DNS/TXT + tek MTA-STS GET.
@@ -587,6 +715,24 @@ const EMAIL_DNS_CFG = {
   ],
   fixCleanDe: ['DMARC p=reject, SPF -all, DKIM 2048-Bit, MTA-STS enforce, TLS-RPT, DNSSEC, CAA — Anti-Spoofing/DNS-Integrität stark (proaktiv).'],
   cleanGenelDe: 'In den E-Mail-/DNS-Einträgen der abgefragten Org-Domain wurde kein eindeutiger Indikator für eine Anti-Spoofing-Schwäche (fehlendes/lockeres DMARC-SPF, offenes +all, unsigniertes DNSSEC usw.) gefunden.',
+  whatCheckedEn: [
+    'Only DNS records read from the REAL org domain; all PASSIVE DNS/TXT + a single safe MTA-STS GET (no attack/state-change). For a subdomain, DMARC is evaluated at the **organizational domain** level.',
+    '**G1 DMARC** policy strength (p=none/quarantine/reject, pct, sp subdomain, adkim/aspf, rua).',
+    '**G2 SPF** depth (-all/~all/?all/+all + top-level DNS-lookup count, RFC 7208).',
+    '**G3 DKIM** common-selector discovery (default/google/selector1…) + key length (~1024/2048) + revocation (empty p=).',
+    '**G4 MTA-STS** (_mta-sts TXT + policy: enforce/testing/none) · **G5 TLS-RPT** reporting.',
+    '**G6 DNSSEC** (signature/validation — AD flag, observation only) · **G7 CAA** (certificate-issuance restriction) + **BIMI** (informational).',
+  ],
+  confidenceNoteEn: 'Evidence = the public record DNS actually returned (no redaction needed). "indicator" language; on a non-mail-sending domain (no MX), the severity of missing DMARC/SPF is lowered. No fabricated/guessed records.',
+  fixTitleEn: 'E-mail & DNS Hardening',
+  fixFoundEn: [
+    'DMARC: tighten gradually `p=none`→`quarantine`→`reject` (pct=100); enable reporting with `rua=`; `sp=reject` for subdomains.',
+    'SPF: use `-all` (hardfail); avoid `+all`/`?all`; keep the DNS-lookup count ≤10 (PermError).',
+    'DKIM: 2048-bit key, remove revoked selectors. MTA-STS: `mode=enforce`. Add TLS-RPT.',
+    'Enable DNSSEC (DS+RRSIG). Restrict authorized CAs with CAA.',
+  ],
+  fixCleanEn: ['DMARC p=reject, SPF -all, DKIM 2048-bit, MTA-STS enforce, TLS-RPT, DNSSEC, CAA — anti-spoofing/DNS integrity strong (proactive).'],
+  cleanGenelEn: 'No clear indicator of an anti-spoofing weakness (missing/loose DMARC-SPF, open +all, unsigned DNSSEC etc.) was found in the queried org domain\'s e-mail/DNS records.',
 };
 
 // (Faz 5) Taşıma Katmanı, CORS & Güvenlik Başlığı Derinliği — H1/H3/H4. Read-only/pasif.
@@ -626,6 +772,23 @@ const TRANSPORT_CFG = {
   ],
   fixCleanDe: ['CORS streng (Allowlist, ohne Credentials), nur TLS 1.2/1.3 + moderne Cipher, HSTS/Clickjacking/CSP/Header vollständig — Transport- & browserseitige Verteidigung stark (proaktiv).'],
   cleanGenelDe: 'In der Transportschicht (CORS/TLS) und den Security-Headern wurde kein eindeutiger Indikator für eine Fehlkonfiguration oder Härtungslücke gefunden.',
+  whatCheckedEn: [
+    'All read-only/passive observation — NO data change, DoS or cipher exploitation.',
+    '**H1 CORS:** a single request with a crafted `Origin` to discovered REAL endpoints — ACAO reflection + ACAC=true (credentialed leak → High), reflection only (Medium, "may be by design"), `*` (informational), `null` acceptance (indicator).',
+    '**H3 TLS protocol/cipher:** 1 safe handshake per protocol — TLS 1.0/1.1 (old, indicator), weak cipher (RC4/3DES/NULL/EXPORT). Certificate validity/hostname/chain is a finding only on a REAL problem (no double CT).',
+    '**H4 security-header depth:** HSTS (presence + max-age sufficiency + preload), clickjacking (X-Frame-Options **or** CSP frame-ancestors dual-mechanism), CSP weakness (unsafe-inline/eval/*), Referrer-Policy / Permissions-Policy / X-Content-Type-Options.',
+    'The basic header-PRESENCE check remains in other packages; this section adds DEPTH (not copied).',
+  ],
+  confidenceNoteEn: 'Findings are based on real observation ("indicator, verification required"); reflected CORS + credentials is CLEARLY bad (High), reflection without credentials may be by design (Medium). Deterministic (same host → same protocol/header).',
+  fixTitleEn: 'Transport Layer & Header Hardening',
+  fixFoundEn: [
+    'CORS: allowlist origins; do not use a wildcard/reflection with `credentials`; do not accept a `null` origin.',
+    'TLS: leave only TLS 1.2/1.3; disable RC4/3DES/NULL/EXPORT ciphers; modern AEAD (ECDHE+AES-GCM/CHACHA20).',
+    'HSTS `max-age≥15768000; includeSubDomains; preload`; X-Frame-Options **and/or** CSP frame-ancestors against clickjacking.',
+    'Remove unsafe-inline/unsafe-eval from CSP (nonce/hash); add Referrer-Policy/Permissions-Policy/X-Content-Type-Options.',
+  ],
+  fixCleanEn: ['CORS strict (allowlist, no credentials), only TLS 1.2/1.3 + modern ciphers, HSTS/clickjacking/CSP/headers complete — transport & browser-side defence strong (proactive).'],
+  cleanGenelEn: 'No clear indicator of a misconfiguration or hardening gap was found in the transport layer (CORS/TLS) and security headers.',
 };
 // (Faz 5) Subdomain Takeover — recon/DNS. Yalnız DNS çözümü + tek güvenli GET (parmak-izi); claim YOK.
 const TAKEOVER_CFG = {
@@ -656,6 +819,19 @@ const TAKEOVER_CFG = {
   ],
   fixCleanDe: ['Subdomain-CNAME-Inventar sauber; kein verwaister/dangling Eintrag (proaktiv).'],
   cleanGenelDe: 'In den entdeckten Subdomains wurde kein Indikator für einen übernehmbaren (dangling) CNAME + nicht beanspruchten Fingerabdruck gefunden.',
+  whatCheckedEn: [
+    'CNAME resolution on REAL subdomains discovered via Certificate Transparency (crt.sh/certSpotter).',
+    'If the CNAME points to a known 3P service (S3/GitHub Pages/Heroku/Azure/Netlify/Fastly/Shopify/… comprehensive list) **AND** an "unclaimed" fingerprint (NoSuchBucket / "There isn\'t a GitHub Pages site here" / NXDOMAIN etc.) is returned → POSSIBLE takeover.',
+    'DNS resolution + a single safe GET (fingerprint observation) only — NO registration/claim is made. No fabricated subdomains.',
+  ],
+  confidenceNoteEn: 'A finding only when dangling + fingerprint match; a live/claimed CNAME is informational. If the CT source is unreachable, "not assessable" (not clean).',
+  fixTitleEn: 'Subdomain Takeover',
+  fixFoundEn: [
+    'Remove unused/dangling CNAME records from DNS (delete the DNS record BEFORE deleting the cloud resource).',
+    'Keep a subdomain inventory; periodically audit abandoned 3P service records.',
+  ],
+  fixCleanEn: ['Subdomain CNAME inventory clean; no dangling/orphaned record (proactive).'],
+  cleanGenelEn: 'No indicator of a takeover-able (dangling) CNAME + unclaimed fingerprint was found in the discovered subdomains.',
 };
 
 // (Faz 8) Authenticated Güvenli Aktif Göstergeler — Faz 6 modülü login-sonrası yüzeyde. Read-only.
@@ -691,6 +867,21 @@ const AUTH_INDICATORS_CFG = {
   ],
   fixCleanDe: ['In den Parametern nach dem Login wird keine Eingabe direkt in Dateipfad/Template/Weiterleitungsziel gelegt (proaktiv).'],
   cleanGenelDe: 'In den nach dem Login erreichten Parametern wurde kein Indikator für LFI-Signatur, Open Redirect, HTTP Parameter Pollution oder SSTI gefunden.',
+  whatCheckedEn: [
+    'Phase 6 safe active indicators on GET parameters accessed **after login** (TEST session) + Phase-7 SPA-discovery/auth-gated endpoints — all read-only (NO data writing/upload/command/time-based).',
+    '**B1 LFI/path-traversal:** graduated probe; only a file SIGNATURE=finding (High), content **REDACTED**.',
+    '**B2 Open redirect:** harmless canary (redirect NOT followed). **B3 HPP:** repeated parameter (observation only).',
+    '**B5 SSTI:** arithmetic only `{{1234*3}}`→`3702` (NO code/command).',
+    '**B4 boolean-SQLi** → in the Authenticated Injection (SQLi/XSS) section; **B6 file upload** → config observation (NO real upload). Cross-referenced to avoid double CT.',
+  ],
+  confidenceNoteEn: 'The post-login surface differs from the pre-login one (the rationale for the package being a super-set). "indicator, verification required"; only on observed parameters. On a well-configured authenticated backend, a clean/low finding is the EXPECTED result.',
+  fixTitleEn: 'Authenticated Safe Active Indicators',
+  fixFoundEn: [
+    'LFI: do not place input in the file path; allowlist + `basename` + root-directory confinement. Open redirect: allowlist targets server-side.',
+    'HPP: normalise parameters to a single value. SSTI: do not interpolate input into templates (logic-less + escaping + sandbox).',
+  ],
+  fixCleanEn: ['No input is placed directly into a file path/template/redirect target in post-login parameters (proactive).'],
+  cleanGenelEn: 'No indicator of LFI signature, open redirect, HTTP parameter pollution or SSTI was found in the parameters accessed after login.',
 };
 
 // (Çok-bölge) run başlıkları hem `## <title>` bölüm başlığı hem tablo/özet etiketi olarak AYNEN kullanılır.
