@@ -329,30 +329,31 @@ export function classifyExposedFile(
   path: string,
   fetched: FetchOut,
   homepage: string,
-  de: boolean = false,
+  locale: string = 'tr',
 ): { verdict: ExposedVerdict; reason: string } {
-  const t = (trS: string, deS: string) => (de ? deS : trS);
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   if (!fetched.ok || fetched.status !== 200 || !fetched.text.trim()) {
-    return { verdict: 'not-exposed', reason: t(`HTTP ${fetched.status || 'hata'} / boş gövde — erişilebilir değil`, `HTTP ${fetched.status || 'Fehler'} / leerer Body — nicht erreichbar`) };
+    return { verdict: 'not-exposed', reason: t(`HTTP ${fetched.status || 'hata'} / boş gövde — erişilebilir değil`, `HTTP ${fetched.status || 'Fehler'} / leerer Body — nicht erreichbar`, `HTTP ${fetched.status || 'error'} / empty body — not reachable`) };
   }
   const body = fetched.text;
   // (2) Catch-all: ana sayfayla ayni mi?
   if (looksLikeHomepage(body, homepage)) {
-    return { verdict: 'not-exposed', reason: t('içerik ana sayfayla aynı (SPA/catch-all yönlendirme; dosya gerçekten açık değil)', 'Inhalt identisch mit der Startseite (SPA/Catch-all-Weiterleitung; die Datei ist nicht wirklich offen zugänglich)') };
+    return { verdict: 'not-exposed', reason: t('içerik ana sayfayla aynı (SPA/catch-all yönlendirme; dosya gerçekten açık değil)', 'Inhalt identisch mit der Startseite (SPA/Catch-all-Weiterleitung; die Datei ist nicht wirklich offen zugänglich)', 'content identical to the home page (SPA/catch-all routing; the file is not truly exposed)') };
   }
   const isHtml = /^\s*<(!doctype|html)\b/i.test(body.trimStart()) || fetched.contentType.includes('text/html');
   const sig = FILE_SIGNATURES[path];
   // (1) Beklenen format imzasi.
   if (sig) {
-    if (sig(body)) return { verdict: 'exposed', reason: t('beklenen dosya formatı doğrulandı (catch-all değil)', 'erwartetes Dateiformat bestätigt (kein Catch-all)') };
+    if (sig(body)) return { verdict: 'exposed', reason: t('beklenen dosya formatı doğrulandı (catch-all değil)', 'erwartetes Dateiformat bestätigt (kein Catch-all)', 'expected file format confirmed (not catch-all)') };
     return {
       verdict: 'not-exposed',
-      reason: t(`HTTP 200 ama içerik beklenen dosya formatına uymuyor${isHtml ? ' (HTML döndü — muhtemelen catch-all)' : ''}`, `HTTP 200, aber der Inhalt entspricht nicht dem erwarteten Dateiformat${isHtml ? ' (HTML zurückgegeben — vermutlich Catch-all)' : ''}`),
+      reason: t(`HTTP 200 ama içerik beklenen dosya formatına uymuyor${isHtml ? ' (HTML döndü — muhtemelen catch-all)' : ''}`, `HTTP 200, aber der Inhalt entspricht nicht dem erwarteten Dateiformat${isHtml ? ' (HTML zurückgegeben — vermutlich Catch-all)' : ''}`, `HTTP 200 but content does not match the expected file format${isHtml ? ' (HTML returned — likely catch-all)' : ''}`),
     };
   }
   // Imza tanimli degil: HTML donduyse catch-all say; degilse kesin diyemeyiz.
-  if (isHtml) return { verdict: 'not-exposed', reason: t('HTTP 200 ama HTML döndü (muhtemelen catch-all)', 'HTTP 200, aber HTML zurückgegeben (vermutlich Catch-all)') };
-  return { verdict: 'inconclusive', reason: t('HTTP 200, format imzası tanımlı değil — manuel doğrulama gerekir', 'HTTP 200, keine Formatsignatur definiert — manuelle Überprüfung erforderlich') };
+  if (isHtml) return { verdict: 'not-exposed', reason: t('HTTP 200 ama HTML döndü (muhtemelen catch-all)', 'HTTP 200, aber HTML zurückgegeben (vermutlich Catch-all)', 'HTTP 200 but HTML returned (likely catch-all)') };
+  return { verdict: 'inconclusive', reason: t('HTTP 200, format imzası tanımlı değil — manuel doğrulama gerekir', 'HTTP 200, keine Formatsignatur definiert — manuelle Überprüfung erforderlich', 'HTTP 200, no format signature defined — manual verification required') };
 }
 
 const SENSITIVE_PATHS = ['/.git/config', '/.git/HEAD', '/.env', '/backup.zip', '/backup.sql', '/.DS_Store', '/wp-config.php',
@@ -369,7 +370,7 @@ async function checkExposedFiles(host: string, de: boolean = false): Promise<Pas
     const notes: string[] = [];
     for (const p of SENSITIVE_PATHS) {
       const r = await safeGet(`https://${host}${p}`, host);
-      const c = classifyExposedFile(p, r, homepage, de);
+      const c = classifyExposedFile(p, r, homepage, de ? 'de' : 'tr');
       if (c.verdict === 'exposed') {
         exposed.push(p);
         notes.push(t(`${p}: 🔴 AÇIK — ${c.reason}`, `${p}: 🔴 OFFEN — ${c.reason}`));

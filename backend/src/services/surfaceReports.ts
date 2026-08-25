@@ -160,7 +160,7 @@ export async function generateHeaderLeakReport(host: string, locale: string = 't
   const RW = locale === 'en' ? RISK_WORD_EN : de ? RISK_WORD_DE : RISK_WORD;
   const http = await collectHttp(host);
   if (!http.ok) return null;
-  const exposed = await collectExposedFiles(host, http.html, de);
+  const exposed = await collectExposedFiles(host, http.html, locale);
 
   const missing = SEC_HDRS.filter((h) => !http.headers.has(h.hdr));
   const missingCrit = missing.filter((h) => h.hdr === 'content-security-policy' || h.hdr === 'x-frame-options');
@@ -472,23 +472,23 @@ export async function generateCspReport(host: string, locale: string = 'tr'): Pr
       : t('- Uygulanan bir CSP olmadığından direktif analizi yapılamadı.\n\n', '- Da keine durchgesetzte CSP vorhanden ist, konnte keine Direktivenanalyse durchgeführt werden.\n\n', '- As there is no enforced CSP, no directive analysis could be performed.\n\n'));
 
   const risks: string[] = [];
-  if (!present && !cspRO) risks.push(t(`- **${isSpa ? 'Orta-Yüksek' : 'Orta'} — CSP tamamen eksik:** XSS ve içerik enjeksiyonuna karşı tarayıcı seviyesinde savunma yok.${isSpa ? ' SPA olduğu için XSS etkisi belirgindir.' : ''}${cspCov}`, `- **${isSpa ? 'Orta-Yüksek' : 'Orta'} — CSP vollständig fehlend:** Keine Verteidigung auf Browser-Ebene gegen XSS und Content-Injection.${isSpa ? ' Da es sich um eine SPA handelt, ist die XSS-Auswirkung ausgeprägt.' : ''}${cspCov}`));
-  if (!present && cspRO) risks.push(t('- **Orta — CSP yalnızca Report-Only:** İhlaller engellenmiyor; enforce moda geçilmeli.', '- **Orta — CSP nur Report-Only:** Verstöße werden nicht blockiert; ein Wechsel in den Enforce-Modus ist erforderlich.'));
-  if (present) for (const w of weakFindings.filter((x) => /unsafe|wildcard/.test(x))) risks.push(t(`- **Orta — Zayıf CSP direktifi:** ${w}`, `- **Orta — Schwache CSP-Direktive:** ${w}`));
-  if (cspVariance) risks.push(t(`- **Orta — Sayfaya özgü CSP tutarsızlığı:** CSP ana sayfada mevcut ancak ${cspAbsentPaths.length}/${cspPageCount} iç sayfada gönderilmiyor (ör. ${cspAbsentPaths.slice(0, 3).join(', ')}). Politika tüm yollarda tutarlı uygulanmalı.`, `- **Orta — Seitenspezifische CSP-Inkonsistenz:** CSP ist auf der Startseite vorhanden, wird aber auf ${cspAbsentPaths.length}/${cspPageCount} Unterseiten nicht gesendet (z. B. ${cspAbsentPaths.slice(0, 3).join(', ')}). Die Richtlinie sollte auf allen Pfaden konsistent angewendet werden.`));
-  if (!risks.length) risks.push(t('- CSP mevcut ve belirgin bir zayıflatıcı direktif içermiyor.', '- CSP ist vorhanden und enthält keine deutlich schwächende Direktive.'));
+  if (!present && !cspRO) risks.push(t(`- **${isSpa ? 'Orta-Yüksek' : 'Orta'} — CSP tamamen eksik:** XSS ve içerik enjeksiyonuna karşı tarayıcı seviyesinde savunma yok.${isSpa ? ' SPA olduğu için XSS etkisi belirgindir.' : ''}${cspCov}`, `- **${isSpa ? 'Orta-Yüksek' : 'Orta'} — CSP vollständig fehlend:** Keine Verteidigung auf Browser-Ebene gegen XSS und Content-Injection.${isSpa ? ' Da es sich um eine SPA handelt, ist die XSS-Auswirkung ausgeprägt.' : ''}${cspCov}`, `- **${isSpa ? 'Orta-Yüksek' : 'Orta'} — CSP entirely missing:** No browser-level defence against XSS and content injection.${isSpa ? ' Being a SPA, the XSS impact is pronounced.' : ''}${cspCov}`));
+  if (!present && cspRO) risks.push(t('- **Orta — CSP yalnızca Report-Only:** İhlaller engellenmiyor; enforce moda geçilmeli.', '- **Orta — CSP nur Report-Only:** Verstöße werden nicht blockiert; ein Wechsel in den Enforce-Modus ist erforderlich.', '- **Orta — CSP is Report-Only:** Violations are not blocked; switch to enforce mode.'));
+  if (present) for (const w of weakFindings.filter((x) => /unsafe|wildcard/.test(x))) risks.push(t(`- **Orta — Zayıf CSP direktifi:** ${w}`, `- **Orta — Schwache CSP-Direktive:** ${w}`, `- **Orta — Weak CSP directive:** ${w}`));
+  if (cspVariance) risks.push(t(`- **Orta — Sayfaya özgü CSP tutarsızlığı:** CSP ana sayfada mevcut ancak ${cspAbsentPaths.length}/${cspPageCount} iç sayfada gönderilmiyor (ör. ${cspAbsentPaths.slice(0, 3).join(', ')}). Politika tüm yollarda tutarlı uygulanmalı.`, `- **Orta — Seitenspezifische CSP-Inkonsistenz:** CSP ist auf der Startseite vorhanden, wird aber auf ${cspAbsentPaths.length}/${cspPageCount} Unterseiten nicht gesendet (z. B. ${cspAbsentPaths.slice(0, 3).join(', ')}). Die Richtlinie sollte auf allen Pfaden konsistent angewendet werden.`, `- **Orta — Page-specific CSP inconsistency:** CSP is present on the home page but is not sent on ${cspAbsentPaths.length}/${cspPageCount} inner pages (e.g. ${cspAbsentPaths.slice(0, 3).join(', ')}). The policy should be applied consistently across all paths.`));
+  if (!risks.length) risks.push(t('- CSP mevcut ve belirgin bir zayıflatıcı direktif içermiyor.', '- CSP ist vorhanden und enthält keine deutlich schwächende Direktive.', '- CSP is present and contains no clearly weakening directive.'));
 
   const bullets: string[] = [];
-  bullets.push(`- **${t('Genel risk seviyesi', 'Gesamtrisikostufe')}: ${RW[level]}** — ${level === 'medium' ? (present ? t('CSP var ama zayıflatıcı direktifler içeriyor.', 'CSP ist vorhanden, enthält aber schwächende Direktiven.') : t('CSP eksik/enforce edilmiyor.', 'CSP fehlt/wird nicht durchgesetzt.')) : t('CSP mevcut ve makul yapılandırılmış.', 'CSP ist vorhanden und sinnvoll konfiguriert.')}`);
-  bullets.push(`- CSP: ${present ? t('uygulanıyor', 'wird durchgesetzt') : cspRO ? t('yalnızca Report-Only', 'nur Report-Only') : t('yok', 'fehlt')}${directives && weakFindings.length ? t(`, ${weakFindings.length} zayıf nokta`, `, ${weakFindings.length} Schwachstelle(n)`) : ''}.`);
-  bullets.push(`- **${t('Önerilen ilk adım', 'Empfohlener erster Schritt')}:** ` + (present ? t("unsafe-inline/unsafe-eval/wildcard direktiflerini kaldırın.", 'Entfernen Sie die Direktiven unsafe-inline/unsafe-eval/wildcard.') : t('Önce Report-Only modda test edip ardından uygulanan CSP ekleyin (hazır örnekler "AI Çözüm Önerileri" eklentisinde).', 'Testen Sie zunächst im Report-Only-Modus und ergänzen Sie dann eine durchgesetzte CSP (fertige Beispiele im Add-on „KI-Lösungsvorschläge").')));
+  bullets.push(`- **${t('Genel risk seviyesi', 'Gesamtrisikostufe', 'Overall risk level')}: ${RW[level]}** — ${level === 'medium' ? (present ? t('CSP var ama zayıflatıcı direktifler içeriyor.', 'CSP ist vorhanden, enthält aber schwächende Direktiven.', 'CSP is present but contains weakening directives.') : t('CSP eksik/enforce edilmiyor.', 'CSP fehlt/wird nicht durchgesetzt.', 'CSP is missing/not enforced.')) : t('CSP mevcut ve makul yapılandırılmış.', 'CSP ist vorhanden und sinnvoll konfiguriert.', 'CSP is present and reasonably configured.')}`);
+  bullets.push(`- CSP: ${present ? t('uygulanıyor', 'wird durchgesetzt', 'enforced') : cspRO ? t('yalnızca Report-Only', 'nur Report-Only', 'Report-Only only') : t('yok', 'fehlt', 'missing')}${directives && weakFindings.length ? t(`, ${weakFindings.length} zayıf nokta`, `, ${weakFindings.length} Schwachstelle(n)`, `, ${weakFindings.length} weak point(s)`) : ''}.`);
+  bullets.push(`- **${t('Önerilen ilk adım', 'Empfohlener erster Schritt', 'Recommended first step')}:** ` + (present ? t("unsafe-inline/unsafe-eval/wildcard direktiflerini kaldırın.", 'Entfernen Sie die Direktiven unsafe-inline/unsafe-eval/wildcard.', 'Remove the unsafe-inline/unsafe-eval/wildcard directives.') : t('Önce Report-Only modda test edip ardından uygulanan CSP ekleyin (hazır örnekler "AI Çözüm Önerileri" eklentisinde).', 'Testen Sie zunächst im Report-Only-Modus und ergänzen Sie dann eine durchgesetzte CSP (fertige Beispiele im Add-on „KI-Lösungsvorschläge").', 'Test in Report-Only mode first, then add an enforced CSP (ready-made examples in the "AI Fix Suggestions" add-on).')));
 
   const genel =
     level === 'medium'
-        ? (present ? t('CSP mevcut ancak koruma değerini düşüren direktifler (unsafe-inline/unsafe-eval/wildcard) içeriyor; sıkılaştırılması önerilir.', 'CSP ist vorhanden, enthält aber Direktiven (unsafe-inline/unsafe-eval/wildcard), die den Schutzwert mindern; eine Verschärfung wird empfohlen.') : t('Uygulanan bir CSP yok (yok veya yalnızca Report-Only). XSS azaltması için enforce edilen bir politika önerilir.', 'Es gibt keine durchgesetzte CSP (fehlt oder nur Report-Only). Zur XSS-Minderung wird eine durchgesetzte Richtlinie empfohlen.'))
-        : t('Content-Security-Policy mevcut ve makul yapılandırılmış; rapor yalnızca küçük iyileştirmeleri listeler.', 'Die Content-Security-Policy ist vorhanden und sinnvoll konfiguriert; der Bericht listet nur kleine Verbesserungen auf.');
+        ? (present ? t('CSP mevcut ancak koruma değerini düşüren direktifler (unsafe-inline/unsafe-eval/wildcard) içeriyor; sıkılaştırılması önerilir.', 'CSP ist vorhanden, enthält aber Direktiven (unsafe-inline/unsafe-eval/wildcard), die den Schutzwert mindern; eine Verschärfung wird empfohlen.', 'CSP is present but contains directives (unsafe-inline/unsafe-eval/wildcard) that reduce its protective value; tightening is recommended.') : t('Uygulanan bir CSP yok (yok veya yalnızca Report-Only). XSS azaltması için enforce edilen bir politika önerilir.', 'Es gibt keine durchgesetzte CSP (fehlt oder nur Report-Only). Zur XSS-Minderung wird eine durchgesetzte Richtlinie empfohlen.', 'There is no enforced CSP (missing or Report-Only only). An enforced policy is recommended to mitigate XSS.'))
+        : t('Content-Security-Policy mevcut ve makul yapılandırılmış; rapor yalnızca küçük iyileştirmeleri listeler.', 'Die Content-Security-Policy ist vorhanden und sinnvoll konfiguriert; der Bericht listet nur kleine Verbesserungen auf.', 'The Content-Security-Policy is present and reasonably configured; the report lists only minor improvements.');
 
-  const findings = assemble('CSP', level, bullets, genel, `${statusSection}${analysisSection}## ${t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN')}\n\n${risksTable(risks, locale)}\n`, locale);
+  const findings = assemble('CSP', level, bullets, genel, `${statusSection}${analysisSection}## ${t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN', 'IDENTIFIED RISKS')}\n\n${risksTable(risks, locale)}\n`, locale);
   const fixText = buildCspFix(host, { present, weak: weakFindings.length > 0 }, locale);
   return { findings, fixText };
 }
@@ -516,7 +516,7 @@ function platformHeaderBlock(entries: Array<{ name: string; value: string }>, lo
   const apache = entries.map((e) => `Header always set ${e.name} "${e.value}"`).join('\n');
   return (
     '**Nginx:**\n\n```nginx\n' + nginx + '\n```\n\n' +
-    t('**Firebase Hosting — `firebase.json`:**\n\n```json\n', '**Firebase Hosting — `firebase.json`:**\n\n```json\n') +
+    t('**Firebase Hosting — `firebase.json`:**\n\n```json\n', '**Firebase Hosting — `firebase.json`:**\n\n```json\n', '**Firebase Hosting — `firebase.json`:**\n\n```json\n') +
     `{\n  "hosting": {\n    "headers": [\n      {\n        "source": "**",\n        "headers": [\n${json}\n        ]\n      }\n    ]\n  }\n}\n` + '```\n\n' +
     '**Apache — `.htaccess`:**\n\n```apache\n' + apache + '\n```'
   );
@@ -525,18 +525,18 @@ function platformHeaderBlock(entries: Array<{ name: string; value: string }>, lo
 function buildTlsFix(host: string, o: { hstsMissing: boolean; weak: string[] }, locale: string = 'tr'): string {
   const de = locale === 'de';
   const t = (trS: string, deS: string, enS?: string) => (locale === 'de' ? deS : locale === 'en' ? (enS ?? trS) : trS);
-  const parts: string[] = [t(`Aşağıdaki öneriler ${host} için TLS/şifreleme yapılandırmasını güçlendirir.`, `Die folgenden Empfehlungen stärken die TLS-/Verschlüsselungskonfiguration für ${host}.`)];
+  const parts: string[] = [t(`Aşağıdaki öneriler ${host} için TLS/şifreleme yapılandırmasını güçlendirir.`, `Die folgenden Empfehlungen stärken die TLS-/Verschlüsselungskonfiguration für ${host}.`, `The following recommendations strengthen the TLS/encryption configuration for ${host}.`)];
   if (o.hstsMissing) {
-    parts.push(t('### 1. HSTS başlığını ekleyin\n\nTarayıcıya siteye yalnızca HTTPS ile bağlanmasını söyler (yalnızca siteniz tamamen HTTPS ise uygulayın):\n\n', '### 1. HSTS-Header ergänzen\n\nWeist den Browser an, die Website nur über HTTPS aufzurufen (nur anwenden, wenn Ihre Website vollständig auf HTTPS läuft):\n\n') +
+    parts.push(t('### 1. HSTS başlığını ekleyin\n\nTarayıcıya siteye yalnızca HTTPS ile bağlanmasını söyler (yalnızca siteniz tamamen HTTPS ise uygulayın):\n\n', '### 1. HSTS-Header ergänzen\n\nWeist den Browser an, die Website nur über HTTPS aufzurufen (nur anwenden, wenn Ihre Website vollständig auf HTTPS läuft):\n\n', '### 1. Add the HSTS header\n\nTells the browser to connect to the site only over HTTPS (apply only if your site runs entirely over HTTPS):\n\n') +
       platformHeaderBlock([{ name: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' }], locale));
   }
   if (o.weak.length) {
-    parts.push(t(`### ${o.hstsMissing ? 2 : 1}. Eski TLS sürümlerini kapatın (${o.weak.join(', ')})\n\n`, `### ${o.hstsMissing ? 2 : 1}. Veraltete TLS-Versionen deaktivieren (${o.weak.join(', ')})\n\n`) +
+    parts.push(t(`### ${o.hstsMissing ? 2 : 1}. Eski TLS sürümlerini kapatın (${o.weak.join(', ')})\n\n`, `### ${o.hstsMissing ? 2 : 1}. Veraltete TLS-Versionen deaktivieren (${o.weak.join(', ')})\n\n`, `### ${o.hstsMissing ? 2 : 1}. Disable outdated TLS versions (${o.weak.join(', ')})\n\n`) +
       '**Nginx:**\n\n```nginx\nssl_protocols TLSv1.2 TLSv1.3;\nssl_prefer_server_ciphers on;\n```\n\n' +
       '**Cloudflare:** SSL/TLS → Edge Certificates → **Minimum TLS Version = 1.2**.\n\n' +
       '**Apache:**\n\n```apache\nSSLProtocol -all +TLSv1.2 +TLSv1.3\n```');
   }
-  if (parts.length === 1) parts.push(t('TLS yapılandırmanız güncel görünüyor. Sürekli güvence için sertifika yenilemenizi otomatik (ör. certbot/ACME) tutun ve yalnızca TLS 1.2+ kabul edin.', 'Ihre TLS-Konfiguration wirkt aktuell. Halten Sie zur dauerhaften Absicherung die Zertifikatserneuerung automatisch (z. B. certbot/ACME) und akzeptieren Sie nur TLS 1.2+.'));
+  if (parts.length === 1) parts.push(t('TLS yapılandırmanız güncel görünüyor. Sürekli güvence için sertifika yenilemenizi otomatik (ör. certbot/ACME) tutun ve yalnızca TLS 1.2+ kabul edin.', 'Ihre TLS-Konfiguration wirkt aktuell. Halten Sie zur dauerhaften Absicherung die Zertifikatserneuerung automatisch (z. B. certbot/ACME) und akzeptieren Sie nur TLS 1.2+.', 'Your TLS configuration appears current. For ongoing assurance, keep certificate renewal automated (e.g. certbot/ACME) and accept only TLS 1.2+.'));
   return parts.join('\n\n');
 }
 
@@ -544,11 +544,11 @@ function buildExposedFileFix(paths: string[], locale: string = 'tr'): string {
   const de = locale === 'de';
   const t = (trS: string, deS: string, enS?: string) => (locale === 'de' ? deS : locale === 'en' ? (enS ?? trS) : trS);
   return (
-    t(`### Açıkta kalan dosyalara erişimi engelleyin\n\n`, `### Zugriff auf offenliegende Dateien sperren\n\n`) +
-    t(`Tespit edilen yollar: ${paths.map((p) => `\`${p}\``).join(', ')}. Sunucu seviyesinde erişimi kapatın:\n\n`, `Festgestellte Pfade: ${paths.map((p) => `\`${p}\``).join(', ')}. Sperren Sie den Zugriff auf Serverebene:\n\n`) +
+    t(`### Açıkta kalan dosyalara erişimi engelleyin\n\n`, `### Zugriff auf offenliegende Dateien sperren\n\n`, `### Block access to exposed files\n\n`) +
+    t(`Tespit edilen yollar: ${paths.map((p) => `\`${p}\``).join(', ')}. Sunucu seviyesinde erişimi kapatın:\n\n`, `Festgestellte Pfade: ${paths.map((p) => `\`${p}\``).join(', ')}. Sperren Sie den Zugriff auf Serverebene:\n\n`, `Detected paths: ${paths.map((p) => `\`${p}\``).join(', ')}. Block access at the server level:\n\n`) +
     '**Nginx:**\n\n```nginx\nlocation ~ /\\.(git|env|ht) { deny all; return 404; }\nlocation ~* \\.(bak|old|zip|sql)$ { deny all; return 404; }\n```\n\n' +
     '**Apache — `.htaccess`:**\n\n```apache\nRedirectMatch 404 /\\.git\nRedirectMatch 404 /\\.env\n<FilesMatch "\\.(bak|old|zip|sql)$">\n  Require all denied\n</FilesMatch>\n```\n\n' +
-    t('Ayrıca bu dosyaların web köküne (public) hiç konmaması en sağlıklısıdır.', 'Am besten legen Sie diese Dateien zudem gar nicht erst in das Web-Root (public).')
+    t('Ayrıca bu dosyaların web köküne (public) hiç konmaması en sağlıklısıdır.', 'Am besten legen Sie diese Dateien zudem gar nicht erst in das Web-Root (public).', 'It is also best not to place these files in the web root (public) at all.')
   );
 }
 
@@ -556,57 +556,57 @@ function buildDnsFix(host: string, dns: DnsEvidence, locale: string = 'tr'): str
   const de = locale === 'de';
   const t = (trS: string, deS: string, enS?: string) => (locale === 'de' ? deS : locale === 'en' ? (enS ?? trS) : trS);
   const apex = host.split('.').slice(-2).join('.');
-  const parts: string[] = [t(`Aşağıdaki öneriler ${apex} alan adının e-posta kimlik doğrulamasını güçlendirir. Kayıtları DNS sağlayıcınızın (Cloudflare/GoDaddy/…) TXT arayüzünden ekleyin.`, `Die folgenden Empfehlungen stärken die E-Mail-Authentifizierung der Domain ${apex}. Fügen Sie die Einträge über die TXT-Oberfläche Ihres DNS-Anbieters (Cloudflare/GoDaddy/…) hinzu.`)];
+  const parts: string[] = [t(`Aşağıdaki öneriler ${apex} alan adının e-posta kimlik doğrulamasını güçlendirir. Kayıtları DNS sağlayıcınızın (Cloudflare/GoDaddy/…) TXT arayüzünden ekleyin.`, `Die folgenden Empfehlungen stärken die E-Mail-Authentifizierung der Domain ${apex}. Fügen Sie die Einträge über die TXT-Oberfläche Ihres DNS-Anbieters (Cloudflare/GoDaddy/…) hinzu.`, `The following recommendations strengthen email authentication for the domain ${apex}. Add the records via your DNS provider's (Cloudflare/GoDaddy/…) TXT interface.`)];
   if (!dns.spf || dns.spf.all === 'yok' || dns.spf.all === '+all' || dns.spf.all === '?all') {
-    parts.push(t('### SPF kaydı ekleyin/sertleştirin\n\nYalnızca yetkili sunucuların sizin adınıza mail göndermesine izin verir. Kendi gönderen servislerinizi (`include:`) ekleyin:\n\n', '### SPF-Eintrag hinzufügen/verschärfen\n\nErlaubt nur autorisierten Servern, in Ihrem Namen E-Mails zu senden. Fügen Sie Ihre eigenen sendenden Dienste (`include:`) hinzu:\n\n') + '```dns\n' +
+    parts.push(t('### SPF kaydı ekleyin/sertleştirin\n\nYalnızca yetkili sunucuların sizin adınıza mail göndermesine izin verir. Kendi gönderen servislerinizi (`include:`) ekleyin:\n\n', '### SPF-Eintrag hinzufügen/verschärfen\n\nErlaubt nur autorisierten Servern, in Ihrem Namen E-Mails zu senden. Fügen Sie Ihre eigenen sendenden Dienste (`include:`) hinzu:\n\n', '### Add/harden an SPF record\n\nAllows only authorised servers to send mail on your behalf. Add your own sending services (`include:`):\n\n') + '```dns\n' +
       `${apex}.  TXT  "v=spf1 include:_spf.google.com -all"\n` +
-      '```\n\n' + t('`-all` (hardfail) en güvenlidir; geçiş sırasında `~all` (softfail) ile başlayabilirsiniz.', '`-all` (hardfail) ist am sichersten; für die Umstellung können Sie mit `~all` (softfail) beginnen.'));
+      '```\n\n' + t('`-all` (hardfail) en güvenlidir; geçiş sırasında `~all` (softfail) ile başlayabilirsiniz.', '`-all` (hardfail) ist am sichersten; für die Umstellung können Sie mit `~all` (softfail) beginnen.', '`-all` (hardfail) is the most secure; during migration you can start with `~all` (softfail).'));
   }
   if (!dns.dmarc || dns.dmarc.policy === 'yok' || dns.dmarc.policy === 'none') {
-    parts.push(t('### DMARC kaydı ekleyin/sıkılaştırın\n\nÖnce `p=none` ile izleyin, raporları inceleyip yanlış-pozitif olmadığından emin olunca `quarantine` → `reject` yapın:\n\n', '### DMARC-Eintrag hinzufügen/verschärfen\n\nÜberwachen Sie zunächst mit `p=none`; sobald Sie die Berichte geprüft und Fehlalarme ausgeschlossen haben, wechseln Sie zu `quarantine` → `reject`:\n\n') + '```dns\n' +
+    parts.push(t('### DMARC kaydı ekleyin/sıkılaştırın\n\nÖnce `p=none` ile izleyin, raporları inceleyip yanlış-pozitif olmadığından emin olunca `quarantine` → `reject` yapın:\n\n', '### DMARC-Eintrag hinzufügen/verschärfen\n\nÜberwachen Sie zunächst mit `p=none`; sobald Sie die Berichte geprüft und Fehlalarme ausgeschlossen haben, wechseln Sie zu `quarantine` → `reject`:\n\n', '### Add/harden a DMARC record\n\nFirst monitor with `p=none`; once you have reviewed the reports and ruled out false positives, move to `quarantine` → `reject`:\n\n') + '```dns\n' +
       `_dmarc.${apex}.  TXT  "v=DMARC1; p=quarantine; rua=mailto:dmarc@${apex}; fo=1"\n` +
       '```');
   }
   if (!dns.dkim?.found) {
-    parts.push(t('### DKIM imzalamayı etkinleştirin\n\nE-posta sağlayıcınızın (Google Workspace/Microsoft 365/gönderim servisi) panelinden DKIM üretin ve verdiği TXT kaydını `seçici._domainkey` altına ekleyin:\n\n', '### DKIM-Signierung aktivieren\n\nErzeugen Sie DKIM über das Panel Ihres E-Mail-Anbieters (Google Workspace/Microsoft 365/Versanddienst) und fügen Sie den bereitgestellten TXT-Eintrag unter `selektor._domainkey` hinzu:\n\n') + '```dns\n' +
-      `google._domainkey.${apex}.  TXT  "v=DKIM1; k=rsa; p=${t('<sağlayıcının-verdiği-anahtar>', '<vom-Anbieter-bereitgestellter-Schlüssel>')}"\n` +
+    parts.push(t('### DKIM imzalamayı etkinleştirin\n\nE-posta sağlayıcınızın (Google Workspace/Microsoft 365/gönderim servisi) panelinden DKIM üretin ve verdiği TXT kaydını `seçici._domainkey` altına ekleyin:\n\n', '### DKIM-Signierung aktivieren\n\nErzeugen Sie DKIM über das Panel Ihres E-Mail-Anbieters (Google Workspace/Microsoft 365/Versanddienst) und fügen Sie den bereitgestellten TXT-Eintrag unter `selektor._domainkey` hinzu:\n\n', '### Enable DKIM signing\n\nGenerate DKIM from your email provider\'s panel (Google Workspace/Microsoft 365/sending service) and add the TXT record it provides under `selector._domainkey`:\n\n') + '```dns\n' +
+      `google._domainkey.${apex}.  TXT  "v=DKIM1; k=rsa; p=${t('<sağlayıcının-verdiği-anahtar>', '<vom-Anbieter-bereitgestellter-Schlüssel>', '<key-provided-by-your-provider>')}"\n` +
       '```');
   }
   if (!dns.dnssec) {
-    parts.push(t('### DNSSEC’i etkinleştirin\n\nDNS sağlayıcınızın panelinden **DNSSEC**’i açın; sağlayıcı DS kaydını üretir, bunu alan adı kayıt operatörünüze (registrar) girin. DNS yanıtlarını imzalayarak cache-poisoning’i zorlaştırır.', '### DNSSEC aktivieren\n\nAktivieren Sie **DNSSEC** im Panel Ihres DNS-Anbieters; der Anbieter erzeugt den DS-Eintrag, den Sie bei Ihrem Domain-Registrar eintragen. Es signiert die DNS-Antworten und erschwert Cache-Poisoning.'));
+    parts.push(t('### DNSSEC’i etkinleştirin\n\nDNS sağlayıcınızın panelinden **DNSSEC**’i açın; sağlayıcı DS kaydını üretir, bunu alan adı kayıt operatörünüze (registrar) girin. DNS yanıtlarını imzalayarak cache-poisoning’i zorlaştırır.', '### DNSSEC aktivieren\n\nAktivieren Sie **DNSSEC** im Panel Ihres DNS-Anbieters; der Anbieter erzeugt den DS-Eintrag, den Sie bei Ihrem Domain-Registrar eintragen. Es signiert die DNS-Antworten und erschwert Cache-Poisoning.', '### Enable DNSSEC\n\nTurn on **DNSSEC** in your DNS provider\'s panel; the provider generates the DS record, which you enter at your domain registrar. It signs DNS responses and makes cache poisoning harder.'));
   }
-  if (parts.length === 1) parts.push(t('E-posta kimlik doğrulama kayıtlarınız (SPF/DMARC/DKIM) sağlam görünüyor. DMARC politikanızı zamanla `reject`’e çekmeyi ve raporları (rua) izlemeyi sürdürün.', 'Ihre E-Mail-Authentifizierungseinträge (SPF/DMARC/DKIM) wirken solide. Ziehen Sie Ihre DMARC-Richtlinie mit der Zeit auf `reject` und überwachen Sie weiterhin die Berichte (rua).'));
+  if (parts.length === 1) parts.push(t('E-posta kimlik doğrulama kayıtlarınız (SPF/DMARC/DKIM) sağlam görünüyor. DMARC politikanızı zamanla `reject`’e çekmeyi ve raporları (rua) izlemeyi sürdürün.', 'Ihre E-Mail-Authentifizierungseinträge (SPF/DMARC/DKIM) wirken solide. Ziehen Sie Ihre DMARC-Richtlinie mit der Zeit auf `reject` und überwachen Sie weiterhin die Berichte (rua).', 'Your email authentication records (SPF/DMARC/DKIM) appear solid. Continue moving your DMARC policy towards `reject` over time and keep monitoring the reports (rua).'));
   return parts.join('\n\n');
 }
 
 function buildCorsCookieFix(host: string, o: { credsWildcardDanger: boolean; wildcard: boolean; reflected: boolean; insecure: boolean }, locale: string = 'tr'): string {
   const de = locale === 'de';
   const t = (trS: string, deS: string, enS?: string) => (locale === 'de' ? deS : locale === 'en' ? (enS ?? trS) : trS);
-  const parts: string[] = [t(`Aşağıdaki öneriler ${host} için CORS ve çerez güvenliğini güçlendirir.`, `Die folgenden Empfehlungen stärken die CORS- und Cookie-Sicherheit für ${host}.`)];
+  const parts: string[] = [t(`Aşağıdaki öneriler ${host} için CORS ve çerez güvenliğini güçlendirir.`, `Die folgenden Empfehlungen stärken die CORS- und Cookie-Sicherheit für ${host}.`, `The following recommendations strengthen CORS and cookie security for ${host}.`)];
   if (o.credsWildcardDanger || o.wildcard || o.reflected) {
-    parts.push(t('### CORS’u origin allowlist’e çekin\n\nGelen Origin’i doğrulamadan yansıtmayın ve kimlik bilgisi (credentials) ile wildcard’ı ASLA birlikte kullanmayın. Yalnızca bilinen kökenlere izin verin:\n\n', '### CORS auf eine Origin-Allowlist umstellen\n\nSpiegeln Sie den eingehenden Origin nicht ungeprüft und verwenden Sie Wildcard NIEMALS zusammen mit Anmeldeinformationen (Credentials). Erlauben Sie nur bekannte Origins:\n\n') +
-      t('**Nginx (örnek allowlist):**\n\n', '**Nginx (Beispiel-Allowlist):**\n\n') + '```nginx\nset $cors "";\nif ($http_origin ~* "^https://(app\\.example\\.com|www\\.example\\.com)$") { set $cors $http_origin; }\nadd_header Access-Control-Allow-Origin $cors always;\nadd_header Vary Origin always;\n' + t('# credentials gerekmiyorsa Allow-Credentials göndermeyin', '# Senden Sie Allow-Credentials nicht, wenn keine Credentials benötigt werden') + '\n```\n\n' +
+    parts.push(t('### CORS’u origin allowlist’e çekin\n\nGelen Origin’i doğrulamadan yansıtmayın ve kimlik bilgisi (credentials) ile wildcard’ı ASLA birlikte kullanmayın. Yalnızca bilinen kökenlere izin verin:\n\n', '### CORS auf eine Origin-Allowlist umstellen\n\nSpiegeln Sie den eingehenden Origin nicht ungeprüft und verwenden Sie Wildcard NIEMALS zusammen mit Anmeldeinformationen (Credentials). Erlauben Sie nur bekannte Origins:\n\n', '### Move CORS to an origin allowlist\n\nDo not reflect the incoming Origin without validation, and NEVER use wildcard together with credentials. Allow only known origins:\n\n') +
+      t('**Nginx (örnek allowlist):**\n\n', '**Nginx (Beispiel-Allowlist):**\n\n', '**Nginx (example allowlist):**\n\n') + '```nginx\nset $cors "";\nif ($http_origin ~* "^https://(app\\.example\\.com|www\\.example\\.com)$") { set $cors $http_origin; }\nadd_header Access-Control-Allow-Origin $cors always;\nadd_header Vary Origin always;\n' + t('# credentials gerekmiyorsa Allow-Credentials göndermeyin', '# Senden Sie Allow-Credentials nicht, wenn keine Credentials benötigt werden', '# do not send Allow-Credentials if credentials are not needed') + '\n```\n\n' +
       '**Express/Node:**\n\n```js\nconst allow = new Set([\'https://app.example.com\']);\napp.use((req,res,next)=>{ const o=req.headers.origin; if(o&&allow.has(o)){ res.set(\'Access-Control-Allow-Origin\',o); res.set(\'Vary\',\'Origin\'); } next(); });\n```');
   }
   if (o.insecure) {
-    parts.push(t('### Çerez bayraklarını tamamlayın\n\nOturum çerezlerine `Secure` (yalnız HTTPS), `HttpOnly` (JS erişimini engeller) ve uygun `SameSite` ekleyin:\n\n', '### Cookie-Flags vervollständigen\n\nErgänzen Sie bei Sitzungscookies `Secure` (nur HTTPS), `HttpOnly` (verhindert JS-Zugriff) und ein passendes `SameSite`:\n\n') +
+    parts.push(t('### Çerez bayraklarını tamamlayın\n\nOturum çerezlerine `Secure` (yalnız HTTPS), `HttpOnly` (JS erişimini engeller) ve uygun `SameSite` ekleyin:\n\n', '### Cookie-Flags vervollständigen\n\nErgänzen Sie bei Sitzungscookies `Secure` (nur HTTPS), `HttpOnly` (verhindert JS-Zugriff) und ein passendes `SameSite`:\n\n', '### Complete the cookie flags\n\nAdd `Secure` (HTTPS only), `HttpOnly` (blocks JS access) and an appropriate `SameSite` to session cookies:\n\n') +
       '```\nSet-Cookie: session=...; Secure; HttpOnly; SameSite=Lax; Path=/\n```\n\n' +
-      t('Çapraz-site gönderim gerekiyorsa `SameSite=None` kullanın ama mutlaka `Secure` ile birlikte.', 'Wenn seitenübergreifender Versand erforderlich ist, verwenden Sie `SameSite=None`, aber stets zusammen mit `Secure`.'));
+      t('Çapraz-site gönderim gerekiyorsa `SameSite=None` kullanın ama mutlaka `Secure` ile birlikte.', 'Wenn seitenübergreifender Versand erforderlich ist, verwenden Sie `SameSite=None`, aber stets zusammen mit `Secure`.', 'If cross-site sending is required, use `SameSite=None`, but always together with `Secure`.'));
   }
-  if (parts.length === 1) parts.push(t('CORS ve çerez yapılandırmanız güvenli varsayılanlara yakın. Yeni uç noktalar eklerken origin allowlist ve çerez bayrakları (Secure/HttpOnly/SameSite) prensibini koruyun.', 'Ihre CORS- und Cookie-Konfiguration ist nahe an sicheren Voreinstellungen. Behalten Sie beim Hinzufügen neuer Endpunkte das Prinzip der Origin-Allowlist und der Cookie-Flags (Secure/HttpOnly/SameSite) bei.'));
+  if (parts.length === 1) parts.push(t('CORS ve çerez yapılandırmanız güvenli varsayılanlara yakın. Yeni uç noktalar eklerken origin allowlist ve çerez bayrakları (Secure/HttpOnly/SameSite) prensibini koruyun.', 'Ihre CORS- und Cookie-Konfiguration ist nahe an sicheren Voreinstellungen. Behalten Sie beim Hinzufügen neuer Endpunkte das Prinzip der Origin-Allowlist und der Cookie-Flags (Secure/HttpOnly/SameSite) bei.', 'Your CORS and cookie configuration is close to secure defaults. When adding new endpoints, keep the origin-allowlist and cookie-flag (Secure/HttpOnly/SameSite) principle.'));
   return parts.join('\n\n');
 }
 
 function buildCspFix(host: string, o: { present: boolean; weak: boolean }, locale: string = 'tr'): string {
   const de = locale === 'de';
   const t = (trS: string, deS: string, enS?: string) => (locale === 'de' ? deS : locale === 'en' ? (enS ?? trS) : trS);
-  const parts: string[] = [t(`Aşağıdaki öneriler ${host} için Content-Security-Policy’yi güçlendirir. CSP’yi önce \`Content-Security-Policy-Report-Only\` başlığıyla test edip, siteyi bozmadığından emin olduktan sonra uygulanan (enforce) başlığa geçin.`, `Die folgenden Empfehlungen stärken die Content-Security-Policy für ${host}. Testen Sie die CSP zunächst mit dem Header \`Content-Security-Policy-Report-Only\` und wechseln Sie erst dann zum durchgesetzten (enforce) Header, wenn Sie sicher sind, dass die Website nicht beeinträchtigt wird.`)];
-  parts.push(t('### Temel (başlangıç) CSP\n\nKendi üçüncü taraf alan adlarınızı (analytics, CDN, font) `script-src`/`connect-src`/`img-src`’ye ekleyerek genişletin:\n\n', '### Basis-CSP (Einstieg)\n\nErweitern Sie sie, indem Sie Ihre eigenen Drittanbieter-Domains (Analytics, CDN, Schriftarten) zu `script-src`/`connect-src`/`img-src` hinzufügen:\n\n') +
+  const parts: string[] = [t(`Aşağıdaki öneriler ${host} için Content-Security-Policy’yi güçlendirir. CSP’yi önce \`Content-Security-Policy-Report-Only\` başlığıyla test edip, siteyi bozmadığından emin olduktan sonra uygulanan (enforce) başlığa geçin.`, `Die folgenden Empfehlungen stärken die Content-Security-Policy für ${host}. Testen Sie die CSP zunächst mit dem Header \`Content-Security-Policy-Report-Only\` und wechseln Sie erst dann zum durchgesetzten (enforce) Header, wenn Sie sicher sind, dass die Website nicht beeinträchtigt wird.`, `The following recommendations strengthen the Content-Security-Policy for ${host}. Test the CSP first with the \`Content-Security-Policy-Report-Only\` header, and only switch to the enforced header once you are sure the site is not broken.`)];
+  parts.push(t('### Temel (başlangıç) CSP\n\nKendi üçüncü taraf alan adlarınızı (analytics, CDN, font) `script-src`/`connect-src`/`img-src`’ye ekleyerek genişletin:\n\n', '### Basis-CSP (Einstieg)\n\nErweitern Sie sie, indem Sie Ihre eigenen Drittanbieter-Domains (Analytics, CDN, Schriftarten) zu `script-src`/`connect-src`/`img-src` hinzufügen:\n\n', '### Baseline (starter) CSP\n\nExtend it by adding your own third-party domains (analytics, CDN, fonts) to `script-src`/`connect-src`/`img-src`:\n\n') +
     platformHeaderBlock([{ name: 'Content-Security-Policy', value: "default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'" }], locale));
   if (o.weak) {
-    parts.push(t("### Zayıflatıcı direktifleri kaldırın\n\n`'unsafe-inline'` ve `'unsafe-eval'` XSS korumasını büyük ölçüde etkisizleştirir. Inline script’leri harici dosyalara taşıyın veya **nonce/hash** kullanın:\n\n```\nscript-src 'self' 'nonce-<rastgele-üretilen>';\n```\n\nWildcard (`*`) kaynakları yerine spesifik alan adları tanımlayın.", "### Schwächende Direktiven entfernen\n\n`'unsafe-inline'` und `'unsafe-eval'` machen den XSS-Schutz weitgehend wirkungslos. Verlagern Sie Inline-Skripte in externe Dateien oder verwenden Sie **Nonce/Hash**:\n\n```\nscript-src 'self' 'nonce-<zufällig-generiert>';\n```\n\nDefinieren Sie spezifische Domains statt Wildcard-Quellen (`*`)."));
+    parts.push(t("### Zayıflatıcı direktifleri kaldırın\n\n`'unsafe-inline'` ve `'unsafe-eval'` XSS korumasını büyük ölçüde etkisizleştirir. Inline script’leri harici dosyalara taşıyın veya **nonce/hash** kullanın:\n\n```\nscript-src 'self' 'nonce-<rastgele-üretilen>';\n```\n\nWildcard (`*`) kaynakları yerine spesifik alan adları tanımlayın.", "### Schwächende Direktiven entfernen\n\n`'unsafe-inline'` und `'unsafe-eval'` machen den XSS-Schutz weitgehend wirkungslos. Verlagern Sie Inline-Skripte in externe Dateien oder verwenden Sie **Nonce/Hash**:\n\n```\nscript-src 'self' 'nonce-<zufällig-generiert>';\n```\n\nDefinieren Sie spezifische Domains statt Wildcard-Quellen (`*`).", "### Remove weakening directives\n\n`'unsafe-inline'` and `'unsafe-eval'` largely neutralise XSS protection. Move inline scripts to external files or use a **nonce/hash**:\n\n```\nscript-src 'self' 'nonce-<randomly-generated>';\n```\n\nDefine specific domains instead of wildcard (`*`) sources."));
   }
-  parts.push(t('### Report-Only ile test\n\n', '### Test mit Report-Only\n\n') + '```\nContent-Security-Policy-Report-Only: default-src \'self\'; report-uri /csp-report\n```\n\n' + t('Raporları izleyip yanlış-pozitifleri giderdikten sonra başlığı `Content-Security-Policy` olarak yayınlayın.', 'Nachdem Sie die Berichte überwacht und Fehlalarme beseitigt haben, veröffentlichen Sie den Header als `Content-Security-Policy`.'));
+  parts.push(t('### Report-Only ile test\n\n', '### Test mit Report-Only\n\n', '### Test with Report-Only\n\n') + '```\nContent-Security-Policy-Report-Only: default-src \'self\'; report-uri /csp-report\n```\n\n' + t('Raporları izleyip yanlış-pozitifleri giderdikten sonra başlığı `Content-Security-Policy` olarak yayınlayın.', 'Nachdem Sie die Berichte überwacht und Fehlalarme beseitigt haben, veröffentlichen Sie den Header als `Content-Security-Policy`.', 'After monitoring the reports and clearing false positives, publish the header as `Content-Security-Policy`.'));
   return parts.join('\n\n');
 }
 
@@ -661,7 +661,15 @@ export async function generateBundleSurfaceReport(host: string, locale: string =
 // Hedefe ulaşılamadığında dürüst "İncelenemedi" raporu (pdf.ts assessBasit nötr amber rozet basar).
 function unscannableSurfaceReport(host: string, locale: string = 'tr'): { findings: string; fixText: string } {
   const de = locale === 'de';
-  const findings = de
+  const en = locale === 'en';
+  const findings = en
+    ? `## EXECUTIVE SUMMARY\n\n` +
+      `- **Overall risk level: Not assessable** — the external-surface scan could not be carried out because no connection to the target (${host}) could be established.\n` +
+      `- This result does NOT mean the website is SECURE; it only shows that the checks could not be run.\n` +
+      `- **Recommended first step:** Confirm that the domain is live and reachable from the outside, then repeat the scan.\n\n` +
+      `## OVERALL ASSESSMENT\n\n**Risk Level: Not assessable**\n\n` +
+      `No connection could be established to the target's ports 443 (HTTPS) and 80 (HTTP). None of the 5 external-surface areas (TLS, security headers, DNS/email, CORS/cookie, CSP) could collect data. This report is NOT a "clean/secure" result; it should be re-scanned once access is possible.\n`
+    : de
     ? `## MANAGEMENTZUSAMMENFASSUNG\n\n` +
       `- **Gesamtrisikostufe: Nicht prüfbar** — die Prüfung der externen Angriffsfläche konnte nicht durchgeführt werden, da keine Verbindung zum Ziel (${host}) hergestellt werden konnte.\n` +
       `- Dieses Ergebnis bedeutet NICHT, dass die Website SICHER ist; es zeigt lediglich, dass die Kontrollen nicht ausgeführt werden konnten.\n` +
@@ -715,43 +723,43 @@ export function combineSurfaceAreas(
   const summary: string[] = [];
   summary.push(
     worst === 'low'
-      ? t(`- **Genel risk seviyesi: Düşük** — dış yüzey yapılandırmanız 5 alanda incelendi; belirgin bir sorun öne çıkmadı.`, `- **Gesamtrisikostufe: Niedrig** — Ihre externe Angriffsfläche wurde in 5 Bereichen geprüft; es wurde kein deutliches Problem festgestellt.`)
-      : t(`- **Genel risk seviyesi: ${RW[worst]}** — 5 alan incelendi; en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`, `- **Gesamtrisikostufe: ${RW[worst]}** — 5 Bereiche wurden geprüft; das höchste Risiko liegt im Bereich **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}.`),
+      ? t(`- **Genel risk seviyesi: Düşük** — dış yüzey yapılandırmanız 5 alanda incelendi; belirgin bir sorun öne çıkmadı.`, `- **Gesamtrisikostufe: Niedrig** — Ihre externe Angriffsfläche wurde in 5 Bereichen geprüft; es wurde kein deutliches Problem festgestellt.`, `- **Overall risk level: Low** — your external surface configuration was examined across 5 areas; no significant issue stood out.`)
+      : t(`- **Genel risk seviyesi: ${RW[worst]}** — 5 alan incelendi; en yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`, `- **Gesamtrisikostufe: ${RW[worst]}** — 5 Bereiche wurden geprüft; das höchste Risiko liegt im Bereich **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}.`, `- **Overall risk level: ${RW[worst]}** — 5 areas were examined; the highest risk is in the **${worstTitle}** area${worstHl ? ` (${worstHl})` : ''}.`),
   );
-  if (httpOnly) summary.push(t('- ⚠️ **HTTPS desteklenmiyor:** Hedef HTTPS (443) üzerinden yanıt vermedi; iletişim şifresiz (düz metin) taşınıyor. Tarama http:// üzerinden yürütüldü. Bu başlı başına ciddi bir bulgudur (aşağıda).', '- ⚠️ **HTTPS wird nicht unterstützt:** Das Ziel hat nicht über HTTPS (443) geantwortet; die Kommunikation läuft unverschlüsselt (Klartext). Die Prüfung wurde über http:// durchgeführt. Das ist für sich genommen ein ernster Befund (siehe unten).'));
+  if (httpOnly) summary.push(t('- ⚠️ **HTTPS desteklenmiyor:** Hedef HTTPS (443) üzerinden yanıt vermedi; iletişim şifresiz (düz metin) taşınıyor. Tarama http:// üzerinden yürütüldü. Bu başlı başına ciddi bir bulgudur (aşağıda).', '- ⚠️ **HTTPS wird nicht unterstützt:** Das Ziel hat nicht über HTTPS (443) geantwortet; die Kommunikation läuft unverschlüsselt (Klartext). Die Prüfung wurde über http:// durchgeführt. Das ist für sich genommen ein ernster Befund (siehe unten).', '- ⚠️ **HTTPS is not supported:** The target did not respond over HTTPS (443); communication is carried in plaintext. The scan was run over http://. This is a serious finding in itself (below).'));
   BUNDLE_AREAS.forEach((a, i) => {
     const r = results[i];
     const lv = levels[i];
     const title = areaTitle(i, locale);
     // (c durumu) "veri toplanamadı" DÜRÜSTÇE ayrı: bu "temiz" DEĞİL, o alan İNCELENEMEDİ demektir.
-    if (!r || !lv) { summary.push(t(`- **${title}:** ⚠️ incelenemedi (bağlantı/sorgu başarısız) — "temiz" anlamına gelmez.`, `- **${title}:** ⚠️ nicht prüfbar (Verbindung/Abfrage fehlgeschlagen) — bedeutet nicht „sauber".`)); return; }
+    if (!r || !lv) { summary.push(t(`- **${title}:** ⚠️ incelenemedi (bağlantı/sorgu başarısız) — "temiz" anlamına gelmez.`, `- **${title}:** ⚠️ nicht prüfbar (Verbindung/Abfrage fehlgeschlagen) — bedeutet nicht „sauber".`, `- **${title}:** ⚠️ not assessable (connection/query failed) — does not mean "clean".`)); return; }
     const hl = areaHeadline(r.findings);
     summary.push(`- **${title}:** ${RW[lv]}${hl ? ` — ${hl}` : ''}`);
   });
-  if (partial) summary.push(t(`- ⚠️ **Kısmi tarama:** ${nullCount}/5 alan incelenemedi; sonuç eksiktir, tam güvence vermez.`, `- ⚠️ **Teilweise Prüfung:** ${nullCount}/5 Bereiche konnten nicht geprüft werden; das Ergebnis ist unvollständig und bietet keine vollständige Zusicherung.`));
-  summary.push(t('- **Önerilen ilk adım:** En yüksek riskli alandan başlayın; her bulgu için adım adım hazır komutlar "AI Çözüm Önerileri" bölümünde sunulur.', '- **Empfohlener erster Schritt:** Beginnen Sie mit dem Bereich mit dem höchsten Risiko; für jeden Befund werden schrittweise fertige Befehle im Abschnitt „KI-Lösungsvorschläge" bereitgestellt.'));
+  if (partial) summary.push(t(`- ⚠️ **Kısmi tarama:** ${nullCount}/5 alan incelenemedi; sonuç eksiktir, tam güvence vermez.`, `- ⚠️ **Teilweise Prüfung:** ${nullCount}/5 Bereiche konnten nicht geprüft werden; das Ergebnis ist unvollständig und bietet keine vollständige Zusicherung.`, `- ⚠️ **Partial scan:** ${nullCount}/5 areas could not be assessed; the result is incomplete and does not give full assurance.`));
+  summary.push(t('- **Önerilen ilk adım:** En yüksek riskli alandan başlayın; her bulgu için adım adım hazır komutlar "AI Çözüm Önerileri" bölümünde sunulur.', '- **Empfohlener erster Schritt:** Beginnen Sie mit dem Bereich mit dem höchsten Risiko; für jeden Befund werden schrittweise fertige Befehle im Abschnitt „KI-Lösungsvorschläge" bereitgestellt.', '- **Recommended first step:** Start with the highest-risk area; for each finding, ready-made step-by-step commands are provided in the "AI Fix Suggestions" section.'));
 
   // GENEL DEĞERLENDİRME cumlesi worst-case ALANA ozgu (pdf.ts bunu ust kutuda da kullanir).
   const genelSentence =
     worst === 'high'
-        ? t(`En yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`, `Das höchste Risiko wurde im Bereich **${worstTitle}**${worstHl ? ` (${worstHl})` : ''} festgestellt; eine vorrangige Behebung wird empfohlen. Nachfolgend wird jeder Bereich einzeln berichtet.`)
+        ? t(`En yüksek risk **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''} tespit edildi; öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`, `Das höchste Risiko wurde im Bereich **${worstTitle}**${worstHl ? ` (${worstHl})` : ''} festgestellt; eine vorrangige Behebung wird empfohlen. Nachfolgend wird jeder Bereich einzeln berichtet.`, `The highest risk was detected in the **${worstTitle}** area${worstHl ? ` (${worstHl})` : ''}; priority remediation is recommended. Each area is reported separately below.`)
         : worst === 'medium-high'
-          ? t(`Öne çıkan alan **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; tek başına yüksek etkili ancak başka ciddi alan yok. Öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`, `Der hervorstechende Bereich ist **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; für sich genommen hochwirksam, aber kein weiterer ernster Bereich. Eine vorrangige Behebung wird empfohlen. Nachfolgend wird jeder Bereich einzeln berichtet.`)
+          ? t(`Öne çıkan alan **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; tek başına yüksek etkili ancak başka ciddi alan yok. Öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.`, `Der hervorstechende Bereich ist **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; für sich genommen hochwirksam, aber kein weiterer ernster Bereich. Eine vorrangige Behebung wird empfohlen. Nachfolgend wird jeder Bereich einzeln berichtet.`, `The standout area is **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; high-impact on its own but no other serious area. Priority remediation is recommended. Each area is reported separately below.`)
           : worst === 'medium'
-            ? t(`Öne çıkan alan **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; kısa vadede giderilmesi önerilir. Kritik/acil bir sorun öne çıkmadı. Aşağıda her alan ayrı ayrı raporlanmıştır.`, `Der hervorstechende Bereich ist **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; eine kurzfristige Behebung wird empfohlen. Kein kritisches/dringendes Problem festgestellt. Nachfolgend wird jeder Bereich einzeln berichtet.`)
-            : t('Dış yüzey yapılandırmanız genel olarak sağlam; rapor yalnızca küçük iyileştirme fırsatlarını listeler. Aşağıda her alan ayrı ayrı raporlanmıştır.', 'Ihre externe Angriffsfläche ist insgesamt solide konfiguriert; der Bericht listet nur kleine Verbesserungsmöglichkeiten auf. Nachfolgend wird jeder Bereich einzeln berichtet.');
+            ? t(`Öne çıkan alan **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; kısa vadede giderilmesi önerilir. Kritik/acil bir sorun öne çıkmadı. Aşağıda her alan ayrı ayrı raporlanmıştır.`, `Der hervorstechende Bereich ist **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; eine kurzfristige Behebung wird empfohlen. Kein kritisches/dringendes Problem festgestellt. Nachfolgend wird jeder Bereich einzeln berichtet.`, `The standout area is **${worstTitle}**${worstHl ? ` (${worstHl})` : ''}; short-term remediation is recommended. No critical/urgent issue stood out. Each area is reported separately below.`)
+            : t('Dış yüzey yapılandırmanız genel olarak sağlam; rapor yalnızca küçük iyileştirme fırsatlarını listeler. Aşağıda her alan ayrı ayrı raporlanmıştır.', 'Ihre externe Angriffsfläche ist insgesamt solide konfiguriert; der Bericht listet nur kleine Verbesserungsmöglichkeiten auf. Nachfolgend wird jeder Bereich einzeln berichtet.', 'Your external surface configuration is generally sound; the report lists only minor improvement opportunities. Each area is reported separately below.');
 
   // --- Alan bolumleri (exec/genel cikarilmis, ## -> ### indirilmis) ---
   const areaSections = BUNDLE_AREAS.map((a, i) => {
     const r = results[i];
     const title = areaTitle(i, locale);
-    if (!r) return `## ${title}\n\n> ${t('Bu alan için veri toplanamadı (bağlantı/sorgu başarısız); diğer alanlar tam olarak raporlanmıştır.', 'Für diesen Bereich konnten keine Daten erhoben werden (Verbindung/Abfrage fehlgeschlagen); die übrigen Bereiche wurden vollständig berichtet.')}\n`;
+    if (!r) return `## ${title}\n\n> ${t('Bu alan için veri toplanamadı (bağlantı/sorgu başarısız); diğer alanlar tam olarak raporlanmıştır.', 'Für diesen Bereich konnten keine Daten erhoben werden (Verbindung/Abfrage fehlgeschlagen); die übrigen Bereiche wurden vollständig berichtet.', 'No data could be collected for this area (connection/query failed); the other areas were reported in full.')}\n`;
     return `## ${title}\n\n${detailOnly(r.findings)}\n`;
   }).join('\n');
 
   // (MASTER TABLO + ZAFİYET DAĞILIMI) https_missing ŞİDDET-KOLONLU tablo -> parseFindings sayar
   const httpsFindingSection = httpOnly
-    ? `## ${t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN')}\n\n| ${t('Bulgu', 'Befund')} | ${t('Şiddet', 'Schweregrad')} | ${t('Açıklama', 'Beschreibung')} |\n|-------|--------|----------|\n| ${t('HTTPS desteklenmiyor (şifresiz iletişim)', 'HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation)')} | ${de ? 'Hoch' : 'Yüksek'} | ${t(`Site HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir, oturum/şifre çalınabilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS.`, `Die Website antwortet nicht über HTTPS; der gesamte Verkehr wird unverschlüsselt (Klartext) übertragen — mitlesbar/veränderbar, Sitzungen/Passwörter können gestohlen werden. Lösung: gültiges TLS-Zertifikat + HTTP→HTTPS-Umleitung + HSTS.`)} |\n\n`
+    ? `## ${t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN', 'IDENTIFIED RISKS')}\n\n| ${t('Bulgu', 'Befund', 'Finding')} | ${t('Şiddet', 'Schweregrad', 'Severity')} | ${t('Açıklama', 'Beschreibung', 'Description')} |\n|-------|--------|----------|\n| ${t('HTTPS desteklenmiyor (şifresiz iletişim)', 'HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation)', 'HTTPS is not supported (unencrypted communication)')} | ${en ? 'High' : de ? 'Hoch' : 'Yüksek'} | ${t(`Site HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir, oturum/şifre çalınabilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS.`, `Die Website antwortet nicht über HTTPS; der gesamte Verkehr wird unverschlüsselt (Klartext) übertragen — mitlesbar/veränderbar, Sitzungen/Passwörter können gestohlen werden. Lösung: gültiges TLS-Zertifikat + HTTP→HTTPS-Umleitung + HSTS.`, `The site does not respond over HTTPS; all traffic is carried in plaintext — it can be intercepted/modified and sessions/passwords stolen. Fix: valid TLS certificate + HTTP→HTTPS redirect + HSTS.`)} |\n\n`
     : '';
 
   // (BÖLÜM 2 — POZİTİF GÜVENCE) "Sorun bulunamadı"yı da ŞEFFAF kıl.
@@ -759,13 +767,21 @@ export function combineSurfaceAreas(
     const r = results[i]; const lv = levels[i];
     const title = areaTitle(i, locale);
     const state = !r || !lv
-      ? t('⚠️ İncelenemedi (veri toplanamadı — “temiz” DEĞİL)', '⚠️ Nicht prüfbar (keine Daten erhebbar — NICHT „sauber")')
+      ? t('⚠️ İncelenemedi (veri toplanamadı — “temiz” DEĞİL)', '⚠️ Nicht prüfbar (keine Daten erhebbar — NICHT „sauber")', '⚠️ Not assessable (no data collected — NOT "clean")')
       : lv === 'low'
-        ? t('✅ Sorun bulunmadı', '✅ Kein Problem gefunden')
-        : t(`⚠️ Bulgu var (${RW[lv]} — yukarıda ayrıntılı)`, `⚠️ Befund vorhanden (${RW[lv]} — oben im Detail)`);
+        ? t('✅ Sorun bulunmadı', '✅ Kein Problem gefunden', '✅ No issue found')
+        : t(`⚠️ Bulgu var (${RW[lv]} — yukarıda ayrıntılı)`, `⚠️ Befund vorhanden (${RW[lv]} — oben im Detail)`, `⚠️ Finding present (${RW[lv]} — detailed above)`);
     return `| ${title} | ${state} |`;
   }).join('\n');
-  const assuranceSection = de
+  const assuranceSection = en
+    ? `## POSITIVE ASSURANCE — AREAS CHECKED\n\n` +
+      `Including the areas with no finding, the external-surface checks were genuinely run across **${pageCount} unique pages** including the home page. The table below also shows the "no issue found" results transparently:\n\n` +
+      `| Control area | Result |\n|---------------|-------|\n${assuranceRows}\n\n` +
+      `> **Three-state distinction (honesty):** ✅ *No issue found* = the check ran and came back clean · ⚠️ *Finding present* = detailed above · ⚠️ *Not assessable* = no data could be collected (does NOT mean secure).\n\n` +
+      `### What this package DOES and DOES NOT check\n\n` +
+      `**DOES (passive — only page retrieval via GET + harmless Origin/DNS query):** TLS/certificate, HTTP security headers, CORS policy, cookie flags (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS/email records (SPF/DKIM/DMARC/DNSSEC), exposed sensitive files, outdated/unsupported software versions — across the ${pageCount} discovered pages.\n\n` +
+      `**DOES NOT:** Active vulnerability verification (payload/probe attempts such as SQLi/XSS/IDOR), authenticated flow testing, business-logic abuse. These are within the scope of the **Active Verification** and **Full-Scope Pentest** packages. This report relies on passive observation; "no finding" in an area **does NOT PROVE** it is secure, because no active exploit was attempted — it only shows that the externally observed configuration is clean.\n\n`
+    : de
     ? `## POSITIVE ZUSICHERUNG — GEPRÜFTE BEREICHE\n\n` +
       `Auch die Bereiche ohne Befund eingeschlossen, wurden die Kontrollen der externen Angriffsfläche tatsächlich auf **${pageCount} einzigartigen Seiten** einschließlich der Startseite ausgeführt. Die folgende Tabelle zeigt auch die „kein Problem gefunden"-Ergebnisse transparent:\n\n` +
       `| Kontrollbereich | Ergebnis |\n|---------------|-------|\n${assuranceRows}\n\n` +
@@ -782,8 +798,8 @@ export function combineSurfaceAreas(
       `**ETMEZ:** Aktif zafiyet doğrulaması (SQLi/XSS/IDOR gibi payload/prob denemesi), kimlik-doğrulamalı akış testi, iş-mantığı istismarı. Bunlar **Aktif Doğrulama** ve **Tam Kapsamlı Pentest** paketlerinin kapsamındadır. Bu rapor pasif gözleme dayanır; bir alanda "bulgu yok" ifadesi, aktif istismar denenmediği için **güvenli olduğunu KANITLAMAZ** — yalnız dışarıdan gözlemlenen yapılandırmanın temiz olduğunu gösterir.\n\n`;
 
   const findings =
-    `## ${t('YÖNETİCİ ÖZETİ', 'MANAGEMENTZUSAMMENFASSUNG')}\n\n${summary.join('\n')}\n\n` +
-    `## ${t('GENEL DEĞERLENDİRME', 'GESAMTBEWERTUNG')}\n\n**${t('Risk Seviyesi', 'Risikostufe')}: ${RW[worst]}**\n\n${httpOnly ? t('Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz (düz metin) taşınıyor — öncelikli olarak geçerli bir TLS sertifikasıyla HTTPS’e geçilmelidir. Diğer alanlar http:// üzerinden incelenmiştir. ', 'Dieses Ziel antwortet nicht über HTTPS; die Kommunikation läuft unverschlüsselt (Klartext) — vorrangig sollte mit einem gültigen TLS-Zertifikat auf HTTPS umgestellt werden. Die übrigen Bereiche wurden über http:// geprüft. ') : ''}${genelSentence}\n\n` +
+    `## ${t('YÖNETİCİ ÖZETİ', 'MANAGEMENTZUSAMMENFASSUNG', 'EXECUTIVE SUMMARY')}\n\n${summary.join('\n')}\n\n` +
+    `## ${t('GENEL DEĞERLENDİRME', 'GESAMTBEWERTUNG', 'OVERALL ASSESSMENT')}\n\n**${t('Risk Seviyesi', 'Risikostufe', 'Risk Level')}: ${RW[worst]}**\n\n${httpOnly ? t('Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz (düz metin) taşınıyor — öncelikli olarak geçerli bir TLS sertifikasıyla HTTPS’e geçilmelidir. Diğer alanlar http:// üzerinden incelenmiştir. ', 'Dieses Ziel antwortet nicht über HTTPS; die Kommunikation läuft unverschlüsselt (Klartext) — vorrangig sollte mit einem gültigen TLS-Zertifikat auf HTTPS umgestellt werden. Die übrigen Bereiche wurden über http:// geprüft. ', 'This target does not respond over HTTPS; communication is carried in plaintext — the priority is to move to HTTPS with a valid TLS certificate. The other areas were examined over http://. ') : ''}${genelSentence}\n\n` +
     `${httpsFindingSection}${areaSections}\n${assuranceSection}`;
 
   // --- AI ÇÖZÜM ÖNERİLERİ (5 alan TEK bolumde, alt-basliklarla) ---
@@ -793,7 +809,7 @@ export function combineSurfaceAreas(
     return `### ${areaTitle(i, locale)}\n\n${r.fixText.trim()}`;
   }).filter(Boolean);
   const fixText =
-    t('Bu bölüm, dış yüzey taramanızda tespit edilen tüm eksiklikler için alan alan düzeltme önerileri içerir. Sunucunuza uygun örnekleri (Nginx/Firebase/Apache/DNS) kopyalayın.', 'Dieser Abschnitt enthält bereichsweise Korrekturvorschläge für alle in Ihrer Prüfung der externen Angriffsfläche festgestellten Lücken. Kopieren Sie die für Ihren Server passenden Beispiele (Nginx/Firebase/Apache/DNS).') + '\n\n' +
+    t('Bu bölüm, dış yüzey taramanızda tespit edilen tüm eksiklikler için alan alan düzeltme önerileri içerir. Sunucunuza uygun örnekleri (Nginx/Firebase/Apache/DNS) kopyalayın.', 'Dieser Abschnitt enthält bereichsweise Korrekturvorschläge für alle in Ihrer Prüfung der externen Angriffsfläche festgestellten Lücken. Kopieren Sie die für Ihren Server passenden Beispiele (Nginx/Firebase/Apache/DNS).', 'This section contains area-by-area remediation suggestions for all the gaps detected in your external-surface scan. Copy the examples that suit your server (Nginx/Firebase/Apache/DNS).') + '\n\n' +
     fixParts.join('\n\n');
 
   return { findings, fixText };

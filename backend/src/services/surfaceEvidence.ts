@@ -450,13 +450,13 @@ async function safeGetForExpose(url: string): Promise<{ ok: boolean; status: num
   }
 }
 
-export async function collectExposedFiles(host: string, homepageHtml: string, de: boolean = false): Promise<ExposedFileResult[]> {
+export async function collectExposedFiles(host: string, homepageHtml: string, locale: string = 'tr'): Promise<ExposedFileResult[]> {
   const out: ExposedFileResult[] = [];
   const o = await resolveOrigin(host);
   if (!o.reachable) return out; // hedefe ulaşılamadı -> "kontrol yapılamadı" (boş; ASLA "hepsi kapalı/temiz" değil)
   for (const path of EXPOSED_CANDIDATES) {
     const fetched = await safeGetForExpose(`${o.origin}${path}`);
-    const { verdict, reason } = classifyExposedFile(path, fetched, homepageHtml, de);
+    const { verdict, reason } = classifyExposedFile(path, fetched, homepageHtml, locale);
     out.push({ path, exposed: verdict === 'exposed', reason });
   }
   return out;
