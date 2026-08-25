@@ -56,22 +56,23 @@ export function findCloudBuckets(text: string): string[] {
   for (const m of text.matchAll(/https?:\/\/([a-z0-9.-]+\.s3[.-][a-z0-9-]*\.?amazonaws\.com|s3\.amazonaws\.com\/[a-z0-9._-]+|storage\.googleapis\.com\/[a-z0-9._-]+|[a-z0-9-]+\.storage\.googleapis\.com|[a-z0-9]+\.blob\.core\.windows\.net)/gi)) out.add(m[0]);
   return [...out].slice(0, 6);
 }
-export function scanCommentLeak(text: string, where: string): VFinding[] {
+export function scanCommentLeak(text: string, where: string, locale: string = 'tr'): VFinding[] {
+  const en = locale === 'en';
   const findings: VFinding[] = [];
   const comments = [...text.matchAll(/<!--([\s\S]*?)-->/g)].map((m) => m[1]).join('\n');
   const hay = comments + '\n' + text;
   const hits: string[] = [];
-  if (/\b(todo|fixme|hack|debug|xxx|bug)\b[:\- ]/i.test(comments)) hits.push('dev yorumu (TODO/FIXME/DEBUG)');
+  if (/\b(todo|fixme|hack|debug|xxx|bug)\b[:\- ]/i.test(comments)) hits.push(en ? 'dev comment (TODO/FIXME/DEBUG)' : 'dev yorumu (TODO/FIXME/DEBUG)');
   const privIp = hay.match(/\b(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b/);
-  if (privIp) hits.push(`iç IP (${privIp[0]})`);
+  if (privIp) hits.push(en ? `internal IP (${privIp[0]})` : `iç IP (${privIp[0]})`);
   const intHost = hay.match(/\b[a-z0-9-]+\.(?:internal|local|corp|intranet|lan)\b/i);
-  if (intHost) hits.push(`iç hostname (${intHost[0]})`);
+  if (intHost) hits.push(en ? `internal hostname (${intHost[0]})` : `iç hostname (${intHost[0]})`);
   const path = hay.match(/(?:\/(?:var|home|usr|opt|etc)\/[\w./-]+|[A-Z]:\\[\w\\.-]+)/);
-  if (path) hits.push(`sunucu dosya yolu (${(path[0] || '').slice(0, 40)})`);
+  if (path) hits.push(en ? `server file path (${(path[0] || '').slice(0, 40)})` : `sunucu dosya yolu (${(path[0] || '').slice(0, 40)})`);
   if (hits.length) findings.push({
     check: 'comment_metadata_leak', inputPoint: where, vulnerable: true,
-    technique: 'HTML/JS yorum & metadata sızıntısı (statik)',
-    evidence: `\`${where}\` içinde geliştirici/iç bilgi sızıntısı göstergesi: ${hits.join(', ')} — üretimde kaldırılmalı (iç altyapı/yorum ifşası saldırgana yol gösterir; değerler kısaltıldı).`,
+    technique: (en ? 'HTML/JS comment & metadata leak (static)' : 'HTML/JS yorum & metadata sızıntısı (statik)'),
+    evidence: (en ? `An indicator of developer/internal-information leakage inside \`${where}\`: ${hits.join(', ')} — should be removed in production (internal-infrastructure/comment exposure guides an attacker; values truncated).` : `\`${where}\` içinde geliştirici/iç bilgi sızıntısı göstergesi: ${hits.join(', ')} — üretimde kaldırılmalı (iç altyapı/yorum ifşası saldırgana yol gösterir; değerler kısaltıldı).`),
     confidence: 'medium', severity: 'low', sideEffectRisk: 'none',
   });
   return findings;
@@ -87,15 +88,15 @@ export async function collectInputHeaderEvidence(host: string, session: AuthSess
   const origin = cachedOriginUrl(host);
   const pageIsHttps = origin.startsWith('https://');
   const corpus = await fetchClientCorpus(host);
-  if (!corpus.reachable) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: [t('Ana sayfa çekilemedi — girdi/header derinliği bu hedef için **kapsam dışıdır**.', 'Startseite konnte nicht abgerufen werden — die Eingabe-/Header-Tiefenprüfung ist für dieses Ziel **außerhalb des Geltungsbereichs**.')] };
+  if (!corpus.reachable) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: [t('Ana sayfa çekilemedi — girdi/header derinliği bu hedef için **kapsam dışıdır**.', 'Startseite konnte nicht abgerufen werden — die Eingabe-/Header-Tiefenprüfung ist für dieses Ziel **außerhalb des Geltungsbereichs**.', 'The home page could not be fetched — the input/header depth check is **out of scope** for this target.')] };
   let probes = 1;
 
   // D4) MIXED CONTENT (statik)
   const mixed = detectMixedContent(corpus.homeHtml, pageIsHttps);
   for (const u of mixed) findings.push({
     check: 'mixed_content', inputPoint: u.slice(0, 100), vulnerable: true,
-    technique: 'HTTPS sayfada HTTP kaynak yüklenmesi (mixed content) — statik',
-    evidence: `HTTPS sayfa, **HTTP** üzerinden bir kaynak yüklüyor (\`${u.slice(0, 80)}\`) — aktif mixed content ise ortadaki-adam içerik enjekte edebilir; tarayıcı da engelleyebilir. Tüm kaynaklar HTTPS olmalı.`,
+    technique: (en ? 'loading an HTTP resource on an HTTPS page (mixed content) — static' : 'HTTPS sayfada HTTP kaynak yüklenmesi (mixed content) — statik'),
+    evidence: (en ? `The HTTPS page loads a resource over **HTTP** (\`${u.slice(0, 80)}\`) — if it is active mixed content, a man-in-the-middle could inject content; the browser may also block it. All resources should be HTTPS.` : `HTTPS sayfa, **HTTP** üzerinden bir kaynak yüklüyor (\`${u.slice(0, 80)}\`) — aktif mixed content ise ortadaki-adam içerik enjekte edebilir; tarayıcı da engelleyebilir. Tüm kaynaklar HTTPS olmalı.`),
     confidence: 'high', severity: /\.(js)(\?|$)|<script|<iframe/i.test(u) ? 'medium' : 'low', sideEffectRisk: 'none',
   });
 
@@ -105,8 +106,8 @@ export async function collectInputHeaderEvidence(host: string, session: AuthSess
     const loc = hi.headers.get('location') ?? '';
     if (hi.text.includes(HOST_PROBE) || loc.includes(HOST_PROBE)) findings.push({
       check: 'host_header_injection', inputPoint: '/', vulnerable: true,
-      technique: 'Host / X-Forwarded-Host yansıması gözlemi — gösterge',
-      evidence: `Gönderilen sahte \`X-Forwarded-Host: ${HOST_PROBE}\` değeri yanıtta (${loc.includes(HOST_PROBE) ? 'Location/yönlendirme' : 'gövde/mutlak link'}) yansıdı — Host header injection göstergesi (parola-sıfırlama zehirlemesi/cache poisoning'e yol açabilir). Gösterge; gerçek istismar YAPILMADI. Host değerini allowlist ile sabitleyin.`,
+      technique: (en ? 'Host / X-Forwarded-Host reflection observation — indicator' : 'Host / X-Forwarded-Host yansıması gözlemi — gösterge'),
+      evidence: (en ? `The spoofed \`X-Forwarded-Host: ${HOST_PROBE}\` value sent was reflected in the response (${loc.includes(HOST_PROBE) ? 'Location/redirect' : 'body/absolute link'}) — a Host header injection indicator (can lead to password-reset poisoning/cache poisoning). An indicator; no real exploitation was performed. Pin the Host value with an allowlist.` : `Gönderilen sahte \`X-Forwarded-Host: ${HOST_PROBE}\` değeri yanıtta (${loc.includes(HOST_PROBE) ? 'Location/yönlendirme' : 'gövde/mutlak link'}) yansıdı — Host header injection göstergesi (parola-sıfırlama zehirlemesi/cache poisoning'e yol açabilir). Gösterge; gerçek istismar YAPILMADI. Host değerini allowlist ile sabitleyin.`),
       confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
     });
   }
@@ -115,15 +116,15 @@ export async function collectInputHeaderEvidence(host: string, session: AuthSess
   const optRes = await probe(`${origin}/`, { method: 'OPTIONS', label: 'D3 OPTIONS method keşfi' }); probes++;
   const allow = optRes?.headers.get('allow') ?? '';
   if (/TRACE/i.test(allow)) {
-    findings.push({ check: 'dangerous_http_method', inputPoint: 'OPTIONS Allow', vulnerable: true, technique: 'HTTP method keşfi (OPTIONS Allow)', evidence: `Sunucu \`Allow: ${allow}\` ile **TRACE** metodunu listeliyor — Cross-Site Tracing (XST) riski. TRACE kapatılmalı.`, confidence: 'high', severity: 'medium', sideEffectRisk: 'none' });
+    findings.push({ check: 'dangerous_http_method', inputPoint: 'OPTIONS Allow', vulnerable: true, technique: (en ? 'HTTP method discovery (OPTIONS Allow)' : 'HTTP method keşfi (OPTIONS Allow)'), evidence: (en ? `The server lists the **TRACE** method via \`Allow: ${allow}\` — Cross-Site Tracing (XST) risk. TRACE should be disabled.` : `Sunucu \`Allow: ${allow}\` ile **TRACE** metodunu listeliyor — Cross-Site Tracing (XST) riski. TRACE kapatılmalı.`), confidence: 'high', severity: 'medium', sideEffectRisk: 'none' });
   } else {
     // TRACE gözlemi (read-only; state değişmez)
     const tr = await probe(`${origin}/`, { method: 'TRACE', label: 'D3 TRACE gözlemi' }).catch(() => null); probes++;
     if (tr && tr.status === 200 && /TRACE\s+\/|x-forwarded|user-agent/i.test(tr.text.slice(0, 300))) findings.push({
-      check: 'dangerous_http_method', inputPoint: 'TRACE', vulnerable: true, technique: 'TRACE metodu gözlemi', evidence: 'Sunucu **TRACE** metoduna 200 + istek yankısı döndürüyor — Cross-Site Tracing (XST) göstergesi. TRACE kapatılmalı.', confidence: 'high', severity: 'medium', sideEffectRisk: 'none',
+      check: 'dangerous_http_method', inputPoint: 'TRACE', vulnerable: true, technique: (en ? 'TRACE method observation' : 'TRACE metodu gözlemi'), evidence: (en ? 'The server returns 200 + request echo for the **TRACE** method — a Cross-Site Tracing (XST) indicator. TRACE should be disabled.' : 'Sunucu **TRACE** metoduna 200 + istek yankısı döndürüyor — Cross-Site Tracing (XST) göstergesi. TRACE kapatılmalı.'), confidence: 'high', severity: 'medium', sideEffectRisk: 'none',
     });
   }
-  if (allow && /\b(PUT|DELETE|PATCH)\b/i.test(allow)) notes.push(t(`OPTIONS Allow durum-değiştiren method(lar) listeliyor (${allow}) — REST API'lerde olağan olabilir; yetkilendirme sunucuda zorunlu kılınmalı (bilgilendirici; PUT/DELETE GÖNDERİLMEDİ).`, `OPTIONS Allow listet zustandsändernde Methode(n) auf (${allow}) — bei REST-APIs kann dies üblich sein; die Autorisierung muss serverseitig erzwungen werden (informativ; PUT/DELETE NICHT GESENDET).`));
+  if (allow && /\b(PUT|DELETE|PATCH)\b/i.test(allow)) notes.push(t(`OPTIONS Allow durum-değiştiren method(lar) listeliyor (${allow}) — REST API'lerde olağan olabilir; yetkilendirme sunucuda zorunlu kılınmalı (bilgilendirici; PUT/DELETE GÖNDERİLMEDİ).`, `OPTIONS Allow listet zustandsändernde Methode(n) auf (${allow}) — bei REST-APIs kann dies üblich sein; die Autorisierung muss serverseitig erzwungen werden (informativ; PUT/DELETE NICHT GESENDET).`, `OPTIONS Allow lists state-changing method(s) (${allow}) — this can be normal for REST APIs; authorization must be enforced server-side (informational; PUT/DELETE NOT SENT).`));
 
   // D2) HTTP PARAMETER POLLUTION — gözlemsel (SPA'da genelde ayırt-edici davranış yok)
   const paramUrl = [...corpus.homeHtml.matchAll(/(?:href|action)\s*=\s*["']([^"']*\?[^"']*=[^"']*)["']/gi)].map((m) => m[1]).find((u) => { try { return new URL(u, `${origin}/`).hostname.toLowerCase() === host.toLowerCase(); } catch { return false; } });
@@ -133,24 +134,24 @@ export async function collectInputHeaderEvidence(host: string, session: AuthSess
       if (p) {
         const a = await probe(`${u.origin}${u.pathname}?${p}=ctA`, { label: 'D2 HPP a' }); probes++;
         const dbl = await probe(`${u.origin}${u.pathname}?${p}=ctA&${p}=ctB`, { label: 'D2 HPP a&b' }); probes++;
-        if (a && dbl && a.status === dbl.status && !isHtmlShell(dbl.text) && md5(a.text) !== md5(dbl.text)) notes.push(t(`HTTP Parameter Pollution gözlemi: \`${p}\` parametresi tekrarlandığında yanıt değişiyor — tutarsız işleme göstergesi (bilgilendirici; gözlemsel).`, `HTTP-Parameter-Pollution-Beobachtung: Bei Wiederholung des Parameters \`${p}\` ändert sich die Antwort — Indikator für inkonsistente Verarbeitung (informativ; beobachtend).`));
-        else notes.push(t('HTTP Parameter Pollution için ayırt-edici davranış gözlemlenmedi (SPA/tek-tip yanıt).', 'Kein unterscheidbares Verhalten für HTTP Parameter Pollution beobachtet (SPA/einheitliche Antwort).'));
+        if (a && dbl && a.status === dbl.status && !isHtmlShell(dbl.text) && md5(a.text) !== md5(dbl.text)) notes.push(t(`HTTP Parameter Pollution gözlemi: \`${p}\` parametresi tekrarlandığında yanıt değişiyor — tutarsız işleme göstergesi (bilgilendirici; gözlemsel).`, `HTTP-Parameter-Pollution-Beobachtung: Bei Wiederholung des Parameters \`${p}\` ändert sich die Antwort — Indikator für inkonsistente Verarbeitung (informativ; beobachtend).`, `HTTP Parameter Pollution observation: when the \`${p}\` parameter is repeated, the response changes — an indicator of inconsistent processing (informational; observational).`));
+        else notes.push(t('HTTP Parameter Pollution için ayırt-edici davranış gözlemlenmedi (SPA/tek-tip yanıt).', 'Kein unterscheidbares Verhalten für HTTP Parameter Pollution beobachtet (SPA/einheitliche Antwort).', 'No distinctive behaviour was observed for HTTP Parameter Pollution (SPA/uniform response).'));
       }
     } catch { /* */ }
-  } else notes.push(t('Parametreli same-origin uç gözlemlenmedi — HPP için test edilebilir yüzey yok.', 'Kein parametrisierter Same-Origin-Endpunkt beobachtet — keine testbare Angriffsfläche für HPP.'));
+  } else notes.push(t('Parametreli same-origin uç gözlemlenmedi — HPP için test edilebilir yüzey yok.', 'Kein parametrisierter Same-Origin-Endpunkt beobachtet — keine testbare Angriffsfläche für HPP.', 'No parameterised same-origin endpoint was observed — no testable surface for HPP.'));
 
   // D5) STORED-XSS GİRİŞ NOKTASI — SADECE ADAY (GÖNDERİM/KAYIT YOK)
   const persistFields = [...corpus.homeHtml.matchAll(/<(?:textarea|input)\b[^>]*\bname\s*=\s*["']([^"']*(?:comment|message|review|feedback|bio|about|description|note|content|post|title|name)[^"']*)["']/gi)].map((m) => m[1]);
   if (persistFields.length) {
     findings.push({
       check: 'stored_xss_candidate', inputPoint: [...new Set(persistFields)].slice(0, 5).join(', '), vulnerable: true,
-      technique: 'stored-XSS ADAY giriş noktası (statik — GÖNDERİM YOK)',
-      evidence: `Kalıcı/paylaşılan bağlama yansıyabilecek giriş alan(lar)ı gözlemlendi (\`${[...new Set(persistFields)].slice(0, 5).join('`, `')}\`) — **stored-XSS için ADAY** giriş noktası. Bu yalnızca bir adaydır; **hiçbir veri gönderilmedi/kaydedilmedi**, dinamik doğrulama gerekir (düşük güven).`,
+      technique: (en ? 'stored-XSS CANDIDATE entry point (static — NO SUBMISSION)' : 'stored-XSS ADAY giriş noktası (statik — GÖNDERİM YOK)'),
+      evidence: (en ? `Input field(s) that could be reflected into a persistent/shared context were observed (\`${[...new Set(persistFields)].slice(0, 5).join('`, `')}\`) — a **CANDIDATE** entry point for stored-XSS. This is only a candidate; **no data was submitted/saved**, dynamic verification is required (low confidence).` : `Kalıcı/paylaşılan bağlama yansıyabilecek giriş alan(lar)ı gözlemlendi (\`${[...new Set(persistFields)].slice(0, 5).join('`, `')}\`) — **stored-XSS için ADAY** giriş noktası. Bu yalnızca bir adaydır; **hiçbir veri gönderilmedi/kaydedilmedi**, dinamik doğrulama gerekir (düşük güven).`),
       confidence: 'low', severity: 'low', sideEffectRisk: 'none',
     });
   }
 
-  notes.push(t(`Denenen: **${probes}** güvenli girdi/header probu (yalnız GET/OPTIONS/TRACE — PUT/DELETE GÖNDERİLMEDİ; stored-XSS yalnız aday, veri OLUŞTURULMADI). Mixed content: ${mixed.length} HTTP kaynak.`, `Durchgeführt: **${probes}** sichere Eingabe-/Header-Proben (nur GET/OPTIONS/TRACE — PUT/DELETE NICHT GESENDET; Stored-XSS nur als Kandidat, keine Daten ERZEUGT). Mixed Content: ${mixed.length} HTTP-Ressourcen.`));
+  notes.push(t(`Denenen: **${probes}** güvenli girdi/header probu (yalnız GET/OPTIONS/TRACE — PUT/DELETE GÖNDERİLMEDİ; stored-XSS yalnız aday, veri OLUŞTURULMADI). Mixed content: ${mixed.length} HTTP kaynak.`, `Durchgeführt: **${probes}** sichere Eingabe-/Header-Proben (nur GET/OPTIONS/TRACE — PUT/DELETE NICHT GESENDET; Stored-XSS nur als Kandidat, keine Daten ERZEUGT). Mixed Content: ${mixed.length} HTTP-Ressourcen.`, `Performed: **${probes}** safe input/header probes (GET/OPTIONS/TRACE only — PUT/DELETE NOT SENT; stored-XSS candidate only, no data CREATED). Mixed content: ${mixed.length} HTTP resources.`));
   return { ok: true, pagesScanned: 1, inputsFound: 1, probesSent: probes, findings, stopped: null, notes };
 }
 
@@ -165,7 +166,7 @@ export async function collectConfigExposureEvidence(host: string, session: AuthS
   const findings: VFinding[] = []; const notes: string[] = [];
   const origin = cachedOriginUrl(host);
   const corpus = await fetchClientCorpus(host);
-  if (!corpus.reachable) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: [t('Ana sayfa çekilemedi — yapılandırma/ifşa derinliği bu hedef için **kapsam dışıdır**.', 'Startseite konnte nicht abgerufen werden — die Konfigurations-/Offenlegungs-Tiefenprüfung ist für dieses Ziel **außerhalb des Geltungsbereichs**.')] };
+  if (!corpus.reachable) return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null, notes: [t('Ana sayfa çekilemedi — yapılandırma/ifşa derinliği bu hedef için **kapsam dışıdır**.', 'Startseite konnte nicht abgerufen werden — die Konfigurations-/Offenlegungs-Tiefenprüfung ist für dieses Ziel **außerhalb des Geltungsbereichs**.', 'The home page could not be fetched — the configuration/exposure depth check is **out of scope** for this target.')] };
   const shellHash = md5(corpus.homeHtml);
   let probes = 1, backupTried = 0, adminTried = 0;
 
@@ -177,7 +178,7 @@ export async function collectConfigExposureEvidence(host: string, session: AuthS
     if (isHtmlShell(r.text)) continue;                  // HTML sayfası -> yedek dosya değil
     const looksReal = /(=|\[core\]|BEGIN|password|secret|api[_-]?key|CREATE TABLE|INSERT INTO|<\?php|\bconst\b|version)/i.test(r.text.slice(0, 500)) || /\.(sql|env|config)/i.test(p);
     if (!looksReal) continue;
-    findings.push({ check: 'backup_file_exposed', inputPoint: p, vulnerable: true, technique: 'erişilebilir yedek/eski/referanssız dosya (güvenli GET)', evidence: `\`${p}\` dışarıdan **erişilebilir** ve ayırt-edici (yedek/config) içerik döndürüyor (200; SPA shell değil) — kaynak kodu/kimlik bilgisi/yapılandırma sızıntısı riski (içerik raporda gösterilmez). Public dizinden kaldırılmalı.`, confidence: 'high', severity: /\.env|\.git|config|\.sql|secret/i.test(p) ? 'high' : 'medium', sideEffectRisk: 'none' });
+    findings.push({ check: 'backup_file_exposed', inputPoint: p, vulnerable: true, technique: (en ? 'accessible backup/old/unreferenced file (safe GET)' : 'erişilebilir yedek/eski/referanssız dosya (güvenli GET)'), evidence: (en ? `\`${p}\` is externally **accessible** and returns distinctive (backup/config) content (200; not the SPA shell) — a source-code/credential/configuration leakage risk (content not shown in the report). It should be removed from the public directory.` : `\`${p}\` dışarıdan **erişilebilir** ve ayırt-edici (yedek/config) içerik döndürüyor (200; SPA shell değil) — kaynak kodu/kimlik bilgisi/yapılandırma sızıntısı riski (içerik raporda gösterilmez). Public dizinden kaldırılmalı.`), confidence: 'high', severity: /\.env|\.git|config|\.sql|secret/i.test(p) ? 'high' : 'medium', sideEffectRisk: 'none' });
   }
 
   // E2) ADMIN ARAYÜZ — aynı provenance kuralı
@@ -187,7 +188,7 @@ export async function collectConfigExposureEvidence(host: string, session: AuthS
     if (md5(r.text) === shellHash) continue;           // SPA catch-all -> gerçek admin değil
     const adminish = /(admin|yönetim|dashboard|phpmyadmin|actuator|server-status|login|parola|password|manager)/i.test(r.text.slice(0, 1500));
     if (!adminish) continue;
-    findings.push({ check: 'admin_interface_exposed', inputPoint: p, vulnerable: true, technique: 'yönetici arayüzü dışarıdan erişilebilirlik (güvenli GET)', evidence: `\`${p}\` dışarıdan **erişilebilir** bir yönetim/araç arayüzü döndürüyor (200; SPA shell değil) — yönetim yüzeyi ağ/kimlik-doğrulama arkasına alınmalı, dışarıya açılmamalı.`, confidence: 'medium', severity: /server-status|actuator|phpmyadmin|\.git/i.test(p) ? 'high' : 'medium', sideEffectRisk: 'none' });
+    findings.push({ check: 'admin_interface_exposed', inputPoint: p, vulnerable: true, technique: (en ? 'admin interface external accessibility (safe GET)' : 'yönetici arayüzü dışarıdan erişilebilirlik (güvenli GET)'), evidence: (en ? `\`${p}\` returns an externally **accessible** management/tool interface (200; not the SPA shell) — the management surface should be placed behind the network/authentication and not exposed externally.` : `\`${p}\` dışarıdan **erişilebilir** bir yönetim/araç arayüzü döndürüyor (200; SPA shell değil) — yönetim yüzeyi ağ/kimlik-doğrulama arkasına alınmalı, dışarıya açılmamalı.`), confidence: 'medium', severity: /server-status|actuator|phpmyadmin|\.git/i.test(p) ? 'high' : 'medium', sideEffectRisk: 'none' });
   }
 
   // E3) CLOUD STORAGE — HTML/JS'te bucket referansı + listelenebilir mi
@@ -196,10 +197,10 @@ export async function collectConfigExposureEvidence(host: string, session: AuthS
   for (const b of buckets.slice(0, 4)) {
     const r = await probe(b, { label: `E3 cloud bucket ${b}` }); probes++;
     if (r && r.status === 200 && /<ListBucketResult|<Contents>|<Blobs>|"items"\s*:/i.test(r.text.slice(0, 800))) {
-      findings.push({ check: 'cloud_bucket_listable', inputPoint: b.slice(0, 80), vulnerable: true, technique: 'public cloud storage bucket listelenebilirlik gözlemi', evidence: `Kaynaklarda referans verilen bulut deposu (\`${b.slice(0, 70)}\`) **listelenebilir** (dizin listesi döndü) — yanlış yapılandırılmış public bucket, tüm nesnelerin envanteri sızabilir. Liste iznini kapatın; hassas nesneleri private yapın.`, confidence: 'high', severity: 'high', sideEffectRisk: 'none' });
+      findings.push({ check: 'cloud_bucket_listable', inputPoint: b.slice(0, 80), vulnerable: true, technique: (en ? 'public cloud storage bucket listability observation' : 'public cloud storage bucket listelenebilirlik gözlemi'), evidence: (en ? `A cloud store referenced in the resources (\`${b.slice(0, 70)}\`) is **listable** (a directory listing was returned) — a misconfigured public bucket; an inventory of all objects could leak. Disable list permission; make sensitive objects private.` : `Kaynaklarda referans verilen bulut deposu (\`${b.slice(0, 70)}\`) **listelenebilir** (dizin listesi döndü) — yanlış yapılandırılmış public bucket, tüm nesnelerin envanteri sızabilir. Liste iznini kapatın; hassas nesneleri private yapın.`), confidence: 'high', severity: 'high', sideEffectRisk: 'none' });
     }
   }
-  if (buckets.length) notes.push(t(`Kaynaklarda ${buckets.length} bulut-depo referansı gözlemlendi (asset için public olabilir; yalnız listelenebilir olan bulgu sayıldı).`, `In den Ressourcen wurden ${buckets.length} Cloud-Storage-Referenz(en) beobachtet (für Assets ggf. öffentlich; nur auflistbare wurden als Befund gezählt).`));
+  if (buckets.length) notes.push(t(`Kaynaklarda ${buckets.length} bulut-depo referansı gözlemlendi (asset için public olabilir; yalnız listelenebilir olan bulgu sayıldı).`, `In den Ressourcen wurden ${buckets.length} Cloud-Storage-Referenz(en) beobachtet (für Assets ggf. öffentlich; nur auflistbare wurden als Befund gezählt).`, `${buckets.length} cloud-storage reference(s) were observed in the resources (may be public for assets; only listable ones were counted as a finding).`));
 
   // E4) CACHE HEADER / POISONING GÖSTERGESİ — güvenli gözlem
   const cp = await probe(`${origin}/`, { headers: { 'x-forwarded-host': HOST_PROBE }, label: 'E4 cache/poisoning gözlemi' }); probes++;
@@ -209,15 +210,15 @@ export async function collectConfigExposureEvidence(host: string, session: AuthS
     const reflectsUnkeyed = cp.text.includes(HOST_PROBE) || (cp.headers.get('location') ?? '').includes(HOST_PROBE);
     const vary = (cp.headers.get('vary') ?? '').toLowerCase();
     if (cacheable && reflectsUnkeyed && !/x-forwarded-host|host/.test(vary)) findings.push({
-      check: 'cache_poisoning_indicator', inputPoint: '/', vulnerable: true, technique: 'cache poisoning göstergesi (unkeyed header yansıması + cacheable) — gözlem', evidence: `Yanıt **önbelleklenebilir** (\`Cache-Control: ${cc || 'yok'}\`) ve **unkeyed** bir başlık (X-Forwarded-Host) yansıtıyor; \`Vary\` bu başlığı içermiyor — web cache poisoning **göstergesi** (zehirlenmiş yanıt başkalarına servis edilebilir). Gösterge; gerçek zehirleme YAPILMADI. Unkeyed girdiyi yansıtmayın veya Vary'e ekleyin.`, confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
+      check: 'cache_poisoning_indicator', inputPoint: '/', vulnerable: true, technique: (en ? 'cache poisoning indicator (unkeyed header reflection + cacheable) — observation' : 'cache poisoning göstergesi (unkeyed header yansıması + cacheable) — gözlem'), evidence: (en ? `The response is **cacheable** (\`Cache-Control: ${cc || 'none'}\`) and reflects an **unkeyed** header (X-Forwarded-Host); \`Vary\` does not include this header — a web cache poisoning **indicator** (a poisoned response could be served to others). An indicator; no real poisoning was performed. Do not reflect unkeyed input, or add it to Vary.` : `Yanıt **önbelleklenebilir** (\`Cache-Control: ${cc || 'yok'}\`) ve **unkeyed** bir başlık (X-Forwarded-Host) yansıtıyor; \`Vary\` bu başlığı içermiyor — web cache poisoning **göstergesi** (zehirlenmiş yanıt başkalarına servis edilebilir). Gösterge; gerçek zehirleme YAPILMADI. Unkeyed girdiyi yansıtmayın veya Vary'e ekleyin.`), confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
     });
   }
 
   // E5) YORUM & METADATA SIZINTISI (statik) — home HTML + inline + same-origin JS
-  findings.push(...scanCommentLeak(corpus.homeHtml, 'ana sayfa HTML'));
-  corpus.inlineScripts.forEach((code, i) => findings.push(...scanCommentLeak(code, `inline-script#${i + 1}`)));
-  for (const f of corpus.sameOriginJs) findings.push(...scanCommentLeak(f.body, (() => { try { return new URL(f.url).pathname.split('/').pop() || f.url; } catch { return f.url; } })()));
+  findings.push(...scanCommentLeak(corpus.homeHtml, en ? 'home-page HTML' : 'ana sayfa HTML', locale));
+  corpus.inlineScripts.forEach((code, i) => findings.push(...scanCommentLeak(code, `inline-script#${i + 1}`, locale)));
+  for (const f of corpus.sameOriginJs) findings.push(...scanCommentLeak(f.body, (() => { try { return new URL(f.url).pathname.split('/').pop() || f.url; } catch { return f.url; } })(), locale));
 
-  notes.push(t(`Denenen: **${backupTried}** yedek/eski dosya + **${adminTried}** admin yolu (SPA catch-all shell 200'ler ELENDİ — gerçek/ayırt-edici olmayan yanıt bulgu sayılmadı); **${buckets.length}** bulut-depo referansı; yorum/metadata statik tarandı.`, `Durchgeführt: **${backupTried}** Backup-/Alt-Dateien + **${adminTried}** Admin-Pfade (SPA-Catch-all-Shell-200er AUSGEFILTERT — nicht echte/nicht unterscheidbare Antworten wurden nicht als Befund gezählt); **${buckets.length}** Cloud-Storage-Referenz(en); Kommentare/Metadaten statisch gescannt.`));
+  notes.push(t(`Denenen: **${backupTried}** yedek/eski dosya + **${adminTried}** admin yolu (SPA catch-all shell 200'ler ELENDİ — gerçek/ayırt-edici olmayan yanıt bulgu sayılmadı); **${buckets.length}** bulut-depo referansı; yorum/metadata statik tarandı.`, `Durchgeführt: **${backupTried}** Backup-/Alt-Dateien + **${adminTried}** Admin-Pfade (SPA-Catch-all-Shell-200er AUSGEFILTERT — nicht echte/nicht unterscheidbare Antworten wurden nicht als Befund gezählt); **${buckets.length}** Cloud-Storage-Referenz(en); Kommentare/Metadaten statisch gescannt.`, `Performed: **${backupTried}** backup/old files + **${adminTried}** admin paths (SPA catch-all shell 200s FILTERED OUT — non-real/non-distinctive responses were not counted as findings); **${buckets.length}** cloud-storage reference(s); comments/metadata scanned statically.`));
   return { ok: true, pagesScanned: 1, inputsFound: 1, probesSent: probes, findings, stopped: null, notes };
 }
