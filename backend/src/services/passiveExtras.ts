@@ -280,7 +280,7 @@ function normalizeBody(s: string): string {
 }
 
 /** İçerik, ana sayfanın (`/`) içeriğiyle (neredeyse) aynı mı? → catch-all/SPA. */
-function looksLikeHomepage(body: string, homepage: string): boolean {
+export function looksLikeHomepage(body: string, homepage: string): boolean {
   if (!homepage) return false;
   const a = normalizeBody(body);
   const b = normalizeBody(homepage);
@@ -326,6 +326,19 @@ const FILE_SIGNATURES: Record<string, (b: string) => boolean> = {
   '/config.php.bak': (b) => /<\?php/i.test(b) && /(define\s*\(\s*['"](DB_|APP_|SECRET)|\$(db|database|password|secret))/i.test(b),
   '/db.sql': (b) => /\b(CREATE TABLE|INSERT INTO|DROP TABLE|MySQL dump|PostgreSQL database dump)\b/i.test(b),
   '/dump.sql': (b) => /\b(CREATE TABLE|INSERT INTO|DROP TABLE|MySQL dump|PostgreSQL database dump)\b/i.test(b),
+  // (Yedek envanteri genişletmesi) yaygın yedek kalıpları — .tar.gz/.zip/.sql/.bak/.old/.backup/~.
+  // Yalnız VARLIK + format-imzası; içerik çekilmez/gösterilmez (mevcut /db.sql davranışıyla aynı).
+  '/backup.tar.gz': (b) => /^\x1f\x8b/.test(b),                 // gzip magic (1f 8b)
+  '/backup.tar': (b) => /^\x1f\x8b/.test(b) || /ustar/.test(b.slice(256, 268)), // gzip ya da tar ustar imzası
+  '/www.zip': (b) => b.startsWith('PK'),                        // ZIP magic
+  '/site.zip': (b) => b.startsWith('PK'),
+  '/backup.old': (b) => /<\?php/i.test(b) || /\b(CREATE TABLE|INSERT INTO)\b/i.test(b) || /^[A-Z][A-Z0-9_]*=/m.test(b),
+  '/backup.backup': (b) => /<\?php/i.test(b) || /\b(CREATE TABLE|INSERT INTO)\b/i.test(b) || /^[A-Z][A-Z0-9_]*=/m.test(b),
+  '/index.php.bak': (b) => /<\?php/i.test(b),
+  '/index.php~': (b) => /<\?php/i.test(b),
+  '/.env.bak': (b) => /^[A-Z][A-Z0-9_]*=/m.test(b),
+  '/.env.old': (b) => /^[A-Z][A-Z0-9_]*=/m.test(b),
+  '/database.sql': (b) => /\b(CREATE TABLE|INSERT INTO|DROP TABLE|MySQL dump|PostgreSQL database dump)\b/i.test(b),
 };
 
 /**
@@ -364,7 +377,9 @@ export function classifyExposedFile(
 }
 
 const SENSITIVE_PATHS = ['/.git/config', '/.git/HEAD', '/.env', '/backup.zip', '/backup.sql', '/.DS_Store', '/wp-config.php',
-  '/ftp', '/backup', '/backups', '/uploads', '/files', '/admin', '/.svn/entries', '/.htaccess', '/config.php.bak', '/db.sql', '/dump.sql'];
+  '/ftp', '/backup', '/backups', '/uploads', '/files', '/admin', '/.svn/entries', '/.htaccess', '/config.php.bak', '/db.sql', '/dump.sql',
+  // (Yedek envanteri genişletmesi) yaygın yedek uzantı/isim kalıpları — yalnız VARLIK, içerik çekilmez.
+  '/backup.tar.gz', '/backup.tar', '/www.zip', '/site.zip', '/backup.old', '/backup.backup', '/index.php.bak', '/index.php~', '/.env.bak', '/.env.old', '/database.sql'];
 
 /** Deterministik hassas-dosya ifsasi kontrolu — classifyExposedFile ile catch-all/format ayrimi yapar. */
 async function checkExposedFiles(host: string, locale: string = 'tr'): Promise<PassiveCheckResult> {

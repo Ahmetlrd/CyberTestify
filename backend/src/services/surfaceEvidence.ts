@@ -11,7 +11,7 @@
  */
 import tls from 'node:tls';
 import { createHash } from 'node:crypto';
-import { classifyExposedFile } from './passiveExtras.js';
+import { classifyExposedFile, looksLikeDirListing, looksLikeHomepage } from './passiveExtras.js';
 import { logScanStep } from './scanLogger.js';
 
 const HTTP_TIMEOUT_MS = 9000;
@@ -433,7 +433,9 @@ export type ExposedFileResult = { path: string; exposed: boolean; reason: string
 const EXPOSED_CANDIDATES = ['/.git/config', '/.env', '/.git/HEAD', '/backup.zip', '/.DS_Store', '/wp-config.php.bak',
   // (İŞ 1) /ftp (Juice Shop) + yaygın hassas dizin/dosyalar. classifyExposedFile GERÇEK içerik/dizin
   // listesi ister (SPA catch-all 200 -> "kapalı"; yanlış-pozitif yok).
-  '/ftp', '/backup', '/backups', '/uploads', '/files', '/admin', '/.svn/entries', '/.htaccess', '/config.php.bak', '/db.sql', '/dump.sql'];
+  '/ftp', '/backup', '/backups', '/uploads', '/files', '/admin', '/.svn/entries', '/.htaccess', '/config.php.bak', '/db.sql', '/dump.sql',
+  // (Yedek envanteri genişletmesi) yaygın yedek uzantı/isim kalıpları — yalnız VARLIK tespiti, içerik ÇEKİLMEZ.
+  '/backup.tar.gz', '/backup.tar', '/www.zip', '/site.zip', '/backup.old', '/backup.backup', '/index.php.bak', '/index.php~', '/.env.bak', '/.env.old', '/database.sql'];
 
 async function safeGetForExpose(url: string): Promise<{ ok: boolean; status: number; text: string; contentType: string }> {
   const ctrl = new AbortController();
@@ -460,4 +462,69 @@ export async function collectExposedFiles(host: string, homepageHtml: string, lo
     out.push({ path, exposed: verdict === 'exposed', reason });
   }
   return out;
+}
+
+// ---- (Genişletme) Bilgi-sızıntısı ek pasif gözlemler: dizin listeleme + verbose-error/yol ifşası +
+// parola-autocomplete. Hepsi GET-only / read-only; içerik ÇEKİLMEZ/gösterilmez, yalnız GÖSTERGE toplanır.
+export type DirListingHit = { path: string };            // (A.2) CWE-548 — autoindex/Index of
+export type ErrorDisclosure = { leaked: boolean; kind: string; redacted: string }; // (A.3) CWE-209 — yol/stack ifşası (REDAKTE)
+export type PwdAutocomplete = { observed: boolean; count: number }; // (A.4) CWE-522 — parola alanı autocomplete politikası yok
+export type SurfaceLeakExtras = {
+  reachable: boolean;
+  dirListings: DirListingHit[];        // listeleme AÇIK dizinler (yalnız yol; içerik dökülmez)
+  dirsTried: number;
+  errorDisclosure: ErrorDisclosure;
+  autocomplete: PwdAutocomplete;
+};
+
+// Yaygın, HASSAS-liste dışı gözatılabilir dizinler (mükerrer değil — /uploads,/files,/admin zaten
+// EXPOSED_CANDIDATES'te). Yalnız autoindex/listeleme GÖSTERGESİ; listelenen dosyalar rapora dökülmez.
+const DIRLIST_CANDIDATES = ['/images/', '/img/', '/assets/', '/logs/', '/tmp/', '/data/'];
+// Sunucu-içi yol / stack-trace / framework hata imzaları — GERÇEK içerik REDAKTE edilerek raporlanır.
+const ERR_PATH_RE = /(\/(?:var|home|usr|srv|opt|www|app|data)\/[\w./-]{3,80}|[A-Za-z]:\\[\w\\.-]{3,80})/;
+const ERR_TRACE_RE = /(Stack trace:|Traceback \(most recent call last\)|Fatal error:|Uncaught \w+|Warning: [\w_]+\(\)|Notice: |Whoops\b|Symfony\\|Illuminate\\|org\.springframework|\bat [\w.$]+\([\w.]+:\d+\)|line \d+ in \/)/;
+
+export async function collectSurfaceLeakExtras(host: string, homepageHtml: string, locale: string = 'tr'): Promise<SurfaceLeakExtras> {
+  const empty: SurfaceLeakExtras = { reachable: false, dirListings: [], dirsTried: 0, errorDisclosure: { leaked: false, kind: '', redacted: '' }, autocomplete: { observed: false, count: 0 } };
+  const o = await resolveOrigin(host);
+  if (!o.reachable) return empty;
+
+  // (A.2) Dizin listeleme — yaygın dizinlerde tek GET; yalnız autoindex/Index-of göstergesi.
+  const dirListings: DirListingHit[] = [];
+  for (const d of DIRLIST_CANDIDATES) {
+    const r = await safeGetForExpose(`${o.origin}${d}`);
+    if (r.ok && r.status === 200 && r.text.trim() && !looksLikeHomepage(r.text, homepageHtml) && looksLikeDirListing(r.text)) {
+      dirListings.push({ path: d });
+    }
+  }
+
+  // (A.3) Verbose error / yol ifşası — var-olmayan bir yola tek GET; yanıtta sunucu-içi yol / stack
+  // sızıntısı aranır. Sızan yol REDAKTE edilir (ham gösterilmez). Salt-okuma; payload/enjeksiyon YOK.
+  let errorDisclosure: ErrorDisclosure = { leaked: false, kind: '', redacted: '' };
+  const probeUrl = `${o.origin}/cybertestify-notfound-probe-4041`;
+  const er = await safeGetForExpose(probeUrl);
+  if (er.ok || er.status >= 400) {
+    const body = er.text || '';
+    const pathM = body.match(ERR_PATH_RE);
+    const traceM = body.match(ERR_TRACE_RE);
+    if (pathM) {
+      // REDAKSİYON: sızan mutlak yolu kısalt (yalnız ilk+son segment, ortası ***).
+      const p = pathM[1];
+      const segs = p.replace(/^[A-Za-z]:\\/, '').split(/[\/\\]/).filter(Boolean);
+      const redacted = segs.length > 2 ? `${p.slice(0, p.indexOf(segs[0]) + segs[0].length)}/***/${segs[segs.length - 1]}` : '***';
+      errorDisclosure = { leaked: true, kind: 'server_path', redacted };
+    } else if (traceM) {
+      errorDisclosure = { leaked: true, kind: 'stack_trace', redacted: traceM[1].slice(0, 40) };
+    }
+  }
+
+  // (A.4) Parola autocomplete — ana sayfa HTML'inde parola alanı var mı, autocomplete politikası
+  // belirtilmiş mi (yalnız gözlem; ek istek yok). Yumuşak/bilgilendirici sertleştirme göstergesi.
+  let autocomplete: PwdAutocomplete = { observed: false, count: 0 };
+  const html = homepageHtml || '';
+  const pwdInputs = html.match(/<input\b[^>]*type\s*=\s*["']?password["']?[^>]*>/gi) ?? [];
+  const noPolicy = pwdInputs.filter((tag) => !/autocomplete\s*=\s*["']?(off|new-password|current-password)/i.test(tag));
+  if (noPolicy.length > 0) autocomplete = { observed: true, count: noPolicy.length };
+
+  return { reachable: true, dirListings, dirsTried: DIRLIST_CANDIDATES.length, errorDisclosure, autocomplete };
 }

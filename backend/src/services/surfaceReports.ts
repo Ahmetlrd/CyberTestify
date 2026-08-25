@@ -10,7 +10,7 @@
  * P2: locale='de' desteği (uykuda) — çıktı 'de' değilse BYTE-AYNI Türkçe kalır.
  */
 import {
-  collectHttp, collectTls, collectCors, collectCorsForUrl, collectDns, collectExposedFiles, resolveOrigin,
+  collectHttp, collectTls, collectCors, collectCorsForUrl, collectDns, collectExposedFiles, collectSurfaceLeakExtras, resolveOrigin,
   collectPages, type PageEvidence, type CorsEvidence, type TlsEvidence, type DnsEvidence,
 } from './surfaceEvidence.js';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
@@ -161,6 +161,12 @@ export async function generateHeaderLeakReport(host: string, locale: string = 't
   const http = await collectHttp(host);
   if (!http.ok) return null;
   const exposed = await collectExposedFiles(host, http.html, locale);
+  // (Genişletme A.2/A.3/A.4) ek pasif bilgi-sızıntısı gözlemleri — dizin listeleme / verbose-error
+  // yol ifşası / parola-autocomplete. GET-only; içerik REDAKTE. Mevcut bulgular DEĞİŞMEZ.
+  const leakX = await collectSurfaceLeakExtras(host, http.html, locale);
+  const dirHits = leakX.dirListings;
+  const errLeaked = leakX.errorDisclosure.leaked;
+  const acObserved = leakX.autocomplete.observed;
 
   const missing = SEC_HDRS.filter((h) => !http.headers.has(h.hdr));
   const missingCrit = missing.filter((h) => h.hdr === 'content-security-policy' || h.hdr === 'x-frame-options');
@@ -187,7 +193,7 @@ export async function generateHeaderLeakReport(host: string, locale: string = 't
 
   let level: Level = 'low';
   if (exposedHits.length || eolHigh) level = 'high';
-  else if (missingCrit.length || missing.length >= 3 || eolMed) level = 'medium';
+  else if (missingCrit.length || missing.length >= 3 || eolMed || dirHits.length || errLeaked) level = 'medium';
 
   const table =
     `## ${t('HTTP GÜVENLİK BAŞLIKLARI', 'HTTP-SICHERHEITS-HEADER', 'HTTP SECURITY HEADERS')}\n\n| ${t('Başlık', 'Header', 'Header')} | ${t('Durum', 'Status', 'Status')} | ${t('Açıklama', 'Beschreibung', 'Description')} |\n|--------|-------|----------|\n` +
@@ -202,9 +208,39 @@ export async function generateHeaderLeakReport(host: string, locale: string = 't
     `| ${t('Yol', 'Pfad', 'Path')} | ${t('Durum', 'Status', 'Status')} | ${t('Not', 'Hinweis', 'Note')} |\n|-----|-------|-----|\n` +
     exposed.map((e) => `| \`${e.path}\` | ${e.exposed ? t('⚠️ AÇIK', '⚠️ OFFEN', '⚠️ EXPOSED') : t('Kapalı', 'Geschlossen', 'Closed')} | ${e.reason} |`).join('\n') + '\n\n';
 
+  // (A.2/A.3/A.4 şeffaflık) Üç ek pasif gözlem — bulgu çıkmasa da "denendi, gösterge yok" olarak
+  // ŞEFFAF listelenir (üç-durum: ✅ temiz / ⚠️ gösterge / ⚠️ İncelenemedi).
+  const S_CLEAN = t('✅ Gösterge bulunamadı', '✅ Kein Indikator gefunden', '✅ No indicator found');
+  const S_NA = t('⚠️ İncelenemedi (hedefe ulaşılamadı — “temiz” DEĞİL)', '⚠️ Nicht prüfbar (Ziel nicht erreichbar — NICHT „sauber")', '⚠️ Not assessable (target unreachable — NOT "clean")');
+  const dirCell = !leakX.reachable ? S_NA : dirHits.length ? t(`⚠️ Listeleme açık (${dirHits.map((d) => d.path).join(', ')})`, `⚠️ Auflistung aktiv (${dirHits.map((d) => d.path).join(', ')})`, `⚠️ Listing enabled (${dirHits.map((d) => d.path).join(', ')})`) : t(`✅ ${leakX.dirsTried} dizin denendi, listeleme yok`, `✅ ${leakX.dirsTried} Verzeichnisse geprüft, keine Auflistung`, `✅ ${leakX.dirsTried} directories tried, no listing`);
+  const errCell = !leakX.reachable ? S_NA : errLeaked ? t(`⚠️ Yol/stack sızıyor (REDAKTE)`, `⚠️ Pfad/Stack lecken (REDIGIERT)`, `⚠️ Path/stack leaking (REDACTED)`) : S_CLEAN;
+  const acCell = !leakX.reachable ? S_NA : acObserved ? t(`⚠️ Politika yok (${leakX.autocomplete.count} alan)`, `⚠️ Keine Richtlinie (${leakX.autocomplete.count} Feld(er))`, `⚠️ No policy (${leakX.autocomplete.count} field(s))`) : t('✅ Uygun / parola alanı gözlenmedi', '✅ Angemessen / kein Passwortfeld beobachtet', '✅ Appropriate / no password field observed');
+  const leakExtrasSection =
+    `## ${t('EK BİLGİ-SIZINTISI GÖZLEMLERİ', 'ZUSÄTZLICHE INFORMATIONSLECK-BEOBACHTUNGEN', 'ADDITIONAL INFORMATION-LEAKAGE OBSERVATIONS')}\n\n` +
+    `| ${t('Kontrol', 'Prüfung', 'Control')} | ${t('Sonuç', 'Ergebnis', 'Result')} |\n|-----|-------|\n` +
+    `| ${t('Dizin listeleme (autoindex / “Index of /”)', 'Verzeichnisauflistung (autoindex / „Index of /")', 'Directory listing (autoindex / "Index of /")')} · CWE-548 | ${dirCell} |\n` +
+    `| ${t('Ayrıntılı hata / sunucu-yol ifşası', 'Ausführlicher Fehler / Serverpfad-Offenlegung', 'Verbose error / server-path disclosure')} · CWE-209 | ${errCell} |\n` +
+    `| ${t('Parola alanı autocomplete politikası', 'autocomplete-Richtlinie im Passwortfeld', 'Password-field autocomplete policy')} · CWE-522 | ${acCell} |\n\n` +
+    `> ${t('Hepsi GET-only/pasif gözlemdir — içerik ÇEKİLMEZ/gösterilmez; sızan yol REDAKTE edilir. “Gösterge bulunamadı” güvenli olduğunu KANITLAMAZ; yalnız denenen pasif yöntemlerle gösterge çıkmadığını gösterir.', 'Alles GET-only/passive Beobachtung — Inhalte werden NICHT abgerufen/angezeigt; ein geleakter Pfad wird REDIGIERT. „Kein Indikator gefunden" BEWEIST NICHT, dass es sicher ist; es zeigt nur, dass mit den passiven Methoden kein Indikator auftrat.', 'All GET-only/passive observation — content is NOT fetched/shown; a leaked path is REDACTED. "No indicator found" does NOT PROVE it is secure; it only shows that no indicator emerged from the passive methods attempted.')}\n\n`;
+
   const risks: string[] = [];
   for (const e of exposedHits) risks.push(t(`- **Yüksek — Hassas dosya erişilebilir (\`${e.path}\`):** İçerik doğrulandı; yapılandırma/kaynak sızıntısı riski. Erişim derhal engellenmeli.`, `- **Yüksek — Sensible Datei erreichbar (\`${e.path}\`):** Inhalt verifiziert; Risiko eines Konfigurations-/Quellcode-Lecks. Der Zugriff muss umgehend gesperrt werden.`, `- **Yüksek — Sensitive file accessible (\`${e.path}\`):** Content verified; risk of configuration/source-code leakage. Access must be blocked immediately.`));
   for (const e of eolRisks) risks.push(`- **${e.sev} — ${e.bulgu}:** ${e.aciklama}`);
+  // (A.2) Dizin listeleme (autoindex) — CWE-548 / OWASP A05. İçerik dökülmez, yalnız listelenen dizin yolu.
+  if (dirHits.length) risks.push(t(
+    `- **Orta — Dizin listeleme açık (${dirHits.map((d) => `\`${d.path}\``).join(', ')}):** Sunucu dizin içeriğini listeliyor (autoindex/“Index of /”); dosya envanteri dışarıya sızabilir. Dizin listelemeyi kapatın (Nginx \`autoindex off\`, Apache \`Options -Indexes\`). CWE-548 · OWASP A05.`,
+    `- **Orta — Verzeichnisauflistung aktiv (${dirHits.map((d) => `\`${d.path}\``).join(', ')}):** Der Server listet den Verzeichnisinhalt auf (autoindex/„Index of /"); ein Dateiinventar kann nach außen abfließen. Deaktivieren Sie die Verzeichnisauflistung (Nginx \`autoindex off\`, Apache \`Options -Indexes\`). CWE-548 · OWASP A05.`,
+    `- **Orta — Directory listing enabled (${dirHits.map((d) => `\`${d.path}\``).join(', ')}):** The server lists the directory contents (autoindex/"Index of /"); a file inventory can leak externally. Disable directory listing (Nginx \`autoindex off\`, Apache \`Options -Indexes\`). CWE-548 · OWASP A05.`));
+  // (A.3) Verbose error / sunucu-yol ifşası — CWE-209 / OWASP A05. Sızan yol REDAKTE.
+  if (errLeaked) risks.push(t(
+    `- **Orta — Ayrıntılı hata / sunucu yolu ifşası (${leakX.errorDisclosure.kind === 'stack_trace' ? 'stack izi' : 'sunucu-içi yol'} \`${leakX.errorDisclosure.redacted}\`):** Hata yanıtında iç dizin yapısı/yığın izi sızıyor (yol REDAKTE) — saldırgana teknoloji/dizin ipucu verir. Üretimde genel (generic) hata sayfası kullanın; hata detaylarını/izleri gizleyin. CWE-209 · OWASP A05.`,
+    `- **Orta — Ausführlicher Fehler / Serverpfad-Offenlegung (${leakX.errorDisclosure.kind === 'stack_trace' ? 'Stack-Trace' : 'serverinterner Pfad'} \`${leakX.errorDisclosure.redacted}\`):** In der Fehlerantwort werden interne Verzeichnisstruktur/Stack-Trace offengelegt (Pfad REDIGIERT) — gibt einem Angreifer Hinweise auf Technologie/Verzeichnisse. Verwenden Sie in der Produktion eine generische Fehlerseite; verbergen Sie Fehlerdetails/Traces. CWE-209 · OWASP A05.`,
+    `- **Orta — Verbose error / server path disclosure (${leakX.errorDisclosure.kind === 'stack_trace' ? 'stack trace' : 'server-internal path'} \`${leakX.errorDisclosure.redacted}\`):** The error response leaks internal directory structure/stack trace (path REDACTED) — gives an attacker technology/directory hints. Use a generic error page in production; hide error details/traces. CWE-209 · OWASP A05.`));
+  // (A.4) Parola autocomplete politikası yok — CWE-522 / OWASP A04. Düşük/bilgilendirici sertleştirme.
+  if (acObserved) risks.push(t(
+    `- **Düşük — Parola alanında autocomplete politikası belirtilmemiş (${leakX.autocomplete.count}):** Paylaşılan/ortak cihaz bağlamında tarayıcı parolayı saklayabilir. Tehdit modelinize göre parola alanlarında \`autocomplete\` politikasını (ör. paylaşılan terminal için \`off\`) değerlendirin. Bilgilendirici sertleştirme. CWE-522 · OWASP A04.`,
+    `- **Düşük — Keine autocomplete-Richtlinie im Passwortfeld (${leakX.autocomplete.count}):** In einem geteilten/öffentlichen Gerätekontext kann der Browser das Passwort speichern. Bewerten Sie je nach Bedrohungsmodell die \`autocomplete\`-Richtlinie der Passwortfelder (z. B. \`off\` für geteilte Terminals). Informative Härtung. CWE-522 · OWASP A04.`,
+    `- **Düşük — No autocomplete policy on the password field (${leakX.autocomplete.count}):** In a shared/public-device context the browser may store the password. Depending on your threat model, evaluate the \`autocomplete\` policy of the password fields (e.g. \`off\` for shared terminals). Informative hardening. CWE-522 · OWASP A04.`));
   if (missingCrit.length) risks.push(t(`- **Orta — Kritik güvenlik başlıkları eksik (${missingCrit.map((h) => h.name).join(', ')}):** XSS/clickjacking’e karşı tarayıcı savunması zayıf.${hdrCov(missingCrit)}`, `- **Orta — Kritische Sicherheits-Header fehlen (${missingCrit.map((h) => h.name).join(', ')}):** Die Browser-Verteidigung gegen XSS/Clickjacking ist schwach.${hdrCov(missingCrit)}`, `- **Orta — Critical security headers missing (${missingCrit.map((h) => h.name).join(', ')}):** Browser defence against XSS/clickjacking is weak.${hdrCov(missingCrit)}`));
   const otherMissing = missing.filter((h) => !missingCrit.includes(h));
   if (otherMissing.length) risks.push(t(`- **Orta — Ek başlıklar eksik (${otherMissing.map((h) => h.name).join(', ')}):** Savunma derinliği zayıf.${hdrCov(otherMissing)}`, `- **Orta — Weitere Header fehlen (${otherMissing.map((h) => h.name).join(', ')}):** Die Verteidigungstiefe ist schwach.${hdrCov(otherMissing)}`, `- **Orta — Additional headers missing (${otherMissing.map((h) => h.name).join(', ')}):** Defence in depth is weak.${hdrCov(otherMissing)}`));
@@ -229,7 +265,7 @@ export async function generateHeaderLeakReport(host: string, locale: string = 't
         ? t(`${(missingCrit.length || missing.length >= 3) ? 'Önemli güvenlik başlığı eksiklikleri var; hassas dosya sızıntısı tespit edilmedi. Eksik başlıklar düşük maliyetli sunucu ayarlarıyla kapatılabilir.' : 'Güncel olmayan bir yazılım sürümü ifşa ediliyor; desteklenen sürüme yükseltilmesi önerilir.'}${(missingCrit.length || missing.length >= 3) ? eolClause : ''}`, `${(missingCrit.length || missing.length >= 3) ? 'Es bestehen wichtige Lücken bei Sicherheits-Headern; kein Datei-Leck festgestellt. Fehlende Header lassen sich mit kostengünstigen Servereinstellungen schließen.' : 'Eine nicht aktuelle Softwareversion wird offengelegt; ein Upgrade auf eine unterstützte Version wird empfohlen.'}${(missingCrit.length || missing.length >= 3) ? eolClause : ''}`, `${(missingCrit.length || missing.length >= 3) ? 'There are significant security-header gaps; no sensitive-file leakage was detected. Missing headers can be closed with low-cost server settings.' : 'A non-current software version is being disclosed; upgrading to a supported version is recommended.'}${(missingCrit.length || missing.length >= 3) ? eolClause : ''}`)
         : t('Güvenlik başlıkları büyük ölçüde mevcut ve dışarıdan erişilebilen hassas dosya bulunmadı.', 'Die Sicherheits-Header sind weitgehend vorhanden und es wurde keine von außen erreichbare sensible Datei gefunden.', 'Security headers are largely present and no externally accessible sensitive file was found.');
 
-  const findings = assemble('Başlıklar', level, bullets, genel, `${table}${leakSection}## ${t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN', 'IDENTIFIED RISKS')}\n\n${risksTable(risks, locale)}\n`, locale);
+  const findings = assemble('Başlıklar', level, bullets, genel, `${table}${leakSection}${leakExtrasSection}## ${t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN', 'IDENTIFIED RISKS')}\n\n${risksTable(risks, locale)}\n`, locale);
   const fixText = buildHeaderFixSuggestions(findings, host, locale) + (exposedHits.length ? '\n\n' + buildExposedFileFix(exposedHits.map((e) => e.path), locale) : '');
   return { findings, fixText };
 }
@@ -779,7 +815,7 @@ export function combineSurfaceAreas(
       `| Control area | Result |\n|---------------|-------|\n${assuranceRows}\n\n` +
       `> **Three-state distinction (honesty):** ✅ *No issue found* = the check ran and came back clean · ⚠️ *Finding present* = detailed above · ⚠️ *Not assessable* = no data could be collected (does NOT mean secure).\n\n` +
       `### What this package DOES and DOES NOT check\n\n` +
-      `**DOES (passive — only page retrieval via GET + harmless Origin/DNS query):** TLS/certificate, HTTP security headers, CORS policy, cookie flags (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS/email records (SPF/DKIM/DMARC/DNSSEC), exposed sensitive files, outdated/unsupported software versions — across the ${pageCount} discovered pages.\n\n` +
+      `**DOES (passive — only page retrieval via GET + harmless Origin/DNS query):** TLS/certificate, HTTP security headers, CORS policy, cookie flags (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS/email records (SPF/DKIM/DMARC/DNSSEC), exposed sensitive files (incl. common backup patterns), directory listing (autoindex), verbose-error/server-path disclosure (redacted), password-field autocomplete policy, outdated/unsupported software versions — across the ${pageCount} discovered pages.\n\n` +
       `**DOES NOT:** Active vulnerability verification (payload/probe attempts such as SQLi/XSS/IDOR), authenticated flow testing, business-logic abuse. These are within the scope of the **Active Verification** and **Full-Scope Pentest** packages. This report relies on passive observation; "no finding" in an area **does NOT PROVE** it is secure, because no active exploit was attempted — it only shows that the externally observed configuration is clean.\n\n`
     : de
     ? `## POSITIVE ZUSICHERUNG — GEPRÜFTE BEREICHE\n\n` +
@@ -787,14 +823,14 @@ export function combineSurfaceAreas(
       `| Kontrollbereich | Ergebnis |\n|---------------|-------|\n${assuranceRows}\n\n` +
       `> **Drei-Zustands-Unterscheidung (Ehrlichkeit):** ✅ *Kein Problem gefunden* = Kontrolle lief, Ergebnis sauber · ⚠️ *Befund vorhanden* = oben im Detail · ⚠️ *Nicht prüfbar* = keine Daten erhebbar (bedeutet NICHT sicher).\n\n` +
       `### Was dieses Paket prüft — und was NICHT\n\n` +
-      `**PRÜFT (passiv — nur Seitenabruf per GET + harmlose Origin-/DNS-Abfrage):** TLS/Zertifikat, HTTP-Sicherheits-Header, CORS-Richtlinie, Cookie-Flags (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS-/E-Mail-Einträge (SPF/DKIM/DMARC/DNSSEC), offenliegende sensible Dateien, veraltete/nicht unterstützte Softwareversionen — auf den ${pageCount} entdeckten Seiten.\n\n` +
+      `**PRÜFT (passiv — nur Seitenabruf per GET + harmlose Origin-/DNS-Abfrage):** TLS/Zertifikat, HTTP-Sicherheits-Header, CORS-Richtlinie, Cookie-Flags (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS-/E-Mail-Einträge (SPF/DKIM/DMARC/DNSSEC), offenliegende sensible Dateien (inkl. gängiger Backup-Muster), Verzeichnisauflistung (autoindex), ausführliche-Fehler-/Serverpfad-Offenlegung (redigiert), autocomplete-Richtlinie im Passwortfeld, veraltete/nicht unterstützte Softwareversionen — auf den ${pageCount} entdeckten Seiten.\n\n` +
       `**PRÜFT NICHT:** Aktive Schwachstellenverifikation (Payload-/Probe-Versuche wie SQLi/XSS/IDOR), authentifizierte Ablauftests, Missbrauch der Geschäftslogik. Diese gehören zum Umfang der Pakete **Aktive Verifikation** und **Umfassender Pentest**. Dieser Bericht beruht auf passiver Beobachtung; die Aussage „kein Befund" in einem Bereich **BEWEIST NICHT**, dass er sicher ist, da kein aktiver Exploit versucht wurde — sie zeigt lediglich, dass die von außen beobachtete Konfiguration sauber ist.\n\n`
     : `## POZİTİF GÜVENCE — KONTROL EDİLEN ALANLAR\n\n` +
       `Bulgu çıkmayan alanlar da dâhil, dış-yüzey kontrolleri ana sayfa dâhil **${pageCount} benzersiz sayfada** gerçekten çalıştırıldı. Aşağıdaki tablo, "sorun bulunamadı" sonuçlarını da şeffaf biçimde gösterir:\n\n` +
       `| Kontrol Alanı | Sonuç |\n|---------------|-------|\n${assuranceRows}\n\n` +
       `> **Üç-durum ayrımı (dürüstlük):** ✅ *Sorun bulunmadı* = kontrol çalıştı, temiz çıktı · ⚠️ *Bulgu var* = yukarıda detaylı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).\n\n` +
       `### Bu paket NE kontrol EDER, NE ETMEZ\n\n` +
-      `**EDER (pasif — yalnız GET ile sayfa çekme + zararsız Origin/DNS sorgusu):** TLS/sertifika, HTTP güvenlik başlıkları, CORS politikası, çerez bayrakları (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS/e-posta kayıtları (SPF/DKIM/DMARC/DNSSEC), açıkta hassas dosya, eski/desteksiz yazılım sürümü — keşfedilen ${pageCount} sayfada.\n\n` +
+      `**EDER (pasif — yalnız GET ile sayfa çekme + zararsız Origin/DNS sorgusu):** TLS/sertifika, HTTP güvenlik başlıkları, CORS politikası, çerez bayrakları (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS/e-posta kayıtları (SPF/DKIM/DMARC/DNSSEC), açıkta hassas dosya (yaygın yedek kalıpları dâhil), dizin listeleme (autoindex), ayrıntılı-hata/sunucu-yol ifşası (redakte), parola alanı autocomplete politikası, eski/desteksiz yazılım sürümü — keşfedilen ${pageCount} sayfada.\n\n` +
       `**ETMEZ:** Aktif zafiyet doğrulaması (SQLi/XSS/IDOR gibi payload/prob denemesi), kimlik-doğrulamalı akış testi, iş-mantığı istismarı. Bunlar **Aktif Doğrulama** ve **Tam Kapsamlı Pentest** paketlerinin kapsamındadır. Bu rapor pasif gözleme dayanır; bir alanda "bulgu yok" ifadesi, aktif istismar denenmediği için **güvenli olduğunu KANITLAMAZ** — yalnız dışarıdan gözlemlenen yapılandırmanın temiz olduğunu gösterir.\n\n`;
 
   const findings =
