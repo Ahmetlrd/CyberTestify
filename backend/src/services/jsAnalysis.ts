@@ -151,34 +151,36 @@ const PUBLIC_BY_DESIGN_RULES: Array<{ id: string; label: string; labelDe: string
 ];
 
 // ============================ C) BİLİNEN-ZAFİYETLİ KÜTÜPHANELER ============================
-type VulnRange = { ltOr?: string; geLt?: [string, string]; cves: string; note: string };
-const KNOWN_VULN_LIBS: Record<string, { display: string; ranges: VulnRange[]; eol?: string }> = {
+// (LOKALİZASYON) note/cves/eol 3 dilde — canlı raporda ${v.note}/${v.cves} yerel cümleye gömülür.
+type L = { tr: string; en: string; de: string };
+type VulnRange = { ltOr?: string; geLt?: [string, string]; cves: L; note: L };
+const KNOWN_VULN_LIBS: Record<string, { display: string; ranges: VulnRange[]; eol?: L }> = {
   jquery: { display: 'jQuery', ranges: [
-    { ltOr: '3.5.0', cves: 'CVE-2020-11022, CVE-2020-11023 (XSS)', note: '<3.5.0: htmlPrefilter kaynaklı XSS' },
-    { ltOr: '1.9.0', cves: 'CVE-2012-6708, CVE-2015-9251 (XSS)', note: '<1.9.0: selector/ajax XSS' },
+    { ltOr: '3.5.0', cves: { tr: 'CVE-2020-11022, CVE-2020-11023 (XSS)', en: 'CVE-2020-11022, CVE-2020-11023 (XSS)', de: 'CVE-2020-11022, CVE-2020-11023 (XSS)' }, note: { tr: '<3.5.0: htmlPrefilter kaynaklı XSS', en: '<3.5.0: htmlPrefilter-based XSS', de: '<3.5.0: XSS durch htmlPrefilter' } },
+    { ltOr: '1.9.0', cves: { tr: 'CVE-2012-6708, CVE-2015-9251 (XSS)', en: 'CVE-2012-6708, CVE-2015-9251 (XSS)', de: 'CVE-2012-6708, CVE-2015-9251 (XSS)' }, note: { tr: '<1.9.0: selector/ajax XSS', en: '<1.9.0: selector/ajax XSS', de: '<1.9.0: selector/ajax XSS' } },
   ] },
-  angular: { display: 'AngularJS (1.x)', eol: 'AngularJS 1.x EOL (Ocak 2022) — güvenlik yaması almıyor', ranges: [
-    { ltOr: '1.99.0', cves: 'CVE-2024-21490 (ReDoS) + AngularJS 1.x EOL', note: 'AngularJS 1.x EOL; sürüme göre sandbox-bypass/ReDoS' },
+  angular: { display: 'AngularJS (1.x)', eol: { tr: 'AngularJS 1.x EOL (Ocak 2022) — güvenlik yaması almıyor', en: 'AngularJS 1.x EOL (Jan 2022) — no longer receives security patches', de: 'AngularJS 1.x EOL (Januar 2022) — erhält keine Sicherheitspatches' }, ranges: [
+    { ltOr: '1.99.0', cves: { tr: 'CVE-2024-21490 (ReDoS) + AngularJS 1.x EOL', en: 'CVE-2024-21490 (ReDoS) + AngularJS 1.x EOL', de: 'CVE-2024-21490 (ReDoS) + AngularJS 1.x EOL' }, note: { tr: 'AngularJS 1.x EOL; sürüme göre sandbox-bypass/ReDoS', en: 'AngularJS 1.x EOL; sandbox-bypass/ReDoS depending on version', de: 'AngularJS 1.x EOL; je nach Version Sandbox-Bypass/ReDoS' } },
   ] },
   bootstrap: { display: 'Bootstrap', ranges: [
-    { ltOr: '3.4.1', cves: 'CVE-2018-14041/14042, CVE-2019-8331 (XSS)', note: '<3.4.1: data-* özniteliklerinde XSS' },
-    { geLt: ['4.0.0', '4.3.1'], cves: 'CVE-2019-8331 (XSS)', note: '4.0–4.3.0: tooltip/popover XSS' },
+    { ltOr: '3.4.1', cves: { tr: 'CVE-2018-14041/14042, CVE-2019-8331 (XSS)', en: 'CVE-2018-14041/14042, CVE-2019-8331 (XSS)', de: 'CVE-2018-14041/14042, CVE-2019-8331 (XSS)' }, note: { tr: '<3.4.1: data-* özniteliklerinde XSS', en: '<3.4.1: XSS in data-* attributes', de: '<3.4.1: XSS in data-*-Attributen' } },
+    { geLt: ['4.0.0', '4.3.1'], cves: { tr: 'CVE-2019-8331 (XSS)', en: 'CVE-2019-8331 (XSS)', de: 'CVE-2019-8331 (XSS)' }, note: { tr: '4.0–4.3.0: tooltip/popover XSS', en: '4.0–4.3.0: tooltip/popover XSS', de: '4.0–4.3.0: tooltip/popover XSS' } },
   ] },
   lodash: { display: 'Lodash', ranges: [
-    { ltOr: '4.17.21', cves: 'CVE-2021-23337 (komut enj.), CVE-2020-8203 (prototype pollution)', note: '<4.17.21: template/zipObjectDeep' },
+    { ltOr: '4.17.21', cves: { tr: 'CVE-2021-23337 (komut enj.), CVE-2020-8203 (prototype pollution)', en: 'CVE-2021-23337 (command injection), CVE-2020-8203 (prototype pollution)', de: 'CVE-2021-23337 (Befehlsinjektion), CVE-2020-8203 (Prototype Pollution)' }, note: { tr: '<4.17.21: template/zipObjectDeep', en: '<4.17.21: template/zipObjectDeep', de: '<4.17.21: template/zipObjectDeep' } },
   ] },
   moment: { display: 'Moment.js', ranges: [
-    { ltOr: '2.29.4', cves: 'CVE-2022-31129 (ReDoS)', note: '<2.29.4: uzun girdi ReDoS' },
+    { ltOr: '2.29.4', cves: { tr: 'CVE-2022-31129 (ReDoS)', en: 'CVE-2022-31129 (ReDoS)', de: 'CVE-2022-31129 (ReDoS)' }, note: { tr: '<2.29.4: uzun girdi ReDoS', en: '<2.29.4: long-input ReDoS', de: '<2.29.4: ReDoS bei langer Eingabe' } },
   ] },
   handlebars: { display: 'Handlebars', ranges: [
-    { ltOr: '4.7.7', cves: 'CVE-2021-23369, CVE-2021-23383 (prototype pollution / şablon RCE)', note: '<4.7.7: derleyici prototype pollution' },
+    { ltOr: '4.7.7', cves: { tr: 'CVE-2021-23369, CVE-2021-23383 (prototype pollution / şablon RCE)', en: 'CVE-2021-23369, CVE-2021-23383 (prototype pollution / template RCE)', de: 'CVE-2021-23369, CVE-2021-23383 (Prototype Pollution / Template-RCE)' }, note: { tr: '<4.7.7: derleyici prototype pollution', en: '<4.7.7: compiler prototype pollution', de: '<4.7.7: Compiler-Prototype-Pollution' } },
   ] },
   dompurify: { display: 'DOMPurify', ranges: [
-    { ltOr: '2.4.0', cves: 'çeşitli mXSS bypass (ör. CVE-2020-26870)', note: '<2.4.0: mutation-XSS bypass' },
+    { ltOr: '2.4.0', cves: { tr: 'çeşitli mXSS bypass (ör. CVE-2020-26870)', en: 'various mXSS bypasses (e.g. CVE-2020-26870)', de: 'diverse mXSS-Bypässe (z. B. CVE-2020-26870)' }, note: { tr: '<2.4.0: mutation-XSS bypass', en: '<2.4.0: mutation-XSS bypass', de: '<2.4.0: mutation-XSS bypass' } },
   ] },
   axios: { display: 'Axios', ranges: [
-    { ltOr: '0.21.2', cves: 'CVE-2021-3749 (ReDoS)', note: '<0.21.2: trim ReDoS' },
-    { geLt: ['0.22.0', '1.6.0'], cves: 'CVE-2023-45857 (XSRF token sızıntısı)', note: '<1.6.0: 3rd-party host’a XSRF-TOKEN sızması' },
+    { ltOr: '0.21.2', cves: { tr: 'CVE-2021-3749 (ReDoS)', en: 'CVE-2021-3749 (ReDoS)', de: 'CVE-2021-3749 (ReDoS)' }, note: { tr: '<0.21.2: trim ReDoS', en: '<0.21.2: trim ReDoS', de: '<0.21.2: trim ReDoS' } },
+    { geLt: ['0.22.0', '1.6.0'], cves: { tr: 'CVE-2023-45857 (XSRF token sızıntısı)', en: 'CVE-2023-45857 (XSRF token leak)', de: 'CVE-2023-45857 (XSRF-Token-Leck)' }, note: { tr: '<1.6.0: 3rd-party host’a XSRF-TOKEN sızması', en: '<1.6.0: XSRF-TOKEN leak to a 3rd-party host', de: '<1.6.0: XSRF-TOKEN-Leck an einen Drittanbieter-Host' } },
   ] },
 };
 
@@ -187,12 +189,13 @@ function parseVer(v: string): number[] | null {
   return m ? [+m[1], +m[2], +(m[3] ?? 0)] : null;
 }
 function cmp(a: number[], b: number[]): number { for (let i = 0; i < 3; i++) { if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) - (b[i] ?? 0); } return 0; }
-function matchVuln(lib: string, version: string): { cves: string; note: string } | null {
+function matchVuln(lib: string, version: string, locale: string = 'tr'): { cves: string; note: string } | null {
   const db = KNOWN_VULN_LIBS[lib]; if (!db) return null;
   const ver = parseVer(version); if (!ver) return null;
+  const pick = (l: L) => (locale === 'de' ? l.de : locale === 'en' ? l.en : l.tr);
   for (const r of db.ranges) {
-    if (r.ltOr && cmp(ver, parseVer(r.ltOr)!) < 0) return { cves: r.cves, note: db.eol ? `${r.note}. ${db.eol}` : r.note };
-    if (r.geLt && cmp(ver, parseVer(r.geLt[0])!) >= 0 && cmp(ver, parseVer(r.geLt[1])!) < 0) return { cves: r.cves, note: r.note };
+    if (r.ltOr && cmp(ver, parseVer(r.ltOr)!) < 0) return { cves: pick(r.cves), note: db.eol ? `${pick(r.note)}. ${pick(db.eol)}` : pick(r.note) };
+    if (r.geLt && cmp(ver, parseVer(r.geLt[0])!) >= 0 && cmp(ver, parseVer(r.geLt[1])!) < 0) return { cves: pick(r.cves), note: pick(r.note) };
   }
   return null;
 }
@@ -263,7 +266,7 @@ export async function collectJsAnalysisEvidence(host: string, locale: string = '
       libSeen.add(lib.lib);
       libsDetected.push(`${lib.display}${lib.version ? ` ${lib.version}` : t(' (sürüm okunamadı)', ' (Version nicht lesbar)')}`);
       if (lib.version) {
-        const v = matchVuln(lib.lib, lib.version);
+        const v = matchVuln(lib.lib, lib.version, locale);
         if (v) findings.push({
           check: 'vulnerable_js_lib', inputPoint: `${lib.display} ${lib.version}`, vulnerable: true,
           technique: (en ? 'version-based library vulnerability indicator (retire.js logic)' : de ? 'versionsbasierter Bibliotheks-Schwachstellen-Indikator (retire.js-Logik)' : 'sürüm-tabanlı kütüphane zafiyet göstergesi (retire.js mantığı)'),
@@ -280,7 +283,7 @@ export async function collectJsAnalysisEvidence(host: string, locale: string = '
     if (lib && lib.version && !libSeen.has(lib.lib)) {
       libSeen.add(lib.lib);
       libsDetected.push(`${lib.display} ${lib.version}${t(' (harici/CDN)', ' (extern/CDN)')}`);
-      const v = matchVuln(lib.lib, lib.version);
+      const v = matchVuln(lib.lib, lib.version, locale);
       if (v) findings.push({
         check: 'vulnerable_js_lib', inputPoint: `${lib.display} ${lib.version} (CDN)`, vulnerable: true,
         technique: (en ? 'version-based library vulnerability indicator (external CDN, version from URL)' : de ? 'versionsbasierter Bibliotheks-Schwachstellen-Indikator (externes CDN, Version aus URL)' : 'sürüm-tabanlı kütüphane zafiyet göstergesi (harici CDN, URL’den sürüm)'),

@@ -9,6 +9,7 @@ import { renderRedTeamFullHtml, redteamReportNo } from '../redteam/report.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getPackageDef, fixSuggestionPrice, localizedPackage, localeFor } from '../services/scanPackages.js';
+import { getBundle } from '../services/bundles.js';
 
 const M = (loc: string, tr: string, de: string, en: string): string => (loc === 'de' ? de : loc === 'en' ? en : tr);
 import { evaluatePromo } from '../services/promo.js';
@@ -92,8 +93,13 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
   const extrasMarkdown = di === -1 ? null : full.slice(di + PASSIVE_EXTRAS_DELIM.length).trim();
 
   const locale: 'tr' | 'en' | 'de' = report.order.locale === 'en' ? 'en' : report.order.locale === 'de' ? 'de' : 'tr';
-  const pkgDef = getPackageDef(report.order.package.key);
-  const localizedPkgName = pkgDef ? localizedPackage(pkgDef, locale).displayName : report.order.package.displayName;
+  // (LOKALİZASYON — canlı yol) Paket adı bölgeye göre: BUNDLE ise bundles.ts lokalize adı
+  // (displayNameDe/En; örnek raporların kullandığı aynı kaynak), tekil paket ise PACKAGE_I18N.
+  // ESKİ HATA: bundle'lar localizedPackage'a düşüyordu (PACKAGE_I18N'de yok) → ham TR ad basılıyordu.
+  const bundleDef = getBundle(report.order.package.key);
+  const localizedPkgName = bundleDef
+    ? (locale === 'de' ? bundleDef.displayNameDe : locale === 'en' ? bundleDef.displayNameEn : bundleDef.displayName)
+    : localizedPackage(getPackageDef(report.order.package.key), locale).displayName;
   const pdf = await renderReportPdf(
     reportMd,
     {

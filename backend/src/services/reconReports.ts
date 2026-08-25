@@ -732,7 +732,7 @@ export async function generateBundleReconReport(host: string, locale: string = '
   // de çalışır) + http-only ise https_missing bulgusu üret.
   const o = await resolveOrigin(host);
   if (!o.reachable) return unscannableReconReport(host, locale);
-  const ev = await collectReconEvidence(host);
+  const ev = await collectReconEvidence(host, locale);
   // Hiçbir keşif alanı veri toplayamadıysa -> "İncelenemedi" (null->Düşük fallback DEĞİL).
   return combineReconAreas(ev, { httpOnly: !o.httpsWorks }, locale) ?? unscannableReconReport(host, locale);
 }

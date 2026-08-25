@@ -394,7 +394,9 @@ export type CmsEvidence = {
   cves: CveItem[];         // ciddiyet'e gore siralanmis ilk N
 };
 
-function detectCms(http: HttpEvidence): { cms?: string; version?: string; evidence: string[]; extras: string[] } {
+function detectCms(http: HttpEvidence, locale: string = 'tr'): { cms?: string; version?: string; evidence: string[]; extras: string[] } {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   const html = http.html;
   const evidence: string[] = [];
   const extras: string[] = [];
@@ -408,28 +410,28 @@ function detectCms(http: HttpEvidence): { cms?: string; version?: string; eviden
   const genStr = [gen, xgen].filter(Boolean).join(' ');
   if (/wordpress/i.test(genStr) || /\/wp-(content|includes)\//i.test(html)) {
     cms = 'WordPress';
-    evidence.push(gen && /wordpress/i.test(gen) ? `Meta generator: "${gen}"` : '/wp-content/ veya /wp-includes/ yolları HTML’de görüldü');
+    evidence.push(gen && /wordpress/i.test(gen) ? `Meta generator: "${gen}"` : t('/wp-content/ veya /wp-includes/ yolları HTML’de görüldü', '/wp-content/- oder /wp-includes/-Pfade wurden im HTML beobachtet', '/wp-content/ or /wp-includes/ paths were observed in the HTML'));
     version = genStr.match(/wordpress\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i)?.[1];
   } else if (/joomla/i.test(genStr) || /\/media\/(jui|system)\//i.test(html) || /option=com_/i.test(html)) {
     cms = 'Joomla';
-    evidence.push(gen && /joomla/i.test(gen) ? `Meta generator: "${gen}"` : 'Joomla’ya özgü yollar/parametreler HTML’de görüldü');
+    evidence.push(gen && /joomla/i.test(gen) ? `Meta generator: "${gen}"` : t('Joomla’ya özgü yollar/parametreler HTML’de görüldü', 'Joomla-spezifische Pfade/Parameter wurden im HTML beobachtet', 'Joomla-specific paths/parameters were observed in the HTML'));
     version = genStr.match(/joomla!?\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i)?.[1];
   } else if (/drupal/i.test(genStr) || /Drupal\.settings|\/sites\/(all|default)\//i.test(html) || http.headers.has('x-drupal-cache') || http.headers.has('x-drupal-dynamic-cache')) {
     cms = 'Drupal';
-    evidence.push(gen && /drupal/i.test(gen) ? `Meta generator: "${gen}"` : 'Drupal’a özgü izler (Drupal.settings / /sites/ / X-Drupal-* başlığı) görüldü');
+    evidence.push(gen && /drupal/i.test(gen) ? `Meta generator: "${gen}"` : t('Drupal’a özgü izler (Drupal.settings / /sites/ / X-Drupal-* başlığı) görüldü', 'Drupal-spezifische Spuren (Drupal.settings / /sites/ / X-Drupal-*-Header) wurden beobachtet', 'Drupal-specific traces (Drupal.settings / /sites/ / X-Drupal-* header) were observed'));
     version = genStr.match(/drupal\s*([0-9]+(?:\.[0-9]+)*)/i)?.[1];
   } else if (/typo3/i.test(genStr) || /typo3conf|typo3temp/i.test(html)) {
-    cms = 'TYPO3'; evidence.push('TYPO3 izleri görüldü'); version = genStr.match(/typo3\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i)?.[1];
+    cms = 'TYPO3'; evidence.push(t('TYPO3 izleri görüldü', 'TYPO3-Spuren wurden beobachtet', 'TYPO3 traces were observed')); version = genStr.match(/typo3\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i)?.[1];
   } else if (/magento/i.test(genStr) || /\/static\/version\d|Magento_/i.test(html) || http.headers.has('x-magento-cache-debug')) {
-    cms = 'Magento'; evidence.push('Magento izleri görüldü');
+    cms = 'Magento'; evidence.push(t('Magento izleri görüldü', 'Magento-Spuren wurden beobachtet', 'Magento traces were observed'));
   } else if (/prestashop/i.test(genStr) || /prestashop/i.test(html)) {
-    cms = 'PrestaShop'; evidence.push('PrestaShop izleri görüldü'); version = genStr.match(/prestashop\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i)?.[1];
+    cms = 'PrestaShop'; evidence.push(t('PrestaShop izleri görüldü', 'PrestaShop-Spuren wurden beobachtet', 'PrestaShop traces were observed')); version = genStr.match(/prestashop\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i)?.[1];
   } else if (/mediawiki/i.test(genStr)) {
     cms = 'MediaWiki'; evidence.push(`Meta generator: "${gen}"`); version = genStr.match(/mediawiki\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i)?.[1];
   }
 
   // Eklenti/kutuphane ipuclari (bilgi amacli)
-  if (/woocommerce/i.test(html)) extras.push('WooCommerce (WordPress e-ticaret eklentisi) tespit edildi');
+  if (/woocommerce/i.test(html)) extras.push(t('WooCommerce (WordPress e-ticaret eklentisi) tespit edildi', 'WooCommerce (WordPress-E-Commerce-Plugin) erkannt', 'WooCommerce (WordPress e-commerce plugin) detected'));
   if (xpb) extras.push(`X-Powered-By: ${xpb}`);
   const jq = html.match(/jquery[.-]?([0-9]+\.[0-9]+(?:\.[0-9]+)?)(?:\.min)?\.js/i)?.[1];
   if (jq) extras.push(`jQuery ${jq}`);
@@ -465,13 +467,15 @@ const CMS_PATH_SIGS: Array<{ cms: string; paths: string[]; bodyRe: RegExp }> = [
   { cms: 'TYPO3', paths: ['/typo3/'], bodyRe: /TYPO3|typo3conf|typo3temp/i },
 ];
 
-async function sniffCmsByPaths(host: string): Promise<{ cms?: string; evidence?: string }> {
+async function sniffCmsByPaths(host: string, locale: string = 'tr'): Promise<{ cms?: string; evidence?: string }> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
   for (const sig of CMS_PATH_SIGS) {
     for (const p of sig.paths) {
       const r = await safeGet(`${cachedOriginUrl(host)}${p}`);
       // 200/401/403 (mevcut ama korumali da olabilir) + govde CMS imzasi -> VARLIK dogrulandi.
       if ((r.status === 200 || r.status === 401 || r.status === 403) && sig.bodyRe.test(r.text)) {
-        return { cms: sig.cms, evidence: `${sig.cms}'e özgü yol mevcut ve içerik imzası eşleşti: \`${p}\` (yalnız varlık kontrolü — giriş/parola denemesi yapılmadı)` };
+        return { cms: sig.cms, evidence: t(`${sig.cms}'e özgü yol mevcut ve içerik imzası eşleşti: \`${p}\` (yalnız varlık kontrolü — giriş/parola denemesi yapılmadı)`, `${sig.cms}-spezifischer Pfad vorhanden und Inhaltssignatur stimmte überein: \`${p}\` (nur Existenzprüfung — kein Login-/Passwortversuch)`, `${sig.cms}-specific path present and content signature matched: \`${p}\` (existence check only — no login/password attempt)`) };
       }
     }
   }
@@ -548,10 +552,10 @@ async function nvdLookup(cpeProdEnc: string, version: string): Promise<{ ok: boo
   return { ok: true, total: items.length, cves: items.slice(0, MAX_CVES_LISTED) };
 }
 
-export async function collectCms(host: string, http?: HttpEvidence): Promise<CmsEvidence> {
+export async function collectCms(host: string, http?: HttpEvidence, locale: string = 'tr'): Promise<CmsEvidence> {
   const page = http ?? (await collectHttp(host));
   if (!page.ok) return { ok: false, evidence: [], extras: [], cveOk: false, cveTotal: 0, cves: [] };
-  const det = detectCms(page);
+  const det = detectCms(page, locale);
   let cms = det.cms;
   let version = det.version;
   const extras = det.extras;
@@ -559,7 +563,7 @@ export async function collectCms(host: string, http?: HttpEvidence): Promise<Cms
   // (Grok B3) Ana sayfa/HTML parmak izi CMS vermediyse: bilinen CMS yollarının VARLIĞIYLA doğrula
   // (yalnız GET/existence — login denemesi YOK). Generator gizlenmiş kurulumları yakalar.
   if (!cms) {
-    const byPath = await sniffCmsByPaths(host).catch(() => ({} as { cms?: string; evidence?: string }));
+    const byPath = await sniffCmsByPaths(host, locale).catch(() => ({} as { cms?: string; evidence?: string }));
     if (byPath.cms) { cms = byPath.cms; if (byPath.evidence) evidence.push(byPath.evidence); }
   }
   if (cms && !version) version = await sniffVersion(host, cms).catch(() => undefined);
@@ -606,7 +610,7 @@ export async function collectBannerCves(host: string, http?: HttpEvidence): Prom
 // ======================================================================================
 export type ReconEvidence = { host: string; sub: SubEvidence; api: ApiEvidence; cms: CmsEvidence; bannerCves: BannerCve[] };
 
-export async function collectReconEvidence(host: string): Promise<ReconEvidence> {
+export async function collectReconEvidence(host: string, locale: string = 'tr'): Promise<ReconEvidence> {
   const http = await collectHttp(host);
   // (BÖLÜM 1) PAYLAŞILAN site haritası (in-flight cache — Dış Yüzey/Uyum ile AYNI crawl, tekrar GET seli
   // YOK) -> API/idari-görünümlü yol adaylarını çıkar ve API/Swagger keşfini ZENGİNLEŞTİR (sabit listeye EK).
@@ -619,7 +623,7 @@ export async function collectReconEvidence(host: string): Promise<ReconEvidence>
   const [sub, api, cms, bannerCves] = await Promise.all([
     collectSubdomains(host).catch(() => ({ ok: false, dataSource: 'unavailable', total: 0, resolved: 0, subdomains: [], cnames: [], managedCnames: [], dangling: [] } as SubEvidence)),
     collectApi(host, mined, Math.max(1, pages.length)).catch(() => ({ ok: false, tried: [], reachable: [], pagesScanned: Math.max(1, pages.length), minedTried: [] } as ApiEvidence)),
-    collectCms(host, http).catch(() => ({ ok: false, evidence: [], extras: [], cveOk: false, cveTotal: 0, cves: [] } as CmsEvidence)),
+    collectCms(host, http, locale).catch(() => ({ ok: false, evidence: [], extras: [], cveOk: false, cveTotal: 0, cves: [] } as CmsEvidence)),
     collectBannerCves(host, http).catch(() => [] as BannerCve[]),
   ]);
   return { host, sub, api, cms, bannerCves };

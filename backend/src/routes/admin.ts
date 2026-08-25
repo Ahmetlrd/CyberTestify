@@ -14,6 +14,7 @@ import { renderRedTeamFullHtml, redteamReportNo } from '../redteam/report.js';
 import { storeRedTeamCustomerReport } from '../services/redteamOrderReport.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
 import { getPackageDef, localizedPackage } from '../services/scanPackages.js';
+import { getBundle } from '../services/bundles.js';
 import { LEVEL_CFG } from '../redteam/orchestrator.js';
 import { appendLogs } from '../redteam/observability.js';
 import { hardkill } from '../redteam/hardkill.js';
@@ -359,8 +360,11 @@ adminRouter.get('/orders/:id/report.pdf', async (req, res) => {
   const reportMd = di === -1 ? fullText : fullText.slice(0, di).trim();
   const extrasMarkdown = di === -1 ? null : fullText.slice(di + PASSIVE_EXTRAS_DELIM.length).trim();
   const locale: 'tr' | 'en' | 'de' = report.order.locale === 'en' ? 'en' : report.order.locale === 'de' ? 'de' : 'tr';
-  const admPkgDef = getPackageDef(report.order.package.key);
-  const admPkgName = admPkgDef ? localizedPackage(admPkgDef, locale).displayName : report.order.package.displayName;
+  // (LOKALİZASYON) BUNDLE ise lokalize bundle adı (displayNameDe/En), tekil ise PACKAGE_I18N — reports.ts ile aynı.
+  const admBundleDef = getBundle(report.order.package.key);
+  const admPkgName = admBundleDef
+    ? (locale === 'de' ? admBundleDef.displayNameDe : locale === 'en' ? admBundleDef.displayNameEn : admBundleDef.displayName)
+    : localizedPackage(getPackageDef(report.order.package.key), locale).displayName;
 
   const pdf = await renderReportPdf(
     reportMd,
