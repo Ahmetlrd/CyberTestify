@@ -104,7 +104,9 @@ Bu bölüm, T.C. Siber Güvenlik Başkanlığı'nın (USOM/SGB) **KAMUYA AÇIK**
 
 > **Bağımsız eşleme — resmî statü değildir:** Bu, bağımsız bir eşleme hizmetidir; SGB/USOM ile **resmî bir bağı, onayı veya yetkilendirmesi YOKTUR**. "SGB onaylı", "resmî/ulusal tarama" veya "zorunlu kontrol" DEĞİLDİR; resmî denetim/sertifikasyon yerine geçmez. Yalnız kamuya açık bildirimlerle eşleme yapar.
 
-**Kapsam (dürüstlük):** Katalogda **10** gerçek bildirim var; bunların **yalnız 5 tanesi dışarıdan gözlemlenebilir** ürüne (ör. Apache/nginx/PHP sunucu banner'ı, WordPress/Joomla/Drupal CMS) aittir ve eşlenebilir. Bir ürünün sürümü dışarıdan görülemiyorsa (ör. bir güvenlik cihazı/uç-nokta ürünü) eşleme YAPILMAZ — bu bölüm katalogun tamamının değil, yalnız dış-yüzeyden görülebilen alt kümenin durumunu gösterir. Sürüm banner'dan gizlenebildiği ve backport yamalar sürüm dizesini değiştirmediği için **"kesin etkileniyorsunuz" ASLA denmez** — çıktı yalnız bir GÖSTERGEDİR.
+**Kapsam (dürüstlük):** Katalogda **70** gerçek bildirim var; bunların **yalnız 10 tanesi dışarıdan gözlemlenebilir** ürüne (ör. Apache/nginx/PHP sunucu banner'ı, WordPress/Joomla/Drupal CMS) aittir ve eşlenebilir. Bir ürünün sürümü dışarıdan görülemiyorsa (ör. bir güvenlik cihazı/uç-nokta ürünü) eşleme YAPILMAZ — bu bölüm katalogun tamamının değil, yalnız dış-yüzeyden görülebilen alt kümenin durumunu gösterir. Sürüm banner'dan gizlenebildiği ve backport yamalar sürüm dizesini değiştirmediği için **"kesin etkileniyorsunuz" ASLA denmez** — çıktı yalnız bir GÖSTERGEDİR.
+
+_Katalog son güncelleme: 2026-08-25 (kamuya açık USOM/SGB akışından otomatik senkron)._
 
 > **Üç-durum (dürüstlük):** ✅ *Sinyal yok* = bu bildirimin imzası hedefte görülmedi · ⚠️ *Sinyal var — sürüm doğrulanamadı* = ürün/teknoloji görüldü ama etkilenen sürümde olup olmadığı dışarıdan doğrulanamıyor · ⚠️ *Etkilenen aralıkta olabilir* = yalnız güvenilir sürüm sinyali etkilenen aralığa düşerse.
 
@@ -114,6 +116,8 @@ Aşağıdaki kamuya açık bildirimlerin imzası dış-yüzeyde **gözlemlendi**
 |-----|-----|-----|-----|-----|
 | TR-24-1843 | Apache Çoklu Ürün Güvenlik Bildirimi | ⚠️ Sinyal var — sürüm doğrulanamadı (görülen sürüm 2.4.25) | — | [bildirim](https://www.usom.gov.tr/bildirim/tr-24-1843) |
 | TR-23-0072 | Apache Zafiyeti | ⚠️ Sinyal var — sürüm doğrulanamadı (görülen sürüm 2.4.25) | — | [bildirim](https://www.usom.gov.tr/bildirim/tr-23-0072) |
+| TR-26-0890 | TR-26-0890 (Apache Çoklu Ürün Güvenlik Bildirimi) | ⚠️ Sinyal var — sürüm doğrulanamadı (görülen sürüm 2.4.25) | CVE-2026-63016, CVE-2026-63015, CVE-2026-47359 | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0890) |
+| TR-26-0865 | TR-26-0865 (Apache Çoklu Ürün Güvenlik Bildirimi) | ⚠️ Sinyal var — sürüm doğrulanamadı (görülen sürüm 2.4.25) | CVE-2026-34884, CVE-2026-73632, CVE-2026-73631 | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0865) |
 
 > **Önerilen resmî çözüm (özet):** İlgili ürünü, kaynak bildirimde belirtilen güncel/yamalı sürüme yükseltin ve sürüm/teknoloji ifşasını azaltın. Kesin durum için bağlı bildirimi inceleyin ve sürümünüzü içeriden doğrulayın.
 
@@ -128,7 +132,7 @@ Keşif çoğu sağlıklı hedefte temiz çıkar; bu bölüm "bir şey bulunamad�
 | CMS / Framework CVE Eşleşmesi | ✅ Bilinen bir CMS/çatı parmak izi tespit edilmedi |
 | Sunucu/Yazılım Banner → Bilinen CVE | ⚠️ Banner sürümünde 21 bilinen CVE (PHP 7.1.26) |
 | Site haritası + robots.txt yol keşfi | ✅ Site haritası + robots.txt Disallow’dan türetilen 0 yol denendi (yalnız varlık); hassas/idari uç bulunamadı |
-| USOM/SGB Bildirim Eşlemesi | ⚠️ 2 kamuya açık bildirim imzası gözlemlendi (sürüm doğrulanamadı — gösterge) |
+| USOM/SGB Bildirim Eşlemesi | ⚠️ 4 kamuya açık bildirim imzası gözlemlendi (sürüm doğrulanamadı — gösterge) |
 
 > **Üç-durum ayrımı (dürüstlük):** ✅ *Gösterge bulunamadı* = yöntem çalıştı, temiz · ⚠️ *Gösterge var* = yukarıda ayrıntılı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).
 
