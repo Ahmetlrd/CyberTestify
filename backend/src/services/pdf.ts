@@ -195,18 +195,19 @@ export function assessBasit(
 
   // (1) Rapor KOD-yazimi oldugundan GENEL DEĞERLENDİRME'deki ACIK "Risk Seviyesi: X"i oku —
   //     tek dogruluk kaynagi; rozet ile metin GARANTI tutarli. "Orta-Yüksek" ONCE eslesmeli.
-  const m = md.slice(0, 1500).match(/(?:risk\s*seviyesi|risikostufe)\s*[:：]\s*\**\s*(orta[-\s]?y[uü]ksek|kr[iİ]t[iİ]k|y[uü]ksek|orta|d[uü][sş][uü]k|mittel[-\s]?hoch|kritisch|hoch|mittel|niedrig)/i);
+  // (3 BÖLGE) Türkçe "Risk Seviyesi" + Almanca "Risikostufe" + İngilizce "Risk Level".
+  const m = md.slice(0, 1500).match(/(?:risk\s*seviyesi|risikostufe|risk\s*level)\s*[:：]\s*\**\s*(orta[-\s]?y[uü]ksek|kr[iİ]t[iİ]k|y[uü]ksek|orta|d[uü][sş][uü]k|mittel[-\s]?hoch|kritisch|hoch|mittel|niedrig|medium[-\s]?high|critical|high|medium|low)/i);
   if (m) {
-    const kw = m[1].toLocaleLowerCase('tr');
-    if (/orta[-\s]?y[uü]ksek|mittel[-\s]?hoch/.test(kw)) return mk('medium-high');
-    if (/kr[iı]t[iı]k|y[uü]ksek|kritisch|hoch/.test(kw)) return mk('high');
-    if (/^orta$|^mittel$/.test(kw)) return mk('medium');
-    if (/d[uü][sş][uü]k|niedrig/.test(kw)) return mk('low');
+    const kw = lcMatch(m[1]); // I-güvenli: "High"->"high" (tr-locale "hıgh" olurdu)
+    if (/orta[-\s]?y[uü]ksek|mittel[-\s]?hoch|medium[-\s]?high/.test(kw)) return mk('medium-high');
+    if (/kr[iı]t[iı]k|y[uü]ksek|kritisch|hoch|critical|high/.test(kw)) return mk('high');
+    if (/^orta$|^mittel$|^medium$/.test(kw)) return mk('medium');
+    if (/d[uü][sş][uü]k|niedrig|low/.test(kw)) return mk('low');
   }
 
   // (2) Acik ifade yoksa (eski/ajan raporu): HTTP baslik tablosundan turet.
   const { present, absent } = parseBasitHeaders(md);
-  if (present.size + absent.size === 0) return assessRisk(md, 'tr'); // (3) son care
+  if (present.size + absent.size === 0) return assessRisk(md, locale); // (3) son care — locale KORUNUR (EN'de 'tr' sızıntısı yoktu)
   const crit = absent.has('csp') || absent.has('xfo');
   if (crit || absent.size >= 3) return mk('medium');
   return mk('low');
@@ -645,15 +646,15 @@ function buildPositiveAssurance(md: string, locale: 'tr' | 'en' | 'de'): string 
     if (block.length < 2) continue;
     const cells = (r: string) => r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
     const header = cells(block[0]).map((h) => lcMatch(h));
-    const kCol = header.findIndex((h) => /kontrol|control|kontrolle/.test(h));
-    const sCol = header.findIndex((h) => /sonu[çc]|result|ergebnis/.test(h));
+    const kCol = header.findIndex((h) => /kontrol|control/.test(h));
+    const sCol = header.findIndex((h) => /sonu[çc]|result/.test(h));
     if (kCol === -1 || sCol === -1) continue; // yalnız KONTROL ÖZETİ tablosu
     for (let r = 1; r < block.length; r++) {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue;
       const c = cells(block[r]);
       const sonuc = lcMatch(c[sCol] ?? '');
-      const isClean = /✓|kan[ıi]t yok|g[öo]sterge yok|vekt[öo]r yok|temiz|no evidence|no indicator|no vector|clean|kein nachweis|kein indikator|sauber/.test(sonuc);
-      const scopeOut = /kapsam d|giri[şs] noktas[ıi] yok|out of scope|no entry point|au[ßs]erhalb|kein einstiegspunkt/.test(sonuc);
+      const isClean = /✓|kan[ıi]t yok|g[öo]sterge yok|vekt[öo]r yok|temiz|no evidence|no indicator|no vector|clean/.test(sonuc);
+      const scopeOut = /kapsam d|giri[şs] noktas[ıi] yok|out of scope|no entry point/.test(sonuc);
       if (!isClean || scopeOut) continue;
       const name = stripMd(c[kCol] ?? '');
       const key = name.toLocaleLowerCase('tr');
@@ -752,14 +753,14 @@ function scopeOutControlsFromTable(md: string): Set<string> {
     if (block.length < 2) continue;
     const cells = (r: string) => r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
     const header = cells(block[0]).map((h) => lcMatch(h));
-    const kCol = header.findIndex((h) => /kontrol|control|kontrolle/.test(h));
-    const sCol = header.findIndex((h) => /sonu[çc]|result|ergebnis/.test(h));
+    const kCol = header.findIndex((h) => /kontrol|control/.test(h));
+    const sCol = header.findIndex((h) => /sonu[çc]|result/.test(h));
     if (kCol === -1 || sCol === -1) continue; // yalnız KONTROL ÖZETİ tablosu
     for (let r = 1; r < block.length; r++) {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue;
       const c = cells(block[r]);
       const sonuc = lcMatch(c[sCol] ?? '');
-      if (/kapsam d|giri[şs] noktas[ıi] yok|out of scope|no entry point|au[ßs]erhalb|kein einstiegspunkt/.test(sonuc)) {
+      if (/kapsam d|giri[şs] noktas[ıi] yok|out of scope|no entry point/.test(sonuc)) {
         const name = stripMd(c[kCol] ?? '').trim();
         if (name) out.add(name.toLocaleLowerCase('tr'));
       }
@@ -845,7 +846,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     // bulgu. Boylece kutu <-> YÖNETİCİ ÖZETİ/GENEL DEĞERLENDİRME HER ZAMAN tutarli. (Yalniz
     // bundle_surface; basit_tarama ve digerleri DEGISMEZ.)
     if (BUNDLE_COMBINED_PKGS.has(meta.packageKey ?? '')) {
-      const g = effectiveMd.match(/##\s*(?:GENEL DEĞERLENDİRME|GESAMTBEWERTUNG)\s*\n+\*\*(?:Risk Seviyesi|Risikostufe):[^\n]*\*\*\s*\n+([^\n]+)/);
+      const g = effectiveMd.match(/##\s*(?:GENEL DEĞERLENDİRME|GESAMTBEWERTUNG|OVERALL ASSESSMENT)\s*\n+\*\*(?:Risk Seviyesi|Risikostufe|Risk Level):[^\n]*\*\*\s*\n+([^\n]+)/);
       if (g) risk.sentence = g[1].trim().replace(/\*\*/g, ''); // kutu duz metin — markdown ** temizle
     }
     // (ROZET TUTARLILIĞI) Severity'li AKTİF bulgu YOK (master "Temiz") ama rozet Yüksek diyorsa
@@ -961,7 +962,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
         // keşfedilen/auth-kilitli API uç sayısı) üst-düzey değer bilgisidir -> korunmalı.
         // (3 BÖLGE) Türkçe + İngilizce + Almanca üst-düzey madde etiketleri. lcMatch: "API"->"api"
         // (tr-locale'de "apı" olurdu; lcMatch I/İ'yi 'i'ye indirger).
-        return /genel risk|kapsam|[öo]nerilen|api sald|overall risk|scope|recommended|api attack|gesamtrisiko|umfang|empfohlen|api-angriff/.test(lcMatch(bm[1]));
+        return /genel risk|kapsam|[öo]nerilen|api sald|overall risk|scope|recommended|api attack/.test(lcMatch(bm[1]));
       }).join('\n');
     }
     const summaryBody = dedupeBlockquotes(md.render(execMd)) + (hasVuln ? buildPriorities(parsed!.rows, loc) : '');
