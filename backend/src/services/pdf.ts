@@ -294,8 +294,15 @@ function reportIdentifiers(hostname: string, createdAt: Date, hideDate = false):
 
 export type Sev = 'critical' | 'high' | 'medium' | 'low';
 export type Finding = { title: string; sev: Sev; type?: FindingType; endpoint?: string; evidence?: string; confidence?: string };
+// (TR-I HATASI) Anahtar-kelime eşleştirmede tr-locale küçültme ASCII "I"->"ı" (noktasız) yapar;
+// İngilizce başlık/değerler (SEVERITY->severıty, HIGH->hıgh, Critical->crıtıcal, EXECUTIVE->executıve)
+// böylece regex'e TAKILMAZ ve EN raporları yapısız yola düşerdi. Bu yardımcı Türkçe İ ile İngilizce I'yı
+// birlikte 'i'ye indirger — SALT eşleştirme için güvenli küçültme (görüntülenen metin için KULLANILMAZ).
+function lcMatch(s: string): string {
+  return s.replace(/[İI]/g, 'i').toLowerCase();
+}
 function normSev(s: string): Sev | null {
-  const x = s.toLocaleLowerCase('tr');
+  const x = lcMatch(s);
   if (/krit[iı]k|critical|kritisch/.test(x)) return 'critical';
   if (/y[üu]ksek|high|hoch/.test(x)) return 'high';
   if (/orta|medium|mittel/.test(x)) return 'medium';
@@ -376,7 +383,7 @@ export function parseFindings(md: string, locale: 'tr' | 'en' | 'de'): { rows: F
     while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { block.push(lines[i]); i++; }
     if (block.length < 2) continue;
     const cells = (r: string) => r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
-    const header = cells(block[0]).map((h) => h.toLocaleLowerCase('tr'));
+    const header = cells(block[0]).map((h) => lcMatch(h));
     const sevCol = header.findIndex((h) => /[şs]iddet|severity|ciddiyet|schweregrad/.test(h));
     if (sevCol === -1) continue; // şiddet kolonu yoksa bulgu tablosu değil
     const techCol = header.findIndex((h) => /teknik|technique|technik|t[üu]r\b|tip\b|\btype\b|\btyp\b/.test(h));
@@ -637,16 +644,16 @@ function buildPositiveAssurance(md: string, locale: 'tr' | 'en' | 'de'): string 
     while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { block.push(lines[i]); i++; }
     if (block.length < 2) continue;
     const cells = (r: string) => r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
-    const header = cells(block[0]).map((h) => h.toLocaleLowerCase('tr'));
-    const kCol = header.findIndex((h) => /kontrol/.test(h));
-    const sCol = header.findIndex((h) => /sonu[çc]/.test(h));
+    const header = cells(block[0]).map((h) => lcMatch(h));
+    const kCol = header.findIndex((h) => /kontrol|control|kontrolle/.test(h));
+    const sCol = header.findIndex((h) => /sonu[çc]|result|ergebnis/.test(h));
     if (kCol === -1 || sCol === -1) continue; // yalnız KONTROL ÖZETİ tablosu
     for (let r = 1; r < block.length; r++) {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue;
       const c = cells(block[r]);
-      const sonuc = (c[sCol] ?? '').toLocaleLowerCase('tr');
-      const isClean = /✓|kan[ıi]t yok|g[öo]sterge yok|vekt[öo]r yok|temiz/.test(sonuc);
-      const scopeOut = /kapsam d|giri[şs] noktas[ıi] yok/.test(sonuc);
+      const sonuc = lcMatch(c[sCol] ?? '');
+      const isClean = /✓|kan[ıi]t yok|g[öo]sterge yok|vekt[öo]r yok|temiz|no evidence|no indicator|no vector|clean|kein nachweis|kein indikator|sauber/.test(sonuc);
+      const scopeOut = /kapsam d|giri[şs] noktas[ıi] yok|out of scope|no entry point|au[ßs]erhalb|kein einstiegspunkt/.test(sonuc);
       if (!isClean || scopeOut) continue;
       const name = stripMd(c[kCol] ?? '');
       const key = name.toLocaleLowerCase('tr');
@@ -744,15 +751,15 @@ function scopeOutControlsFromTable(md: string): Set<string> {
     while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { block.push(lines[i]); i++; }
     if (block.length < 2) continue;
     const cells = (r: string) => r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
-    const header = cells(block[0]).map((h) => h.toLocaleLowerCase('tr'));
-    const kCol = header.findIndex((h) => /kontrol/.test(h));
-    const sCol = header.findIndex((h) => /sonu[çc]/.test(h));
+    const header = cells(block[0]).map((h) => lcMatch(h));
+    const kCol = header.findIndex((h) => /kontrol|control|kontrolle/.test(h));
+    const sCol = header.findIndex((h) => /sonu[çc]|result|ergebnis/.test(h));
     if (kCol === -1 || sCol === -1) continue; // yalnız KONTROL ÖZETİ tablosu
     for (let r = 1; r < block.length; r++) {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue;
       const c = cells(block[r]);
-      const sonuc = (c[sCol] ?? '').toLocaleLowerCase('tr');
-      if (/kapsam d|giri[şs] noktas[ıi] yok/.test(sonuc)) {
+      const sonuc = lcMatch(c[sCol] ?? '');
+      if (/kapsam d|giri[şs] noktas[ıi] yok|out of scope|no entry point|au[ßs]erhalb|kein einstiegspunkt/.test(sonuc)) {
         const name = stripMd(c[kCol] ?? '').trim();
         if (name) out.add(name.toLocaleLowerCase('tr'));
       }
@@ -898,11 +905,16 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   for (const chunk of effectiveMd.split(/\n(?=##\s)/)) {
     const hm = chunk.match(/^##\s+(.+?)\s*(?:\n|$)/);
     const tt = hm ? stripMd(hm[1]).toLocaleLowerCase('tr') : '';
+    // (TR-I HATASI) tr-locale küçültme ASCII "I" -> "ı" (noktasız) yapar; İngilizce başlık
+    // "EXECUTIVE"/"PRIORITY" -> "executıve"/"prıorıty" olur ve anahtar-kelime regex'i TUTMAZ
+    // (EN raporları yapısız yola düşer). Türkçe İ eşleşmesini korumak için tt (tr) TUTULUR;
+    // İngilizce/Almanca anahtar kelimeleri de yakalamak için varsayılan küçültme EKLENİR.
+    const ttx = hm ? `${tt} ${stripMd(hm[1]).toLowerCase()}` : '';
     if (!tt) { if (chunk.trim()) detailParts.push(chunk.replace(/^###\s/gm, '#### ').replace(/^##\s/gm, '### ')); continue; }
     if (/^bulgular$/.test(tt)) continue; // boş "## Bulgular" wrapper
-    if (/y[öo]netici [öo]zeti|executive summary|managementzusammenfassung/.test(tt)) { hasExec = true; summaryParts.push(chunk.replace(/^##[^\n]*\n?/, '').trim()); continue; }
-    if (/genel de[ğg]erlendirme|overall assessment|gesamtbewertung/.test(tt)) continue; // MÜKERRER -> at
-    if (/[öo]ncelikli aksiyonlar|priority actions|iyile[şs]tirme [öo]ncelik|priorisierte (aktionen|ma[ßs]nahmen)/.test(tt)) { summaryParts.push(chunk.replace(/^###\s/gm, '#### ').replace(/^##\s/gm, '### ')); continue; }
+    if (/y[öo]netici [öo]zeti|executive summary|managementzusammenfassung/.test(ttx)) { hasExec = true; summaryParts.push(chunk.replace(/^##[^\n]*\n?/, '').trim()); continue; }
+    if (/genel de[ğg]erlendirme|overall assessment|gesamtbewertung/.test(ttx)) continue; // MÜKERRER -> at
+    if (/[öo]ncelikli aksiyonlar|priority actions|iyile[şs]tirme [öo]ncelik|priorisierte (aktionen|ma[ßs]nahmen)/.test(ttx)) { summaryParts.push(chunk.replace(/^###\s/gm, '#### ').replace(/^##\s/gm, '### ')); continue; }
     detailParts.push(chunk.replace(/^###\s/gm, '#### ').replace(/^##\s/gm, '### ')); // detay -> H3
   }
   const reorganize = hasExec && !opts.assessOverride;
@@ -947,8 +959,9 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
         if (!bm) return true; // madde değil -> tut
         // yalnız üst-düzey madde tut (per-kontrol uzun listeyi at). "API saldırı yüzeyi" (Bölüm B —
         // keşfedilen/auth-kilitli API uç sayısı) üst-düzey değer bilgisidir -> korunmalı.
-        // DİKKAT: tr-locale'de "API" -> "apı" (NOKTASIZ ı, U+0131). Bu yüzden ap[ıi] (her iki i).
-        return /genel risk|kapsam|[öo]nerilen|ap[ıi] sald/.test(bm[1].toLocaleLowerCase('tr'));
+        // (3 BÖLGE) Türkçe + İngilizce + Almanca üst-düzey madde etiketleri. lcMatch: "API"->"api"
+        // (tr-locale'de "apı" olurdu; lcMatch I/İ'yi 'i'ye indirger).
+        return /genel risk|kapsam|[öo]nerilen|api sald|overall risk|scope|recommended|api attack|gesamtrisiko|umfang|empfohlen|api-angriff/.test(lcMatch(bm[1]));
       }).join('\n');
     }
     const summaryBody = dedupeBlockquotes(md.render(execMd)) + (hasVuln ? buildPriorities(parsed!.rows, loc) : '');
