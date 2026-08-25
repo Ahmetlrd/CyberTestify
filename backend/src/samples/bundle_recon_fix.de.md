@@ -1,16 +1,16 @@
-Dieser Abschnitt enthält bereichsweise Korrekturvorschläge für alle in Ihrem Reconnaissance-Scan festgestellten Mängel.
+Dieser Abschnitt enthält bereichsweise Behebungsempfehlungen für alle in Ihrer Erkundungsprüfung festgestellten Mängel.
 
-### Subdomain-Takeover — Leitfaden für proaktive Überwachung
+### Subdomain-Takeover — proaktiver Überwachungsleitfaden
 
-Derzeit wurde keine übernehmbare Subdomain festgestellt. Um diesen Zustand **dauerhaft** zu erhalten, richten Sie ein Certificate-Transparency-(CT)-Überwachungssystem ein, das neue/unerwartete Subdomain-Zertifikate frühzeitig erkennt:
+Derzeit wurde kein übernehmbares Subdomain festgestellt. Um diesen Zustand **dauerhaft** zu sichern, richten Sie ein Certificate-Transparency-(CT-)Überwachungssystem ein, das neue/unerwartete Subdomain-Zertifikate frühzeitig erkennt:
 
 **1) Kostenlose E-Mail-/Webhook-Benachrichtigung mit certSpotter**
 
-Fügen Sie auf `sslmate.com/certspotter` Ihre Domain (z. B. `ornek.com`, inklusive Subdomains) zur Überwachung hinzu; bei Ausstellung eines neuen Zertifikats erhalten Sie eine E-Mail-/Webhook-Benachrichtigung (ein neues Subdomain-Zertifikat könnte ein Eintrag sein, den Sie nicht erstellt haben).
+Fügen Sie Ihre Domain (z. B. `nomorelink.com`, inklusive Subdomains) auf `sslmate.com/certspotter` zur Überwachung hinzu; bei Ausstellung eines neuen Zertifikats erhalten Sie eine E-Mail-/Webhook-Benachrichtigung (ein neues Subdomain-Zertifikat kann ein Eintrag sein, den Sie nicht erstellt haben).
 
-**2) Ein einfacher Cron, der crt.sh periodisch abfragt (auf Ihrem eigenen Server)**
+**2) Ein einfacher Cronjob, der crt.sh regelmäßig abfragt (auf Ihrem eigenen Server)**
 
-Beispielskript, das täglich die Subdomain-Liste abruft, mit der vorherigen vergleicht und bei einer neu hinzugekommenen Subdomain warnt:
+Ein Beispielskript, das täglich die Subdomain-Liste abruft, mit der vorherigen vergleicht und bei einer neu hinzugekommenen Subdomain benachrichtigt:
 
 ```bash
 #!/usr/bin/env bash
@@ -28,11 +28,11 @@ if [ -n "$NEW" ]; then
 fi
 ```
 
-**3) Führen Sie ein Subdomain-Inventar** — dokumentieren Sie, welche Subdomain zu welchem Dienst/Team gehört; entfernen Sie verwaiste (ungenutzte) CNAME-Einträge aus dem DNS, bevor Sie die Cloud-Ressource löschen (die Reihenfolge des Entfernens ist wichtig).
+**3) Führen Sie ein Subdomain-Inventar** — dokumentieren Sie, welche Subdomain zu welchem Dienst/Team gehört; entfernen Sie brachliegende (ungenutzte) CNAME-Einträge aus dem DNS, bevor Sie die Cloud-Ressource löschen (die Reihenfolge der Entfernung ist wichtig).
 
-### API- & Swagger-Reconnaissance — Leitfaden für proaktive Härtung
+### API- & Swagger-Erkundung — proaktiver Härtungsleitfaden
 
-Es wurde keine öffentlich zugängliche API-Dokumentation gefunden. Um dies dauerhaft zu machen, stellen Sie Schema-Endpunkte wie Swagger/OpenAPI/ReDoc in der Produktion hinter Authentifizierung oder IP-Beschränkung. Wenden Sie das für Ihre Plattform passende Beispiel an:
+Es wurde keine öffentlich zugängliche API-Dokumentation gefunden. Um dies dauerhaft zu sichern, stellen Sie Schema-Endpunkte wie Swagger/OpenAPI/ReDoc in der Produktion hinter eine Authentifizierung oder IP-Beschränkung. Wenden Sie das zu Ihrer Plattform passende Beispiel an:
 
 **Nginx — IP-Allowlist + Basic-Auth für `/swagger*`, `/api-docs*`, `/openapi.json`**
 
@@ -67,18 +67,18 @@ basic_auth @apidocs {
 }
 ```
 
-**Zusätzliche Empfehlungen:** Fügen Sie Ihrem OpenAPI-Schema eine globale `security`-Definition hinzu; wenn Sie GraphQL verwenden, deaktivieren Sie die Introspection in der Produktion (`introspection: false`).
+**Zusätzliche Empfehlungen:** Fügen Sie Ihrem OpenAPI-Schema eine globale `security`-Definition hinzu; wenn Sie GraphQL verwenden, deaktivieren Sie Introspection in der Produktion (`introspection: false`).
 
-### CMS & Bekannte CVE — Leitfaden zum proaktiven Aktuellbleiben
+### CMS & bekannte CVE — proaktiver Aktualitätsleitfaden
 
-Für die erkannte Version wurde kein bekannter CVE gefunden, der die Version ausdrücklich abdeckt. Um diesen Zustand zu erhalten, automatisieren Sie das Updaten und scannen Sie Ihre Abhängigkeiten fortlaufend:
+Es wurde kein bekanntes CMS erkannt (möglicherweise eine eigene/verschleierte Anwendung). Automatisieren Sie das Aktuellbleiben und die Verfolgung bekannter Schwachstellen:
 
-**1) Falls Sie WordPress verwenden — automatische Minor- + Sicherheitsupdates**
+**1) Wenn Sie WordPress verwenden — automatische Minor- + Sicherheitsupdates**
 
 In `wp-config.php`:
 
 ```php
-define( 'WP_AUTO_UPDATE_CORE', 'minor' );  // güvenlik/minor sürümleri otomatik
+define( 'WP_AUTO_UPDATE_CORE', 'minor' );  // Sicherheits-/Minor-Versionen automatisch
 ```
 
 Für automatische Plugin-/Theme-Updates (WP-CLI):
@@ -88,18 +88,18 @@ wp plugin auto-updates enable --all
 wp theme auto-updates enable --all
 ```
 
-**2) Fügen Sie in CI/CD kostenlosen Abhängigkeitsscan (SCA) hinzu**
+**2) Fügen Sie Ihrer CI/CD einen kostenlosen Abhängigkeits-Scan (SCA) hinzu**
 
-- **Dependabot** (GitHub, kostenlos): fügen Sie dem Repository `.github/dependabot.yml` hinzu:
+- **Dependabot** (GitHub, kostenlos): Fügen Sie dem Repository `.github/dependabot.yml` hinzu:
 
 ```yaml
 version: 2
 updates:
-  - package-ecosystem: "composer"   # WordPress/PHP için; npm/pip/… da desteklenir
+  - package-ecosystem: "composer"   # für WordPress/PHP; npm/pip/… werden ebenfalls unterstützt
     directory: "/"
     schedule: { interval: "weekly" }
 ```
 
-- **npm audit** (Node-Projekte): fügen Sie Ihrem CI-Schritt `npm audit --audit-level=high` hinzu; bei hohen/kritischen Schwachstellen soll der Build fehlschlagen.
+- **npm audit** (Node-Projekte): Fügen Sie Ihrem CI-Schritt `npm audit --audit-level=high` hinzu; bei hohen/kritischen Schwachstellen soll der Build fehlschlagen.
 
-**3) Reduzieren Sie die Versionspreisgabe** — entfernen/deaktivieren Sie versionsverratende Stellen wie `<meta generator>`, `X-Powered-By`, `/readme.html`, `/CHANGELOG.txt`; so wird der automatische CVE-Abgleich für Angreifer schwieriger.
+**3) Reduzieren Sie die Versionsoffenlegung** — entfernen/deaktivieren Sie versionsverratende Stellen wie `<meta generator>`, `X-Powered-By`, `/readme.html`, `/CHANGELOG.txt`; so wird die automatische CVE-Zuordnung für Angreifer erschwert.

@@ -1,31 +1,31 @@
 ## MANAGEMENTZUSAMMENFASSUNG
 
-- **Allgemeine Risikostufe: Hoch** — 5 Bereiche wurden untersucht; das höchste Risiko liegt im Bereich **SSL/TLS-Konfigurationsprüfung** (auf Zertifikats- und/oder Protokollebene wurde ein dringend zu behebendes Problem festgestellt.).
-- ⚠️ **HTTPS wird nicht unterstützt:** Das Ziel hat über HTTPS (443) nicht geantwortet; die Kommunikation wird unverschlüsselt (im Klartext) übertragen. Die Prüfung wurde über http:// durchgeführt. Dies ist für sich genommen ein schwerwiegender Befund (siehe unten).
-- **SSL/TLS-Konfigurationsprüfung:** Hoch — auf Zertifikats- und/oder Protokollebene wurde ein dringend zu behebendes Problem festgestellt.
-- **Sicherheits-Header & Informationsabfluss:** Hoch — eine von außen zugängliche sensible Datei wurde festgestellt.
+- **Gesamtrisikostufe: Hoch** — 5 Bereiche wurden geprüft; das höchste Risiko liegt im Bereich **SSL/TLS-Konfigurationsaudit** (auf Zertifikats- und/oder Protokollebene wurde ein dringend zu behebendes Problem festgestellt.).
+- ⚠️ **HTTPS wird nicht unterstützt:** Das Ziel hat nicht über HTTPS (443) geantwortet; die Kommunikation läuft unverschlüsselt (Klartext). Die Prüfung wurde über http:// durchgeführt. Das ist für sich genommen ein ernster Befund (siehe unten).
+- **SSL/TLS-Konfigurationsaudit:** Hoch — auf Zertifikats- und/oder Protokollebene wurde ein dringend zu behebendes Problem festgestellt.
+- **Sicherheits-Header & Informationslecks:** Hoch — eine von außen erreichbare sensible Datei wurde festgestellt.
 - **DNS- & E-Mail-Sicherheit:** Mittel — bei der E-Mail-Authentifizierung bestehen zu behebende Lücken.
-- **CORS- & Cookie-Sicherheit:** Niedrig — es fiel kein auffälliges CORS-/Cookie-Problem auf.
-- **CSP-Analyse (Content-Security-Policy):** Mittel — die CSP fehlt/wird nicht erzwungen.
-- **Empfohlener erster Schritt:** Beginnen Sie mit dem Bereich des höchsten Risikos; für jeden Befund finden Sie Schritt-für-Schritt-Befehle im Abschnitt „KI-Lösungsvorschläge".
+- **CORS- & Cookie-Sicherheit:** Niedrig — es wurde kein deutliches CORS-/Cookie-Problem festgestellt.
+- **CSP-Analyse (Content Security Policy):** Mittel — CSP fehlt/wird nicht durchgesetzt.
+- **Empfohlener erster Schritt:** Beginnen Sie mit dem Bereich mit dem höchsten Risiko; für jeden Befund werden schrittweise fertige Befehle im Abschnitt „KI-Lösungsvorschläge" bereitgestellt.
 
 ## GESAMTBEWERTUNG
 
 **Risikostufe: Hoch**
 
-Dieses Ziel antwortet nicht über HTTPS; die Kommunikation wird unverschlüsselt (im Klartext) übertragen — vorrangig sollte mit einem gültigen TLS-Zertifikat auf HTTPS umgestellt werden. Die übrigen Bereiche wurden über http:// untersucht. Das höchste Risiko wurde im Bereich **SSL/TLS-Konfigurationsprüfung** (auf Zertifikats- und/oder Protokollebene wurde ein dringend zu behebendes Problem festgestellt.) festgestellt; es wird empfohlen, dies vorrangig zu beheben. Nachfolgend wird jeder Bereich einzeln berichtet.
+Dieses Ziel antwortet nicht über HTTPS; die Kommunikation läuft unverschlüsselt (Klartext) — vorrangig sollte mit einem gültigen TLS-Zertifikat auf HTTPS umgestellt werden. Die übrigen Bereiche wurden über http:// geprüft. Das höchste Risiko wurde im Bereich **SSL/TLS-Konfigurationsaudit** (auf Zertifikats- und/oder Protokollebene wurde ein dringend zu behebendes Problem festgestellt.) festgestellt; eine vorrangige Behebung wird empfohlen. Nachfolgend wird jeder Bereich einzeln berichtet.
 
 ## FESTGESTELLTE RISIKEN
 
 | Befund | Schweregrad | Beschreibung |
 |-------|--------|----------|
-| HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation) | Hoch | Die Website antwortet nicht auf HTTPS; der gesamte Datenverkehr wird unverschlüsselt (im Klartext) übertragen — er kann abgehört/verändert, Sitzungen/Passwörter können gestohlen werden. Lösung: gültiges TLS-Zertifikat + HTTP→HTTPS-Weiterleitung + HSTS. |
+| HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation) | Hoch | Die Website antwortet nicht über HTTPS; der gesamte Verkehr wird unverschlüsselt (Klartext) übertragen — mitlesbar/veränderbar, Sitzungen/Passwörter können gestohlen werden. Lösung: gültiges TLS-Zertifikat + HTTP→HTTPS-Umleitung + HSTS. |
 
-## SSL/TLS-Konfigurationsprüfung
+## SSL/TLS-Konfigurationsaudit
 
 ### TLS-ZERTIFIKATSSTATUS
 
-⚠️ Dieses Ziel hat **über HTTPS (443) nicht geantwortet**; es wurde kein gültiges TLS-Zertifikat gefunden. Die Website ist nur über **unverschlüsseltes HTTP** erreichbar.
+⚠️ Dieses Ziel **hat nicht über HTTPS (443) geantwortet**; es wurde kein gültiges TLS-Zertifikat gefunden. Die Website ist nur über **unverschlüsseltes HTTP** erreichbar.
 
 ### TLS-PROTOKOLL & CIPHER
 
@@ -35,88 +35,109 @@ Dieses Ziel antwortet nicht über HTTPS; die Kommunikation wird unverschlüsselt
 
 ### HSTS (HTTP Strict Transport Security)
 
-- **Status:** Fehlt — dem Browser wird die HTTPS-Pflicht nicht mitgeteilt; bei ersten Anfragen besteht das Risiko eines SSL-Stripping-/Downgrade-Angriffs.
+- **Status:** Fehlt — Dem Browser wird die HTTPS-Pflicht nicht mitgeteilt; bei Erstanfragen besteht das Risiko von SSL-Stripping-/Downgrade-Angriffen.
 
 ### FESTGESTELLTE RISIKEN
 
 | Befund | Schweregrad | Beschreibung |
 |-------|--------|----------|
-| HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation) | Hoch | Die Website antwortet nicht auf HTTPS; der gesamte Datenverkehr wird unverschlüsselt (im Klartext) übertragen. Ein Angreifer im selben Netzwerk kann abhören, Sitzungen/Passwörter stehlen oder Inhalte verändern. Lösung: gültiges TLS-Zertifikat + HTTP→HTTPS-Weiterleitung + HSTS. |
-| HSTS fehlt | Mittel | Dem Browser wird die HTTPS-Pflicht nicht mitgeteilt; anfällig für Downgrade-Angriffe. |
+| HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation) | Hoch | Die Website antwortet nicht über HTTPS; der gesamte Datenverkehr wird unverschlüsselt (Klartext) übertragen. Ein Angreifer im selben Netzwerk kann mithören, Sitzungen/Passwörter stehlen oder Inhalte verändern. Lösung: gültiges TLS-Zertifikat + HTTP→HTTPS-Umleitung + HSTS. |
+| HSTS fehlt | Mittel | Die HTTPS-Pflicht wird dem Browser nicht mitgeteilt; anfällig für Downgrade-Angriffe. |
 
-## Sicherheits-Header & Informationsabfluss
+## Sicherheits-Header & Informationslecks
 
 ### HTTP-SICHERHEITS-HEADER
 
 | Header | Status | Beschreibung |
 |--------|-------|----------|
-| Strict-Transport-Security | Fehlt | HTTPS-Pflicht wird nicht mitgeteilt; SSL-Stripping-Risiko. |
-| Content-Security-Policy | Fehlt | Keine browserseitige Verteidigung gegen XSS/Injektion. |
+| Strict-Transport-Security | Fehlt | Die HTTPS-Pflicht wird nicht mitgeteilt; SSL-Stripping-Risiko. |
+| Content-Security-Policy | Fehlt | Keine Browser-Verteidigung gegen XSS/Injection. |
 | X-Frame-Options | Fehlt | Anfällig für Clickjacking; kann in ein iframe eingebettet werden. |
 | X-Content-Type-Options | Fehlt | MIME-Sniffing möglich. |
 | Referrer-Policy | Fehlt | Referrer-Informationen können an externe Quellen abfließen. |
 | Permissions-Policy | Fehlt | Sensible Browser-APIs sind nicht eingeschränkt. |
-| X-XSS-Protection | Fehlt | Der XSS-Filter älterer Browser ist nicht gesetzt (in modernen Browsern nicht kritisch). |
+| X-XSS-Protection | Fehlt | Der Legacy-XSS-Filter älterer Browser ist nicht gesetzt (in modernen Browsern unkritisch). |
 
-### INFORMATIONSABFLUSS / OFFEN ZUGÄNGLICHE DATEIEN
+### INFORMATIONSLECKS / OFFENLIEGENDE DATEIEN
 
-Häufige sensible Pfade wurden mit einem einzelnen GET geprüft (Inhalt verifiziert — allein HTTP 200 gilt nicht als Nachweis):
+Häufige sensible Pfade wurden mit einem einzigen GET geprüft (Inhalt verifiziert — allein HTTP 200 gilt nicht als Nachweis):
 
 | Pfad | Status | Hinweis |
 |-----|-------|-----|
-| `/.git/config` | Geschlossen | HTTP 400 / leerer Körper — nicht zugänglich |
-| `/.env` | Geschlossen | HTTP 404 / leerer Körper — nicht zugänglich |
-| `/.git/HEAD` | Geschlossen | HTTP 400 / leerer Körper — nicht zugänglich |
-| `/backup.zip` | Geschlossen | HTTP 404 / leerer Körper — nicht zugänglich |
-| `/.DS_Store` | Geschlossen | HTTP 404 / leerer Körper — nicht zugänglich |
-| `/wp-config.php.bak` | Geschlossen | HTTP 404 / leerer Körper — nicht zugänglich |
-| `/ftp` | Geschlossen | HTTP 404 / leerer Körper — nicht zugänglich |
-| `/backup` | Geschlossen | HTTP 404 / leerer Körper — nicht zugänglich |
-| `/backups` | Geschlossen | HTTP 404 / leerer Körper — nicht zugänglich |
-| `/uploads` | Geschlossen | HTTP 404 / leerer Körper — nicht zugänglich |
-| `/files` | Geschlossen | HTTP 400 / leerer Körper — nicht zugänglich |
-| `/admin` | Geschlossen | HTTP 404 / leerer Körper — nicht zugänglich |
-| `/.svn/entries` | Geschlossen | HTTP 400 / leerer Körper — nicht zugänglich |
-| `/.htaccess` | Geschlossen | HTTP 403 / leerer Körper — nicht zugänglich |
-| `/config.php.bak` | Geschlossen | HTTP 404 / leerer Körper — nicht zugänglich |
-| `/db.sql` | ⚠️ OFFEN | erwartetes Dateiformat verifiziert (kein Catch-all) |
-| `/dump.sql` | Geschlossen | HTTP 404 / leerer Körper — nicht zugänglich |
+| `/.git/config` | Geschlossen | HTTP 400 / leerer Body — nicht erreichbar |
+| `/.env` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/.git/HEAD` | Geschlossen | HTTP 400 / leerer Body — nicht erreichbar |
+| `/backup.zip` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/.DS_Store` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/wp-config.php.bak` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/ftp` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/backup` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/backups` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/uploads` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/files` | Geschlossen | HTTP 400 / leerer Body — nicht erreichbar |
+| `/admin` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/.svn/entries` | Geschlossen | HTTP 400 / leerer Body — nicht erreichbar |
+| `/.htaccess` | Geschlossen | HTTP 403 / leerer Body — nicht erreichbar |
+| `/config.php.bak` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/db.sql` | ⚠️ OFFEN | erwartetes Dateiformat bestätigt (kein Catch-all) |
+| `/dump.sql` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/backup.tar.gz` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/backup.tar` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/www.zip` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/site.zip` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/backup.old` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/backup.backup` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/index.php.bak` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/index.php~` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/.env.bak` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/.env.old` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+| `/database.sql` | Geschlossen | HTTP 404 / leerer Body — nicht erreichbar |
+
+### ZUSÄTZLICHE INFORMATIONSLECK-BEOBACHTUNGEN
+
+| Prüfung | Ergebnis |
+|-----|-------|
+| Verzeichnisauflistung (autoindex / „Index of /") · CWE-548 | ✅ 6 Verzeichnisse geprüft, keine Auflistung |
+| Ausführlicher Fehler / Serverpfad-Offenlegung · CWE-209 | ✅ Kein Indikator gefunden |
+| autocomplete-Richtlinie im Passwortfeld · CWE-522 | ✅ Angemessen / kein Passwortfeld beobachtet |
+
+> Alles GET-only/passive Beobachtung — Inhalte werden NICHT abgerufen/angezeigt; ein geleakter Pfad wird REDIGIERT. „Kein Indikator gefunden" BEWEIST NICHT, dass es sicher ist; es zeigt nur, dass mit den passiven Methoden kein Indikator auftrat.
 
 ### FESTGESTELLTE RISIKEN
 
 | Befund | Schweregrad | Beschreibung |
 |-------|--------|----------|
-| Sensible Datei zugänglich (`/db.sql`) | Hoch | Inhalt verifiziert; Risiko eines Konfigurations-/Quellcode-Abflusses. Der Zugriff sollte umgehend blockiert werden. |
-| Veraltete/nicht unterstützte Softwareversion wird offengelegt (PHP/7.1.26 — EOL) | Hoch | Die PHP-7.x-Reihe wird offiziell nicht mehr unterstützt (die Sicherheitsupdates für 7.x endeten Ende 2022). Zahlreiche bekannte Schwachstellen bleiben ungepatcht. CWE-1104 · OWASP A06:2021 (Veraltete/anfällige Komponenten). Lösung: Aktualisieren Sie auf eine aktuelle und unterstützte PHP-Version (8.2+); verbergen Sie die Versionssignatur (expose_php=Off). |
-| Nicht aktuelle Softwareversion wird offengelegt (Apache/2.4.25 — sehr alter Patch) | Mittel | Die Apache-2.4-Reihe wird zwar unterstützt, aber Apache/2.4.25 ist ein sehr alter Patch-Stand; die zwischenzeitlichen Sicherheitspatches scheinen nicht eingespielt worden zu sein. CWE-1104 · OWASP A06:2021 (Veraltete/anfällige Komponenten). Lösung: Aktualisieren Sie auf den aktuellen Patch der 2.4-Reihe; verbergen Sie die Versionssignatur (ServerTokens Prod). |
-| Kritische Sicherheits-Header fehlen (Content-Security-Policy, X-Frame-Options) | Mittel | Schwache browserseitige Verteidigung gegen XSS/Clickjacking. (Fehlt auf 2/2 Seiten) |
-| Zusätzliche Header fehlen (Strict-Transport-Security, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection) | Mittel | Schwache Tiefenverteidigung. (Fehlt auf 2/2 Seiten) |
+| Sensible Datei erreichbar (`/db.sql`) | Hoch | Inhalt verifiziert; Risiko eines Konfigurations-/Quellcode-Lecks. Der Zugriff muss umgehend gesperrt werden. |
+| Veraltete/nicht mehr unterstützte Softwareversion wird offengelegt (PHP/7.1.26 — EOL) | Hoch | Die PHP-7.x-Serie wird offiziell nicht mehr unterstützt (Sicherheitsupdates für 7.x endeten Ende 2022). Zahlreiche bekannte Sicherheitslücken bleiben ungepatcht. CWE-1104 · OWASP A06:2021 (Veraltete/Verwundbare Komponenten). Lösung: Auf eine aktuelle, unterstützte PHP-Version (8.2+) aktualisieren; die Versionssignatur verbergen (expose_php=Off). |
+| Nicht aktuelle Softwareversion wird offengelegt (Apache/2.4.25 — sehr alter Patchstand) | Mittel | Die Apache-2.4-Serie wird zwar unterstützt, Apache/2.4.25 ist jedoch ein sehr alter Patchstand; zwischenzeitliche Sicherheitspatches scheinen nicht eingespielt zu sein. CWE-1104 · OWASP A06:2021 (Veraltete/Verwundbare Komponenten). Lösung: Auf den aktuellen Patch der 2.4-Serie aktualisieren; die Versionssignatur verbergen (ServerTokens Prod). |
+| Kritische Sicherheits-Header fehlen (Content-Security-Policy, X-Frame-Options) | Mittel | Die Browser-Verteidigung gegen XSS/Clickjacking ist schwach. (fehlt auf 2/2 Seiten) |
+| Weitere Header fehlen (Strict-Transport-Security, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection) | Mittel | Die Verteidigungstiefe ist schwach. (fehlt auf 2/2 Seiten) |
 
 ## DNS- & E-Mail-Sicherheit
 
-### SPF (Absenderrichtlinie) — geprüfte Domain: `vulnweb.com`
+### SPF (Sender-Richtlinie) — geprüfte Domain: `vulnweb.com`
 
 - **Status:** Vorhanden — `v=spf1 ~all`
-- **Härte:** `~all` — weich (softfail; akzeptabel, aber nicht ideal).
+- **Härte:** `~all` — weich (softfail; akzeptabel, nicht ideal).
 
 ### DMARC (Authentifizierungsrichtlinie) — geprüfte Domain: `vulnweb.com`
 
-- **Status:** Fehlt — es wurde kein DMARC-Eintrag gefunden. Auf Basis der SPF/DKIM-Ergebnisse erfolgt keine Durchsetzung; der Schutz gegen Spoofing ist schwach.
+- **Status:** Fehlt — Es wurde kein DMARC-Eintrag gefunden. Es erfolgt keine Durchsetzung anhand der SPF/DKIM-Ergebnisse; der Schutz vor Spoofing ist schwach.
 
 ### DKIM (Signatur)
 
-- **Status:** Nicht ermittelbar — bei gängigen Selektoren (default/google/selector1…) wurde kein DKIM-Eintrag gefunden. Sie verwenden möglicherweise einen anderen Selektor; dies bedeutet kein sicheres „nicht vorhanden".
+- **Status:** Nicht erkannt — Bei gängigen Selektoren (default/google/selector1…) wurde kein DKIM-Eintrag gefunden. Möglicherweise verwenden Sie einen anderen Selektor; dies bedeutet nicht sicher „kein Eintrag".
 
 ### DNSSEC
 
-- **Status:** Passiv/nicht vorhanden — die DNS-Antworten sind nicht signiert; anfälliger für DNS-Spoofing/Cache-Poisoning.
+- **Status:** Passiv/fehlt — DNS-Antworten sind nicht signiert; erhöhtes Risiko für DNS-Spoofing/Cache-Poisoning.
 
 ### FESTGESTELLTE RISIKEN
 
 | Befund | Schweregrad | Beschreibung |
 |-------|--------|----------|
 | DMARC fehlt | Mittel | Die SPF/DKIM-Ergebnisse werden nicht durchgesetzt. |
-| DKIM nicht ermittelbar | Hinweis | Bei gängigen Selektoren nicht gefunden (kann ein anderer Selektor sein). |
+| DKIM nicht erkannt | Hinweis | Bei gängigen Selektoren nicht gefunden (möglicherweise anderer Selektor). |
 | DNSSEC passiv | Hinweis | Die DNS-Antworten sind nicht signiert. |
 
 ## CORS- & Cookie-Sicherheit
@@ -124,7 +145,7 @@ Häufige sensible Pfade wurden mit einem einzelnen GET geprüft (Inhalt verifizi
 ### CORS-KONFIGURATION (auf 2/2 Seiten getestet)
 
 - **Test-Origin:** `https://cybertestify-cors-probe.example` — an jede Seite wurde ein harmloser Origin-Header gesendet und die Antwort ausgewertet.
-- **Offenste beobachtete Richtlinie** (`/`): Access-Control-Allow-Origin: wird nicht gesendet (geschlossen — sicherer Standard); Allow-Credentials: wird nicht gesendet.
+- **Offenste beobachtete Richtlinie** (`/`): Access-Control-Allow-Origin: wird nicht gesendet (geschlossen — sichere Voreinstellung); Allow-Credentials: wird nicht gesendet.
 
 ### COOKIE-FLAGS (alle auf 2 Seiten beobachteten Cookies)
 
@@ -132,40 +153,41 @@ Häufige sensible Pfade wurden mit einem einzelnen GET geprüft (Inhalt verifizi
 
 ### FESTGESTELLTE RISIKEN
 
-- Bei der CORS- und Cookie-Konfiguration fiel kein auffälliges Risiko auf.
+- Bei der CORS- und Cookie-Konfiguration wurde kein deutliches Risiko festgestellt.
 
-## CSP-Analyse (Content-Security-Policy)
+## CSP-Analyse (Content Security Policy)
 
 ### CSP-STATUS
 
-- **Status:** Fehlt — der Content-Security-Policy-Header wird überhaupt nicht gesendet.
+- **Status:** Fehlt — Es wird kein Content-Security-Policy-Header gesendet.
 
 ### CSP-DIREKTIVENANALYSE
 
-- Da keine CSP angewendet wird, konnte keine Direktivenanalyse durchgeführt werden.
+- Da keine durchgesetzte CSP vorhanden ist, konnte keine Direktivenanalyse durchgeführt werden.
 
 ### FESTGESTELLTE RISIKEN
 
 | Befund | Schweregrad | Beschreibung |
 |-------|--------|----------|
-| CSP vollständig fehlt | Mittel | Keine browserseitige Verteidigung gegen XSS und Content-Injektion. Auf ALLEN 2 geprüften Seiten fehlt der CSP-Header. |
+| CSP vollständig fehlend | Mittel | Keine Verteidigung auf Browser-Ebene gegen XSS und Content-Injection. Auf ALLEN 2 geprüften Seiten fehlt der CSP-Header. |
 
 ## POSITIVE ZUSICHERUNG — GEPRÜFTE BEREICHE
 
-Einschließlich der Bereiche ohne Befund wurden die Prüfungen der externen Angriffsfläche auf **2 eindeutigen Seiten** einschließlich der Startseite tatsächlich ausgeführt. Die folgende Tabelle zeigt transparent auch die Ergebnisse „kein Problem gefunden":
+Auch die Bereiche ohne Befund eingeschlossen, wurden die Kontrollen der externen Angriffsfläche tatsächlich auf **2 einzigartigen Seiten** einschließlich der Startseite ausgeführt. Die folgende Tabelle zeigt auch die „kein Problem gefunden"-Ergebnisse transparent:
 
-| Prüfbereich | Ergebnis |
+| Kontrollbereich | Ergebnis |
 |---------------|-------|
-| SSL/TLS-Konfigurationsprüfung | ⚠️ Befund vorhanden (Hoch — oben ausführlich) |
-| Sicherheits-Header & Informationsabfluss | ⚠️ Befund vorhanden (Hoch — oben ausführlich) |
-| DNS- & E-Mail-Sicherheit | ⚠️ Befund vorhanden (Mittel — oben ausführlich) |
+| SSL/TLS-Konfigurationsaudit | ⚠️ Befund vorhanden (Hoch — oben im Detail) |
+| Sicherheits-Header & Informationslecks | ⚠️ Befund vorhanden (Hoch — oben im Detail) |
+| DNS- & E-Mail-Sicherheit | ⚠️ Befund vorhanden (Mittel — oben im Detail) |
 | CORS- & Cookie-Sicherheit | ✅ Kein Problem gefunden |
-| CSP-Analyse (Content-Security-Policy) | ⚠️ Befund vorhanden (Mittel — oben ausführlich) |
+| CSP-Analyse (Content Security Policy) | ⚠️ Befund vorhanden (Mittel — oben im Detail) |
 
-> **Drei-Zustands-Unterscheidung (Ehrlichkeit):** ✅ *Kein Problem gefunden* = Prüfung lief, sauberes Ergebnis · ⚠️ *Befund vorhanden* = oben ausführlich · ⚠️ *Nicht überprüfbar* = keine Daten erhoben (bedeutet NICHT sicher).
+> **Drei-Zustands-Unterscheidung (Ehrlichkeit):** ✅ *Kein Problem gefunden* = Kontrolle lief, Ergebnis sauber · ⚠️ *Befund vorhanden* = oben im Detail · ⚠️ *Nicht prüfbar* = keine Daten erhebbar (bedeutet NICHT sicher).
 
-### Was dieses Paket prüft und was NICHT
+### Was dieses Paket prüft — und was NICHT
 
-**PRÜFT (passiv — nur Seitenabruf per GET + harmlose Origin-/DNS-Abfrage):** TLS/Zertifikat, HTTP-Sicherheits-Header, CORS-Richtlinie, Cookie-Flags (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS-/E-Mail-Einträge (SPF/DKIM/DMARC/DNSSEC), offen zugängliche sensible Dateien, veraltete/nicht unterstützte Softwareversionen — auf den 2 entdeckten Seiten.
+**PRÜFT (passiv — nur Seitenabruf per GET + harmlose Origin-/DNS-Abfrage):** TLS/Zertifikat, HTTP-Sicherheits-Header, CORS-Richtlinie, Cookie-Flags (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS-/E-Mail-Einträge (SPF/DKIM/DMARC/DNSSEC), offenliegende sensible Dateien (inkl. gängiger Backup-Muster), Verzeichnisauflistung (autoindex), ausführliche-Fehler-/Serverpfad-Offenlegung (redigiert), autocomplete-Richtlinie im Passwortfeld, veraltete/nicht unterstützte Softwareversionen — auf den 2 entdeckten Seiten.
 
-**PRÜFT NICHT:** Aktive Schwachstellenverifikation (Payload-/Sondenversuche wie SQLi/XSS/IDOR), Test authentifizierter Abläufe, Ausnutzung von Geschäftslogik. Diese fallen in den Umfang der Pakete **Aktive Verifikation** und **Umfassender Pentest**. Dieser Bericht beruht auf passiver Beobachtung; die Aussage „kein Befund" in einem Bereich **BEWEIST NICHT**, dass er sicher ist, da kein aktiver Angriff versucht wurde — sie zeigt lediglich, dass die von außen beobachtete Konfiguration sauber ist.
+**PRÜFT NICHT:** Aktive Schwachstellenverifikation (Payload-/Probe-Versuche wie SQLi/XSS/IDOR), authentifizierte Ablauftests, Missbrauch der Geschäftslogik. Diese gehören zum Umfang der Pakete **Aktive Verifikation** und **Umfassender Pentest**. Dieser Bericht beruht auf passiver Beobachtung; die Aussage „kein Befund" in einem Bereich **BEWEIST NICHT**, dass er sicher ist, da kein aktiver Exploit versucht wurde — sie zeigt lediglich, dass die von außen beobachtete Konfiguration sauber ist.
+

@@ -6,7 +6,7 @@ Bu bölüm, keşif taramanızda tespit edilen tüm eksiklikler için alan alan d
 
 **1) certSpotter ile ücretsiz e-posta/webhook uyarısı**
 
-`sslmate.com/certspotter` üzerinde alan adınızı (ör. `ornek.com`, alt domainler dahil) izlemeye ekleyin; yeni sertifika yayınlandığında e-posta/webhook uyarısı alırsınız (yeni bir alt domain sertifikası, sizin oluşturmadığınız bir kayıt olabilir).
+`sslmate.com/certspotter` üzerinde alan adınızı (ör. `nomorelink.com`, alt domainler dahil) izlemeye ekleyin; yeni sertifika yayınlandığında e-posta/webhook uyarısı alırsınız (yeni bir alt domain sertifikası, sizin oluşturmadığınız bir kayıt olabilir).
 
 **2) crt.sh’i periyodik sorgulayan basit bir cron (kendi sunucunuzda)**
 
@@ -71,7 +71,7 @@ basic_auth @apidocs {
 
 ### CMS & Bilinen CVE — proaktif güncel kalma rehberi
 
-Tespit edilen sürüm için, sürümü açıkça kapsayan bilinen CVE bulunamadı. Bu durumu korumak için güncellemeyi otomatikleştirin ve bağımlılıklarınızı sürekli tarayın:
+Bilinen bir CMS tespit edilmedi (özel/gizlenmiş uygulama olabilir). Güncel kalmayı ve bilinen-zafiyet takibini otomatikleştirin:
 
 **1) WordPress kullanıyorsanız — otomatik minor + güvenlik güncellemesi**
 

@@ -501,7 +501,8 @@ function buildCmsArea(ev: CmsEvidence, bannerCves: BannerCve[] = [], locale: str
         : b.cveTotal === 0
           ? t('✅ eşleşen CVE yok', '✅ keine passende CVE', '✅ no matching CVE')
           : t(`⚠️ ${b.cveTotal} bilinen CVE`, `⚠️ ${b.cveTotal} bekannte CVE`, `⚠️ ${b.cveTotal} known CVEs`);
-      const sample = b.cves.length ? `[${b.cves[0].id}](https://nvd.nist.gov/vuln/detail/${b.cves[0].id})${b.cves[0].score ? ` (CVSS ${b.cves[0].score})` : ''}` : '—';
+      // (kısıt) Sayısal CVSS EKLENMEZ — yalnız CVE referans linki (nitel bandlar + CWE/CVE kimliği yeterli).
+      const sample = b.cves.length ? `[${b.cves[0].id}](https://nvd.nist.gov/vuln/detail/${b.cves[0].id})` : '—';
       lines.push(`| ${b.product} ${b.version} | ${res} | ${sample} |`);
     }
     lines.push('');

@@ -1,17 +1,25 @@
 ## YÖNETİCİ ÖZETİ
 
-- **Genel risk seviyesi: Düşük** — keşif yüzeyiniz 3 alanda incelendi; devralınabilir alt domain, açık hassas API veya sürümü kapsayan bilinen yüksek CVE öne çıkmadı. Dışarıdan görünen yüzeyiniz şu an için dar ve kontrollü görünüyor.
-- **Subdomain Takeover Taraması:** Düşük — 7 alt domain envanterlendi; devralınabilir kayıt tespit edilmedi
+- **Genel risk seviyesi: Yüksek** — 3 alan incelendi; en yüksek risk **CMS & Bilinen CVE Taraması** alanında (Bilinen bir CMS parmak izi tespit edilmedi · sunucu/yazılım sürümünde 21 bilinen CVE).
+- ⚠️ **HTTPS desteklenmiyor:** Hedef HTTPS (443) üzerinden yanıt vermedi; keşif http:// üzerinden yürütüldü. Şifresiz iletişim başlı başına ciddi bir bulgudur (aşağıda).
+- **Subdomain Takeover Taraması:** Düşük — Sertifika şeffaflığı kayıtlarında alt domain görülmedi
 - **API & Swagger Keşfi:** Düşük — Herkese açık API/Swagger dokümantasyonu bulunamadı
-- **CMS & Bilinen CVE Taraması:** Düşük — WordPress 5.5.20 tespit edildi; eşleşen CVE bulunamadı
-- **Kapsam (gerçek sayılar):** 7 alt domain envanterlendi · 19 API/Swagger yolu denendi (7 sayfa tarandı) · 6+ pasif CMS/teknoloji sinyali incelendi.
+- **CMS & Bilinen CVE Taraması:** Yüksek — Bilinen bir CMS parmak izi tespit edilmedi · sunucu/yazılım sürümünde 21 bilinen CVE
+- **Kapsam (gerçek sayılar):** 0 alt domain envanterlendi · 12 API/Swagger yolu denendi (2 sayfa tarandı) · 6+ pasif CMS/teknoloji sinyali incelendi.
 - **Önerilen ilk adım:** En yüksek riskli alandan başlayın; her bulgu için adım adım hazır çözümler "AI Çözüm Önerileri" bölümünde sunulur.
 
 ## GENEL DEĞERLENDİRME
 
-**Risk Seviyesi: Düşük**
+**Risk Seviyesi: Yüksek**
 
-Dışarıdan görünen alt domain, API ve CMS yüzeyiniz şu an için dar ve kontrollü görünüyor; rapor, tam envanter ve önerilen iyi pratiklerle birlikte her alanı ayrı ayrı belgeler. Aşağıda her alan ayrı ayrı raporlanmıştır.
+Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz taşınıyor (öncelikli olarak HTTPS’e geçilmelidir). En yüksek risk **CMS & Bilinen CVE Taraması** alanında (Bilinen bir CMS parmak izi tespit edilmedi · sunucu/yazılım sürümünde 21 bilinen CVE) tespit edildi; öncelikli olarak giderilmesi önerilir. Aşağıda her alan ayrı ayrı raporlanmıştır.
+
+## TESPİT EDİLEN RİSKLER
+
+| Bulgu | Şiddet | Açıklama |
+|-------|--------|----------|
+| HTTPS desteklenmiyor (şifresiz iletişim) | Yüksek | Hedef HTTPS'e yanıt vermiyor; tüm trafik şifresiz (düz metin) taşınıyor — dinlenebilir/değiştirilebilir. Çözüm: geçerli TLS sertifikası + HTTP→HTTPS yönlendirme + HSTS. |
+| CMS & Bilinen CVE Taraması — Bilinen bir CMS parmak izi tespit edilmedi · sunucu/yazılım sürümünde 21 bilinen CVE | Yüksek | Ayrıntı aşağıdaki “CMS & Bilinen CVE Taraması” bölümündedir. |
 
 ## KAPSAM VE METODOLOJİ
 
@@ -25,25 +33,11 @@ Bu rapor, üç keşif alanında **pasif** (istismar içermeyen) tekniklerle, dı
 
 ## Subdomain Takeover Taraması
 
-**Genel risk seviyesi: Düşük — 7 alt domain envanterlendi; devralınabilir kayıt tespit edilmedi**
+**Genel risk seviyesi: Düşük — Sertifika şeffaflığı kayıtlarında alt domain görülmedi**
 
-Certificate Transparency (crt.sh / certSpotter) kayıtlarından **7** benzersiz alt domain envanterlendi; bunlardan **7** tanesinin CNAME kaydı çözümlenip devralma (subdomain takeover) açısından incelendi.
+Certificate Transparency (crt.sh / certSpotter) kayıtlarından **0** benzersiz alt domain envanterlendi; bunlardan **0** tanesinin CNAME kaydı çözümlenip devralma (subdomain takeover) açısından incelendi.
 
 Çözümlenen CNAME kayıtlarında, terk edilmiş bir bulut kaynağına işaret eden **devralınabilir (dangling)** alt domain tespit edilmedi. Bu, dışarıdan görünen alt domain yüzeyinizin şu an için **dar ve kontrollü** göründüğünü gösterir.
-
-### Alt domain envanteri (durum tablosu)
-
-Bulunan alt domainler ve CNAME çözümlemesi sonucu durumları:
-
-| Alt Domain | CNAME Hedefi | Durum |
-|-----------|--------------|-------|
-| api.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
-| blog.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
-| mail.ornek.com | mail.barindirma-saglayici.example | Aktif (CNAME kaydı var) |
-| panel.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
-| cdn.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
-| destek.ornek.com | — | CNAME kaydı yok (doğrudan A/AAAA) |
-| www.ornek.com | ornek.com | Aktif (CNAME kaydı var) |
 
 > Kapsam: Yalnızca pasif kaynaklar (Certificate Transparency logları + gözlemlenebilir DNS). Alt domain brute-force / aktif tarama yapılmamıştır.
 
@@ -59,32 +53,16 @@ Aşağıdaki **12** yaygın API dokümantasyon/keşif yolu GET ile denenmiştir.
 |-----|------|-------|
 | /openapi.json | 404 | Bulunamadı |
 | /swagger.json | 404 | Bulunamadı |
-| /v2/api-docs | 404 | Bulunamadı |
-| /v3/api-docs | 404 | Bulunamadı |
+| /v2/api-docs | 400 | Bulunamadı |
+| /v3/api-docs | 400 | Bulunamadı |
 | /api-docs | 404 | Bulunamadı |
-| /api/docs | 404 | Bulunamadı |
-| /api/v1/docs | 404 | Bulunamadı |
+| /api/docs | 400 | Bulunamadı |
+| /api/v1/docs | 400 | Bulunamadı |
 | /swagger-ui.html | 404 | Bulunamadı |
-| /swagger/index.html | 404 | Bulunamadı |
+| /swagger/index.html | 400 | Bulunamadı |
 | /redoc | 404 | Bulunamadı |
-| /.well-known/openapi.json | 404 | Bulunamadı |
+| /.well-known/openapi.json | 400 | Bulunamadı |
 | /graphql | 404 | Bulunamadı |
-
-### Site haritasından türetilen yol adayları (7 sayfadan 7 aday)
-
-Sabit liste **dışında**, keşfedilen sayfalardaki link/script/form referanslarından çıkarılan API/idari-görünümlü yollar da GET ile **yalnız varlık** açısından denendi (payload/enjeksiyon YOK — Keşif yalnız "bu uç var mı" tespiti yapar):
-
-| Aday Yol | Kaynak sayfa | HTTP | Not |
-|----------|--------------|------|-----|
-| /wp-content/uploads/elementor/css/global.css | / | 200 | ⚠️ mevcut (idari-görünümlü) |
-| /wp-content/uploads/elementor/css/post-5.css | / | 200 | ⚠️ mevcut (idari-görünümlü) |
-| /wp-content/uploads/2023/05/logo-150x150.png | / | 200 | ⚠️ mevcut (idari-görünümlü) |
-| /wp-content/uploads/2023/05/logo.png | / | 200 | ⚠️ mevcut (idari-görünümlü) |
-| /wp-content/uploads/2023/05/banner-scaled.jpg | / | 200 | ⚠️ mevcut (idari-görünümlü) |
-| /wp-content/uploads/2023/05/urun-gorseli-1.jpg | / | 200 | ⚠️ mevcut (idari-görünümlü) |
-| /wp-content/uploads/2023/05/hizmet-gorseli-2.jpg | / | 200 | ⚠️ mevcut (idari-görünümlü) |
-
-> **7** idari/hassas-görünümlü yol site haritasından keşfedildi ve erişilebilir (HTTP 200). Bu yolların YETKİ kontrolü **Aktif Doğrulama / Tam Pentest** ile doğrulanmalıdır — Keşif yalnız varlığı tespit eder, yetki testi yapmaz.
 
 Denenen yolların hiçbiri herkese açık bir API şeması/arayüzü döndürmedi. Herkese açık API dokümantasyonu bulunmaması, saldırganların API yüzeyinizi dışarıdan kolayca **haritalayamayacağı** anlamına gelir — bu, dış saldırı yüzeyi açısından olumlu bir işarettir.
 
@@ -92,7 +70,7 @@ Denenen yolların hiçbiri herkese açık bir API şeması/arayüzü döndürmed
 
 ## CMS & Bilinen CVE Taraması
 
-**Genel risk seviyesi: Düşük — WordPress 5.5.20 tespit edildi; eşleşen CVE bulunamadı**
+**Genel risk seviyesi: Yüksek — Bilinen bir CMS parmak izi tespit edilmedi · sunucu/yazılım sürümünde 21 bilinen CVE**
 
 ### İncelenen parmak izi kaynakları
 
@@ -105,34 +83,36 @@ CMS/çatı ve sürüm tespiti için ana sayfa yanıtı üzerinde aşağıdaki pa
 - Bilinen CMS yollarının VARLIĞI (`/wp-login.php`, `/wp-json/`, `/administrator/`, `/user/login`, `/typo3/` — yalnız var/yok kontrolü; giriş/parola denemesi YOK)
 - Kütüphane/eklenti ipuçları (WooCommerce, jQuery sürümü)
 
-### Parmak izi sonucu
+Bu sinyallerin **hiçbiri** bilinen bir CMS/çatı ile eşleşmedi. Bu, özel geliştirilmiş bir uygulama veya CMS izlerini bilinçli olarak gizleyen bir kurulum olabileceğine işaret eder; her iki durum da dışarıdan otomatik CMS/CVE eşlemesini zorlaştırır.
 
-- Tespit edilen sistem: **WordPress 5.5.20**
-- Nasıl tespit edildi: Meta generator: "WordPress 5.5.20"
-- Ek gözlemler: WooCommerce (WordPress e-ticaret eklentisi) tespit edildi · X-Powered-By: ASP.NET · Server: Microsoft-IIS/10.0
+### Sunucu/Yazılım Banner Sürümü — Bilinen CVE (NVD)
 
-### Bilinen CVE eşleşmeleri (NVD)
+Banner'dan çıkan sürüm(ler) NVD'ye bağlandı (istismar/doğrulama YOK — yalnız "bu sürüm için bilinen CVE var mı" göstergesi):
 
-NVD (NIST Ulusal Zafiyet Veritabanı) sorgusu bu tarama sırasında yanıt vermedi; CVE eşlemesi yapılamadı. Lütfen sürümünüzü NVD üzerinde manuel doğrulayın.
+| Yazılım/Sürüm | NVD sonucu | Örnek CVE |
+|-----|-------|-------|
+| Apache httpd 2.4.25 | sorgulanamadı (temiz DEĞİL) | — |
+| PHP 7.1.26 | ⚠️ 21 bilinen CVE | [CVE-2017-8923](https://nvd.nist.gov/vuln/detail/CVE-2017-8923) |
+
+> **Not:** Aşağıdaki CVE listesi, tespit edilen sürümle NVD (NIST Ulusal Zafiyet Veritabanı) üzerinden **otomatik eşlenen** bilinen zafiyetlerdir; sürümünüz için sömürülebilir oldukları **doğrulanmamıştır** ve bir kısmı eklenti/tema kaynaklı olabilir. Kesin durum için güncelleme + hedefli doğrulama önerilir.
 
 > Kapsam: Pasif parmak izi + NVD üzerinden bilinen-CVE eşlemesi. Hiçbir CVE **istismar edilmemiş/doğrulanmamıştır**.
 
 ## POZİTİF GÜVENCE — DENENEN KEŞİF YÖNTEMLERİ
 
-Keşif çoğu sağlıklı hedefte temiz çıkar; bu bölüm "bir şey bulunamadı" sonucunu da ŞEFFAF kılar — GERÇEKTEN ne denendiğini gösterir (ana sayfa dâhil **7 sayfa** site haritası dahil):
+Keşif çoğu sağlıklı hedefte temiz çıkar; bu bölüm "bir şey bulunamadı" sonucunu da ŞEFFAF kılar — GERÇEKTEN ne denendiğini gösterir (ana sayfa dâhil **2 sayfa** site haritası dahil):
 
 | Keşif Alanı | Sonuç |
 |-------------|-------|
-| Subdomain-Takeover Taraması | ✅ 7 alt domain kaydı denendi; devralma göstergesi bulunamadı |
-| API & Swagger Keşfi | ✅ 19 yol denendi (12 sabit + 7 site-haritası adayı, 7 sayfadan); herkese açık API şeması bulunamadı |
-| CMS / Framework CVE Eşleşmesi | ✅ WordPress 5.5.20 tespit edildi; sürümü kapsayan bilinen yüksek CVE eşleşmedi |
-| Site-haritası yol keşfi | ⚠️ 7 idari-görünümlü yol erişilebilir (yetki testi Aktif Doğrulama kapsamı) |
+| Subdomain-Takeover Taraması | ✅ 0 alt domain kaydı denendi; devralma göstergesi bulunamadı |
+| API & Swagger Keşfi | ✅ 12 yol denendi (12 sabit + 0 site-haritası adayı, 2 sayfadan); herkese açık API şeması bulunamadı |
+| CMS / Framework CVE Eşleşmesi | ✅ Bilinen bir CMS/çatı parmak izi tespit edilmedi |
 
 > **Üç-durum ayrımı (dürüstlük):** ✅ *Gösterge bulunamadı* = yöntem çalıştı, temiz · ⚠️ *Gösterge var* = yukarıda ayrıntılı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).
 
 ### Bu paket NE değerlendirir, NE değerlendirmez
 
-**DEĞERLENDİRİR (pasif keşif — yalnız GET, dış kaynak):** alt domain envanteri + devralma (dangling CNAME), herkese açık API/Swagger/OpenAPI dokümanı, CMS/çatı parmak izi + bilinen CVE eşleşmesi (NVD), site haritasından türeyen API/idari-görünümlü yolların VARLIK tespiti — 7 sayfa üzerinden.
+**DEĞERLENDİRİR (pasif keşif — yalnız GET, dış kaynak):** alt domain envanteri + devralma (dangling CNAME), herkese açık API/Swagger/OpenAPI dokümanı, CMS/çatı ve sunucu/yazılım banner (Apache/nginx/PHP) parmak izi + bilinen CVE eşleşmesi (NVD), site haritası + robots.txt Disallow'dan türeyen API/idari-görünümlü yolların VARLIK tespiti — 2 sayfa üzerinden.
 
 **DEĞERLENDİRMEZ:** aktif enjeksiyon/IDOR/XSS doğrulaması ve keşfedilen uçlara yetki testi (**Aktif Doğrulama / Tam Pentest** kapsamı), HTTP güvenlik başlığı/CORS/çerez/CSP detayı (**Basit Tarama / Dış Yüzey** kapsamı), KVKK/PCI/ISO çerçeve-eşleme (**Uyum** kapsamı). Bir alanda "gösterge bulunamadı" ifadesi **güvenli olduğunuzu KANITLAMAZ** — yalnız denenen pasif yöntemlerle bir gösterge çıkmadığını gösterir.
 

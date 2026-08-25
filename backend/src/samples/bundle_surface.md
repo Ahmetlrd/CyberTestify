@@ -81,6 +81,27 @@ Yaygın hassas yollar tek GET ile kontrol edildi (içerik doğrulandı — yaln�
 | `/config.php.bak` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
 | `/db.sql` | ⚠️ AÇIK | beklenen dosya formatı doğrulandı (catch-all değil) |
 | `/dump.sql` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
+| `/backup.tar.gz` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
+| `/backup.tar` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
+| `/www.zip` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
+| `/site.zip` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
+| `/backup.old` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
+| `/backup.backup` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
+| `/index.php.bak` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
+| `/index.php~` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
+| `/.env.bak` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
+| `/.env.old` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
+| `/database.sql` | Kapalı | HTTP 404 / boş gövde — erişilebilir değil |
+
+### EK BİLGİ-SIZINTISI GÖZLEMLERİ
+
+| Kontrol | Sonuç |
+|-----|-------|
+| Dizin listeleme (autoindex / “Index of /”) · CWE-548 | ✅ 6 dizin denendi, listeleme yok |
+| Ayrıntılı hata / sunucu-yol ifşası · CWE-209 | ✅ Gösterge bulunamadı |
+| Parola alanı autocomplete politikası · CWE-522 | ✅ Uygun / parola alanı gözlenmedi |
+
+> Hepsi GET-only/pasif gözlemdir — içerik ÇEKİLMEZ/gösterilmez; sızan yol REDAKTE edilir. “Gösterge bulunamadı” güvenli olduğunu KANITLAMAZ; yalnız denenen pasif yöntemlerle gösterge çıkmadığını gösterir.
 
 ### TESPİT EDİLEN RİSKLER
 
@@ -166,7 +187,7 @@ Bulgu çıkmayan alanlar da dâhil, dış-yüzey kontrolleri ana sayfa dâhil **
 
 ### Bu paket NE kontrol EDER, NE ETMEZ
 
-**EDER (pasif — yalnız GET ile sayfa çekme + zararsız Origin/DNS sorgusu):** TLS/sertifika, HTTP güvenlik başlıkları, CORS politikası, çerez bayrakları (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS/e-posta kayıtları (SPF/DKIM/DMARC/DNSSEC), açıkta hassas dosya, eski/desteksiz yazılım sürümü — keşfedilen 2 sayfada.
+**EDER (pasif — yalnız GET ile sayfa çekme + zararsız Origin/DNS sorgusu):** TLS/sertifika, HTTP güvenlik başlıkları, CORS politikası, çerez bayrakları (Secure/HttpOnly/SameSite), Content-Security-Policy, DNS/e-posta kayıtları (SPF/DKIM/DMARC/DNSSEC), açıkta hassas dosya (yaygın yedek kalıpları dâhil), dizin listeleme (autoindex), ayrıntılı-hata/sunucu-yol ifşası (redakte), parola alanı autocomplete politikası, eski/desteksiz yazılım sürümü — keşfedilen 2 sayfada.
 
 **ETMEZ:** Aktif zafiyet doğrulaması (SQLi/XSS/IDOR gibi payload/prob denemesi), kimlik-doğrulamalı akış testi, iş-mantığı istismarı. Bunlar **Aktif Doğrulama** ve **Tam Kapsamlı Pentest** paketlerinin kapsamındadır. Bu rapor pasif gözleme dayanır; bir alanda "bulgu yok" ifadesi, aktif istismar denenmediği için **güvenli olduğunu KANITLAMAZ** — yalnız dışarıdan gözlemlenen yapılandırmanın temiz olduğunu gösterir.
 

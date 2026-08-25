@@ -1,16 +1,16 @@
-This section contains area-by-area remediation recommendations for every gap detected in your reconnaissance scan.
+This section contains area-by-area remediation recommendations for all shortcomings detected in your reconnaissance scan.
 
 ### Subdomain Takeover — proactive monitoring guide
 
-No takeover-able subdomain was detected right now. To keep it that way **continuously**, set up a Certificate Transparency (CT) monitoring system that catches new/unexpected subdomain certificates early:
+No takeover-able subdomain is currently detected. To keep this state **permanently**, set up a Certificate Transparency (CT) monitoring system that catches new/unexpected subdomain certificates early:
 
-**1) Free e-mail/webhook alert with certSpotter**
+**1) Free email/webhook alert with certSpotter**
 
-On `sslmate.com/certspotter`, add your domain (e.g. `ornek.com`, including subdomains) to monitoring; you receive an e-mail/webhook alert when a new certificate is issued (a new subdomain certificate may be a record you did not create).
+Add your domain (e.g. `nomorelink.com`, including subdomains) to monitoring on `sslmate.com/certspotter`; when a new certificate is issued you receive an email/webhook alert (a new subdomain certificate may be a record you did not create).
 
-**2) A simple cron that periodically queries crt.sh (on your own server)**
+**2) A simple cron that queries crt.sh periodically (on your own server)**
 
-Example script that fetches the subdomain list daily, compares it with the previous one and alerts on a newly appearing subdomain:
+An example script that fetches the subdomain list daily, compares it with the previous one, and alerts on a newly added subdomain:
 
 ```bash
 #!/usr/bin/env bash
@@ -23,18 +23,18 @@ curl -s "https://crt.sh/?q=%25.$DOMAIN&output=json" \
   | sort -u > /tmp/ct-now.txt
 NEW=$(comm -13 "$STATE" /tmp/ct-now.txt)
 if [ -n "$NEW" ]; then
-  echo "$NEW" | mail -s "[CT] New subdomain: $DOMAIN" you@ornek.com
+  echo "$NEW" | mail -s "[CT] Yeni alt domain: $DOMAIN" siz@ornek.com
   cp /tmp/ct-now.txt "$STATE"
 fi
 ```
 
-**3) Keep a subdomain inventory** — document which subdomain belongs to which service/team; remove orphaned (unused) CNAME records from DNS before deleting the cloud resource (the order of removal matters).
+**3) Keep a subdomain inventory** — document which subdomain belongs to which service/team; remove idle (unused) CNAME records from DNS before deleting the cloud resource (the order of removal matters).
 
 ### API & Swagger Reconnaissance — proactive hardening guide
 
-No public API documentation was found. To make this permanent, place schema endpoints such as Swagger/OpenAPI/ReDoc behind authentication or an IP restriction in production. Apply the example that fits your platform:
+No publicly accessible API documentation was found. To make this permanent, place schema endpoints such as Swagger/OpenAPI/ReDoc behind authentication or an IP restriction in production. Apply the example matching your platform:
 
-**Nginx — IP allowlist + Basic-Auth for `/swagger*`, `/api-docs*`, `/openapi.json`**
+**Nginx — IP allowlist + Basic Auth for `/swagger*`, `/api-docs*`, `/openapi.json`**
 
 ```nginx
 location ~* ^/(swagger|api-docs|v2/api-docs|v3/api-docs|openapi\.json|redoc) {
@@ -67,30 +67,30 @@ basic_auth @apidocs {
 }
 ```
 
-**Additional recommendations:** add a global `security` definition to your OpenAPI schema; if you use GraphQL, disable introspection in production (`introspection: false`).
+**Additional recommendations:** Add a global `security` definition to your OpenAPI schema; if you use GraphQL, disable introspection in production (`introspection: false`).
 
 ### CMS & known CVE — proactive currency guide
 
-No known CVE explicitly covering the detected version was found. To keep it that way, automate updates and continuously scan your dependencies:
+No known CMS was detected (may be a custom/obfuscated application). Automate staying up to date and tracking known vulnerabilities:
 
 **1) If you use WordPress — automatic minor + security updates**
 
 In `wp-config.php`:
 
 ```php
-define( 'WP_AUTO_UPDATE_CORE', 'minor' );  // security/minor releases automatically
+define( 'WP_AUTO_UPDATE_CORE', 'minor' );  // security/minor versions automatically
 ```
 
-For plugin/theme auto-updates (WP-CLI):
+For automatic plugin/theme updates (WP-CLI):
 
 ```bash
 wp plugin auto-updates enable --all
 wp theme auto-updates enable --all
 ```
 
-**2) Add free dependency scanning (SCA) to CI/CD**
+**2) Add a free dependency scan (SCA) to your CI/CD**
 
-- **Dependabot** (GitHub, free): add `.github/dependabot.yml` to the repo:
+- **Dependabot** (GitHub, free): add `.github/dependabot.yml` to the repository:
 
 ```yaml
 version: 2
@@ -100,6 +100,6 @@ updates:
     schedule: { interval: "weekly" }
 ```
 
-- **npm audit** (Node projects): add `npm audit --audit-level=high` to your CI step; break the build if there is a high/critical vulnerability.
+- **npm audit** (Node projects): add `npm audit --audit-level=high` to your CI step; the build should fail on high/critical vulnerabilities.
 
 **3) Reduce version disclosure** — remove/disable version-leaking points such as `<meta generator>`, `X-Powered-By`, `/readme.html`, `/CHANGELOG.txt`; this makes automatic CVE mapping harder for attackers.

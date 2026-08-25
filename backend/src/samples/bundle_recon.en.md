@@ -1,148 +1,128 @@
 ## EXECUTIVE SUMMARY
 
-- **Overall risk level: Low** — your reconnaissance surface was examined across 3 areas; no takeover-able subdomain, exposed sensitive API or known high CVE covering your version stood out. Your externally visible surface currently appears narrow and controlled.
-- **Subdomain Takeover Scan:** Low — 7 subdomains inventoried; no takeover-able record detected
-- **API & Swagger Discovery:** Low — no public API/Swagger documentation found
-- **CMS & Known-CVE Scan:** Low — WordPress 5.5.20 detected; no matching CVE found
-- **Scope (real numbers):** 7 subdomains inventoried · 19 API/Swagger paths tried (7 pages scanned) · 6+ passive CMS/technology signals examined.
-- **Recommended first step:** Start with the highest-risk area; ready-made step-by-step fixes for each finding are in the "AI Solution Recommendations" section.
+- **Overall risk level: High** — 3 areas examined; the highest risk is in the **CMS & known CVE Scan** area (No known CMS fingerprint detected · 21 known CVEs in the server/software version).
+- ⚠️ **HTTPS not supported:** The target did not respond over HTTPS (443); reconnaissance was carried out over http://. Unencrypted communication is a serious finding in itself (see below).
+- **Subdomain Takeover Scan:** Low — No subdomain seen in the Certificate Transparency records
+- **API & Swagger Reconnaissance:** Low — No publicly accessible API/Swagger documentation found
+- **CMS & known CVE Scan:** High — No known CMS fingerprint detected · 21 known CVEs in the server/software version
+- **Scope (real numbers):** 0 subdomains inventoried · 12 API/Swagger paths checked (2 pages scanned) · 6+ passive CMS/technology signals examined.
+- **Recommended first step:** Start with the highest-risk area; step-by-step ready-made solutions for each finding are provided in the “AI Solution Suggestions” section.
 
 ## OVERALL ASSESSMENT
 
-**Risk Level: Low**
+**Risk Level: High**
 
-Your externally visible subdomain, API and CMS surface currently appears narrow and controlled; the report documents each area separately with a full inventory and recommended best practices. Each area is reported separately below.
+This target does not respond over HTTPS; communication is carried unencrypted (HTTPS should be adopted as a priority). The highest risk was detected in the **CMS & known CVE Scan** area (No known CMS fingerprint detected · 21 known CVEs in the server/software version); priority remediation is recommended. Each area is reported separately below.
+
+## IDENTIFIED RISKS
+
+| Finding | Severity | Description |
+|-------|--------|----------|
+| HTTPS not supported (unencrypted communication) | High | The target does not respond over HTTPS; all traffic is carried unencrypted (plaintext) — interceptable/modifiable. Solution: valid TLS certificate + HTTP→HTTPS redirect + HSTS. |
+| CMS & known CVE Scan — No known CMS fingerprint detected · 21 known CVEs in the server/software version | High | See the “CMS & known CVE Scan” section below for details. |
 
 ## SCOPE & METHODOLOGY
 
 This report was generated automatically from externally observable data using **passive** (non-exploitative) techniques across three reconnaissance areas:
 
-- **Subdomain Takeover:** Subdomains are gathered from Certificate Transparency logs (crt.sh, with certSpotter as fallback); each is resolved via Cloudflare DoH for DNS/CNAME and compared against a database of known "dangling" (abandoned cloud service) signatures.
-- **API & Swagger Discovery:** A fixed list of common API documentation paths is tried via GET; any OpenAPI/Swagger schemas found are parsed and sensitive/unauthenticated endpoints are flagged (endpoints are not called).
-- **CMS & Known CVE:** CMS and version fingerprints are extracted from HTTP headers, `<meta generator>` and HTML patterns; if the generator is hidden, the PRESENCE of known CMS paths is verified (GET/existence only — no login attempt). The detected version is mapped against known CVEs by querying the NVD (NIST National Vulnerability Database) — only CVEs that explicitly cover the version; if the version cannot be read, no CVE mapping is done (no fabricated CVEs).
+- **Subdomain Takeover:** Subdomains are collected from Certificate Transparency logs (crt.sh, with certSpotter as a fallback); each is put through DNS/CNAME resolution via Cloudflare DoH and compared against a signature database of known “dangling” (abandoned cloud services).
+- **API & Swagger Reconnaissance:** A fixed list of common API documentation paths is checked via GET; any OpenAPI/Swagger schemas found are parsed and sensitive/unauthenticated endpoints are flagged (the endpoints are not called).
+- **CMS & known CVE:** CMS and version fingerprinting is derived from HTTP headers, `<meta generator>` and HTML patterns; if the generator is hidden, it is verified via the EXISTENCE of known CMS paths (GET/existence only — no login attempt). The detected version is matched against known CVEs that explicitly cover the version by querying the NVD (NIST National Vulnerability Database); if the version cannot be read, no CVE mapping is performed (no fabricated CVEs).
 
-> All data was collected externally without harming the target. Areas requiring authentication, the internal network and active exploitation are outside the scope of this package.
+> All data was collected externally, without causing harm to the target. Authentication-protected areas, the internal network and active exploitation are outside the scope of this package.
 
 ## Subdomain Takeover Scan
 
-**Overall risk level: Low — 7 subdomains inventoried; no takeover-able record detected**
+**Overall risk level: Low — No subdomain seen in the Certificate Transparency records**
 
-**7** unique subdomains were inventoried from Certificate Transparency (crt.sh / certSpotter) records; of these, the CNAME records of **7** were resolved and examined for subdomain takeover.
+From the Certificate Transparency records (crt.sh / certSpotter), **0** unique subdomains were inventoried; of these, the CNAME record of **0** was resolved and examined for takeover (subdomain takeover).
 
-In the resolved CNAME records, no **takeover-able (dangling)** subdomain pointing to an abandoned cloud resource was detected. This indicates that your externally visible subdomain surface currently appears **narrow and controlled**.
+No **takeover-able (dangling)** subdomain pointing to an abandoned cloud resource was detected among the resolved CNAME records. This indicates that your externally visible subdomain surface currently appears **narrow and controlled**.
 
-### Subdomain inventory (status table)
-
-Discovered subdomains and their status after CNAME resolution:
-
-| Subdomain | CNAME Target | Status |
-|-----------|--------------|-------|
-| api.ornek.com | — | No CNAME record (direct A/AAAA) |
-| blog.ornek.com | — | No CNAME record (direct A/AAAA) |
-| mail.ornek.com | mail.barindirma-saglayici.example | Active (has CNAME record) |
-| panel.ornek.com | — | No CNAME record (direct A/AAAA) |
-| cdn.ornek.com | — | No CNAME record (direct A/AAAA) |
-| destek.ornek.com | — | No CNAME record (direct A/AAAA) |
-| www.ornek.com | ornek.com | Active (has CNAME record) |
-
-> Scope: Passive sources only (Certificate Transparency logs + observable DNS). No subdomain brute-force / active scanning was performed.
+> Scope: Passive sources only (Certificate Transparency logs + observable DNS). No subdomain brute-force / active scan was performed.
 
 ## API & Swagger Reconnaissance
 
-**Overall risk level: Low — no public API/Swagger documentation found**
+**Overall risk level: Low — No publicly accessible API/Swagger documentation found**
 
-The following **12** common API documentation/discovery paths were tried via GET. No endpoint was called/exploited (passive reconnaissance).
+The following **12** common API documentation/discovery paths were checked via GET. No endpoint was called/exploited (passive reconnaissance).
 
-### Paths tried (full list)
+### Paths checked (full list)
 
 | Path | HTTP | Status |
 |-----|------|-------|
 | /openapi.json | 404 | Not found |
 | /swagger.json | 404 | Not found |
-| /v2/api-docs | 404 | Not found |
-| /v3/api-docs | 404 | Not found |
+| /v2/api-docs | 400 | Not found |
+| /v3/api-docs | 400 | Not found |
 | /api-docs | 404 | Not found |
-| /api/docs | 404 | Not found |
-| /api/v1/docs | 404 | Not found |
+| /api/docs | 400 | Not found |
+| /api/v1/docs | 400 | Not found |
 | /swagger-ui.html | 404 | Not found |
-| /swagger/index.html | 404 | Not found |
+| /swagger/index.html | 400 | Not found |
 | /redoc | 404 | Not found |
-| /.well-known/openapi.json | 404 | Not found |
+| /.well-known/openapi.json | 400 | Not found |
 | /graphql | 404 | Not found |
 
-### Path candidates derived from the sitemap (7 candidates from 7 pages)
+None of the paths checked returned a publicly accessible API schema/interface. The absence of public API documentation means attackers cannot easily **map** your API surface from outside — this is a positive sign for the external attack surface.
 
-**In addition** to the fixed list, API/admin-looking paths extracted from link/script/form references on the discovered pages were also tried via GET for **existence only** (NO payload/injection — Reconnaissance only detects "does this endpoint exist"):
+> Scope: Only publicly accessible documentation paths were checked via GET; no endpoint was called/exploited (passive reconnaissance).
 
-| Candidate Path | Source page | HTTP | Note |
-|----------|--------------|------|-----|
-| /wp-content/uploads/elementor/css/global.css | / | 200 | ⚠️ present (admin-looking) |
-| /wp-content/uploads/elementor/css/post-5.css | / | 200 | ⚠️ present (admin-looking) |
-| /wp-content/uploads/2023/05/logo-150x150.png | / | 200 | ⚠️ present (admin-looking) |
-| /wp-content/uploads/2023/05/logo.png | / | 200 | ⚠️ present (admin-looking) |
-| /wp-content/uploads/2023/05/banner-scaled.jpg | / | 200 | ⚠️ present (admin-looking) |
-| /wp-content/uploads/2023/05/urun-gorseli-1.jpg | / | 200 | ⚠️ present (admin-looking) |
-| /wp-content/uploads/2023/05/hizmet-gorseli-2.jpg | / | 200 | ⚠️ present (admin-looking) |
+## CMS & known CVE Scan
 
-> **7** admin/sensitive-looking paths were discovered from the sitemap and are accessible (HTTP 200). The AUTHORIZATION control of these paths should be verified with **Active Verification / Full Pentest** — Reconnaissance only detects existence, it does not test authorization.
-
-None of the tried paths returned a public API schema/interface. The absence of public API documentation means attackers cannot easily **map** your API surface from the outside — a positive sign for the external attack surface.
-
-> Scope: Only public documentation paths were tried via GET; no endpoint was called/exploited (passive reconnaissance).
-
-## CMS & Known-CVE Scan
-
-**Overall risk level: Low — WordPress 5.5.20 detected; no matching CVE found**
+**Overall risk level: High — No known CMS fingerprint detected · 21 known CVEs in the server/software version**
 
 ### Fingerprint sources examined
 
-For CMS/framework and version detection, the following passive signals on the home-page response were inspected:
+For CMS/framework and version detection, the following passive signals in the home page response were examined:
 
 - HTTP response headers (`Server`, `X-Powered-By`, `X-Generator`, `X-Drupal-Cache`, `X-Magento-Cache-Debug`)
 - `<meta name="generator">` tag
 - HTML path/pattern traces (`/wp-content/`, `/wp-includes/`, `Drupal.settings`, `/sites/all/`, `option=com_`, `/media/jui/`, `typo3conf`, `Magento_`)
 - Common version files (WordPress `/readme.html`, Drupal `/CHANGELOG.txt`)
-- PRESENCE of known CMS paths (`/wp-login.php`, `/wp-json/`, `/administrator/`, `/user/login`, `/typo3/` — existence check only; NO login/password attempt)
+- EXISTENCE of known CMS paths (`/wp-login.php`, `/wp-json/`, `/administrator/`, `/user/login`, `/typo3/` — presence/absence check only; NO login/password attempt)
 - Library/plugin hints (WooCommerce, jQuery version)
 
-### Fingerprint result
+**None** of these signals matched a known CMS/framework. This suggests a custom-built application or an installation that deliberately hides CMS traces; either case makes automatic CMS/CVE mapping from outside harder.
 
-- Detected system: **WordPress 5.5.20**
-- How detected: Meta generator: "WordPress 5.5.20"
-- Additional observations: WooCommerce (WordPress e-commerce plugin) detected · X-Powered-By: ASP.NET · Server: Microsoft-IIS/10.0
+### Server/Software Banner Version — Known CVE (NVD)
 
-### Known CVE matches (NVD)
+The version(s) derived from the banner were matched against the NVD (NO exploitation/verification — only the "are there known CVEs for this version" indicator):
 
-The NVD (NIST National Vulnerability Database) query did not respond during this scan; no CVE mapping could be done. Please verify your version manually on the NVD.
+| Software/Version | NVD result | Example CVE |
+|-----|-------|-------|
+| Apache httpd 2.4.25 | not queryable (NOT clean) | — |
+| PHP 7.1.26 | ⚠️ 21 known CVEs | [CVE-2017-8923](https://nvd.nist.gov/vuln/detail/CVE-2017-8923) |
 
-> Scope: Passive fingerprint + known-CVE mapping via NVD. No CVE was **exploited/verified**.
+> **Note:** The CVE list below contains known vulnerabilities that were **automatically mapped via the NVD (NIST National Vulnerability Database)** from the detected version; whether they are exploitable for your version is **not verified**, and some may originate from plugins/themes. For a confirmed assessment, an update + targeted verification are recommended.
+
+> Scope: Passive fingerprint + known-CVE mapping via the NVD. No CVE was **exploited/verified**.
 
 ## POSITIVE ASSURANCE — RECONNAISSANCE METHODS CHECKED
 
-Reconnaissance comes back clean on most healthy targets; this section makes the "nothing found" result TRANSPARENT too — it shows what was ACTUALLY tried (across **7 pages** including the home page and sitemap):
+Reconnaissance comes out clean on most healthy targets; this section also makes the “nothing found” result TRANSPARENT — it shows what was ACTUALLY checked (including a **2-page** sitemap, home page included):
 
 | Reconnaissance Area | Result |
 |-------------|-------|
-| Subdomain Takeover Scan | ✅ 7 subdomain records tried; no takeover indicator found |
-| API & Swagger Discovery | ✅ 19 paths tried (12 fixed + 7 sitemap candidates, from 7 pages); no public API schema found |
-| CMS / Framework CVE Match | ✅ WordPress 5.5.20 detected; no known high CVE covering the version matched |
-| Sitemap path discovery | ⚠️ 7 admin-looking paths accessible (authorization test is Active Verification scope) |
+| Subdomain Takeover Scan | ✅ 0 subdomain records checked; no takeover indicator found |
+| API & Swagger Reconnaissance | ✅ 12 paths checked (12 fixed + 0 sitemap candidates, from 2 pages); no publicly accessible API schema found |
+| CMS / Framework CVE Match | ✅ No known CMS/framework fingerprint detected |
 
-> **Three-state distinction (honesty):** ✅ *No indicator found* = the method ran, clean · ⚠️ *Indicator present* = detailed above · ⚠️ *Not assessable* = no data collected (does NOT mean secure).
+> **Three-state distinction (honesty):** ✅ *No indicator found* = method ran, clean · ⚠️ *Indicator present* = detailed above · ⚠️ *Not assessable* = no data collectable (does NOT mean secure).
 
-### What this package DOES and does NOT assess
+### What this package assesses — and what it does NOT
 
-**ASSESSES (passive reconnaissance — GET only, external sources):** subdomain inventory + takeover (dangling CNAME), public API/Swagger/OpenAPI docs, CMS/framework fingerprint + known-CVE match (NVD), existence detection of API/admin-looking paths derived from the sitemap — across 7 pages.
+**ASSESSES (passive reconnaissance — GET only, external sources):** subdomain inventory + takeover (dangling CNAME), publicly accessible API/Swagger/OpenAPI document, CMS/framework and server/software banner (Apache/nginx/PHP) fingerprint + known CVE match (NVD), EXISTENCE determination of API/administrative-looking paths derived from the sitemap + robots.txt Disallow entries — across 2 pages.
 
-**DOES NOT ASSESS:** active injection/IDOR/XSS verification and authorization testing of discovered endpoints (**Active Verification / Full Pentest** scope), HTTP security header/CORS/cookie/CSP detail (**Basic Scan / External Surface** scope), GDPR/PCI/ISO framework mapping (**Compliance** scope). "No indicator found" in an area **does NOT prove** you are secure — it only shows that no indicator emerged from the passive methods attempted.
+**DOES NOT ASSESS:** active injection/IDOR/XSS verification and authorisation testing of discovered endpoints (**Active Verification / Full Pentest** scope), HTTP security header/CORS/cookie/CSP details (**Basic Scan / External Attack Surface** scope), GDPR/PCI/ISO framework mapping (**Compliance** scope). The statement “no indicator found” in an area **DOES NOT PROVE** you are secure — it only shows that no indicator emerged with the passive methods checked.
 
 ## BEST PRACTICES / RECOMMENDED NEXT STEPS
 
-Regardless of this scan's result, recommended lasting practices to keep your attack surface narrow:
+Regardless of the outcome of this scan, the following are recommended lasting practices to keep your attack surface narrow:
 
-- **Regularly clean up unused CNAME records** — records pointing to abandoned cloud resources carry a subdomain-takeover risk; remove the DNS record before deleting the cloud resource.
-- **If you have API documentation (Swagger/OpenAPI)**, keep it available only to authenticated access; do not publish it publicly in production.
-- **Keep your CMS, plugin and theme versions** current via automatic updates or regular tracking; stay patched against known CVEs.
-- **Use Certificate Transparency (CT) log monitoring** tools (crt.sh, certSpotter, etc.) to spot new/unexpected subdomain certificates early.
-- **Reduce version/technology disclosure** — do not leak unnecessary version information via headers/tags such as `Server`, `X-Powered-By`, `<meta generator>`.
-- **Document your subdomain inventory** — knowing which subdomain belongs to which service/team lets you quickly notice orphaned records.
+- **Clean up unused CNAME records regularly** — records pointing to abandoned cloud resources carry a subdomain takeover risk; remove the DNS record before deleting the cloud resource.
+- **If you have API documentation (Swagger/OpenAPI),** keep it open only to authenticated access; do not publish it publicly in production.
+- **Keep your CMS, plugin and theme versions** up to date via auto-update or regular tracking; stay patched against known CVEs.
+- **Detect new/unexpected subdomain certificates early** with Certificate Transparency (CT) log monitoring tools (crt.sh, certSpotter, etc.).
+- **Reduce version/technology disclosure** — do not leak unnecessary version information through headers/tags such as `Server`, `X-Powered-By`, `<meta generator>`.
+- **Document your subdomain inventory** — knowing which subdomain belongs to which service/team helps you quickly spot idle records.

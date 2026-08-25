@@ -1,12 +1,12 @@
-Dieser Abschnitt enthält bereichsweise Behebungsvorschläge für alle in Ihrem Scan der externen Angriffsfläche festgestellten Mängel. Kopieren Sie die für Ihren Server passenden Beispiele (Nginx/Firebase/Apache/DNS).
+Dieser Abschnitt enthält bereichsweise Korrekturvorschläge für alle in Ihrer Prüfung der externen Angriffsfläche festgestellten Lücken. Kopieren Sie die für Ihren Server passenden Beispiele (Nginx/Firebase/Apache/DNS).
 
-### SSL/TLS-Konfigurationsprüfung
+### SSL/TLS-Konfigurationsaudit
 
 Die folgenden Empfehlungen stärken die TLS-/Verschlüsselungskonfiguration für rest.vulnweb.com.
 
-### 1. Fügen Sie den HSTS-Header hinzu
+### 1. HSTS-Header ergänzen
 
-Weist den Browser an, sich nur über HTTPS mit der Website zu verbinden (nur anwenden, wenn Ihre Website vollständig über HTTPS läuft):
+Weist den Browser an, die Website nur über HTTPS aufzurufen (nur anwenden, wenn Ihre Website vollständig auf HTTPS läuft):
 
 **Nginx:**
 
@@ -37,13 +37,13 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" alway
 Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
 ```
 
-### Sicherheits-Header & Informationsabfluss
+### Sicherheits-Header & Informationslecks
 
-Die folgenden Empfehlungen dienen dazu, die auf der Startseite von rest.vulnweb.com festgestellten fehlenden Sicherheits-Header zu beheben. Für jeden Header folgt zunächst eine kurze Erläuterung, anschließend ein Nginx-Beispiel; ganz am Ende finden Sie fertige Blöcke für andere Plattformen als Nginx (Firebase, Vercel, Next.js, Apache). Kopieren Sie den für Ihren Server passenden Block.
+Die folgenden Empfehlungen dienen der Behebung der auf der Startseite von rest.vulnweb.com festgestellten fehlenden Sicherheits-Header. Zu jedem Header folgt zuerst eine kurze Erläuterung, dann ein Nginx-Beispiel; am Ende finden Sie fertige Blöcke für andere Plattformen (Firebase, Vercel, Next.js, Apache). Kopieren Sie den zu Ihrem Server passenden Block.
 
 ### 1. Content-Security-Policy (CSP) hinzufügen
 
-Dies ist die wirksamste browserseitige Verteidigung gegen XSS und Content-Injektion. Beginnen Sie mit einer für Ihre Website passenden Basisrichtlinie und verschärfen Sie sie mit der Zeit:
+Die wirksamste Browser-Verteidigung gegen XSS und Content-Injection. Beginnen Sie mit einer zur Website passenden Basisrichtlinie und verschärfen Sie sie mit der Zeit:
 
 ```nginx
 add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'self'" always;
@@ -53,17 +53,17 @@ Wenn Sie Drittanbieter-Skripte verwenden (GTM, Analytics, Pixel), fügen Sie die
 
 ### 2. X-Frame-Options hinzufügen
 
-Verhindert, dass Ihre Seite in ein iframe einer anderen Website eingebettet und so für Clickjacking anfällig wird:
+Verhindert, dass Ihre Seite in das iframe einer fremden Website eingebettet und für Clickjacking missbraucht wird:
 
 ```nginx
 add_header X-Frame-Options "SAMEORIGIN" always;
 ```
 
-Als moderne Alternative bietet die CSP `frame-ancestors 'self'` denselben Schutz.
+Als moderne Alternative bietet CSP `frame-ancestors 'self'` denselben Schutz.
 
 ### 3. X-Content-Type-Options hinzufügen
 
-Verhindert, dass der Browser MIME-Type-Sniffing betreibt und Inhalte falsch interpretiert (und das dadurch entstehende XSS-Risiko):
+Verhindert, dass der Browser per MIME-Type-Sniffing Inhalte falsch interpretiert (und das damit verbundene XSS-Risiko):
 
 ```nginx
 add_header X-Content-Type-Options "nosniff" always;
@@ -79,7 +79,7 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" alway
 
 ### 5. Referrer-Policy hinzufügen
 
-Verringert den Informationsabfluss im `Referer`-Header, der an externe Links gesendet wird:
+Reduziert den Informationsabfluss über den `Referer`-Header bei externen Links:
 
 ```nginx
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
@@ -87,23 +87,23 @@ add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
 ### 6. Permissions-Policy hinzufügen
 
-Schränkt Browser-APIs (Kamera, Mikrofon, Standort usw.) ein; verhindert den unerwünschten Zugriff durch Drittanbieter-iframes:
+Schränkt Browser-APIs (Kamera, Mikrofon, Standort usw.) ein; verhindert unerwünschte Zugriffe durch Drittanbieter-iframes:
 
 ```nginx
 add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
 ```
 
-### 7. X-XSS-Protection (Tiefenverteidigung)
+### 7. X-XSS-Protection (Defense-in-Depth)
 
-Ein historischer Header für ältere Browser; der eigentliche Schutz liegt in der CSP. Sie können ihn optional hinzufügen:
+Ein historischer Header für ältere Browser; der eigentliche Schutz liegt in der CSP. Kann optional ergänzt werden:
 
 ```nginx
 add_header X-XSS-Protection "1; mode=block" always;
 ```
 
-### Alles zusammenfassende Konfiguration — Nginx
+### Kombinierte Konfiguration — Nginx
 
-Fügen Sie dies Ihrem Server-Block (server { ... }) hinzu, prüfen Sie es mit `nginx -t` und laden Sie anschließend mit `systemctl reload nginx` neu:
+In Ihren Server-Block (server { ... }) einfügen, mit `nginx -t` prüfen und anschließend mit `systemctl reload nginx` neu laden:
 
 ```nginx
 add_header Content-Security-Policy "default-src 'self'; frame-ancestors 'self'" always;
@@ -116,7 +116,7 @@ add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
 
 ### Fertige Konfiguration für andere Plattformen
 
-Wenn Ihr Server nicht Nginx ist, können Sie dieselben Header mit dem passenden der folgenden fertigen Blöcke hinzufügen.
+Falls Ihr Server nicht Nginx ist, können Sie dieselben Header mit einem der folgenden fertigen Blöcke hinzufügen.
 
 **Firebase Hosting — `firebase.json`:**
 
@@ -212,9 +212,9 @@ Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
 </configuration>
 ```
 
-Überprüfen Sie nach den Änderungen mit den Entwicklertools des Browsers (Registerkarte „Network") oder mit `curl -I https://rest.vulnweb.com`, ob die Header der Antwort hinzugefügt wurden.
+Prüfen Sie nach den Änderungen mit den Browser-Entwicklertools (Tab „Network") oder mit `curl -I https://rest.vulnweb.com`, dass die Header in der Antwort enthalten sind.
 
-### Blockieren Sie den Zugriff auf offen zugängliche Dateien
+### Zugriff auf offenliegende Dateien sperren
 
 Festgestellte Pfade: `/db.sql`. Sperren Sie den Zugriff auf Serverebene:
 
@@ -235,7 +235,7 @@ RedirectMatch 404 /\.env
 </FilesMatch>
 ```
 
-Am gesündesten ist es zudem, solche Dateien gar nicht erst in das Web-Root (public) zu legen.
+Am besten legen Sie diese Dateien zudem gar nicht erst in das Web-Root (public).
 
 ### DNS- & E-Mail-Sicherheit
 
@@ -243,7 +243,7 @@ Die folgenden Empfehlungen stärken die E-Mail-Authentifizierung der Domain vuln
 
 ### DMARC-Eintrag hinzufügen/verschärfen
 
-Überwachen Sie zunächst mit `p=none`, prüfen Sie die Berichte und stellen Sie, sobald Sie sicher sind, dass es keine Falsch-Positiven gibt, auf `quarantine` → `reject` um:
+Überwachen Sie zunächst mit `p=none`; sobald Sie die Berichte geprüft und Fehlalarme ausgeschlossen haben, wechseln Sie zu `quarantine` → `reject`:
 
 ```dns
 _dmarc.vulnweb.com.  TXT  "v=DMARC1; p=quarantine; rua=mailto:dmarc@vulnweb.com; fo=1"
@@ -259,21 +259,21 @@ google._domainkey.vulnweb.com.  TXT  "v=DKIM1; k=rsa; p=<vom-Anbieter-bereitgest
 
 ### DNSSEC aktivieren
 
-Aktivieren Sie **DNSSEC** über das Panel Ihres DNS-Anbieters; der Anbieter erzeugt den DS-Eintrag, den Sie bei Ihrem Domain-Registrar eintragen. Durch die Signierung der DNS-Antworten wird Cache-Poisoning erschwert.
+Aktivieren Sie **DNSSEC** im Panel Ihres DNS-Anbieters; der Anbieter erzeugt den DS-Eintrag, den Sie bei Ihrem Domain-Registrar eintragen. Es signiert die DNS-Antworten und erschwert Cache-Poisoning.
 
 ### CORS- & Cookie-Sicherheit
 
 Die folgenden Empfehlungen stärken die CORS- und Cookie-Sicherheit für rest.vulnweb.com.
 
-Ihre CORS- und Cookie-Konfiguration liegt nahe an sicheren Standardwerten. Behalten Sie beim Hinzufügen neuer Endpunkte das Prinzip der Origin-Allowlist und der Cookie-Flags (Secure/HttpOnly/SameSite) bei.
+Ihre CORS- und Cookie-Konfiguration ist nahe an sicheren Voreinstellungen. Behalten Sie beim Hinzufügen neuer Endpunkte das Prinzip der Origin-Allowlist und der Cookie-Flags (Secure/HttpOnly/SameSite) bei.
 
-### CSP-Analyse (Content-Security-Policy)
+### CSP-Analyse (Content Security Policy)
 
 Die folgenden Empfehlungen stärken die Content-Security-Policy für rest.vulnweb.com. Testen Sie die CSP zunächst mit dem Header `Content-Security-Policy-Report-Only` und wechseln Sie erst dann zum durchgesetzten (enforce) Header, wenn Sie sicher sind, dass die Website nicht beeinträchtigt wird.
 
 ### Basis-CSP (Einstieg)
 
-Erweitern Sie sie, indem Sie Ihre eigenen Drittanbieter-Domains (Analytics, CDN, Font) zu `script-src`/`connect-src`/`img-src` hinzufügen:
+Erweitern Sie sie, indem Sie Ihre eigenen Drittanbieter-Domains (Analytics, CDN, Schriftarten) zu `script-src`/`connect-src`/`img-src` hinzufügen:
 
 **Nginx:**
 
@@ -310,4 +310,4 @@ Header always set Content-Security-Policy "default-src 'self'; img-src 'self' da
 Content-Security-Policy-Report-Only: default-src 'self'; report-uri /csp-report
 ```
 
-Nachdem Sie die Berichte überwacht und die Falsch-Positiven beseitigt haben, veröffentlichen Sie den Header als `Content-Security-Policy`.
+Nachdem Sie die Berichte überwacht und Fehlalarme beseitigt haben, veröffentlichen Sie den Header als `Content-Security-Policy`.

@@ -173,7 +173,7 @@ const SAMPLE_RISK: Record<string, { level: 'high' | 'medium' | 'low' }> = {
 const REAL_SAMPLES: Record<string, { fileKey: string; hostname: string }> = {
   basit_tarama: { fileKey: 'basit_tarama', hostname: 'testasp.vulnweb.com' },
   bundle_surface: { fileKey: 'bundle_surface', hostname: 'rest.vulnweb.com' },
-  bundle_recon: { fileKey: 'bundle_recon', hostname: 'ornek.com' }, // gerçek tarama (anonimleştirildi: *.ornek.com)
+  bundle_recon: { fileKey: 'bundle_recon', hostname: 'rest.vulnweb.com' }, // gerçek tarama — herkese açık test hedefi (anonimleştirme gerekmez; robots.txt + banner CVE dahil)
   bundle_compliance: { fileKey: 'bundle_compliance', hostname: 'ornek.com' }, // gerçek tarama (anonimleştirildi)
   bundle_active_verify: { fileKey: 'bundle_active_verify', hostname: 'ornek.com' }, // gerçek aktif tarama (kendi fixture'ımız; gövde host-agnostik -> kapakta ornek.com)
   bundle_full_pentest: { fileKey: 'bundle_full_pentest', hostname: 'ornek.com' }, // gerçek pentest çıktısı — BİLEREK zafiyetli test uygulaması (anonimleştirildi: ornek.com; Faz 0–5 tüm kontroller görünür; sample-notice ile işaretli)
