@@ -26,7 +26,7 @@ import { suggestPricingForHost } from './pricingModel.js';
 import { logScanStep } from './scanLogger.js';
 import {
   buildActiveCheckReport, buildInjectionReport, buildIdorReport,
-  RISK_WORD, RISK_WORD_DE, SEV_DISP, levelRank, extractLevel, headlineOf, detailOnly, type Level,
+  RISK_WORD, RISK_WORD_DE, RISK_WORD_EN, SEV_DISP, levelRank, extractLevel, headlineOf, detailOnly, type Level,
 } from './activeVerifyReports.js';
 import type { AuthSession } from './authSession.js';
 
@@ -215,7 +215,20 @@ const LOGIN_BYPASS_CFG = {
 // (blocker fix — part 2) Aktif Doğrulama'nın (login'siz) şablonundan MİRAS kalan "kimlik doğrulaması
 // olmadan / kapsam dışı" cümlelerini authenticated bağlama çevirir. buildInjection/Idor/ActiveCheckReport
 // DİĞER paketlerde AYNEN kalır — bu yalnız authenticated raporu POST-İŞLER (kaynak şablonlara dokunmaz).
-function toAuthenticatedContext(md: string, de = false): string {
+function toAuthenticatedContext(md: string, locale: string | boolean = false): string {
+  const de = locale === true || locale === 'de', en = locale === 'en';
+  if (en) {
+    return md
+      .replace(
+        /(#{2,3}) SCOPE \(IMPORTANT\)[\s\S]*?\(\*\*Review required \/ Out of scope\*\*\)\.\n\n/,
+        '$1 SCOPE (IMPORTANT)\n\nThis section was run with the **session (logged in)** of the TEST account you provided and tests unauthorized access to the account\'s **own** enumerable resources. A **cross-account** test (accessing another user\'s data) is outside the scope of this version (it requires two separate accounts). The absence of findings does not prove that there is no IDOR in all authenticated flows.\n\n',
+      )
+      .replace(
+        /Areas that require authentication and internal logic are outside the scope of this package\./g,
+        'This section was run with the session of the TEST account you provided in an authenticated (logged-in) context; completion of payment/account-status change is blocked at the code level.',
+      )
+      .replace(/without authentication/g, 'with an authenticated session');
+  }
   if (de) {
     return md
       .replace(
@@ -705,15 +718,38 @@ const AUTH_TITLE_DE: Record<string, string> = {
   'Subdomain Takeover (Dangling DNS)': 'Subdomain-Takeover (Dangling DNS)',
   'Authenticated Güvenli Aktif Göstergeler (LFI/Redirect/HPP/SSTI)': 'Authentifizierte sichere aktive Indikatoren (LFI/Redirect/HPP/SSTI)',
 };
+const AUTH_TITLE_EN: Record<string, string> = {
+  'Oturum Çerezi Bayrakları': 'Session Cookie Flags',
+  'Session Fixation': 'Session Fixation',
+  'Logout / Oturum Geçersizleştirme': 'Logout / Session Invalidation',
+  'Forced Browsing / Fonksiyon-Seviye Yetki': 'Forced Browsing / Function-Level Authorization',
+  'Authenticated Enjeksiyon (SQLi/XSS)': 'Authenticated Injection (SQLi/XSS)',
+  'Authenticated IDOR (kendi kaynakları)': 'Authenticated IDOR (own resources)',
+  'Yetki Yükseltme (Privilege Escalation)': 'Privilege Escalation',
+  'Çok-Adımlı İş Mantığı': 'Multi-Step Business Logic',
+  'JWT / Token Güvenliği': 'JWT / Token Security',
+  'Giriş Baypası (SQLi Göstergesi)': 'Login Bypass (SQLi Indicator)',
+  'Client-Side / JS Analizi': 'Client-Side / JS Analysis',
+  'Client-Side Statik Analiz': 'Client-Side Static Analysis',
+  'Kimlik-Doğrulama Derinliği': 'Authentication Depth',
+  'Oturum Güvenliği Derinliği': 'Session Security Depth',
+  'Girdi & Header Derinliği': 'Input & Header Depth',
+  'Yapılandırma & İfşa Derinliği': 'Configuration & Exposure Depth',
+  'API Güvenliği Derinliği (OWASP API Top 10)': 'API Security Depth (OWASP API Top 10)',
+  'E-posta & DNS Derinliği (Anti-Spoofing)': 'E-mail & DNS Depth (Anti-Spoofing)',
+  'Taşıma Katmanı, CORS & Güvenlik Başlığı Derinliği': 'Transport Layer, CORS & Security-Header Depth',
+  'Subdomain Takeover (Dangling DNS)': 'Subdomain Takeover (Dangling DNS)',
+  'Authenticated Güvenli Aktif Göstergeler (LFI/Redirect/HPP/SSTI)': 'Authenticated Safe Active Indicators (LFI/Redirect/HPP/SSTI)',
+};
 
 type Run = { title: string; conf: 'Yüksek' | 'Orta' | 'Düşük'; rep: { findings: string; fixText: string } | null; inputs: number; probes: number; fc: number; agentCheck?: boolean; agentUsed?: boolean; agentStatus?: 'analyzed' | 'no_candidate' | 'unavailable' | 'disabled'; enumerableSurface?: { param: string; count: number } | null };
 
 /** 6 authenticated kontrolü çalıştır + TEK rapora birleştir. Hedefe ulaşılamazsa null. */
 export async function generateAuthenticatedReport(host: string, session: AuthSession, locale: string = 'tr'): Promise<{ findings: string; fixText: string } | null> {
-  const de = locale === 'de';
-  const t = (trS: string, deS: string) => (de ? deS : trS);
-  const rw = (l: Level) => (de ? RISK_WORD_DE[l] : RISK_WORD[l]);
-  const T = (tr: string) => (de ? (AUTH_TITLE_DE[tr] ?? tr) : tr);
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
+  const rw = (l: Level) => (de ? RISK_WORD_DE[l] : en ? RISK_WORD_EN[l] : RISK_WORD[l]);
+  const T = (tr: string) => (de ? (AUTH_TITLE_DE[tr] ?? tr) : en ? (AUTH_TITLE_EN[tr] ?? tr) : tr);
   void SEV_DISP;
   // (Faz 4 / Bölüm 2) DİNAMİK FİYAT ÖNERİSİ — yalnız 6. paket; pasif sinyallerden deterministik skor.
   // Müşteri PDF'ine GİRMEZ (satış sinyali); admin/panel için log'a yazılır. Ekstra tarama yapmaz (cache'li corpus).
@@ -783,7 +819,7 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   runs.push({ title: T('Authenticated Güvenli Aktif Göstergeler (LFI/Redirect/HPP/SSTI)'), conf: 'Orta', rep: aiEv ? buildActiveCheckReport(aiEv, AUTH_INDICATORS_CFG, locale) : null, inputs: aiEv?.inputsFound ?? 0, probes: aiEv?.probesSent ?? 0, fc: aiEv?.findings.length ?? 0 });
 
   // (DÜRÜSTLÜK) Hiçbir kontrol veri toplayamadıysa (hedefe ulaşılamadı) -> "İncelenemedi" (null->Düşük DEĞİL).
-  if (runs.every((r) => !r.rep)) return unscannableReport(host, t('kimlik-doğrulamalı kontroller', 'authentifizierte Kontrollen'), locale);
+  if (runs.every((r) => !r.rep)) return unscannableReport(host, t('kimlik-doğrulamalı kontroller', 'authentifizierte Kontrollen', 'authenticated checks'), locale);
 
   const levels: Array<Level | null> = runs.map((r) => (r.rep ? extractLevel(r.rep.findings) : null));
   const ranked = levels.map((lv, i) => ({ lv, i })).filter((x): x is { lv: Level; i: number } => x.lv !== null).sort((a, b) => levelRank(b.lv) - levelRank(a.lv));
@@ -793,6 +829,11 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   const totalProbes = runs.reduce((s, r) => s + r.probes, 0);
   const dataOk = runs.filter((r) => r.rep).length;
 
+  const enBox = `> ### Assessment Summary (Authenticated)\n` +
+      `> **This scan was performed in an AUTHENTICATED (logged-in) context using the session of the provided TEST account.** ` +
+      `${runs.length} authenticated checks were assessed; **${totalProbes}** requests in total. ` +
+      (anyFinding ? `The highest risk is in the **${worstTitle}** area (detailed below).` : `No confirmed critical/high vulnerability stood out.`) +
+      `\n>\n> _The password was never sent externally/to a third-party service; the backend performed a deterministic login and used only the session (cookie/token)._`;
   const box = de
     ? `> ### Bewertungszusammenfassung (Authentifiziert)\n` +
       `> **Dieser Scan wurde mit der Sitzung des bereitgestellten TEST-Kontos in einem AUTHENTIFIZIERTEN (angemeldeten) Kontext durchgeführt.** ` +
@@ -804,100 +845,106 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
     `${runs.length} authenticated kontrol değerlendirildi; toplam **${totalProbes}** istek. ` +
     (anyFinding ? `En yüksek risk **${worstTitle}** alanında (aşağıda detaylı).` : `Doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`) +
     `\n>\n> _Şifre hiçbir aşamada dışarı/üçüncü bir servise gönderilmedi; backend deterministik login yapıp yalnız oturumu (cookie/token) kullandı._`;
+  const boxFinal = en ? enBox : box;
 
   // AJAN kontrolleri için 3 durum NET ayrılır (dürüstlük): 'unavailable' = advisory tamamlanamadı;
   // 'analyzed' = advisory GERÇEKTEN çalıştı (bulgu varsa gösterge, yoksa "AI analiz etti, vektör yok");
   // 'no_candidate' = pasif keşifle aday yoktu, advisory çağrılmadı (gerçek "kapsam dışı"). Böylece
   // "AI çalıştı ama temiz" ile "hiç uygulanamadı" birbirine KARIŞMAZ.
-  const confWord = (c: string) => (de ? (c === 'Yüksek' ? 'Hoch' : c === 'Orta' ? 'Mittel' : c === 'Düşük' ? 'Niedrig' : c) : c);
+  const confWord = (c: string) => (de ? (c === 'Yüksek' ? 'Hoch' : c === 'Orta' ? 'Mittel' : c === 'Düşük' ? 'Niedrig' : c) : en ? (c === 'Yüksek' ? 'High' : c === 'Orta' ? 'Medium' : c === 'Düşük' ? 'Low' : c) : c);
   const statusOf = (r: Run, lv: Level | null): string => {
-    if (!r.rep) return t('Veri toplanamadı', 'Keine Daten erhoben');
-    if (r.fc > 0 && lv === 'high') return t('⚠ Zafiyet göstergesi', '⚠ Schwachstellenindikator');
-    if (r.fc > 0) return t('⚠ Sınırlı gösterge', '⚠ Begrenzter Indikator');
+    if (!r.rep) return t('Veri toplanamadı', 'Keine Daten erhoben', 'No data collected');
+    if (r.fc > 0 && lv === 'high') return t('⚠ Zafiyet göstergesi', '⚠ Schwachstellenindikator', '⚠ Vulnerability indicator');
+    if (r.fc > 0) return t('⚠ Sınırlı gösterge', '⚠ Begrenzter Indikator', '⚠ Limited indicator');
     if (r.agentCheck) {
       // (Deney) advisory VARSAYILAN KAPALI -> bu kontrol deterministik çalışır; sonucu deterministik durumdan türet.
-      if (r.agentStatus === 'disabled') return r.inputs === 0 ? t('İncelenemedi — güvenli test edilebilir yüzey yok', 'Nicht prüfbar — keine sicher prüfbare Oberfläche') : t('✓ Zafiyet kanıtı yok', '✓ Kein Schwachstellennachweis');
-      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return t('Ajan analizi tamamlanamadı (deterministik göstergeyle sınırlı)', 'Agentenanalyse nicht abgeschlossen (auf deterministischen Indikator beschränkt)');
-      if (r.agentStatus === 'analyzed') return t('✓ AI advisory analiz etti — vektör yok', '✓ KI-Advisory hat analysiert — kein Vektor');
-      return t('Uygulanabilir giriş noktası yok (advisory çalıştırılmadı)', 'Kein anwendbarer Eingabepunkt (Advisory nicht ausgeführt)'); // no_candidate
+      if (r.agentStatus === 'disabled') return r.inputs === 0 ? t('İncelenemedi — güvenli test edilebilir yüzey yok', 'Nicht prüfbar — keine sicher prüfbare Oberfläche', 'Not assessable — no safely testable surface') : t('✓ Zafiyet kanıtı yok', '✓ Kein Schwachstellennachweis', '✓ No vulnerability evidence');
+      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return t('Ajan analizi tamamlanamadı (deterministik göstergeyle sınırlı)', 'Agentenanalyse nicht abgeschlossen (auf deterministischen Indikator beschränkt)', 'Agent analysis could not be completed (limited to the deterministic indicator)');
+      if (r.agentStatus === 'analyzed') return t('✓ AI advisory analiz etti — vektör yok', '✓ KI-Advisory hat analysiert — kein Vektor', '✓ AI advisory analysed — no vector');
+      return t('Uygulanabilir giriş noktası yok (advisory çalıştırılmadı)', 'Kein anwendbarer Eingabepunkt (Advisory nicht ausgeführt)', 'No applicable input point (advisory not run)'); // no_candidate
     }
     // (İş 2 tutarlılık) Numaralandırılabilir yüzey BULUNDU ama cross-account testi kapsam dışı olduğundan
     // komşu-ID probu BİLİNÇLİ çalıştırılmadı -> "temiz" DEĞİL; detay bölümüyle tutarlı ayrı durum.
-    if (r.enumerableSurface && r.fc === 0) return t('⚠ Yüzey bulundu — cross-account testi kapsam dışı', '⚠ Oberfläche gefunden — Cross-Account-Test außerhalb des Umfangs');
-    if (r.inputs === 0) return t('Uygulanabilir giriş noktası yok (Kapsam dışı)', 'Kein anwendbarer Eingabepunkt (Außerhalb des Umfangs)');
-    return t('✓ Zafiyet kanıtı yok', '✓ Kein Schwachstellennachweis');
+    if (r.enumerableSurface && r.fc === 0) return t('⚠ Yüzey bulundu — cross-account testi kapsam dışı', '⚠ Oberfläche gefunden — Cross-Account-Test außerhalb des Umfangs', '⚠ Surface found — cross-account test out of scope');
+    if (r.inputs === 0) return t('Uygulanabilir giriş noktası yok (Kapsam dışı)', 'Kein anwendbarer Eingabepunkt (Außerhalb des Umfangs)', 'No applicable input point (out of scope)');
+    return t('✓ Zafiyet kanıtı yok', '✓ Kein Schwachstellennachweis', '✓ No vulnerability evidence');
   };
   const confCell = (r: Run): string => {
-    if (!r.rep) return t('Kapsam dışı', 'Außerhalb des Umfangs');
+    if (!r.rep) return t('Kapsam dışı', 'Außerhalb des Umfangs', 'Out of scope');
     if (r.agentCheck) {
-      if (r.agentStatus === 'disabled') return r.inputs > 0 || r.fc > 0 ? confWord(r.conf) : t('Kapsam dışı', 'Außerhalb des Umfangs');
-      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return t('Sınırlı', 'Begrenzt');
+      if (r.agentStatus === 'disabled') return r.inputs > 0 || r.fc > 0 ? confWord(r.conf) : t('Kapsam dışı', 'Außerhalb des Umfangs', 'Out of scope');
+      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return t('Sınırlı', 'Begrenzt', 'Limited');
       if (r.agentStatus === 'analyzed') return confWord(r.conf); // AI gerçekten çalıştı -> güven göster
-      return t('Kapsam dışı', 'Außerhalb des Umfangs'); // no_candidate
+      return t('Kapsam dışı', 'Außerhalb des Umfangs', 'Out of scope'); // no_candidate
     }
-    if (r.enumerableSurface && r.fc === 0) return t('Kapsam dışı', 'Außerhalb des Umfangs'); // yüzey var ama test çalıştırılmadı -> güven yok
-    return r.inputs > 0 ? confWord(r.conf) : t('Kapsam dışı', 'Außerhalb des Umfangs');
+    if (r.enumerableSurface && r.fc === 0) return t('Kapsam dışı', 'Außerhalb des Umfangs', 'Out of scope'); // yüzey var ama test çalıştırılmadı -> güven yok
+    return r.inputs > 0 ? confWord(r.conf) : t('Kapsam dışı', 'Außerhalb des Umfangs', 'Out of scope');
   };
   // (blocker fix) YÖNETİCİ ÖZETİ satırı, KONTROL ÖZETİ tablosuyla AYNI kaynaktan/mantıktan türer —
   // ayrı statik "Düşük — bulunamadı" şablonu YOK. statusOf ile birebir tutarlı (her satır tek doğru durum).
   const statusSummary = (r: Run, lv: Level | null): string => {
-    if (!r.rep || !lv) return t('veri toplanamadı', 'keine Daten erhoben');
+    if (!r.rep || !lv) return t('veri toplanamadı', 'keine Daten erhoben', 'no data collected');
     const hl = headlineOf(r.rep.findings);
     if (r.fc > 0) return `${rw(lv)}${hl ? ` — ${hl}` : ''}`;                       // bulgu var -> seviye + başlık
     if (r.agentCheck) {
-      if (r.agentStatus === 'disabled') return r.inputs === 0 ? t('İncelenemedi — güvenle test edilebilir yüzey bulunamadı (deterministik kontrol)', 'Nicht prüfbar — keine sicher prüfbare Oberfläche gefunden (deterministische Kontrolle)') : `${rw(lv)} — ${t('deterministik kontrol, göstergesi yok', 'deterministische Kontrolle, kein Indikator')}`;
-      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return t('Ajan analizi tamamlanamadı — deterministik göstergeyle sınırlı', 'Agentenanalyse nicht abgeschlossen — auf deterministischen Indikator beschränkt');
-      if (r.agentStatus === 'analyzed') return t('Yapay zekâ destekli advisory analiz etti — uygulanabilir vektör tespit edilmedi', 'KI-gestütztes Advisory hat analysiert — kein anwendbarer Vektor festgestellt');
-      return t('Kapsam dışı — pasif keşifle uygulanabilir giriş noktası yok (advisory çalıştırılmadı)', 'Außerhalb des Umfangs — durch passive Entdeckung kein anwendbarer Eingabepunkt (Advisory nicht ausgeführt)'); // no_candidate
+      if (r.agentStatus === 'disabled') return r.inputs === 0 ? t('İncelenemedi — güvenle test edilebilir yüzey bulunamadı (deterministik kontrol)', 'Nicht prüfbar — keine sicher prüfbare Oberfläche gefunden (deterministische Kontrolle)', 'Not assessable — no safely testable surface found (deterministic control)') : `${rw(lv)} — ${t('deterministik kontrol, göstergesi yok', 'deterministische Kontrolle, kein Indikator', 'deterministic control, no indicator')}`;
+      if (r.agentStatus === 'unavailable' || r.agentUsed === false) return t('Ajan analizi tamamlanamadı — deterministik göstergeyle sınırlı', 'Agentenanalyse nicht abgeschlossen — auf deterministischen Indikator beschränkt', 'Agent analysis could not be completed — limited to the deterministic indicator');
+      if (r.agentStatus === 'analyzed') return t('Yapay zekâ destekli advisory analiz etti — uygulanabilir vektör tespit edilmedi', 'KI-gestütztes Advisory hat analysiert — kein anwendbarer Vektor festgestellt', 'The AI-assisted advisory analysed — no applicable vector detected');
+      return t('Kapsam dışı — pasif keşifle uygulanabilir giriş noktası yok (advisory çalıştırılmadı)', 'Außerhalb des Umfangs — durch passive Entdeckung kein anwendbarer Eingabepunkt (Advisory nicht ausgeführt)', 'Out of scope — no applicable input point from passive discovery (advisory not run)'); // no_candidate
     }
     if (r.enumerableSurface && r.fc === 0) return de
       ? `Enumerierbare Oberfläche gefunden (${r.enumerableSurface.count} Werte) — Zugriff auf eigene Ressource berechtigt; Cross-Account-IDOR außerhalb des Umfangs (benachbarte ID bewusst nicht ausgeführt)`
+      : en ? `Enumerable surface found (${r.enumerableSurface.count} values) — access to own resource authorized; cross-account IDOR out of scope (neighbouring ID deliberately not run)`
       : `Numaralandırılabilir yüzey bulundu (${r.enumerableSurface.count} değer) — kendi kaynağına erişim yetkili; cross-account IDOR kapsam dışı (komşu-ID bilinçli çalıştırılmadı)`;
-    if (r.inputs === 0) return t('Kapsam dışı — uygulanabilir giriş noktası yok', 'Außerhalb des Umfangs — kein anwendbarer Eingabepunkt');
+    if (r.inputs === 0) return t('Kapsam dışı — uygulanabilir giriş noktası yok', 'Außerhalb des Umfangs — kein anwendbarer Eingabepunkt', 'Out of scope — no applicable input point');
     return `${rw(lv)}${hl ? ` — ${hl}` : ''}`;                                      // temiz çalıştı -> seviye + başlık
   };
   const tableRows = runs.map((r, i) => `| ${r.title} | ${statusOf(r, levels[i])} | ${confCell(r)} |`).join('\n');
   const controlTable = de
     ? `## KONTROLLÜBERSICHT\n\n| Kontrolle | Ergebnis | Konfidenz |\n|---------|-------|-------|\n${tableRows}\n\n> Konfidenz wird nur für tatsächlich anwendbare (Eingabe/Cookie/Endpunkt gefunden) Kontrollen angezeigt; nicht anwendbare Kontrollen sind **außerhalb des Umfangs** (z. B. Cookie-Flag/Fixation bei einer Sitzung, die statt Cookies ein Token nutzt).\n`
+    : en
+    ? `## CONTROLS SUMMARY\n\n| Control | Result | Confidence |\n|---------|-------|-------|\n${tableRows}\n\n> Confidence is shown only for actually applicable checks (input/cookie/endpoint found); non-applicable checks are **out of scope** (e.g. cookie-flag/fixation on a session that uses a token instead of cookies).\n`
     : `## KONTROL ÖZETİ\n\n| Kontrol | Sonuç | Güven |\n|---------|-------|-------|\n${tableRows}\n\n> Güven yalnızca gerçekten uygulanabilen (giriş/çerez/uç bulunan) kontroller için gösterilir; uygulanamayan kontroller **Kapsam dışı**dır (ör. çerez yerine token kullanan oturumda çerez-bayrağı/fixation).\n`;
 
   const summary: string[] = [];
   summary.push(
     worst === 'low'
-      ? t(`- **Genel risk seviyesi: Düşük** — ${runs.length} authenticated kontrol değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`, `- **Gesamtrisikostufe: Niedrig** — ${runs.length} authentifizierte Kontrollen wurden bewertet; es trat keine bestätigte kritische/hohe Schwachstelle hervor.`)
-      : t(`- **Genel risk seviyesi: ${RISK_WORD[worst]}** — en yüksek risk **${worstTitle}** alanında.`, `- **Gesamtrisikostufe: ${RISK_WORD_DE[worst]}** — das höchste Risiko liegt im Bereich **${worstTitle}**.`),
+      ? t(`- **Genel risk seviyesi: Düşük** — ${runs.length} authenticated kontrol değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`, `- **Gesamtrisikostufe: Niedrig** — ${runs.length} authentifizierte Kontrollen wurden bewertet; es trat keine bestätigte kritische/hohe Schwachstelle hervor.`, `- **Overall risk level: Low** — ${runs.length} authenticated checks were assessed; no confirmed critical/high-level vulnerability stood out.`)
+      : t(`- **Genel risk seviyesi: ${RISK_WORD[worst]}** — en yüksek risk **${worstTitle}** alanında.`, `- **Gesamtrisikostufe: ${RISK_WORD_DE[worst]}** — das höchste Risiko liegt im Bereich **${worstTitle}**.`, `- **Overall risk level: ${RISK_WORD_EN[worst]}** — the highest risk is in the **${worstTitle}** area.`),
   );
   summary.push(
     de
       ? `- **Umfang:** Dieser Abschnitt arbeitet in einem **authentifizierten (angemeldeten)** Kontext; er umfasst Cookie/Sitzung/Berechtigung, authentifizierte Injektion/IDOR sowie Indikatoren für Rechteausweitung + mehrstufige Geschäftslogik ${advisorActive ? 'unterstützt durch eine optionale **KI-Beratungsschicht**' : 'mit **deterministischen Sicherheitskontrollen**'} (das Backend führt dies sicher aus; KEIN Abschluss von Zahlung/Kontoänderung). Cross-Account-IDOR (Daten eines anderen Benutzers) liegt außerhalb des Umfangs dieser Version.`
+      : en
+      ? `- **Scope:** This section operates in an **authenticated (logged-in)** context; it covers cookie/session/authorization, authenticated injection/IDOR and indicators of privilege escalation + multi-step business logic ${advisorActive ? 'supported by an optional **AI advisory layer**' : 'with **deterministic security controls**'} (the backend runs this safely; NO completion of payment/account change). Cross-account IDOR (another user's data) is outside the scope of this version.`
       : `- **Kapsam:** Bu bölüm **kimlik-doğrulamalı (login’li)** bağlamda çalışır; çerez/oturum/yetki, authenticated enjeksiyon/IDOR ve ${advisorActive ? 'isteğe bağlı bir **yapay zekâ danışma katmanı** destekli' : '**deterministik güvenlik kontrolleriyle**'} yetki yükseltme + çok-adımlı iş mantığı göstergelerini kapsar (backend güvenli uygular; ödeme/hesap-değişikliği tamamlama YOK). Cross-account (başka kullanıcının verisi) IDOR bu sürümün kapsamı dışındadır.`,
   );
   runs.forEach((r, i) => {
     summary.push(`- **${r.title}:** ${statusSummary(r, levels[i])}`);
   });
-  summary.push(t('- **Önerilen ilk adım:** Çalıştırılan kontrollerdeki bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.', '- **Empfohlener erster Schritt:** Beheben Sie die Befunde der ausgeführten Kontrollen; fertige Schritte im Abschnitt „KI-Lösungsvorschläge".'));
+  summary.push(t('- **Önerilen ilk adım:** Çalıştırılan kontrollerdeki bulguları giderin; hazır adımlar "AI Çözüm Önerileri" bölümünde.', '- **Empfohlener erster Schritt:** Beheben Sie die Befunde der ausgeführten Kontrollen; fertige Schritte im Abschnitt „KI-Lösungsvorschläge".', '- **Recommended first step:** Remediate the findings from the checks that were run; ready-made steps are in the "AI Solution Recommendations" section.'));
 
   const genel =
     (worst === 'low'
-      ? t(`${runs.length} authenticated doğrulama kontrolü değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`, `${runs.length} authentifizierte Verifizierungskontrollen wurden bewertet; es trat keine bestätigte kritische/hohe Schwachstelle hervor.`)
-      : t(`Çalıştırılan authenticated kontrollerde en yüksek risk **${worstTitle}** alanında tespit edildi; öncelikli olarak giderilmesi/doğrulanması önerilir.`, `In den ausgeführten authentifizierten Kontrollen wurde das höchste Risiko im Bereich **${worstTitle}** festgestellt; eine vorrangige Behebung/Verifizierung wird empfohlen.`)) +
-    t(` Tüm kontroller GET-only/gözlemseldir; state-değiştiren istek gönderilmemiştir. Şifre dışarı/üçüncü bir servise gönderilmemiş, backend login yapıp yalnız oturumu kullanmıştır.`, ` Alle Kontrollen sind GET-only/beobachtend; es wurde keine zustandsändernde Anfrage gesendet. Das Passwort wurde nicht nach außen/an einen Drittdienst gesendet; das Backend führte den Login durch und nutzte nur die Sitzung.`);
+      ? t(`${runs.length} authenticated doğrulama kontrolü değerlendirildi; doğrulanmış kritik/yüksek seviyeli bir zafiyet öne çıkmadı.`, `${runs.length} authentifizierte Verifizierungskontrollen wurden bewertet; es trat keine bestätigte kritische/hohe Schwachstelle hervor.`, `${runs.length} authenticated verification checks were assessed; no confirmed critical/high-level vulnerability stood out.`)
+      : t(`Çalıştırılan authenticated kontrollerde en yüksek risk **${worstTitle}** alanında tespit edildi; öncelikli olarak giderilmesi/doğrulanması önerilir.`, `In den ausgeführten authentifizierten Kontrollen wurde das höchste Risiko im Bereich **${worstTitle}** festgestellt; eine vorrangige Behebung/Verifizierung wird empfohlen.`, `In the authenticated checks that were run, the highest risk was detected in the **${worstTitle}** area; priority remediation/verification is recommended.`)) +
+    t(` Tüm kontroller GET-only/gözlemseldir; state-değiştiren istek gönderilmemiştir. Şifre dışarı/üçüncü bir servise gönderilmemiş, backend login yapıp yalnız oturumu kullanmıştır.`, ` Alle Kontrollen sind GET-only/beobachtend; es wurde keine zustandsändernde Anfrage gesendet. Das Passwort wurde nicht nach außen/an einen Drittdienst gesendet; das Backend führte den Login durch und nutzte nur die Sitzung.`, ` All checks are GET-only/observational; no state-changing request was sent. The password was not sent externally/to a third-party service; the backend performed the login and used only the session.`);
 
   const sections = runs.map((r) => {
-    if (!r.rep) return `## ${r.title}\n\n> ${t('Bu kontrol için veri toplanamadı.', 'Für diese Kontrolle konnten keine Daten erhoben werden.')}\n`;
+    if (!r.rep) return `## ${r.title}\n\n> ${t('Bu kontrol için veri toplanamadı.', 'Für diese Kontrolle konnten keine Daten erhoben werden.', 'No data could be collected for this check.')}\n`;
     return `## ${r.title}\n\n${detailOnly(r.rep.findings)}\n`;
   }).join('\n');
 
   const findingsRaw =
-    `${box}\n\n` +
-    `## ${t('YÖNETİCİ ÖZETİ', 'MANAGEMENTZUSAMMENFASSUNG')}\n\n${summary.join('\n')}\n\n` +
-    `## ${t('GENEL DEĞERLENDİRME', 'GESAMTBEWERTUNG')}\n\n**${t('Risk Seviyesi', 'Risikostufe')}: ${rw(worst)}**\n\n${genel}\n\n` +
+    `${boxFinal}\n\n` +
+    `## ${t('YÖNETİCİ ÖZETİ', 'MANAGEMENTZUSAMMENFASSUNG', 'EXECUTIVE SUMMARY')}\n\n${summary.join('\n')}\n\n` +
+    `## ${t('GENEL DEĞERLENDİRME', 'GESAMTBEWERTUNG', 'OVERALL ASSESSMENT')}\n\n**${t('Risk Seviyesi', 'Risikostufe', 'Risk level')}: ${rw(worst)}**\n\n${genel}\n\n` +
     `${controlTable}\n${sections}`;
 
   const fixParts = runs.map((r) => (r.rep && r.rep.fixText.trim() ? `### ${r.title}\n\n${r.rep.fixText.trim()}` : '')).filter(Boolean);
-  const fixTextRaw = t(`Bu bölüm, çalıştırılan authenticated kontrollerde tespit edilen bulgular için düzeltme önerileri içerir.\n\n${fixParts.join('\n\n')}`, `Dieser Abschnitt enthält Behebungsvorschläge für die in den ausgeführten authentifizierten Kontrollen festgestellten Befunde.\n\n${fixParts.join('\n\n')}`);
+  const fixTextRaw = t(`Bu bölüm, çalıştırılan authenticated kontrollerde tespit edilen bulgular için düzeltme önerileri içerir.\n\n${fixParts.join('\n\n')}`, `Dieser Abschnitt enthält Behebungsvorschläge für die in den ausgeführten authentifizierten Kontrollen festgestellten Befunde.\n\n${fixParts.join('\n\n')}`, `This section contains remediation recommendations for the findings detected in the authenticated checks that were run.\n\n${fixParts.join('\n\n')}`);
 
   void dataOk;
   // (part 2) MİRAS login'siz cümleleri authenticated bağlama çevir (kaynak şablonlara dokunmadan).
-  return { findings: toAuthenticatedContext(findingsRaw, de), fixText: toAuthenticatedContext(fixTextRaw, de) };
+  return { findings: toAuthenticatedContext(findingsRaw, locale), fixText: toAuthenticatedContext(fixTextRaw, locale) };
 }
