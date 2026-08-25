@@ -65,7 +65,7 @@ export async function collectClientSideEvidence(host: string, locale: string = '
   const c = await fetchClientCorpus(host);
   if (!c.reachable) {
     return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null,
-      notes: [t('Ana sayfa HTML çekilemedi — client-side statik analiz bu hedef için **kapsam dışıdır**.', 'Startseiten-HTML konnte nicht abgerufen werden — die clientseitige statische Analyse ist für dieses Ziel **außerhalb des Geltungsbereichs**.')] };
+      notes: [t('Ana sayfa HTML çekilemedi — client-side statik analiz bu hedef için **kapsam dışıdır**.', 'Startseiten-HTML konnte nicht abgerufen werden — die clientseitige statische Analyse ist für dieses Ziel **außerhalb des Geltungsbereichs**.', 'The home-page HTML could not be fetched — client-side static analysis is **out of scope** for this target.')] };
   }
 
   const jsBlobs: Array<{ name: string; body: string }> = [
@@ -87,8 +87,8 @@ export async function collectClientSideEvidence(host: string, locale: string = '
       domSeen.add(key);
       findings.push({
         check: 'dom_xss_sink', inputPoint: `${blob.name} · ${sink.id}`, vulnerable: true,
-        technique: 'statik DOM-XSS sink↔kaynak eşleşmesi (gösterge)',
-        evidence: `\`${blob.name}\` içinde AYNI ifadede tehlikeli sink (\`${sink.id}\`) ile kullanıcı-kontrollü kaynak (\`${source.id}\`) birlikte görüldü — olası DOM-based XSS **GÖSTERGESİ**. Bu STATİK bir eşleşmedir; **kanıtlanmış XSS DEĞİL**, dinamik doğrulama gerekir (yanlış-pozitif olabilir).`,
+        technique: t('statik DOM-XSS sink↔kaynak eşleşmesi (gösterge)', 'statik DOM-XSS sink↔kaynak eşleşmesi (gösterge)', 'static DOM-XSS sink↔source match (indicator)'),
+        evidence: t(`\`${blob.name}\` içinde AYNI ifadede tehlikeli sink (\`${sink.id}\`) ile kullanıcı-kontrollü kaynak (\`${source.id}\`) birlikte görüldü — olası DOM-based XSS **GÖSTERGESİ**. Bu STATİK bir eşleşmedir; **kanıtlanmış XSS DEĞİL**, dinamik doğrulama gerekir (yanlış-pozitif olabilir).`, `\`${blob.name}\` içinde AYNI ifadede tehlikeli sink (\`${sink.id}\`) ile kullanıcı-kontrollü kaynak (\`${source.id}\`) birlikte görüldü — olası DOM-based XSS **GÖSTERGESİ**. Bu STATİK bir eşleşmedir; **kanıtlanmış XSS DEĞİL**, dinamik doğrulama gerekir (yanlış-pozitif olabilir).`, `In \`${blob.name}\`, a dangerous sink (\`${sink.id}\`) and a user-controlled source (\`${source.id}\`) were seen together in the SAME expression — a possible DOM-based XSS **INDICATOR**. This is a STATIC match; **NOT proven XSS**, dynamic verification is required (may be a false positive).`),
         confidence: 'low', severity: 'low', sideEffectRisk: 'none',
       });
       if (domSeen.size >= 6) break outer;
@@ -105,8 +105,8 @@ export async function collectClientSideEvidence(host: string, locale: string = '
       pmSeen.add(blob.name);
       findings.push({
         check: 'insecure_postmessage', inputPoint: `${blob.name} · message handler`, vulnerable: true,
-        technique: 'web messaging (postMessage) origin doğrulaması analizi',
-        evidence: `\`${blob.name}\` içinde bir \`message\` olay dinleyicisi **event.origin doğrulaması olmadan** işlem yapıyor gibi görünüyor — güvensiz cross-origin mesaj işleme göstergesi. Gönderen origin'i allowlist ile doğrulanmalı.`,
+        technique: t('web messaging (postMessage) origin doğrulaması analizi', 'web messaging (postMessage) origin doğrulaması analizi', 'web messaging (postMessage) origin-validation analysis'),
+        evidence: t(`\`${blob.name}\` içinde bir \`message\` olay dinleyicisi **event.origin doğrulaması olmadan** işlem yapıyor gibi görünüyor — güvensiz cross-origin mesaj işleme göstergesi. Gönderen origin'i allowlist ile doğrulanmalı.`, `\`${blob.name}\` içinde bir \`message\` olay dinleyicisi **event.origin doğrulaması olmadan** işlem yapıyor gibi görünüyor — güvensiz cross-origin mesaj işleme göstergesi. Gönderen origin'i allowlist ile doğrulanmalı.`, `In \`${blob.name}\`, a \`message\` event listener appears to process data **without event.origin validation** — an indicator of insecure cross-origin message handling. The sender origin should be validated with an allowlist.`),
         confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
       });
       if (pmSeen.size >= 4) break;
@@ -124,8 +124,8 @@ export async function collectClientSideEvidence(host: string, locale: string = '
       stSeen.add(dk);
       findings.push({
         check: 'sensitive_storage', inputPoint: `${blob.name} · ${m[1]}Storage['${key}']`, vulnerable: true,
-        technique: 'browser storage statik hassas-veri analizi',
-        evidence: `\`${blob.name}\` içinde \`${m[1]}Storage.setItem('${key}', …)\` — hassas veri (oturum/kimlik göstergesi) istemci depolamasına yazılıyor (değer gösterilmez). localStorage/sessionStorage XSS ile okunabilir; oturum verisi için HttpOnly çerez tercih edilmelidir.`,
+        technique: t('browser storage statik hassas-veri analizi', 'browser storage statik hassas-veri analizi', 'browser storage static sensitive-data analysis'),
+        evidence: t(`\`${blob.name}\` içinde \`${m[1]}Storage.setItem('${key}', …)\` — hassas veri (oturum/kimlik göstergesi) istemci depolamasına yazılıyor (değer gösterilmez). localStorage/sessionStorage XSS ile okunabilir; oturum verisi için HttpOnly çerez tercih edilmelidir.`, `\`${blob.name}\` içinde \`${m[1]}Storage.setItem('${key}', …)\` — hassas veri (oturum/kimlik göstergesi) istemci depolamasına yazılıyor (değer gösterilmez). localStorage/sessionStorage XSS ile okunabilir; oturum verisi için HttpOnly çerez tercih edilmelidir.`, `In \`${blob.name}\`, \`${m[1]}Storage.setItem('${key}', …)\` — sensitive data (session/identity indicator) is written to client storage (value not shown). localStorage/sessionStorage can be read via XSS; an HttpOnly cookie should be preferred for session data.`),
         confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
       });
       if (stSeen.size >= 6) break;
@@ -137,8 +137,8 @@ export async function collectClientSideEvidence(host: string, locale: string = '
   for (const t of sriTargets.slice(0, 10)) {
     findings.push({
       check: 'missing_sri', inputPoint: shortName(t.url), vulnerable: true,
-      technique: 'Subresource Integrity (SRI) statik kontrolü',
-      evidence: `Harici kaynak \`${t.url}\` **integrity (SRI) attribute'u olmadan** yükleniyor — CDN/tedarik-zinciri ele geçirilirse değiştirilmiş kod çalışabilir. \`integrity=\"sha384-…\" crossorigin=\"anonymous\"\` eklenmeli.`,
+      technique: (en ? 'Subresource Integrity (SRI) static check' : 'Subresource Integrity (SRI) statik kontrolü'),
+      evidence: (en ? `The external resource \`${t.url}\` is loaded **without an integrity (SRI) attribute** — if the CDN/supply chain is compromised, modified code could run. \`integrity=\"sha384-…\" crossorigin=\"anonymous\"\` should be added.` : `Harici kaynak \`${t.url}\` **integrity (SRI) attribute'u olmadan** yükleniyor — CDN/tedarik-zinciri ele geçirilirse değiştirilmiş kod çalışabilir. \`integrity=\"sha384-…\" crossorigin=\"anonymous\"\` eklenmeli.`),
       confidence: 'high', severity: 'low', sideEffectRisk: 'none',
     });
   }
@@ -150,8 +150,8 @@ export async function collectClientSideEvidence(host: string, locale: string = '
     if (tabSeen.has(l.href)) continue; tabSeen.add(l.href);
     findings.push({
       check: 'reverse_tabnabbing', inputPoint: l.href, vulnerable: true,
-      technique: 'reverse tabnabbing (target=_blank) statik kontrolü',
-      evidence: `\`target="_blank"\` ile açılan harici bağlantı (\`${l.href}\`) **rel="noopener"/"noreferrer" olmadan** — açılan sayfa \`window.opener\` ile bu sekmeyi başka yere yönlendirebilir (reverse tabnabbing). \`rel="noopener noreferrer"\` eklenmeli.`,
+      technique: t('reverse tabnabbing (target=_blank) statik kontrolü', 'reverse tabnabbing (target=_blank) statik kontrolü', 'reverse tabnabbing (target=_blank) static check'),
+      evidence: t(`\`target="_blank"\` ile açılan harici bağlantı (\`${l.href}\`) **rel="noopener"/"noreferrer" olmadan** — açılan sayfa \`window.opener\` ile bu sekmeyi başka yere yönlendirebilir (reverse tabnabbing). \`rel="noopener noreferrer"\` eklenmeli.`, `\`target="_blank"\` ile açılan harici bağlantı (\`${l.href}\`) **rel="noopener"/"noreferrer" olmadan** — açılan sayfa \`window.opener\` ile bu sekmeyi başka yere yönlendirebilir (reverse tabnabbing). \`rel="noopener noreferrer"\` eklenmeli.`, `An external link opened with \`target="_blank"\` (\`${l.href}\`) **without rel="noopener"/"noreferrer"** — the opened page can redirect this tab elsewhere via \`window.opener\` (reverse tabnabbing). \`rel="noopener noreferrer"\` should be added.`),
       confidence: 'high', severity: 'low', sideEffectRisk: 'none',
     });
     if (tabSeen.size >= 8) break;
@@ -171,17 +171,17 @@ export async function collectClientSideEvidence(host: string, locale: string = '
     if (hitLoc || hitBody) {
       findings.push({
         check: 'open_redirect', inputPoint: `${cnd.path}?${cnd.param}=`, vulnerable: true,
-        technique: 'açık yönlendirme (open redirect) — tek güvenli gözlem probu (redirect TAKİP EDİLMEDİ)',
-        evidence: `\`${cnd.path}\` uç noktası, \`${cnd.param}\` parametresine verilen HARİCİ bir URL'e yönlendiriyor (${hitLoc ? 'sunucu Location başlığı' : 'istemci-tarafı yönlendirme'} harici domaine işaret etti). Doğrulanmamış yönlendirme kimlik-avı/oturum-çalma için kullanılabilir. Redirect hedefleri allowlist ile sınırlanmalı.`,
+        technique: t('açık yönlendirme (open redirect) — tek güvenli gözlem probu (redirect TAKİP EDİLMEDİ)', 'açık yönlendirme (open redirect) — tek güvenli gözlem probu (redirect TAKİP EDİLMEDİ)', 'open redirect — single safe observation probe (redirect NOT followed)'),
+        evidence: t(`\`${cnd.path}\` uç noktası, \`${cnd.param}\` parametresine verilen HARİCİ bir URL'e yönlendiriyor (${hitLoc ? 'sunucu Location başlığı' : 'istemci-tarafı yönlendirme'} harici domaine işaret etti). Doğrulanmamış yönlendirme kimlik-avı/oturum-çalma için kullanılabilir. Redirect hedefleri allowlist ile sınırlanmalı.`, `\`${cnd.path}\` uç noktası, \`${cnd.param}\` parametresine verilen HARİCİ bir URL'e yönlendiriyor (${hitLoc ? 'sunucu Location başlığı' : 'istemci-tarafı yönlendirme'} harici domaine işaret etti). Doğrulanmamış yönlendirme kimlik-avı/oturum-çalma için kullanılabilir. Redirect hedefleri allowlist ile sınırlanmalı.`, `The \`${cnd.path}\` endpoint redirects to an EXTERNAL URL supplied to the \`${cnd.param}\` parameter (${hitLoc ? 'the server Location header' : 'client-side redirection'} pointed to an external domain). An unvalidated redirect can be used for phishing/session theft. Redirect targets should be restricted with an allowlist.`),
         confidence: 'high', severity: 'medium', sideEffectRisk: 'none',
       });
     }
   }
 
   // --- POZİTİF GÜVENCE (gerçek sayılar) ---
-  notes.push(t(`Statik ayrıştırıldı: **${c.sameOriginJs.length}** same-origin JS + **${c.inlineScripts.length}** inline script; **${sriTargets.length}** harici kaynak SRI için, **${c.blankLinks.length}** \`target=_blank\` link tabnabbing için kontrol edildi; **${redirectProbes}** redirect-parametresi güvenli probla denendi (redirect TAKİP EDİLMEDİ).`, `Statisch geparst: **${c.sameOriginJs.length}** Same-Origin-JS + **${c.inlineScripts.length}** Inline-Skripte; **${sriTargets.length}** externe Ressourcen auf SRI, **${c.blankLinks.length}** \`target=_blank\`-Links auf Tabnabbing geprüft; **${redirectProbes}** Redirect-Parameter mit sicherer Probe getestet (Redirect NICHT verfolgt).`));
-  notes.push(t('DOM-XSS eşleşmeleri STATİK **göstergedir** (kanıtlanmış XSS değil); yüksek yanlış-pozitif potansiyeli taşır ve dinamik doğrulama gerektirir.', 'DOM-XSS-Treffer sind ein STATISCHER **Indikator** (kein nachgewiesenes XSS); sie bergen ein hohes Falsch-Positiv-Potenzial und erfordern eine dynamische Verifizierung.'));
-  if (!candidates.length) notes.push(t('HTML’de gözlemlenen bir yönlendirme (redirect) parametresi bulunamadı — open redirect probu **kapsam dışı**.', 'Im HTML wurde kein beobachteter Redirect-Parameter gefunden — die Open-Redirect-Probe ist **außerhalb des Geltungsbereichs**.'));
+  notes.push(t(`Statik ayrıştırıldı: **${c.sameOriginJs.length}** same-origin JS + **${c.inlineScripts.length}** inline script; **${sriTargets.length}** harici kaynak SRI için, **${c.blankLinks.length}** \`target=_blank\` link tabnabbing için kontrol edildi; **${redirectProbes}** redirect-parametresi güvenli probla denendi (redirect TAKİP EDİLMEDİ).`, `Statisch geparst: **${c.sameOriginJs.length}** Same-Origin-JS + **${c.inlineScripts.length}** Inline-Skripte; **${sriTargets.length}** externe Ressourcen auf SRI, **${c.blankLinks.length}** \`target=_blank\`-Links auf Tabnabbing geprüft; **${redirectProbes}** Redirect-Parameter mit sicherer Probe getestet (Redirect NICHT verfolgt).`, `Statically parsed: **${c.sameOriginJs.length}** same-origin JS + **${c.inlineScripts.length}** inline scripts; **${sriTargets.length}** external resources checked for SRI, **${c.blankLinks.length}** \`target=_blank\` links checked for tabnabbing; **${redirectProbes}** redirect parameters tested with a safe probe (redirect NOT followed).`));
+  notes.push(t('DOM-XSS eşleşmeleri STATİK **göstergedir** (kanıtlanmış XSS değil); yüksek yanlış-pozitif potansiyeli taşır ve dinamik doğrulama gerektirir.', 'DOM-XSS-Treffer sind ein STATISCHER **Indikator** (kein nachgewiesenes XSS); sie bergen ein hohes Falsch-Positiv-Potenzial und erfordern eine dynamische Verifizierung.', 'DOM-XSS matches are a STATIC **indicator** (not proven XSS); they carry a high false-positive potential and require dynamic verification.'));
+  if (!candidates.length) notes.push(t('HTML’de gözlemlenen bir yönlendirme (redirect) parametresi bulunamadı — open redirect probu **kapsam dışı**.', 'Im HTML wurde kein beobachteter Redirect-Parameter gefunden — die Open-Redirect-Probe ist **außerhalb des Geltungsbereichs**.', 'No observed redirect parameter was found in the HTML — the open-redirect probe is **out of scope**.'));
 
   const inputs = jsBlobs.length + sriTargets.length + c.blankLinks.length + candidates.length;
   return { ok: true, pagesScanned: 1, inputsFound: inputs, probesSent: c.fetches + redirectProbes, findings, stopped: null, notes };
