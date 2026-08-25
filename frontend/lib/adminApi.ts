@@ -40,12 +40,32 @@ async function areq<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 type Page<T> = { page: number; pageSize: number; total: number; items: T[] };
 
+// Stage-token (2FA ara token) ile istek — stored admin token'ı DEĞİL, verilen bearer'ı kullanır.
+async function areqStage<T>(path: string, bearer: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bearer}`, ...options.headers },
+  });
+  if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(friendlyAdminError(b, res.status, 'İşlem şu an tamamlanamadı.')); }
+  return res.json();
+}
+
 export const adminApi = {
+  // Adım 1: mail+şifre. Dönüş: tam token DEĞİL — 2FA gerekli/enrollment gerekli + stageToken.
   login: (email: string, password: string) =>
-    areq<{ token: string; email: string }>('/admin/auth/login', {
+    areq<{ token?: string; email?: string; twofaRequired?: boolean; enrollmentRequired?: boolean; stageToken?: string }>('/admin/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
+  // Adım 2: TOTP/kurtarma kodu → tam token.
+  login2fa: (stageToken: string, code: string) =>
+    areq<{ token: string; email: string }>('/admin/auth/login/2fa', { method: 'POST', body: JSON.stringify({ stageToken, code }) }),
+  // Enrollment: QR + manuel anahtar (stageToken=enroll ile).
+  twofaSetup: (stageToken: string) =>
+    areqStage<{ otpauthUri: string; qrDataUrl: string; manualKey: string }>('/admin/auth/2fa/setup', stageToken),
+  // Enrollment onay: kod → tam token + kurtarma kodları.
+  twofaEnable: (stageToken: string, code: string) =>
+    areqStage<{ token: string; email: string; recoveryCodes: string[] }>('/admin/auth/2fa/enable', stageToken, { method: 'POST', body: JSON.stringify({ code }) }),
   customers: (page = 1) =>
     areq<Page<{ id: string; email: string; createdAt: string; domainCount: number; orderCount: number }>>(
       `/admin/customers?page=${page}`,

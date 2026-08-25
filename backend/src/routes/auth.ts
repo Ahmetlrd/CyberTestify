@@ -93,6 +93,13 @@ authRouter.post('/login', async (req, res) => {
     return res.status(401).json({ error: M(aLoc(req), 'E-posta veya şifre hatalı.', 'E-Mail oder Passwort ist falsch.', 'E-mail or password is incorrect.') });
   }
 
+  // (2FA — OPT-IN) Musteri 2FA'yi actiysa: sifre dogru → ikinci faktore gec (tam token BURADA verilmez).
+  // 2FA kapali musteri BUGUNKU gibi girer (regresyonsuz).
+  if (customer.twofaEnabled) {
+    const stageToken = jwt.sign({ sub: customer.id, typ: 'cust-2fa' }, config.jwtSecret, { expiresIn: '10m' });
+    return res.json({ twofaRequired: true, stageToken });
+  }
+
   const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '7d' });
   res.json({ token });
 });
@@ -267,6 +274,12 @@ authRouter.get('/google/callback', async (req, res) => {
       });
     }
 
+    // (2FA — OPT-IN) Google girisi de 2. faktore tabidir: 2FA acıksa tam token yerine stage token
+    // ile 2FA kod ekranina yonlendir (frontend google/done twofa=1'i algilar).
+    if (customer.twofaEnabled) {
+      const stageToken = jwt.sign({ sub: customer.id, typ: 'cust-2fa' }, config.jwtSecret, { expiresIn: '10m' });
+      return res.redirect(`${config.frontendUrl}/auth/google/done#twofa=1&stageToken=${stageToken}&next=${encodeURIComponent(next)}`);
+    }
     const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '7d' });
     // Token'i FRAGMENT ile frontend origin'ine tasi (localStorage orada). Query DEGIL → sunucu
     // loglarina / Referer'a sizmaz. Kucuk bir sayfa token'i saklayip 'next'e yonlendirir.

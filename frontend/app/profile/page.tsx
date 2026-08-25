@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { api } from '../../lib/api';
 import { readRegionCookie } from '../../lib/region';
 import { getRegion } from '../../config/regions';
+import { TwoFactorSection } from '../../components/TwoFactorSection';
 
 // (Çok-bölge) Profil sayfası metinleri — /de tamamen Almanca (Sie-Form).
 const PROF_T = {
@@ -125,6 +126,9 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
+
+          {/* (2FA) İki faktörlü doğrulama — opt-in */}
+          <TwoFactorSection lang={lang} />
 
           {/* Hızlı eylemler */}
           <div className="flex flex-col gap-3">

@@ -13,6 +13,13 @@ export default function GoogleDonePage() {
     const frag = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const token = frag.get('token');
     const next = frag.get('next') || '/verify';
+    // (2FA) 2FA açık hesap: backend tam token yerine stageToken yolladı → login sayfasında kod iste.
+    if (frag.get('twofa') === '1' && frag.get('stageToken')) {
+      try { window.sessionStorage.setItem('twofa_stage', frag.get('stageToken')!); } catch { /* noop */ }
+      window.history.replaceState(null, '', window.location.pathname);
+      router.replace(`/login?twofa=1&next=${encodeURIComponent(next.startsWith('/') ? next : '/verify')}`);
+      return;
+    }
     if (token) {
       window.localStorage.setItem('token', token);
       // hash'i temizle (token adres cubugunda kalmasin), sonra yonlendir.

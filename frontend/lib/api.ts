@@ -97,7 +97,17 @@ export const api = {
       body: JSON.stringify({ email, password, termsAccepted, turnstileToken, region: readRegionCookie() }),
     }),
   login: (email: string, password: string) =>
-    request<{ token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password, region: readRegionCookie() }) }),
+    request<{ token?: string; twofaRequired?: boolean; stageToken?: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password, region: readRegionCookie() }) }),
+  // (2FA — OPT-IN) login 2. adımı + hesap ayarları + nudge. region → hata mesajı dili.
+  login2fa: (stageToken: string, code: string) =>
+    request<{ token: string }>('/twofa/login-verify', { method: 'POST', body: JSON.stringify({ stageToken, code, region: readRegionCookie() }) }),
+  twofaStatus: () => request<{ enabled: boolean; remainingRecoveryCodes: number }>('/twofa/status'),
+  twofaSetup: () => request<{ otpauthUri: string; qrDataUrl: string; manualKey: string }>('/twofa/setup', { method: 'POST', body: JSON.stringify({ region: readRegionCookie() }) }),
+  twofaEnable: (code: string) => request<{ enabled: boolean; recoveryCodes: string[] }>('/twofa/enable', { method: 'POST', body: JSON.stringify({ code, region: readRegionCookie() }) }),
+  twofaDisable: (code: string) => request<{ enabled: boolean }>('/twofa/disable', { method: 'POST', body: JSON.stringify({ code, region: readRegionCookie() }) }),
+  twofaNudge: () => request<{ show: boolean }>('/twofa/nudge'),
+  twofaNudgeDismiss: () => request<{ ok: boolean }>('/twofa/nudge/dismiss', { method: 'POST' }),
+  twofaNudgeRemind: () => request<{ ok: boolean }>('/twofa/nudge/remind', { method: 'POST' }),
   // (ÜCRETSİZ ANLIK ÖN-TARAMA) public, pasif teaser. turnstileToken = bot doğrulaması; website = honeypot.
   instantScan: (url: string, turnstileToken?: string, website?: string, region?: string) =>
     request<InstantScanResult>('/instant-scan', { method: 'POST', body: JSON.stringify({ url, turnstileToken, website, region }) }),

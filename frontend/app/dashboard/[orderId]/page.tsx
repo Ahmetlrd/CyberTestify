@@ -9,6 +9,7 @@ import { InvoiceRequestForm } from '../../../components/dashboard/InvoiceRequest
 import { ScanFailedActions } from '../../../components/dashboard/ScanFailedActions';
 import { GA_ID } from '../../../lib/consent';
 import { ScopeCertificate } from '../../../components/dashboard/ScopeCertificate';
+import { TwoFaNudge } from '../../../components/TwoFaNudge';
 import { readRegionCookie } from '../../../lib/region';
 import { getRegion } from '../../../config/regions';
 
@@ -280,6 +281,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
 
   return (
     <main className={`container-page py-16 ${active ? "max-w-5xl" : "max-w-xl"}`}>
+      <TwoFaNudge />
       {!active && <>
         <p className="eyebrow">{t.orderStatus}</p>
         <h1 className="mt-2 text-3xl font-extrabold text-brand">

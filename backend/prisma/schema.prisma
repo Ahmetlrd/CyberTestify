@@ -105,6 +105,19 @@ model Customer {
   // ile girebilir. Google ile gelen hesaplar emailVerified=true'dur (Google dogrulamis).
   googleId String? @unique
 
+  // (2FA — TOTP, OPT-IN) Musteri istege bagli etkinlestirir. totpSecret + recoveryCodes
+  // encryptSecret (AES-256-GCM at-rest) ile sifreli; recovery kodlari SHA-256 hash'li JSON.
+  // twofaEnabled ancak enrollment onaylaninca (bir kod dogrulaninca) true olur.
+  totpSecret          String? // encryptSecret(base32 secret)
+  twofaEnabled        Boolean   @default(false)
+  twofaConfirmedAt    DateTime?
+  twofaRecoveryCodes  String? // encryptSecret(JSON: [{h: sha256, used: bool}])
+  twofaFailedAttempts Int       @default(0)
+  twofaLockedUntil    DateTime?
+  // (Nudge — hafif hatirlatma) Kullanici tercihi KALICI saklanir (nag dongusu yok).
+  twofaNudgeDismissedAt DateTime? // "bir daha gosterme" → kalici sustur
+  twofaNudgeRemindAfter DateTime? // "sonra hatirlat" → bu tarihe kadar gosterme
+
   domains            Domain[]
   orders             Order[]
   scheduledScans     ScheduledScan[]
@@ -447,9 +460,15 @@ model AdminUser {
   id           String    @id @default(uuid())
   email        String    @unique
   passwordHash String
-  // 2FA (TOTP) — su an login'de ZORUNLU DEGIL; alan ileride icin ayrildi.
-  // Etkinlestirme akisi HANDOFF.md'de TODO olarak belgelendi.
-  totpSecret   String?
+  // 2FA (TOTP) — admin icin ZORUNLU. totpSecret + recoveryCodes encryptSecret (AES-256-GCM)
+  // ile sifreli. twofaEnabled ancak enrollment onaylaninca true olur. Telefon+kod kaybinda
+  // SUNUCU-TARAFI sifirlama: prisma/resetAdmin2fa.ts (panelden DEGIL — bkz dosya basi).
+  totpSecret          String?
+  twofaEnabled        Boolean   @default(false)
+  twofaConfirmedAt    DateTime?
+  twofaRecoveryCodes  String?
+  twofaFailedAttempts Int       @default(0)
+  twofaLockedUntil    DateTime?
   createdAt    DateTime  @default(now())
   lastLoginAt  DateTime?
 }

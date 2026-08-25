@@ -7,6 +7,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { config, validateScopeLockConfig } from './config.js';
 import { checkEgressProxyHealth } from './services/egressHealth.js';
 import { authRouter } from './routes/auth.js';
+import { twofaRouter } from './routes/twofa.js';
 import { domainsRouter } from './routes/domains.js';
 import { instantRouter } from './routes/instant.js';
 import { ordersRouter } from './routes/orders.js';
@@ -98,6 +99,7 @@ const instantLimiter = rateLimit({
 });
 
 app.use('/auth', authLimiter, authRouter);
+app.use('/twofa', authLimiter, twofaRouter); // (2FA musteri) login-verify + ayarlar + nudge
 app.use('/domains', apiLimiter, domainsRouter);
 app.use('/instant-scan', instantLimiter, instantRouter);
 app.use('/orders', apiLimiter, ordersRouter);
