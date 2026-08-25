@@ -79,7 +79,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     displayNameEn: 'Discovery Bundle',
     displayNameDe: 'Reconnaissance-Paket',
     description:
-      'Dış saldırı yüzeyinizi haritalayan ve sahipsiz/ifşa olmuş varlıkları tespit eden derin keşif paketi.',
+      'Dış saldırı yüzeyinizi haritalayan ve sahipsiz/ifşa olmuş varlıkları tespit eden derin keşif paketi. Ayrıca USOM/SGB’nin kamuya açık güvenlik bildirimleriyle dış-yüzey eşlemesi yapar (bağımsız hizmet; resmî onay/sertifika değildir).',
     descriptionEn:
       'A deep discovery bundle that maps your external attack surface and detects abandoned/exposed assets.',
     descriptionDe:

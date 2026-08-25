@@ -13,6 +13,7 @@
  * TR/DE'de AYNIDIR; 'en' branch'inde kod-içi yorumlar İngilizce'ye çevrilir (kod/komut aynı kalır).
  */
 import { collectReconEvidence, type ReconEvidence, type SubEvidence, type ApiEvidence, type CmsEvidence, type BannerCve } from './reconEvidence.js';
+import { matchUsom, USOM_CATALOG, USOM_OBSERVABLE_COUNT, type UsomHit } from './usomCatalog.js';
 import { resolveOrigin } from './surfaceEvidence.js';
 
 const RISK_WORD = { low: 'Düşük', medium: 'Orta', 'medium-high': 'Orta-Yüksek', high: 'Yüksek' } as const;
@@ -586,6 +587,42 @@ function bestPracticesSection(locale: string): string {
 }
 
 // ======================================================================================
+// (USOM/SGB Bildirim Eşlemesi — YALNIZCA /tr) Mevcut Keşif parmak-izini (CMS + banner) kamuya açık
+// USOM/SGB bildirim kataloğuyla DETERMİNİSTİK eşler. LLM YOK; %100 backend şablon. İstismar YOK.
+// Bölüm yalnız locale==='tr' iken çağrılır (aşağıda); /de-/en'de HİÇ üretilmez.
+// ======================================================================================
+function usomHitsFor(ev: ReconEvidence): UsomHit[] {
+  const banners = (ev.bannerCves ?? []).map((b) => ({ product: b.product, version: b.version }));
+  return matchUsom({ cms: ev.cms.ok ? { cms: ev.cms.cms, version: ev.cms.version } : undefined, banners });
+}
+function buildUsomSection(hits: UsomHit[]): string {
+  const stateCell = (h: UsomHit): string =>
+    h.state === 'range'
+      ? `⚠️ Etkilenen aralıkta olabilir${h.observedVersion ? ` (görülen sürüm ${h.observedVersion})` : ''}`
+      : `⚠️ Sinyal var — sürüm doğrulanamadı${h.observedVersion ? ` (görülen sürüm ${h.observedVersion})` : ''}`;
+
+  let body = `## USOM/SGB Bildirim Eşlemesi\n\n`;
+  body += `Bu bölüm, T.C. Siber Güvenlik Başkanlığı'nın (USOM/SGB) **KAMUYA AÇIK** olarak yayımladığı güvenlik bildirimleriyle, yukarıdaki Keşif parmak-izini (CMS/sunucu-banner) dışarıdan gözlemlenebilir düzeyde eşleştirir. Yeni bir tarama yapılmaz; mevcut keşif sinyali ikinci bir katalogla karşılaştırılır.\n\n`;
+  // Marka/hukuk disclaimer'ı — bölümün BAŞINDA belirgin.
+  body += `> **Bağımsız eşleme — resmî statü değildir:** Bu, bağımsız bir eşleme hizmetidir; SGB/USOM ile **resmî bir bağı, onayı veya yetkilendirmesi YOKTUR**. "SGB onaylı", "resmî/ulusal tarama" veya "zorunlu kontrol" DEĞİLDİR; resmî denetim/sertifikasyon yerine geçmez. Yalnız kamuya açık bildirimlerle eşleme yapar.\n\n`;
+  // Dışarıdan-gözlemlenebilir alt küme dürüstlüğü.
+  body += `**Kapsam (dürüstlük):** Katalogda **${USOM_CATALOG.length}** gerçek bildirim var; bunların **yalnız ${USOM_OBSERVABLE_COUNT} tanesi dışarıdan gözlemlenebilir** ürüne (ör. Apache/nginx/PHP sunucu banner'ı, WordPress/Joomla/Drupal CMS) aittir ve eşlenebilir. Bir ürünün sürümü dışarıdan görülemiyorsa (ör. bir güvenlik cihazı/uç-nokta ürünü) eşleme YAPILMAZ — bu bölüm katalogun tamamının değil, yalnız dış-yüzeyden görülebilen alt kümenin durumunu gösterir. Sürüm banner'dan gizlenebildiği ve backport yamalar sürüm dizesini değiştirmediği için **"kesin etkileniyorsunuz" ASLA denmez** — çıktı yalnız bir GÖSTERGEDİR.\n\n`;
+  body += `> **Üç-durum (dürüstlük):** ✅ *Sinyal yok* = bu bildirimin imzası hedefte görülmedi · ⚠️ *Sinyal var — sürüm doğrulanamadı* = ürün/teknoloji görüldü ama etkilenen sürümde olup olmadığı dışarıdan doğrulanamıyor · ⚠️ *Etkilenen aralıkta olabilir* = yalnız güvenilir sürüm sinyali etkilenen aralığa düşerse.\n\n`;
+
+  if (hits.length) {
+    body += `Aşağıdaki kamuya açık bildirimlerin imzası dış-yüzeyde **gözlemlendi** (istismar/doğrulama YOK — yalnız gösterge):\n\n`;
+    body += `| TR No | Ürün / Teknoloji | Durum | CVE | Kaynak |\n|-----|-----|-----|-----|-----|\n`;
+    for (const h of hits) {
+      body += `| ${h.adv.tr} | ${h.adv.title} | ${stateCell(h)} | ${h.adv.cve ?? '—'} | [bildirim](${h.adv.url}) |\n`;
+    }
+    body += `\n> **Önerilen resmî çözüm (özet):** İlgili ürünü, kaynak bildirimde belirtilen güncel/yamalı sürüme yükseltin ve sürüm/teknoloji ifşasını azaltın. Kesin durum için bağlı bildirimi inceleyin ve sürümünüzü içeriden doğrulayın.\n\n`;
+  } else {
+    body += `✅ **Eşleşme yok:** Katalogdaki dış-gözlemlenebilir **${USOM_OBSERVABLE_COUNT}** bildirimin hiçbirinin imzası (CMS/sunucu-banner) hedefte görülmedi. Bu, hedefin bu bildirimlerden ETKİLENMEDİĞİNİ KANITLAMAZ; yalnız dış-yüzeyde ilgili ürün/sürüm sinyalinin gözlemlenmediğini gösterir.\n\n`;
+  }
+  return body;
+}
+
+// ======================================================================================
 // BIRLESTIRME
 // ======================================================================================
 export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean }, locale: string = 'tr'): { findings: string; fixText: string } | null {
@@ -689,6 +726,14 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
   const robotsRow = minedSensExists
     ? t(`⚠️ ${minedSensExists} idari-görünümlü yol erişilebilir (yetki testi Aktif Doğrulama kapsamı)`, `⚠️ ${minedSensExists} administrativ wirkende Pfade erreichbar (Berechtigungsprüfung im Umfang der Aktiven Verifikation)`, `⚠️ ${minedSensExists} administrative-looking paths accessible (authorisation testing within Active Verification scope)`)
     : t(`✅ Site haritası + robots.txt Disallow’dan türetilen ${minedN} yol denendi (yalnız varlık); hassas/idari uç bulunamadı`, `✅ ${minedN} aus Sitemap + robots.txt-Disallow abgeleitete Pfade geprüft (nur Existenz); kein sensibler/administrativer Endpunkt gefunden`, `✅ ${minedN} paths derived from the sitemap + robots.txt Disallow tried (existence only); no sensitive/administrative endpoint found`);
+  // (USOM/SGB — YALNIZCA /tr) parmak-izi ↔ kamuya açık bildirim eşlemesi; bölüm + güvence satırı yalnız Türkçe.
+  const usomHits: UsomHit[] = locale === 'tr' ? usomHitsFor(ev) : [];
+  const usomSection = locale === 'tr' ? buildUsomSection(usomHits) : '';
+  const usomRow = usomHits.length
+    ? `⚠️ ${usomHits.length} kamuya açık bildirim imzası gözlemlendi (sürüm doğrulanamadı — gösterge)`
+    : `✅ ${USOM_OBSERVABLE_COUNT} dış-gözlemlenebilir bildirim tarandı; eşleşme bulunamadı`;
+  const usomAssuranceRow = locale === 'tr' ? `\n| USOM/SGB Bildirim Eşlemesi | ${usomRow} |` : '';
+
   const assuranceSection = en
     ? `## POSITIVE ASSURANCE — RECONNAISSANCE METHODS CHECKED\n\n` +
       `Reconnaissance comes out clean on most healthy targets; this section also makes the “nothing found” result TRANSPARENT — it shows what was ACTUALLY checked (including a **${paScanned}-page** sitemap, home page included):\n\n` +
@@ -707,17 +752,17 @@ export function combineReconAreas(ev: ReconEvidence, opts?: { httpOnly?: boolean
       `**BEWERTET NICHT:** aktive Injektions-/IDOR-/XSS-Verifikation und Berechtigungsprüfung entdeckter Endpunkte (Umfang **Aktive Verifikation / Umfassender Pentest**), HTTP-Sicherheits-Header-/CORS-/Cookie-/CSP-Details (Umfang **Basis-Scan / Externe Angriffsfläche**), DSGVO/PCI/ISO-Rahmenzuordnung (Umfang **Compliance**). Die Aussage „kein Indikator gefunden" in einem Bereich **BEWEIST NICHT**, dass Sie sicher sind — sie zeigt nur, dass mit den geprüften passiven Methoden kein Indikator auftrat.\n\n`
     : `## POZİTİF GÜVENCE — DENENEN KEŞİF YÖNTEMLERİ\n\n` +
       `Keşif çoğu sağlıklı hedefte temiz çıkar; bu bölüm "bir şey bulunamadı" sonucunu da ŞEFFAF kılar — GERÇEKTEN ne denendiğini gösterir (ana sayfa dâhil **${paScanned} sayfa** site haritası dahil):\n\n` +
-      `| Keşif Alanı | Sonuç |\n|-------------|-------|\n| Subdomain-Takeover Taraması | ${subRow} |\n| API & Swagger Keşfi | ${apiRow} |\n| CMS / Framework CVE Eşleşmesi | ${cmsRow} |\n| Sunucu/Yazılım Banner → Bilinen CVE | ${banRow} |\n| Site haritası + robots.txt yol keşfi | ${robotsRow} |\n\n` +
+      `| Keşif Alanı | Sonuç |\n|-------------|-------|\n| Subdomain-Takeover Taraması | ${subRow} |\n| API & Swagger Keşfi | ${apiRow} |\n| CMS / Framework CVE Eşleşmesi | ${cmsRow} |\n| Sunucu/Yazılım Banner → Bilinen CVE | ${banRow} |\n| Site haritası + robots.txt yol keşfi | ${robotsRow} |${usomAssuranceRow}\n\n` +
       `> **Üç-durum ayrımı (dürüstlük):** ✅ *Gösterge bulunamadı* = yöntem çalıştı, temiz · ⚠️ *Gösterge var* = yukarıda ayrıntılı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).\n\n` +
       `### Bu paket NE değerlendirir, NE değerlendirmez\n\n` +
-      `**DEĞERLENDİRİR (pasif keşif — yalnız GET, dış kaynak):** alt domain envanteri + devralma (dangling CNAME), herkese açık API/Swagger/OpenAPI dokümanı, CMS/çatı ve sunucu/yazılım banner (Apache/nginx/PHP) parmak izi + bilinen CVE eşleşmesi (NVD), site haritası + robots.txt Disallow'dan türeyen API/idari-görünümlü yolların VARLIK tespiti — ${paScanned} sayfa üzerinden.\n\n` +
-      `**DEĞERLENDİRMEZ:** aktif enjeksiyon/IDOR/XSS doğrulaması ve keşfedilen uçlara yetki testi (**Aktif Doğrulama / Tam Pentest** kapsamı), HTTP güvenlik başlığı/CORS/çerez/CSP detayı (**Basit Tarama / Dış Yüzey** kapsamı), KVKK/PCI/ISO çerçeve-eşleme (**Uyum** kapsamı). Bir alanda "gösterge bulunamadı" ifadesi **güvenli olduğunuzu KANITLAMAZ** — yalnız denenen pasif yöntemlerle bir gösterge çıkmadığını gösterir.\n\n`;
+      `**DEĞERLENDİRİR (pasif keşif — yalnız GET, dış kaynak):** alt domain envanteri + devralma (dangling CNAME), herkese açık API/Swagger/OpenAPI dokümanı, CMS/çatı ve sunucu/yazılım banner (Apache/nginx/PHP) parmak izi + bilinen CVE eşleşmesi (NVD), site haritası + robots.txt Disallow'dan türeyen API/idari-görünümlü yolların VARLIK tespiti${locale === 'tr' ? `, USOM/SGB kamuya açık bildirim kataloğuyla dış-yüzey eşlemesi (yalnız dış-gözlemlenebilir alt küme — bağımsız, resmî onay değildir)` : ''} — ${paScanned} sayfa üzerinden.\n\n` +
+      `**DEĞERLENDİRMEZ:** aktif enjeksiyon/IDOR/XSS doğrulaması ve keşfedilen uçlara yetki testi (**Aktif Doğrulama / Tam Pentest** kapsamı), HTTP güvenlik başlığı/CORS/çerez/CSP detayı (**Basit Tarama / Dış Yüzey** kapsamı), KVKK/PCI/ISO çerçeve-eşleme (**Uyum** kapsamı). USOM/SGB eşlemesi bir **resmî onay/sertifika DEĞİLDİR**, canlı istismar yapmaz ve dışarıdan görülemeyen ürünlerin (ör. güvenlik cihazı/uç-nokta ürünü) sürümünü doğrulamaz. Bir alanda "gösterge bulunamadı" ifadesi **güvenli olduğunuzu KANITLAMAZ** — yalnız denenen pasif yöntemlerle bir gösterge çıkmadığını gösterir.\n\n`;
 
   const findings =
     `## ${t('YÖNETİCİ ÖZETİ', 'MANAGEMENTZUSAMMENFASSUNG', 'EXECUTIVE SUMMARY')}\n\n${summary.join('\n')}\n\n` +
     `## ${t('GENEL DEĞERLENDİRME', 'GESAMTBEWERTUNG', 'OVERALL ASSESSMENT')}\n\n**${t('Risk Seviyesi', 'Risikostufe', 'Risk Level')}: ${RW[worst]}**\n\n${httpOnly ? t('Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz taşınıyor (öncelikli olarak HTTPS’e geçilmelidir). ', 'Dieses Ziel antwortet nicht über HTTPS; die Kommunikation wird unverschlüsselt übertragen (vorrangig sollte auf HTTPS umgestellt werden). ', 'This target does not respond over HTTPS; communication is carried unencrypted (HTTPS should be adopted as a priority). ') : ''}${genelSentence}\n\n` +
     `${httpsFindingSection}${methodologySection(locale)}\n` +
-    `${areaSections}\n${assuranceSection}` +
+    `${areaSections}\n${usomSection}${assuranceSection}` +
     `${bestPracticesSection(locale)}`;
 
   const fixText =

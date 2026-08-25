@@ -98,6 +98,25 @@ Banner'dan çıkan sürüm(ler) NVD'ye bağlandı (istismar/doğrulama YOK — y
 
 > Kapsam: Pasif parmak izi + NVD üzerinden bilinen-CVE eşlemesi. Hiçbir CVE **istismar edilmemiş/doğrulanmamıştır**.
 
+## USOM/SGB Bildirim Eşlemesi
+
+Bu bölüm, T.C. Siber Güvenlik Başkanlığı'nın (USOM/SGB) **KAMUYA AÇIK** olarak yayımladığı güvenlik bildirimleriyle, yukarıdaki Keşif parmak-izini (CMS/sunucu-banner) dışarıdan gözlemlenebilir düzeyde eşleştirir. Yeni bir tarama yapılmaz; mevcut keşif sinyali ikinci bir katalogla karşılaştırılır.
+
+> **Bağımsız eşleme — resmî statü değildir:** Bu, bağımsız bir eşleme hizmetidir; SGB/USOM ile **resmî bir bağı, onayı veya yetkilendirmesi YOKTUR**. "SGB onaylı", "resmî/ulusal tarama" veya "zorunlu kontrol" DEĞİLDİR; resmî denetim/sertifikasyon yerine geçmez. Yalnız kamuya açık bildirimlerle eşleme yapar.
+
+**Kapsam (dürüstlük):** Katalogda **10** gerçek bildirim var; bunların **yalnız 5 tanesi dışarıdan gözlemlenebilir** ürüne (ör. Apache/nginx/PHP sunucu banner'ı, WordPress/Joomla/Drupal CMS) aittir ve eşlenebilir. Bir ürünün sürümü dışarıdan görülemiyorsa (ör. bir güvenlik cihazı/uç-nokta ürünü) eşleme YAPILMAZ — bu bölüm katalogun tamamının değil, yalnız dış-yüzeyden görülebilen alt kümenin durumunu gösterir. Sürüm banner'dan gizlenebildiği ve backport yamalar sürüm dizesini değiştirmediği için **"kesin etkileniyorsunuz" ASLA denmez** — çıktı yalnız bir GÖSTERGEDİR.
+
+> **Üç-durum (dürüstlük):** ✅ *Sinyal yok* = bu bildirimin imzası hedefte görülmedi · ⚠️ *Sinyal var — sürüm doğrulanamadı* = ürün/teknoloji görüldü ama etkilenen sürümde olup olmadığı dışarıdan doğrulanamıyor · ⚠️ *Etkilenen aralıkta olabilir* = yalnız güvenilir sürüm sinyali etkilenen aralığa düşerse.
+
+Aşağıdaki kamuya açık bildirimlerin imzası dış-yüzeyde **gözlemlendi** (istismar/doğrulama YOK — yalnız gösterge):
+
+| TR No | Ürün / Teknoloji | Durum | CVE | Kaynak |
+|-----|-----|-----|-----|-----|
+| TR-24-1843 | Apache Çoklu Ürün Güvenlik Bildirimi | ⚠️ Sinyal var — sürüm doğrulanamadı (görülen sürüm 2.4.25) | — | [bildirim](https://www.usom.gov.tr/bildirim/tr-24-1843) |
+| TR-23-0072 | Apache Zafiyeti | ⚠️ Sinyal var — sürüm doğrulanamadı (görülen sürüm 2.4.25) | — | [bildirim](https://www.usom.gov.tr/bildirim/tr-23-0072) |
+
+> **Önerilen resmî çözüm (özet):** İlgili ürünü, kaynak bildirimde belirtilen güncel/yamalı sürüme yükseltin ve sürüm/teknoloji ifşasını azaltın. Kesin durum için bağlı bildirimi inceleyin ve sürümünüzü içeriden doğrulayın.
+
 ## POZİTİF GÜVENCE — DENENEN KEŞİF YÖNTEMLERİ
 
 Keşif çoğu sağlıklı hedefte temiz çıkar; bu bölüm "bir şey bulunamadı" sonucunu da ŞEFFAF kılar — GERÇEKTEN ne denendiğini gösterir (ana sayfa dâhil **2 sayfa** site haritası dahil):
@@ -109,14 +128,15 @@ Keşif çoğu sağlıklı hedefte temiz çıkar; bu bölüm "bir şey bulunamad�
 | CMS / Framework CVE Eşleşmesi | ✅ Bilinen bir CMS/çatı parmak izi tespit edilmedi |
 | Sunucu/Yazılım Banner → Bilinen CVE | ⚠️ Banner sürümünde 21 bilinen CVE (PHP 7.1.26) |
 | Site haritası + robots.txt yol keşfi | ✅ Site haritası + robots.txt Disallow’dan türetilen 0 yol denendi (yalnız varlık); hassas/idari uç bulunamadı |
+| USOM/SGB Bildirim Eşlemesi | ⚠️ 2 kamuya açık bildirim imzası gözlemlendi (sürüm doğrulanamadı — gösterge) |
 
 > **Üç-durum ayrımı (dürüstlük):** ✅ *Gösterge bulunamadı* = yöntem çalıştı, temiz · ⚠️ *Gösterge var* = yukarıda ayrıntılı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).
 
 ### Bu paket NE değerlendirir, NE değerlendirmez
 
-**DEĞERLENDİRİR (pasif keşif — yalnız GET, dış kaynak):** alt domain envanteri + devralma (dangling CNAME), herkese açık API/Swagger/OpenAPI dokümanı, CMS/çatı ve sunucu/yazılım banner (Apache/nginx/PHP) parmak izi + bilinen CVE eşleşmesi (NVD), site haritası + robots.txt Disallow'dan türeyen API/idari-görünümlü yolların VARLIK tespiti — 2 sayfa üzerinden.
+**DEĞERLENDİRİR (pasif keşif — yalnız GET, dış kaynak):** alt domain envanteri + devralma (dangling CNAME), herkese açık API/Swagger/OpenAPI dokümanı, CMS/çatı ve sunucu/yazılım banner (Apache/nginx/PHP) parmak izi + bilinen CVE eşleşmesi (NVD), site haritası + robots.txt Disallow'dan türeyen API/idari-görünümlü yolların VARLIK tespiti, USOM/SGB kamuya açık bildirim kataloğuyla dış-yüzey eşlemesi (yalnız dış-gözlemlenebilir alt küme — bağımsız, resmî onay değildir) — 2 sayfa üzerinden.
 
-**DEĞERLENDİRMEZ:** aktif enjeksiyon/IDOR/XSS doğrulaması ve keşfedilen uçlara yetki testi (**Aktif Doğrulama / Tam Pentest** kapsamı), HTTP güvenlik başlığı/CORS/çerez/CSP detayı (**Basit Tarama / Dış Yüzey** kapsamı), KVKK/PCI/ISO çerçeve-eşleme (**Uyum** kapsamı). Bir alanda "gösterge bulunamadı" ifadesi **güvenli olduğunuzu KANITLAMAZ** — yalnız denenen pasif yöntemlerle bir gösterge çıkmadığını gösterir.
+**DEĞERLENDİRMEZ:** aktif enjeksiyon/IDOR/XSS doğrulaması ve keşfedilen uçlara yetki testi (**Aktif Doğrulama / Tam Pentest** kapsamı), HTTP güvenlik başlığı/CORS/çerez/CSP detayı (**Basit Tarama / Dış Yüzey** kapsamı), KVKK/PCI/ISO çerçeve-eşleme (**Uyum** kapsamı). USOM/SGB eşlemesi bir **resmî onay/sertifika DEĞİLDİR**, canlı istismar yapmaz ve dışarıdan görülemeyen ürünlerin (ör. güvenlik cihazı/uç-nokta ürünü) sürümünü doğrulamaz. Bir alanda "gösterge bulunamadı" ifadesi **güvenli olduğunuzu KANITLAMAZ** — yalnız denenen pasif yöntemlerle bir gösterge çıkmadığını gösterir.
 
 ## İYİ PRATİKLER / ÖNERİLEN SONRAKİ ADIMLAR
 
