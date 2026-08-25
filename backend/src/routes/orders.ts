@@ -772,12 +772,15 @@ ordersRouter.get('/', requireAuth, async (req, res) => {
   });
   res.json(
     orders.map((o) => {
-      const lPkgDef = getPackageDef(o.package.key);
       const lLocale = o.locale === 'de' ? 'de' : o.locale === 'en' ? 'en' : 'tr';
+      const lBundle = getBundle(o.package.key);
+      const lPkgName = lBundle
+        ? (lLocale === 'de' ? lBundle.displayNameDe : lLocale === 'en' ? lBundle.displayNameEn : lBundle.displayName)
+        : localizedPackage(getPackageDef(o.package.key), lLocale).displayName;
       return {
       id: o.id,
       hostname: o.domain.hostname,
-      packageName: lPkgDef ? localizedPackage(lPkgDef, lLocale).displayName : o.package.displayName,
+      packageName: lPkgName,
       status: customerFacingStatus(o.status),
       createdAt: o.createdAt,
       archived: o.archived,
@@ -924,9 +927,12 @@ ordersRouter.get('/:orderId', requireAuth, async (req, res) => {
   // packageName + packageKey (GA event / fatura / canlı-tarama faz metinleri); ham package objesi gönderilmez.
   // (Canlı tarama) "Alan adı sahipliği doğrulandı" satırı YALNIZ DNS-doğrulaması yapılmış paketlerde
   // (aktif paketler) gösterilsin diye domainVerified sinyali eklenir (pasif paketlerde doğrulama yok).
-  const oPkgDef = getPackageDef(order.package.key);
   const oPkgLocale = order.locale === 'de' ? 'de' : order.locale === 'en' ? 'en' : 'tr';
-  const oPkgName = oPkgDef ? localizedPackage(oPkgDef, oPkgLocale).displayName : order.package.displayName;
+  // (LOKALİZASYON) BUNDLE ise lokalize bundle adı (dashboard tarama-türü + başlık); tekil ise PACKAGE_I18N.
+  const oBundle = getBundle(order.package.key);
+  const oPkgName = oBundle
+    ? (oPkgLocale === 'de' ? oBundle.displayNameDe : oPkgLocale === 'en' ? oBundle.displayNameEn : oBundle.displayName)
+    : localizedPackage(getPackageDef(order.package.key), oPkgLocale).displayName;
   res.json({ ...order, status: customerStatus, flow: customerFlow, package: undefined, packageName: oPkgName, packageKey: order.package.key, domainVerified: order.domain.verifiedAt != null, report: customerReport, queue });
 });
 
