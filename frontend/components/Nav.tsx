@@ -14,8 +14,8 @@ export function Nav({ region }: { region: RegionConfig }) {
     [d.how, `${base}#nasil-calisir`],
     [d.why, `${base}#neden-biz`],
     [d.packages, `${base}/packages`],
-    // (P3) S1 Otonom AI Red Team /de'de gizli → nav'da da gösterme.
-    ...(region.code === 'de' ? [] : [[d.otonom, `${base}/otonom-red-team`] as [string, string]]),
+    // (P3) S1 Otonom AI Red Team /de + /en'de gizli → nav'da da gösterme.
+    ...(region.code === 'de' || region.code === 'en' ? [] : [[d.otonom, `${base}/otonom-red-team`] as [string, string]]),
     ['Blog', `${base}/blog`], // SEO: her sayfada blog'a internal link; bölge-önekli (/tr/blog, /de/blog)
   ];
 

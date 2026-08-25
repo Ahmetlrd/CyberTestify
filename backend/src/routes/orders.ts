@@ -24,6 +24,11 @@ import { isVerificationStillValid } from '../services/verification.js';
 
 export const ordersRouter = Router();
 
+// (çok-bölge) kullanıcıya dönen hata metni locale'e göre — tr/de/en.
+const M = (loc: string, tr: string, de: string, en: string): string => (loc === 'de' ? de : loc === 'en' ? en : tr);
+const reqLoc = (req: { body?: any; query?: any }): string =>
+  localeFor(typeof req.body?.region === 'string' ? req.body.region : (typeof req.query?.region === 'string' ? req.query.region : 'tr'));
+
 // (BOT KORUMASI) Sipariş/ödeme OLUŞTURMA uçları — sahte sipariş / kart-deneme botlarına karşı IP
 // başına sıkı limit (create'ler zaten requireAuth + e-posta + domain-doğrulama arkasında; bu EK kat).
 const createLimiter = rateLimit({ windowMs: 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false, message: { error: 'Cok fazla islem denemesi. Lutfen biraz bekleyip tekrar deneyin.' } });
@@ -245,7 +250,7 @@ ordersRouter.post('/', createLimiter, requireAuth, async (req, res) => {
   // KISITLANMAZ, yalniz satin alma adimi.
   const cust0 = await prisma.customer.findUnique({ where: { id: req.customerId! }, select: { emailVerified: true } });
   if (!cust0?.emailVerified) {
-    return res.status(409).json({ error: 'Satın almadan önce e-posta adresinizi doğrulayın.', emailUnverified: true });
+    return res.status(409).json({ error: M(reqLoc(req), 'Satın almadan önce e-posta adresinizi doğrulayın.', 'Bitte bestätigen Sie Ihre E-Mail-Adresse vor dem Kauf.', 'Please verify your e-mail address before purchasing.'), emailUnverified: true });
   }
 
   const parsed = createOrderSchema.safeParse(req.body);
@@ -273,7 +278,7 @@ ordersRouter.post('/', createLimiter, requireAuth, async (req, res) => {
   }
   // "Yakında" paket: listelenir ama satin ALINAMAZ (defense-in-depth; frontend de kapatir).
   if (packageDef.comingSoon) {
-    return res.status(409).json({ error: 'Bu paket yakında açılacak; şu an satın alınamıyor.' });
+    return res.status(409).json({ error: M(reqLoc(req), 'Bu paket yakında açılacak; şu an satın alınamıyor.', 'Dieses Paket wird bald verfügbar sein; derzeit nicht kaufbar.', 'This package is coming soon; it cannot be purchased right now.') });
   }
 
   // SATIS MODELI (defense-in-depth): tekil paket satisi KAPALI — basit_tarama HARIC tum
@@ -354,8 +359,8 @@ ordersRouter.post('/', createLimiter, requireAuth, async (req, res) => {
   let effectiveAmount = amountMinorUnit;
   let promoApplied: Awaited<ReturnType<typeof evaluatePromo>> | null = null;
   if (parsed.data.promoCode) {
-    const p = await evaluatePromo(parsed.data.promoCode, amountMinorUnit);
-    if (!p.valid) return res.status(400).json({ error: p.error ?? 'Promosyon kodu geçersiz.' });
+    const p = await evaluatePromo(parsed.data.promoCode, amountMinorUnit, localeFor(region));
+    if (!p.valid) return res.status(400).json({ error: p.error ?? 'Promo code is invalid.' });
     promoApplied = p;
     effectiveAmount = p.finalAmountMinorUnit!;
   }
@@ -545,7 +550,7 @@ ordersRouter.post('/bundle', createLimiter, requireAuth, async (req, res) => {
   // ODEME ONCESI E-POSTA DOGRULAMA ZORUNLU (bundle; fail-fast, sema parse'indan ONCE).
   const custB = await prisma.customer.findUnique({ where: { id: req.customerId! }, select: { emailVerified: true } });
   if (!custB?.emailVerified) {
-    return res.status(409).json({ error: 'Satın almadan önce e-posta adresinizi doğrulayın.', emailUnverified: true });
+    return res.status(409).json({ error: M(reqLoc(req), 'Satın almadan önce e-posta adresinizi doğrulayın.', 'Bitte bestätigen Sie Ihre E-Mail-Adresse vor dem Kauf.', 'Please verify your e-mail address before purchasing.'), emailUnverified: true });
   }
 
   const parsed = bundleOrderSchema.safeParse(req.body);
@@ -559,7 +564,7 @@ ordersRouter.post('/bundle', createLimiter, requireAuth, async (req, res) => {
   const bundle = getBundle(bundleKey);
   if (!bundle) return res.status(404).json({ error: 'Paket bulunamadi.' });
   if (bundle.comingSoon) {
-    return res.status(409).json({ error: 'Bu paket yakında açılacak; şu an satın alınamıyor.' });
+    return res.status(409).json({ error: M(reqLoc(req), 'Bu paket yakında açılacak; şu an satın alınamıyor.', 'Dieses Paket wird bald verfügbar sein; derzeit nicht kaufbar.', 'This package is coming soon; it cannot be purchased right now.') });
   }
   const memberKeys = resolveMembers(bundle, region, parsed.data.selectedModules);
   if (!memberKeys.length) return res.status(400).json({ error: 'Bu paket icin gecerli modul secilmedi.' });
@@ -592,8 +597,8 @@ ordersRouter.post('/bundle', createLimiter, requireAuth, async (req, res) => {
   let promoFree = false;
   let promoApplied: Awaited<ReturnType<typeof evaluatePromo>> | null = null;
   if (parsed.data.promoCode) {
-    const p = await evaluatePromo(parsed.data.promoCode, price.amountMinorUnit);
-    if (!p.valid) return res.status(400).json({ error: p.error ?? 'Promosyon kodu geçersiz.' });
+    const p = await evaluatePromo(parsed.data.promoCode, price.amountMinorUnit, localeFor(region));
+    if (!p.valid) return res.status(400).json({ error: p.error ?? 'Promo code is invalid.' });
     promoApplied = p;
     promoFree = p.finalAmountMinorUnit === 0;
   }
@@ -729,7 +734,7 @@ ordersRouter.post('/bundle', createLimiter, requireAuth, async (req, res) => {
     } catch (err: any) {
       console.error(`[bundle] odeme baslatilamadi (orders ${createdOrderIds.join(',')}):`, err?.message ?? err);
       return res.status(503).json({
-        error: 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin veya destek ile iletişime geçin.',
+        error: M(reqLoc(req), 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin veya destek ile iletişime geçin.', 'Die Zahlung konnte derzeit nicht gestartet werden. Bitte versuchen Sie es später erneut oder kontaktieren Sie den Support.', 'Payment could not be started right now. Please try again later or contact support.'),
         orderIds: createdOrderIds,
       });
     }
@@ -790,7 +795,7 @@ ordersRouter.get('/', requireAuth, async (req, res) => {
 ordersRouter.patch('/:orderId/archive', requireAuth, async (req, res) => {
   const archived = req.body?.archived !== false; // gövde yoksa arşivle (true)
   const order = await prisma.order.findFirst({ where: { id: req.params.orderId, customerId: req.customerId! } });
-  if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı.' });
+  if (!order) return res.status(404).json({ error: M(reqLoc(req), 'Sipariş bulunamadı.', 'Bestellung nicht gefunden.', 'Order not found.') });
   await prisma.order.update({ where: { id: order.id }, data: { archived } });
   res.json({ ok: true, archived });
 });
@@ -799,9 +804,9 @@ ordersRouter.patch('/:orderId/archive', requireAuth, async (req, res) => {
 // Aktif/islenen tarama silinmez (once bitmesi beklenir).
 ordersRouter.delete('/:orderId', requireAuth, async (req, res) => {
   const order = await prisma.order.findFirst({ where: { id: req.params.orderId, customerId: req.customerId! } });
-  if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı.' });
+  if (!order) return res.status(404).json({ error: M(reqLoc(req), 'Sipariş bulunamadı.', 'Bestellung nicht gefunden.', 'Order not found.') });
   if (['paid', 'scan_queued', 'scan_running'].includes(order.status)) {
-    return res.status(409).json({ error: 'İşlenen/aktif bir tarama silinemez; önce tamamlanmasını bekleyin.' });
+    return res.status(409).json({ error: M(order.locale, 'İşlenen/aktif bir tarama silinemez; önce tamamlanmasını bekleyin.', 'Ein laufender/aktiver Scan kann nicht gelöscht werden; warten Sie, bis er abgeschlossen ist.', 'A running/active scan cannot be deleted; wait for it to finish first.') });
   }
   await prisma.$transaction(async (tx) => {
     await tx.promoCodeUsage.deleteMany({ where: { orderId: order.id } });
@@ -833,21 +838,21 @@ const promoPreviewSchema = z.object({
 });
 ordersRouter.post('/promo/preview', requireAuth, async (req, res) => {
   const parsed = promoPreviewSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ valid: false, error: 'Geçersiz istek.' });
+  if (!parsed.success) return res.status(400).json({ valid: false, error: M(reqLoc(req), 'Geçersiz istek.', 'Ungültige Anfrage.', 'Invalid request.') });
   let amountMinorUnit: number;
   let currency: string;
   if (parsed.data.bundleKey) {
     const b = getBundle(parsed.data.bundleKey);
-    if (!b) return res.status(400).json({ valid: false, error: 'Paket bulunamadı.' });
+    if (!b) return res.status(400).json({ valid: false, error: M(reqLoc(req), 'Paket bulunamadı.', 'Paket nicht gefunden.', 'Package not found.') });
     const price = bundlePrice(b, parsed.data.region);
     amountMinorUnit = price.amountMinorUnit;
     currency = price.currency;
   } else if (parsed.data.packageKey) {
     ({ amountMinorUnit, currency } = getPricing(parsed.data.packageKey, parsed.data.region));
   } else {
-    return res.status(400).json({ valid: false, error: 'Geçersiz istek.' });
+    return res.status(400).json({ valid: false, error: M(reqLoc(req), 'Geçersiz istek.', 'Ungültige Anfrage.', 'Invalid request.') });
   }
-  const result = await evaluatePromo(parsed.data.code, amountMinorUnit);
+  const result = await evaluatePromo(parsed.data.code, amountMinorUnit, localeFor(parsed.data.region));
   res.json({ ...result, currency });
 });
 
@@ -958,8 +963,8 @@ ordersRouter.post('/:orderId/invoice-request', requireAuth, async (req, res) => 
     where: { id: req.params.orderId, customerId: req.customerId! },
     include: { invoiceRequest: { select: { id: true } } },
   });
-  if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı.' });
-  if (!order.paidAt) return res.status(409).json({ error: 'Fatura talebi yalnızca ödemesi tamamlanmış siparişler için verilebilir.' });
+  if (!order) return res.status(404).json({ error: M(reqLoc(req), 'Sipariş bulunamadı.', 'Bestellung nicht gefunden.', 'Order not found.') });
+  if (!order.paidAt) return res.status(409).json({ error: M(order.locale, 'Fatura talebi yalnızca ödemesi tamamlanmış siparişler için verilebilir.', 'Eine Rechnungsanforderung ist nur für bezahlte Bestellungen möglich.', 'An invoice request can only be made for paid orders.') });
   const parsed = invoiceSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
   const d = parsed.data;
@@ -995,9 +1000,9 @@ ordersRouter.post('/:orderId/retry', requireAuth, async (req, res) => {
     where: { id: req.params.orderId, customerId: req.customerId! },
     include: { package: { select: { key: true } } },
   });
-  if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı.' });
-  if (order.status !== 'scan_failed') return res.status(409).json({ error: 'Yalnız başarısız olan taramalar tekrar denenebilir.' });
-  if (order.attemptCount > 2) return res.status(409).json({ error: 'Bu tarama birden çok kez denendi. Lütfen iade talebinde bulunun.', tooManyAttempts: true });
+  if (!order) return res.status(404).json({ error: M(reqLoc(req), 'Sipariş bulunamadı.', 'Bestellung nicht gefunden.', 'Order not found.') });
+  if (order.status !== 'scan_failed') return res.status(409).json({ error: M(order.locale, 'Yalnız başarısız olan taramalar tekrar denenebilir.', 'Nur fehlgeschlagene Scans können erneut versucht werden.', 'Only failed scans can be retried.') });
+  if (order.attemptCount > 2) return res.status(409).json({ error: M(order.locale, 'Bu tarama birden çok kez denendi. Lütfen iade talebinde bulunun.', 'Dieser Scan wurde mehrfach versucht. Bitte fordern Sie eine Rückerstattung an.', 'This scan has been attempted multiple times. Please request a refund.'), tooManyAttempts: true });
 
   const parsed = retrySchema.safeParse(req.body ?? {});
   if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
@@ -1011,7 +1016,7 @@ ordersRouter.post('/:orderId/retry', requireAuth, async (req, res) => {
     // Kimlik-doğrulamalı paket: yeni test hesabı bilgisi gerekir (eski tüketildi).
     const has = await hasTestCredential(order.id, 'primary');
     if (!has) {
-      if (!parsed.data.authCredentials) return res.status(400).json({ error: 'Bu paket kimlik-doğrulamalı test içerir; tekrar denemek için test hesabı kullanıcı adı ve şifresini girin.', needsCredentials: true });
+      if (!parsed.data.authCredentials) return res.status(400).json({ error: M(order.locale, 'Bu paket kimlik-doğrulamalı test içerir; tekrar denemek için test hesabı kullanıcı adı ve şifresini girin.', 'Dieses Paket enthält einen authentifizierten Test; geben Sie zum erneuten Versuch Benutzername und Passwort des Testkontos ein.', 'This package includes an authenticated test; to retry, enter the test account username and password.'), needsCredentials: true });
       await storeTestCredential(order.id, parsed.data.authCredentials);
     }
   }
@@ -1030,10 +1035,10 @@ ordersRouter.post('/:orderId/retry', requireAuth, async (req, res) => {
 ordersRouter.post('/:orderId/refund-request', requireAuth, async (req, res) => {
   const order = await prisma.order.findFirst({
     where: { id: req.params.orderId, customerId: req.customerId! },
-    select: { id: true, status: true, refundRequestedAt: true },
+    select: { id: true, status: true, refundRequestedAt: true, locale: true },
   });
-  if (!order) return res.status(404).json({ error: 'Sipariş bulunamadı.' });
-  if (order.status === 'refunded') return res.status(409).json({ error: 'Bu sipariş zaten iade edilmiş.' });
+  if (!order) return res.status(404).json({ error: M(reqLoc(req), 'Sipariş bulunamadı.', 'Bestellung nicht gefunden.', 'Order not found.') });
+  if (order.status === 'refunded') return res.status(409).json({ error: M(order.locale, 'Bu sipariş zaten iade edilmiş.', 'Diese Bestellung wurde bereits erstattet.', 'This order has already been refunded.') });
   if (order.refundRequestedAt) return res.json({ ok: true, alreadyRequested: true });
   const reason = typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 500) : null;
   await prisma.order.update({ where: { id: order.id }, data: { refundRequestedAt: new Date(), refundRequestReason: reason } });

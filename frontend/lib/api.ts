@@ -94,30 +94,30 @@ export const api = {
   register: (email: string, password: string, termsAccepted: boolean, turnstileToken?: string) =>
     request<{ token: string; emailVerified?: boolean; autoLogin?: boolean }>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password, termsAccepted, turnstileToken }),
+      body: JSON.stringify({ email, password, termsAccepted, turnstileToken, region: readRegionCookie() }),
     }),
   login: (email: string, password: string) =>
-    request<{ token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    request<{ token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password, region: readRegionCookie() }) }),
   // (ÜCRETSİZ ANLIK ÖN-TARAMA) public, pasif teaser. turnstileToken = bot doğrulaması; website = honeypot.
-  instantScan: (url: string, turnstileToken?: string, website?: string) =>
-    request<InstantScanResult>('/instant-scan', { method: 'POST', body: JSON.stringify({ url, turnstileToken, website }) }),
+  instantScan: (url: string, turnstileToken?: string, website?: string, region?: string) =>
+    request<InstantScanResult>('/instant-scan', { method: 'POST', body: JSON.stringify({ url, turnstileToken, website, region }) }),
   // (0) E-posta dogrulama
   me: () => request<{ email: string; emailVerified: boolean }>('/auth/me'),
   verifyEmail: (code: string) =>
-    request<{ ok: boolean; emailVerified: boolean }>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ code }) }),
+    request<{ ok: boolean; emailVerified: boolean }>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ code, region: readRegionCookie() }) }),
   resendVerification: () => request<{ ok: boolean }>('/auth/resend-verification', { method: 'POST' }),
   // (A) Sifre sifirlama — forgot HER ZAMAN {ok:true} (enumeration korumasi); reset yeni token doner.
   forgotPassword: (email: string) =>
-    request<{ ok: boolean }>('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+    request<{ ok: boolean }>('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email, region: readRegionCookie() }) }),
   resetPassword: (token: string, password: string) =>
-    request<{ ok: boolean; token: string }>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
+    request<{ ok: boolean; token: string }>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password, region: readRegionCookie() }) }),
   createDomain: (hostname: string) =>
     request<{ domainId: string; hostname: string; alreadyVerified?: boolean; message?: string; instructions?: { recordName: string; recordValue: string; note: string } }>(
       '/domains',
-      { method: 'POST', body: JSON.stringify({ hostname }) },
+      { method: 'POST', body: JSON.stringify({ hostname, region: readRegionCookie() }) },
     ),
   verifyDomain: (domainId: string) =>
-    request<{ verified: boolean }>(`/domains/${domainId}/verify`, { method: 'POST' }),
+    request<{ verified: boolean }>(`/domains/${domainId}/verify`, { method: 'POST', body: JSON.stringify({ region: readRegionCookie() }) }),
   deleteDomain: (domainId: string) =>
     request<{ ok: boolean }>(`/domains/${domainId}`, { method: 'DELETE' }),
   deleteAllDomains: () =>

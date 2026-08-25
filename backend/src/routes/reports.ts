@@ -8,7 +8,9 @@ import { renderReportPdf, htmlToPdfBuffer } from '../services/pdf.js';
 import { renderRedTeamFullHtml, redteamReportNo } from '../redteam/report.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
 import { requireAuth } from '../middleware/auth.js';
-import { getPackageDef, fixSuggestionPrice, localizedPackage } from '../services/scanPackages.js';
+import { getPackageDef, fixSuggestionPrice, localizedPackage, localeFor } from '../services/scanPackages.js';
+
+const M = (loc: string, tr: string, de: string, en: string): string => (loc === 'de' ? de : loc === 'en' ? en : tr);
 import { evaluatePromo } from '../services/promo.js';
 import { initiateFixSuggestionPayment } from '../services/payment/iyzico.js';
 
@@ -31,7 +33,7 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
 
   // (İÇ KALİTE KAPISI) Admin onayı beklerken rapor müşteriye VERİLMEZ (müşteri "hala taranıyor" görür).
   if (report.order.status === 'awaiting_admin_review') {
-    return res.status(409).json({ error: 'Raporunuz henüz hazırlanıyor.' });
+    return res.status(409).json({ error: M(report.order.locale, 'Raporunuz henüz hazırlanıyor.', 'Ihr Bericht wird noch erstellt.', 'Your report is still being prepared.') });
   }
 
   let plaintext: Buffer;
@@ -52,7 +54,7 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
   // markdown/fix yolu ATLANIR. Onay kapısı (409) yukarıda zaten uygulandı.
   if (report.order.package.key === 'redteam_s1') {
     let rt: any;
-    try { rt = JSON.parse(plaintext.toString('utf-8')); } catch { return res.status(500).json({ error: 'Rapor içeriği çözümlenemedi.' }); }
+    try { rt = JSON.parse(plaintext.toString('utf-8')); } catch { return res.status(500).json({ error: M(report.order.locale, 'Rapor içeriği çözümlenemedi.', 'Der Berichtsinhalt konnte nicht dekodiert werden.', 'The report content could not be decoded.') }); }
     if (rt?.meta) rt.meta.jobId = rt.meta.jobId ?? req.params.orderId;
     const reportNo = redteamReportNo(rt?.meta ?? { generatedAt: '', target: report.order.domain.hostname });
     const html = renderRedTeamFullHtml(rt, 'customer');
@@ -123,11 +125,11 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
 const unlockSchema = z.object({ promoCode: z.string().trim().max(64).optional() });
 reportsRouter.post('/:orderId/fix-suggestions/unlock', requireAuth, async (req, res) => {
   const parsed = unlockSchema.safeParse(req.body ?? {});
-  if (!parsed.success) return res.status(400).json({ error: 'Geçersiz istek.' });
+  if (!parsed.success) return res.status(400).json({ error: M(localeFor(typeof (req.body as any)?.region === 'string' ? (req.body as any).region : 'tr'), 'Geçersiz istek.', 'Ungültige Anfrage.', 'Invalid request.') });
 
   const report = await prisma.report.findFirstOrThrow({
     where: { orderId: req.params.orderId, order: { customerId: req.customerId! } },
-    include: { order: { select: { package: { select: { key: true } }, currency: true } } },
+    include: { order: { select: { package: { select: { key: true } }, currency: true, locale: true } } },
   });
   if (!report.fixSuggestions) {
     return res.status(404).json({ error: 'Bu rapor icin cozum onerisi uretilmedi.' });
@@ -141,8 +143,9 @@ reportsRouter.post('/:orderId/fix-suggestions/unlock', requireAuth, async (req, 
   const listPrice = fixSuggestionPrice(pkgDef);
   let amount = listPrice;
   if (parsed.data.promoCode) {
-    const p = await evaluatePromo(parsed.data.promoCode, listPrice);
-    if (!p.valid) return res.status(400).json({ error: p.error ?? 'Promosyon kodu geçersiz.' });
+    const rloc = report.order.locale === 'en' ? 'en' : report.order.locale === 'de' ? 'de' : 'tr';
+    const p = await evaluatePromo(parsed.data.promoCode, listPrice, rloc);
+    if (!p.valid) return res.status(400).json({ error: p.error ?? 'Promo code is invalid.' });
     amount = p.finalAmountMinorUnit ?? listPrice;
   }
 
@@ -164,7 +167,7 @@ reportsRouter.post('/:orderId/fix-suggestions/unlock', requireAuth, async (req, 
     return res.json({ paymentPageUrl: payment.paymentPageUrl });
   } catch (err: any) {
     console.error(`[fix-unlock] odeme baslatilamadi (order ${req.params.orderId}):`, err?.message ?? err);
-    return res.status(503).json({ error: 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin.' });
+    return res.status(503).json({ error: M(report.order.locale, 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin.', 'Die Zahlung konnte derzeit nicht gestartet werden. Bitte versuchen Sie es später erneut.', 'Payment could not be started right now. Please try again later.') });
   }
 });
 

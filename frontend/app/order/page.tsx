@@ -93,7 +93,7 @@ const ORD = {
     lcTimeout: 'Doğrulama uzun sürdü — yine de devam edebilirsiniz (gerçek tarama daha kapsamlı deneyecektir).',
     lcOther: 'Giriş şu an doğrulanamadı — yine de devam edebilirsiniz.',
     // Promo
-    promoLabel: 'Promosyon kodu (opsiyonel)', promoPh: 'Kodunuz', apply: 'Uygula',
+    promoLabel: 'Promosyon kodu (opsiyonel)', promoPh: 'Kodunuz', apply: 'Uygula', promoCheckFail: 'Kod kontrol edilemedi.',
     promoAppliedPre: 'Kod uygulandı — indirim', promoNewTotal: 'Yeni tutar:', promoFree: ' — ödeme adımı atlanır, tarama hemen kuyruğa alınır.',
     queueBusyHtml: 'Sipariş verebilirsiniz — <strong>taramanız en kısa sürede başlayacaktır</strong> ve durumu bu panelden takip edebilirsiniz.',
     // Precheck warnings
@@ -207,7 +207,7 @@ const ORD = {
     lcNoForm: 'Kein automatisches Login-Formular gefunden — Sie können dennoch fortfahren (der Scan versucht mehr).',
     lcTimeout: 'Die Prüfung hat zu lange gedauert — Sie können dennoch fortfahren (der echte Scan versucht mehr).',
     lcOther: 'Die Anmeldung konnte derzeit nicht bestätigt werden — Sie können dennoch fortfahren.',
-    promoLabel: 'Aktionscode (optional)', promoPh: 'Ihr Code', apply: 'Anwenden',
+    promoLabel: 'Aktionscode (optional)', promoPh: 'Ihr Code', apply: 'Anwenden', promoCheckFail: 'Code konnte nicht geprüft werden.',
     promoAppliedPre: 'Code angewendet — Rabatt', promoNewTotal: 'Neuer Betrag:', promoFree: ' — der Zahlungsschritt entfällt, der Scan wird sofort eingereiht.',
     queueBusyHtml: 'Sie können bestellen — <strong>Ihr Scan startet baldmöglichst</strong> und Sie verfolgen den Status über dieses Panel.',
     checking: 'Erreichbarkeit Ihres Ziels wird vorab geprüft…',
@@ -312,7 +312,7 @@ const ORD = {
     lcNoForm: 'No automatic login form found — you can still continue (the scan will try more thoroughly).',
     lcTimeout: 'Verification took too long — you can still continue (the real scan will try more thoroughly).',
     lcOther: 'Login could not be verified at the moment — you can still continue.',
-    promoLabel: 'Promo code (optional)', promoPh: 'Your code', apply: 'Apply',
+    promoLabel: 'Promo code (optional)', promoPh: 'Your code', apply: 'Apply', promoCheckFail: 'Could not check the code.',
     promoAppliedPre: 'Code applied — discount', promoNewTotal: 'New total:', promoFree: ' — the payment step is skipped and the scan is queued immediately.',
     queueBusyHtml: 'You can place your order — <strong>your scan will start as soon as possible</strong> and you can track its status from this panel.',
     checking: 'Pre-checking whether your target is reachable…',
@@ -548,7 +548,7 @@ export default function OrderPage() {
       const r = await api.previewPromo(promoInput.trim(), target, region);
       setPromo(r);
     } catch {
-      setPromo({ valid: false, error: 'Kod kontrol edilemedi.' });
+      setPromo({ valid: false, error: L.promoCheckFail });
     } finally {
       setPromoBusy(false);
     }
@@ -1384,7 +1384,11 @@ export default function OrderPage() {
                 </li>
               </ul>
               <div className="mt-3 flex flex-wrap items-center gap-3">
-                <img src="/iyzico/iyzico_ile_ode_colored_horizontal.svg" alt={L.payAlt} className="h-5 w-auto" width={175} height={26} />
+                {deLang || enLang ? (
+                  <span className="inline-flex items-center rounded-md border border-line bg-white px-2 py-1 text-xs font-semibold text-brand">{L.payAlt}</span>
+                ) : (
+                  <img src="/iyzico/iyzico_ile_ode_colored_horizontal.svg" alt={L.payAlt} className="h-5 w-auto" width={175} height={26} />
+                )}
                 <img src="/iyzico/logo_band_colored.svg" alt="Visa, Mastercard, Troy" className="h-4 w-auto max-w-full" width={228} height={16} />
               </div>
             </div>

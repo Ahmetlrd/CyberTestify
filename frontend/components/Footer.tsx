@@ -113,7 +113,7 @@ export function Footer({ region }: { region: RegionConfig }) {
           {/* iyzico resmi "iyzico ile ode" bandi (Visa/Mastercard/Troy dahil) — koyu zemin icin White */}
           <img
             src="/iyzico/logo_band_white.svg"
-            alt="iyzico ile Öde — Visa, Mastercard, Troy"
+            alt={`${isDe ? 'Mit iyzico bezahlen' : isEn ? 'Pay with iyzico' : 'iyzico ile Öde'} — Visa, Mastercard, Troy`}
             className="mt-4 h-auto w-auto max-w-full"
             width={456}
             height={32}

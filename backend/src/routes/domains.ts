@@ -14,6 +14,13 @@ import { quickScopeSignal } from '../services/activeVerifyEvidence.js';
 
 export const domainsRouter = Router();
 
+// (çok-bölge) kullanıcıya dönen hata metni bölgeye göre — tr/de/en.
+const dLoc = (req: { body?: any; query?: any }): string => {
+  const r = typeof req.body?.region === 'string' ? req.body.region : (typeof req.query?.region === 'string' ? req.query.region : 'tr');
+  return r === 'de' ? 'de' : r === 'en' ? 'en' : 'tr';
+};
+const M = (loc: string, tr: string, de: string, en: string): string => (loc === 'de' ? de : loc === 'en' ? en : tr);
+
 // Gecerli bir alan adi olmali (rastgele metin degil): en az bir nokta, gecerli
 // etiketler. Kullanici "https://", "www.", sondaki "/" vb. girebilir -> ONCE normalizeHostname
 // ile CIPLAK host'a indiriyoruz, SONRA bu regex ile dogruluyoruz (aksi halde sema/www yuzunden
@@ -82,7 +89,7 @@ domainsRouter.post('/:domainId/verify', requireAuth, async (req, res) => {
   // Sahiplik kontrolü: domain bu müşteriye ait olmalı (aksi halde başkasının domain'ini
   // doğrulayıp resume tetiklenemesin).
   const owned = await prisma.domain.findFirst({ where: { id: req.params.domainId, customerId: req.customerId! }, select: { id: true } });
-  if (!owned) return res.status(404).json({ error: 'Alan adı bulunamadı.' });
+  if (!owned) return res.status(404).json({ error: M(dLoc(req), 'Alan adı bulunamadı.', 'Domain nicht gefunden.', 'Domain not found.') });
   const verified = await checkDomainVerification(req.params.domainId);
   // ÇELİK KAPI (resume): doğrulama tamamlandıysa bu alan adında 'doğrulama bekliyor'da TUTULAN
   // aktif siparişleri otomatik başlat. Best-effort — doğrulama yanıtını bloklamaz.
@@ -100,7 +107,7 @@ domainsRouter.get('/:domainId/scope-estimate', requireAuth, async (req, res) => 
     where: { id: req.params.domainId, customerId: req.customerId! },
     select: { hostname: true },
   });
-  if (!domain) return res.status(404).json({ error: 'Alan adı bulunamadı.' });
+  if (!domain) return res.status(404).json({ error: M(dLoc(req), 'Alan adı bulunamadı.', 'Domain nicht gefunden.', 'Domain not found.') });
   try {
     const sig = await quickScopeSignal(domain.hostname);
     res.json({ lowSignal: sig.lowSignal, jsRendered: sig.jsRendered, inputCount: sig.inputCount, reachable: sig.reachable });

@@ -17,13 +17,15 @@ export interface PromoResult {
  * siparis aninda ayni mantik). Kod bulunamaz/pasif/suresi dolmus/limit dolmussa gecersiz.
  * Indirim tutari [0, amount] araligina kelepcelenir (negatif/asiri koruma).
  */
-export async function evaluatePromo(codeRaw: string, amountMinorUnit: number): Promise<PromoResult> {
+export async function evaluatePromo(codeRaw: string, amountMinorUnit: number, locale: string = 'tr'): Promise<PromoResult> {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (tr: string, deS: string, enS: string) => (de ? deS : en ? enS : tr);
   const code = (codeRaw ?? '').trim().toUpperCase();
-  if (!code) return { valid: false, error: 'Promosyon kodu boş.' };
+  if (!code) return { valid: false, error: t('Promosyon kodu boş.', 'Aktionscode ist leer.', 'Promo code is empty.') };
   const promo = await prisma.promoCode.findUnique({ where: { code } });
-  if (!promo || !promo.active) return { valid: false, error: 'Kod geçersiz veya pasif.' };
-  if (promo.expiresAt && promo.expiresAt.getTime() < Date.now()) return { valid: false, error: 'Kodun süresi dolmuş.' };
-  if (promo.maxUses != null && promo.usedCount >= promo.maxUses) return { valid: false, error: 'Kod kullanım limiti dolmuş.' };
+  if (!promo || !promo.active) return { valid: false, error: t('Kod geçersiz veya pasif.', 'Code ungültig oder inaktiv.', 'Code is invalid or inactive.') };
+  if (promo.expiresAt && promo.expiresAt.getTime() < Date.now()) return { valid: false, error: t('Kodun süresi dolmuş.', 'Der Code ist abgelaufen.', 'The code has expired.') };
+  if (promo.maxUses != null && promo.usedCount >= promo.maxUses) return { valid: false, error: t('Kod kullanım limiti dolmuş.', 'Nutzungslimit des Codes erreicht.', 'The code has reached its usage limit.') };
 
   const raw =
     promo.discountType === 'percentage'

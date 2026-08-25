@@ -12,6 +12,10 @@ import { verifyTurnstile } from '../services/turnstile.js';
 
 export const authRouter = Router();
 
+// (çok-bölge) kullanıcıya dönen hata metni bölgeye göre — tr/de/en.
+const aLoc = (req: { body?: any }): string => { const r = typeof req.body?.region === 'string' ? req.body.region : 'tr'; return r === 'de' ? 'de' : r === 'en' ? 'en' : 'tr'; };
+const M = (loc: string, tr: string, de: string, en: string): string => (loc === 'de' ? de : loc === 'en' ? en : tr);
+
 // E-posta dogrulama kodu uretir (6 hane), hash'ini + 15dk gecerlilik kaydeder ve mail atar.
 const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
 async function issueEmailVerification(customerId: string, email: string): Promise<void> {
@@ -42,7 +46,7 @@ authRouter.post('/register', async (req, res) => {
 
   // (BOT KORUMASI) fake/otomatik hesap acilmasina karsi insan dogrulamasi (authLimiter'a EK).
   if (!(await verifyTurnstile(parsed.data.turnstileToken, (req.ip || '').toString()))) {
-    return res.status(403).json({ error: 'İnsan doğrulaması gerekli. Lütfen doğrulama kutusunu tamamlayın.' });
+    return res.status(403).json({ error: M(aLoc(req), 'İnsan doğrulaması gerekli. Lütfen doğrulama kutusunu tamamlayın.', 'Menschliche Verifizierung erforderlich. Bitte schließen Sie die Verifizierungsbox ab.', 'Human verification required. Please complete the verification box.') });
   }
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
@@ -69,7 +73,7 @@ authRouter.post('/register', async (req, res) => {
         return res.json({ token, autoLogin: true, emailVerified: existing.emailVerified });
       }
       // Sifre yanlis -> mevcut dostane mesaj (degistirilmedi).
-      return res.status(409).json({ error: 'Bu e-posta ile zaten bir hesap var. Lutfen giris yapin.' });
+      return res.status(409).json({ error: M(aLoc(req), 'Bu e-posta ile zaten bir hesap var. Lütfen giriş yapın.', 'Mit dieser E-Mail existiert bereits ein Konto. Bitte melden Sie sich an.', 'An account with this e-mail already exists. Please log in.') });
     }
     throw err;
   }
@@ -86,7 +90,7 @@ authRouter.post('/login', async (req, res) => {
 
   const customer = await prisma.customer.findUnique({ where: { email: parsed.data.email } });
   if (!customer || !(await bcrypt.compare(parsed.data.password, customer.passwordHash))) {
-    return res.status(401).json({ error: 'E-posta veya sifre hatali.' });
+    return res.status(401).json({ error: M(aLoc(req), 'E-posta veya şifre hatalı.', 'E-Mail oder Passwort ist falsch.', 'E-mail or password is incorrect.') });
   }
 
   const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '7d' });
@@ -119,12 +123,12 @@ authRouter.post('/forgot-password', async (req, res) => {
 
 authRouter.post('/reset-password', async (req, res) => {
   const parsed = resetSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Geçersiz istek. Şifre en az 8 karakter olmalıdır.' });
+  if (!parsed.success) return res.status(400).json({ error: M(aLoc(req), 'Geçersiz istek. Şifre en az 8 karakter olmalıdır.', 'Ungültige Anfrage. Das Passwort muss mindestens 8 Zeichen lang sein.', 'Invalid request. The password must be at least 8 characters.') });
   const tokenHash = crypto.createHash('sha256').update(parsed.data.token).digest('hex');
   const customer = await prisma.customer.findFirst({
     where: { resetTokenHash: tokenHash, resetTokenExpiry: { gt: new Date() } },
   });
-  if (!customer) return res.status(400).json({ error: 'Bağlantı geçersiz veya süresi dolmuş. Lütfen yeniden sıfırlama talep edin.' });
+  if (!customer) return res.status(400).json({ error: M(aLoc(req), 'Bağlantı geçersiz veya süresi dolmuş. Lütfen yeniden sıfırlama talep edin.', 'Der Link ist ungültig oder abgelaufen. Bitte fordern Sie eine neue Zurücksetzung an.', 'The link is invalid or has expired. Please request a new reset.') });
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
   await prisma.customer.update({
     where: { id: customer.id },
@@ -142,7 +146,7 @@ authRouter.post('/reset-password', async (req, res) => {
 
 authRouter.get('/me', requireAuth, async (req, res) => {
   const c = await prisma.customer.findUnique({ where: { id: req.customerId! }, select: { email: true, emailVerified: true } });
-  if (!c) return res.status(404).json({ error: 'Hesap bulunamadı.' });
+  if (!c) return res.status(404).json({ error: M(aLoc(req), 'Hesap bulunamadı.', 'Konto nicht gefunden.', 'Account not found.') });
   res.json(c);
 });
 
@@ -150,15 +154,15 @@ const codeSchema = z.object({ code: z.string().regex(/^\d{6}$/, '6 haneli doğru
 
 authRouter.post('/verify-email', requireAuth, async (req, res) => {
   const parsed = codeSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Kod 6 haneli olmalıdır.' });
+  if (!parsed.success) return res.status(400).json({ error: M(aLoc(req), 'Kod 6 haneli olmalıdır.', 'Der Code muss 6-stellig sein.', 'The code must be 6 digits.') });
   const c = await prisma.customer.findUnique({ where: { id: req.customerId! } });
-  if (!c) return res.status(404).json({ error: 'Hesap bulunamadı.' });
+  if (!c) return res.status(404).json({ error: M(aLoc(req), 'Hesap bulunamadı.', 'Konto nicht gefunden.', 'Account not found.') });
   if (c.emailVerified) return res.json({ ok: true, emailVerified: true }); // zaten dogrulanmis
   if (!c.emailVerifyCodeHash || !c.emailVerifyCodeExpiry || c.emailVerifyCodeExpiry < new Date()) {
-    return res.status(400).json({ error: 'Kodun süresi dolmuş. Lütfen yeni kod isteyin.' });
+    return res.status(400).json({ error: M(aLoc(req), 'Kodun süresi dolmuş. Lütfen yeni kod isteyin.', 'Der Code ist abgelaufen. Bitte fordern Sie einen neuen Code an.', 'The code has expired. Please request a new code.') });
   }
   if (sha256(parsed.data.code) !== c.emailVerifyCodeHash) {
-    return res.status(400).json({ error: 'Kod hatalı. Lütfen tekrar deneyin.' });
+    return res.status(400).json({ error: M(aLoc(req), 'Kod hatalı. Lütfen tekrar deneyin.', 'Der Code ist falsch. Bitte versuchen Sie es erneut.', 'The code is incorrect. Please try again.') });
   }
   await prisma.customer.update({
     where: { id: c.id },
@@ -169,7 +173,7 @@ authRouter.post('/verify-email', requireAuth, async (req, res) => {
 
 authRouter.post('/resend-verification', requireAuth, async (req, res) => {
   const c = await prisma.customer.findUnique({ where: { id: req.customerId! }, select: { id: true, email: true, emailVerified: true } });
-  if (!c) return res.status(404).json({ error: 'Hesap bulunamadı.' });
+  if (!c) return res.status(404).json({ error: M(aLoc(req), 'Hesap bulunamadı.', 'Konto nicht gefunden.', 'Account not found.') });
   if (c.emailVerified) return res.json({ ok: true, emailVerified: true });
   await issueEmailVerification(c.id, c.email);
   res.json({ ok: true });
