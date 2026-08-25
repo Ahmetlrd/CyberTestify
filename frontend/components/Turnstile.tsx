@@ -1,6 +1,8 @@
 'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { readRegionCookie } from '../lib/region';
+import { getRegion } from '../config/regions';
 
 // Cloudflare Turnstile SITE key. Gerçek key .env'de (NEXT_PUBLIC_TURNSTILE_SITE_KEY); bossa TEST key.
 const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
@@ -39,10 +41,13 @@ export const Turnstile = forwardRef<TurnstileHandle, { onToken: (t: string | nul
       function render() {
         if (cancelled || !window.turnstile || !host.current || widgetId.current) return;
         try {
+          const lg = getRegion(readRegionCookie()).lang;
           widgetId.current = window.turnstile.render(host.current, {
             sitekey: SITE_KEY,
             action,
             theme: 'auto',
+            language: lg === 'de' ? 'de' : lg === 'en' ? 'en' : 'tr', // (çok-bölge) widget dili
+
             callback: (t: string) => onTokenRef.current(t),
             'expired-callback': () => onTokenRef.current(null),
             'timeout-callback': () => onTokenRef.current(null),

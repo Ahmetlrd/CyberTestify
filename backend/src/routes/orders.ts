@@ -454,9 +454,7 @@ ordersRouter.post('/', createLimiter, requireAuth, async (req, res) => {
   } catch (err: any) {
     console.error(`[order] odeme baslatilamadi (order ${order.id}):`, err?.message ?? err);
     return res.status(503).json({
-      error: err?.message?.startsWith('Ödeme')
-        ? err.message
-        : 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin veya destek ile iletişime geçin.',
+      error: M(localeFor(region), 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin veya destek ile iletişime geçin.', 'Die Zahlung konnte derzeit nicht gestartet werden. Bitte versuchen Sie es später erneut oder kontaktieren Sie den Support.', 'Payment could not be started right now. Please try again later or contact support.'),
       orderId: order.id,
     });
   }
@@ -473,9 +471,9 @@ ordersRouter.post('/:orderId/pay', createLimiter, requireAuth, async (req, res) 
     where: { id: req.params.orderId, customerId: req.customerId! },
     select: { id: true, status: true, region: true },
   });
-  if (!order) return res.status(404).json({ error: 'Siparis bulunamadi.' });
+  if (!order) return res.status(404).json({ error: M(reqLoc(req), 'Sipariş bulunamadı.', 'Bestellung nicht gefunden.', 'Order not found.') });
   if (order.status !== 'awaiting_payment') {
-    return res.status(409).json({ error: 'Bu siparis odeme beklemiyor (zaten odendi/iptal).' });
+    return res.status(409).json({ error: M(order.region, 'Bu sipariş ödeme beklemiyor (zaten ödendi/iptal).', 'Diese Bestellung erwartet keine Zahlung (bereits bezahlt/storniert).', 'This order is not awaiting payment (already paid/cancelled).') });
   }
   // Ödeme sağlayıcı order'ın GERÇEK bölgesinden (tr→iyzico, de→iyzico+EUR, us/ae→intl) — locale'den
   // türetmek /de'yi (locale=en) yanlışlıkla us'e düşürüyordu.
@@ -486,7 +484,7 @@ ordersRouter.post('/:orderId/pay', createLimiter, requireAuth, async (req, res) 
   } catch (err: any) {
     console.error(`[order][resume-pay] odeme baslatilamadi (order ${order.id}):`, err?.message ?? err);
     return res.status(503).json({
-      error: err?.message?.startsWith('Ödeme') ? err.message : 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin.',
+      error: M(order.region, 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin.', 'Die Zahlung konnte derzeit nicht gestartet werden. Bitte versuchen Sie es später erneut.', 'Payment could not be started right now. Please try again later.'),
     });
   }
 });

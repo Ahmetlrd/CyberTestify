@@ -6,7 +6,20 @@ import { encryptReport, generateReportAccessSecret } from './crypto.js';
 import { redactAll } from './piiRedaction.js';
 import { validateAndRepairReport } from './reportValidator.js';
 import { logScanStep } from './scanLogger.js';
-import { FIX_SUGGESTIONS_DELIM, getPackageDef, securityProfileFor } from './scanPackages.js';
+import { FIX_SUGGESTIONS_DELIM, getPackageDef, securityProfileFor, localizedPackage } from './scanPackages.js';
+import { getBundle } from './bundles.js';
+
+// (çok-bölge) Rapor kapağı/başlık için pakete-özel GÖRÜNEN isim — locale'e göre.
+// Bundle ise displayNameDe/En; tekil paket ise PACKAGE_I18N; yoksa DB (TR) fallback.
+function localizedPackageName(key: string, fallback: string, locale: 'tr' | 'en' | 'de'): string {
+  const b = getBundle(key);
+  if (b) return locale === 'de' ? b.displayNameDe : locale === 'en' ? b.displayNameEn : b.displayName;
+  try {
+    const def = getPackageDef(key as Parameters<typeof getPackageDef>[0]);
+    if (def) return localizedPackage(def, locale).displayName;
+  } catch { /* bundle-only/bilinmeyen key -> fallback */ }
+  return fallback;
+}
 import { hasPassiveExtras, runPassiveExtras, renderPassiveExtrasMarkdown, PASSIVE_EXTRAS_DELIM } from './passiveExtras.js';
 import { buildHeaderFixSuggestions } from './fixSuggestions.js';
 import { generateBasitReport } from './basitReport.js';
@@ -442,7 +455,7 @@ export async function generateAndStoreReport(flowId: string) {
   }
 
   const rawMarkdown = redactAll(
-    renderReportMarkdown(flow.order.domain.hostname, flow.order.package.displayName, findings, logs.screenshots, locale, flow.order.package.key) +
+    renderReportMarkdown(flow.order.domain.hostname, localizedPackageName(flow.order.package.key, flow.order.package.displayName, locale), findings, logs.screenshots, locale, flow.order.package.key) +
       extrasBlock,
   );
 

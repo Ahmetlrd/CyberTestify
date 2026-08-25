@@ -1076,7 +1076,7 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
       if (r && SQL_ERROR_RE.test(r.text)) {
         sqlErrorFound = true;
         const sig = r.text.match(SQL_ERROR_RE)?.[0] ?? 'SQL hata imzası';
-        findings.push({ inputPoint: label, type: 'SQLi', technique: 'error-based', evidence: `Yanıtta veritabanı hata imzası görüldü ("${q}" payload'ı ile): "${sig.slice(0, 60)}"`, severity: 'high', confidence: 'high' });
+        findings.push({ inputPoint: label, type: 'SQLi', technique: 'error-based', evidence: t(`Yanıtta veritabanı hata imzası görüldü ("${q}" payload'ı ile): "${sig.slice(0, 60)}"`, `In der Antwort wurde eine Datenbank-Fehlersignatur beobachtet (mit dem Payload "${q}"): "${sig.slice(0, 60)}"`, `A database error signature was observed in the response (with the "${q}" payload): "${sig.slice(0, 60)}"`), severity: 'high', confidence: 'high' });
       }
     }
 
@@ -1087,11 +1087,11 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
       const xr = await send(ip, xp);
       if (xr && xr.text.includes(xp)) {
         // (İş B.3) TAM yansıma: payload (< > " dâhil) AYNEN, encode edilmeden döndü -> yüksek güven.
-        findings.push({ inputPoint: label, type: 'XSS', technique: 'reflection', evidence: 'İşaret dizesi yanıt HTML’inde TAM ve ENCODE EDİLMEDEN yansıdı (özel karakterler `< > "` kaçırılmadan döndü) — yüksek güvenli yansıyan XSS göstergesi.', severity: 'high', confidence: 'high' });
+        findings.push({ inputPoint: label, type: 'XSS', technique: 'reflection', evidence: t('İşaret dizesi yanıt HTML’inde TAM ve ENCODE EDİLMEDEN yansıdı (özel karakterler `< > "` kaçırılmadan döndü) — yüksek güvenli yansıyan XSS göstergesi.', 'Die Markierungszeichenfolge wurde im Antwort-HTML VOLLSTÄNDIG und OHNE ENCODING reflektiert (Sonderzeichen `< > "` kamen ungeschützt zurück) — ein Indikator für reflektiertes XSS mit hoher Konfidenz.', 'The marker string was reflected in the response HTML FULLY and WITHOUT ENCODING (special characters `< > "` returned unescaped) — a high-confidence reflected-XSS indicator.'), severity: 'high', confidence: 'high' });
         break;
       } else if (xr && xr.text.includes(XSS_MARKER)) {
         // (İş B.3) KISMİ yansıma: yalnız işaret dizesi döndü, özel karakterler kaçırılmış/encode edilmiş -> düşük güven.
-        findings.push({ inputPoint: label, type: 'XSS', technique: 'reflection', evidence: 'İşaret dizesi yansıdı ancak KISMİ/ENCODE EDİLMİŞ (özel karakterler `< > "` kaçırılmış) — bağlama bağlı düşük güvenli gösterge; manuel doğrulama önerilir.', severity: 'low', confidence: 'low' });
+        findings.push({ inputPoint: label, type: 'XSS', technique: 'reflection', evidence: t('İşaret dizesi yansıdı ancak KISMİ/ENCODE EDİLMİŞ (özel karakterler `< > "` kaçırılmış) — bağlama bağlı düşük güvenli gösterge; manuel doğrulama önerilir.', 'Die Markierungszeichenfolge wurde reflektiert, aber TEILWEISE/ENCODED (Sonderzeichen `< > "` wurden escaped) — ein kontextabhängiger Indikator mit geringer Konfidenz; eine manuelle Verifizierung wird empfohlen.', 'The marker string was reflected but PARTIALLY/ENCODED (special characters `< > "` were escaped) — a context-dependent low-confidence indicator; manual verification is recommended.'), severity: 'low', confidence: 'low' });
         break;
       }
     }
@@ -1101,7 +1101,7 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
       payloads++;
       const tr = await send(ip, `1' AND SLEEP(${TIME_PROBE_DELAY_S})-- -`, true);
       if (tr && tr.status > 0 && tr.ms >= (ctx.baseline + (TIME_PROBE_DELAY_S * 1000) - 700)) {
-        findings.push({ inputPoint: label, type: 'SQLi', technique: 'time-based', evidence: `Zaman-tabanlı probe (SLEEP ${TIME_PROBE_DELAY_S}s) yanıt süresini ~${(tr.ms / 1000).toFixed(1)}s'ye çıkardı (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — blind SQLi göstergesi.`, severity: 'high', confidence: 'medium' });
+        findings.push({ inputPoint: label, type: 'SQLi', technique: 'time-based', evidence: t(`Zaman-tabanlı probe (SLEEP ${TIME_PROBE_DELAY_S}s) yanıt süresini ~${(tr.ms / 1000).toFixed(1)}s'ye çıkardı (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — blind SQLi göstergesi.`, `Eine zeitbasierte Sonde (SLEEP ${TIME_PROBE_DELAY_S}s) erhöhte die Antwortzeit auf ~${(tr.ms / 1000).toFixed(1)}s (Baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — ein Blind-SQLi-Indikator.`, `A time-based probe (SLEEP ${TIME_PROBE_DELAY_S}s) raised the response time to ~${(tr.ms / 1000).toFixed(1)}s (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — a blind-SQLi indicator.`), severity: 'high', confidence: 'medium' });
       }
     }
 
@@ -1127,7 +1127,7 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
         const tRes2 = await send(ip, truePay);
         const stable = !!tRes2 && tRes2.status > 0 && Math.abs(tRes2.len - tRes.len) <= Math.max(80, 0.05 * Math.max(tRes.len, 1)) && bigDiff(tRes2, fRes);
         if (stable) {
-          findings.push({ inputPoint: label, type: 'SQLi', technique: 'boolean-based', evidence: `Boolean-tabanlı karşılaştırma: TRUE koşulu (\`${truePay}\`) → HTTP ${tRes.status}/${tRes.len} bayt; FALSE koşulu (\`${falsePay}\`) → HTTP ${fRes.status}/${fRes.len} bayt. TRUE yanıtı tekrarda tutarlı (${tRes2!.len} bayt), FALSE'tan KALICI içerik farkı — boolean-based SQL enjeksiyonu göstergesi (girdinin sorgu mantığını değiştirdiğini gösterir).`, severity: 'high', confidence: 'high' });
+          findings.push({ inputPoint: label, type: 'SQLi', technique: 'boolean-based', evidence: t(`Boolean-tabanlı karşılaştırma: TRUE koşulu (\`${truePay}\`) → HTTP ${tRes.status}/${tRes.len} bayt; FALSE koşulu (\`${falsePay}\`) → HTTP ${fRes.status}/${fRes.len} bayt. TRUE yanıtı tekrarda tutarlı (${tRes2!.len} bayt), FALSE'tan KALICI içerik farkı — boolean-based SQL enjeksiyonu göstergesi (girdinin sorgu mantığını değiştirdiğini gösterir).`, `Boolescher Vergleich: TRUE-Bedingung (\`${truePay}\`) → HTTP ${tRes.status}/${tRes.len} Bytes; FALSE-Bedingung (\`${falsePay}\`) → HTTP ${fRes.status}/${fRes.len} Bytes. Die TRUE-Antwort ist bei Wiederholung konsistent (${tRes2!.len} Bytes), ein DAUERHAFTER Inhaltsunterschied zu FALSE — ein Indikator für boolean-based SQL-Injection (zeigt, dass die Eingabe die Abfragelogik verändert).`, `Boolean-based comparison: TRUE condition (\`${truePay}\`) → HTTP ${tRes.status}/${tRes.len} bytes; FALSE condition (\`${falsePay}\`) → HTTP ${fRes.status}/${fRes.len} bytes. The TRUE response is consistent on repeat (${tRes2!.len} bytes), a PERSISTENT content difference from FALSE — a boolean-based SQL injection indicator (shows the input alters the query logic).`), severity: 'high', confidence: 'high' });
         }
       }
     }
@@ -1153,7 +1153,7 @@ export async function collectInjectionEvidence(host: string, session?: AuthSessi
       if (r && SQL_ERROR_RE.test(r.text)) {
         hit = true;
         const sig = r.text.match(SQL_ERROR_RE)?.[0] ?? 'SQL hata imzası';
-        findings.push({ inputPoint: label, type: 'SQLi', technique: 'error-based', evidence: `Path parametresine zararsız tek tırnak ("${q}") eklendiğinde yanıtta veritabanı hata imzası görüldü: "${sig.slice(0, 60)}"`, severity: 'high', confidence: 'high' });
+        findings.push({ inputPoint: label, type: 'SQLi', technique: 'error-based', evidence: t(`Path parametresine zararsız tek tırnak ("${q}") eklendiğinde yanıtta veritabanı hata imzası görüldü: "${sig.slice(0, 60)}"`, `Als ein harmloses einzelnes Anführungszeichen ("${q}") an den Path-Parameter angehängt wurde, erschien in der Antwort eine Datenbank-Fehlersignatur: "${sig.slice(0, 60)}"`, `When a harmless single quote ("${q}") was appended to the path parameter, a database error signature appeared in the response: "${sig.slice(0, 60)}"`), severity: 'high', confidence: 'high' });
       }
     }
   }
@@ -1530,7 +1530,7 @@ export async function collectSsrfEvidence(host: string, session?: AuthSession, l
       : await ctx.fetchOnce(ip.action, { method: 'POST', body: buildFormBody(ip, echoUrl), contentType: 'application/x-www-form-urlencoded', expectSlow: true });
     if (r && r.status > 0 && r.ms >= ctx.baseline + (SLEEP_S * 1000) - 1000) {
       // (esik: baseline + ~SLEEP_S sn) — kontrollu gecikme hedefin yanitina yansidi
-      findings.push({ check: 'ssrf', inputPoint: label, vulnerable: true, technique: 'time-based (kontrollü gecikme echo)', evidence: `Parametreye kontrolümüzdeki gecikmeli URL verildiğinde hedefin yanıtı ~${(r.ms / 1000).toFixed(1)}s'ye çıktı (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — sunucu-taraflı fetch (SSRF) göstergesi.`, confidence: 'medium', severity: 'high', sideEffectRisk: 'none' });
+      findings.push({ check: 'ssrf', inputPoint: label, vulnerable: true, technique: t('time-based (kontrollü gecikme echo)', 'zeitbasiert (kontrollierter Verzögerungs-Echo)', 'time-based (controlled delay echo)'), evidence: t(`Parametreye kontrolümüzdeki gecikmeli URL verildiğinde hedefin yanıtı ~${(r.ms / 1000).toFixed(1)}s'ye çıktı (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — sunucu-taraflı fetch (SSRF) göstergesi.`, `Als dem Parameter eine von uns kontrollierte verzögerte URL übergeben wurde, stieg die Antwort des Ziels auf ~${(r.ms / 1000).toFixed(1)}s (Baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — ein Indikator für serverseitigen Fetch (SSRF).`, `When a delayed URL under our control was supplied to the parameter, the target's response rose to ~${(r.ms / 1000).toFixed(1)}s (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — a server-side fetch (SSRF) indicator.`), confidence: 'medium', severity: 'high', sideEffectRisk: 'none' });
     }
   }
   if (ctx.stopped) notes.push(ctx.stopped);
@@ -1572,7 +1572,7 @@ export async function collectRceEvidence(host: string, session?: AuthSession, lo
         : await ctx.fetchOnce(ip.action, { method: 'POST', body: buildFormBody(ip, val), contentType: 'application/x-www-form-urlencoded', expectSlow: true });
       if (r && r.status > 0 && r.ms >= ctx.baseline + (SLEEP_S * 1000) - 700) {
         hit = true;
-        findings.push({ check: 'rce', inputPoint: label, vulnerable: true, technique: 'time-based (blind, sleep)', evidence: `Zaman-tabanlı zararsız gecikme payload'ı yanıt süresini ~${(r.ms / 1000).toFixed(1)}s'ye çıkardı (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — blind komut çalıştırma göstergesi.`, confidence: 'medium', severity: 'high', sideEffectRisk: 'none' });
+        findings.push({ check: 'rce', inputPoint: label, vulnerable: true, technique: 'time-based (blind, sleep)', evidence: t(`Zaman-tabanlı zararsız gecikme payload'ı yanıt süresini ~${(r.ms / 1000).toFixed(1)}s'ye çıkardı (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — blind komut çalıştırma göstergesi.`, `Ein zeitbasiertes harmloses Verzögerungs-Payload erhöhte die Antwortzeit auf ~${(r.ms / 1000).toFixed(1)}s (Baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — ein Indikator für blinde Befehlsausführung.`, `A time-based harmless delay payload raised the response time to ~${(r.ms / 1000).toFixed(1)}s (baseline ~${(ctx.baseline / 1000).toFixed(1)}s) — a blind command-execution indicator.`), confidence: 'medium', severity: 'high', sideEffectRisk: 'none' });
       }
     }
   }
@@ -1634,7 +1634,7 @@ export async function collectFileUploadEvidence(host: string, locale: string = '
     if (!r || ctx.stopped) continue;
     const accepted = (r.status === 200 || r.status === 201 || r.status === 302) && !UPLOAD_REJECT_RE.test(r.text);
     if (accepted) {
-      findings.push({ check: 'file_upload', inputPoint: label, vulnerable: true, technique: 'inert file accepted (double-extension)', evidence: `Çift uzantılı (.php.txt) zararsız test dosyası, açık bir doğrulama reddi olmadan kabul edilmiş görünüyor (HTTP ${r.status}). Yükleme filtresi zayıf olabilir; kesin doğrulama için manuel test gerekir (dosya GERİ ÇAĞIRILMADI/çalıştırılmadı).`, confidence: 'low', severity: 'medium', sideEffectRisk: 'possible' });
+      findings.push({ check: 'file_upload', inputPoint: label, vulnerable: true, technique: 'inert file accepted (double-extension)', evidence: t(`Çift uzantılı (.php.txt) zararsız test dosyası, açık bir doğrulama reddi olmadan kabul edilmiş görünüyor (HTTP ${r.status}). Yükleme filtresi zayıf olabilir; kesin doğrulama için manuel test gerekir (dosya GERİ ÇAĞIRILMADI/çalıştırılmadı).`, `Eine harmlose Testdatei mit doppelter Erweiterung (.php.txt) scheint ohne ausdrückliche Validierungsablehnung akzeptiert worden zu sein (HTTP ${r.status}). Der Upload-Filter könnte schwach sein; für eine eindeutige Bestätigung ist ein manueller Test erforderlich (die Datei wurde NICHT abgerufen/ausgeführt).`, `A harmless double-extension (.php.txt) test file appears to have been accepted without an explicit validation rejection (HTTP ${r.status}). The upload filter may be weak; a manual test is required for definitive confirmation (the file was NOT recalled/executed).`), confidence: 'low', severity: 'medium', sideEffectRisk: 'possible' });
     }
   }
   const netForms = forms.filter((f) => f.source === 'network').length;
@@ -1665,7 +1665,7 @@ export async function collectBusinessLogicEvidence(host: string, locale: string 
   // (a) İstemci-tarafli fiyat/miktar alani (hidden veya duz) — GOZLEM (istek yok)
   const hiddenPrice = html.match(new RegExp(`<input[^>]*type=["']hidden["'][^>]*${PRICE_FIELD_RE.source}`, 'i')) || html.match(new RegExp(`<input[^>]*${PRICE_FIELD_RE.source}[^>]*type=["']hidden["']`, 'i'));
   if (hiddenPrice) {
-    findings.push({ check: 'business_logic', inputPoint: 'form (hidden price/qty)', vulnerable: true, technique: 'observation (client-controllable amount)', evidence: 'Formda gizli (hidden) bir fiyat/miktar alanı gözlemlendi. Bu alan istemci tarafında değiştirilebilir; sunucu-taraflı fiyat/miktar doğrulaması yapılmıyorsa fiyat manipülasyonu riski oluşur (kesin doğrulama kimlik-doğrulamalı manuel test gerektirir).', confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
+    findings.push({ check: 'business_logic', inputPoint: 'form (hidden price/qty)', vulnerable: true, technique: 'observation (client-controllable amount)', evidence: t('Formda gizli (hidden) bir fiyat/miktar alanı gözlemlendi. Bu alan istemci tarafında değiştirilebilir; sunucu-taraflı fiyat/miktar doğrulaması yapılmıyorsa fiyat manipülasyonu riski oluşur (kesin doğrulama kimlik-doğrulamalı manuel test gerektirir).', 'Im Formular wurde ein verstecktes (hidden) Preis-/Mengenfeld beobachtet. Dieses Feld ist clientseitig veränderbar; ohne serverseitige Preis-/Mengenvalidierung besteht ein Preismanipulationsrisiko (eine eindeutige Bestätigung erfordert einen authentifizierten manuellen Test).', 'A hidden price/quantity field was observed in the form. This field is client-side modifiable; without server-side price/quantity validation there is a price-manipulation risk (definitive confirmation requires an authenticated manual test).'), confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
   }
 
   // (b) Adim-atlama: success/confirm sayfalarina DOGRUDAN GET (yalniz GET; tamamlama YOK).
@@ -1679,7 +1679,7 @@ export async function collectBusinessLogicEvidence(host: string, locale: string 
     if (ctx.stopped) break;
     const r = await ctx.fetchOnce(url); // GET — state degistirmez
     if (r && r.status === 200 && !/oturum|login|giriş yap|unauthorized|403|yetkisiz/i.test(r.text.slice(0, 2000))) {
-      findings.push({ check: 'business_logic', inputPoint: new URL(url).pathname, vulnerable: true, technique: 'observation (step-skip, GET only)', evidence: `Bir "başarılı/onay" adımı sayfası (${new URL(url).pathname}) ön koşul olmadan doğrudan GET ile erişilebilir göründü — adım-atlama (business logic) göstergesi olabilir; manuel doğrulama önerilir.`, confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
+      findings.push({ check: 'business_logic', inputPoint: new URL(url).pathname, vulnerable: true, technique: 'observation (step-skip, GET only)', evidence: t(`Bir "başarılı/onay" adımı sayfası (${new URL(url).pathname}) ön koşul olmadan doğrudan GET ile erişilebilir göründü — adım-atlama (business logic) göstergesi olabilir; manuel doğrulama önerilir.`, `Eine "Erfolgs-/Bestätigungs"-Schrittseite (${new URL(url).pathname}) schien ohne Vorbedingung direkt per GET erreichbar zu sein — möglicherweise ein Indikator für Schrittüberspringen (Geschäftslogik); eine manuelle Verifizierung wird empfohlen.`, `A "success/confirmation" step page (${new URL(url).pathname}) appeared directly reachable via GET without a precondition — possibly a step-skipping (business logic) indicator; manual verification is recommended.`), confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
     }
   }
   // (c) SINIRLI PentAGI AJAN: bulunan yuzeyden is-mantigi acisindan ilginc GET uclarini SECER (JSON).
@@ -1694,7 +1694,7 @@ export async function collectBusinessLogicEvidence(host: string, locale: string 
       if (!url) continue;
       const r = await ctx.fetchOnce(url); // GET-only (state degistirmez)
       if (r && r.status > 0 && r.status < 500 && !/oturum|login|giriş yap|unauthorized|403|yetkisiz/i.test(r.text.slice(0, 1500))) {
-        findings.push({ check: 'business_logic', inputPoint: (() => { try { return new URL(url).pathname; } catch { return s.inputPoint; } })(), vulnerable: true, technique: 'PentAGI ajanı seçti + backend GET ile doğruladı', evidence: `⚠️ DOLAYLI/ZAYIF GÖSTERGE — doğrudan zafiyet kanıtı DEĞİLDİR. Tek dayanak: bu uç nokta PentAGI ajanınca iş-mantığı açısından aday seçildi ve backend GET ile erişilebilir bulundu (HTTP ${r.status}). Fiyat/miktar/rol gibi alanların sunucu-taraflı doğrulanıp doğrulanmadığı TEST EDİLMEDİ; bu davranışsal bir işarettir, gerçek bir açık olup olmadığı KESİNLİKLE manuel doğrulama gerektirir (dönen veri gösterilmez).`, confidence: 'low', severity: s.severity === 'high' ? 'medium' : s.severity, sideEffectRisk: 'none' });
+        findings.push({ check: 'business_logic', inputPoint: (() => { try { return new URL(url).pathname; } catch { return s.inputPoint; } })(), vulnerable: true, technique: t('PentAGI ajanı seçti + backend GET ile doğruladı', 'Von der Analyse-Engine ausgewählt + per Backend-GET verifiziert', 'Selected by the analysis engine + verified via backend GET'), evidence: t(`⚠️ DOLAYLI/ZAYIF GÖSTERGE — doğrudan zafiyet kanıtı DEĞİLDİR. Tek dayanak: bu uç nokta PentAGI ajanınca iş-mantığı açısından aday seçildi ve backend GET ile erişilebilir bulundu (HTTP ${r.status}). Fiyat/miktar/rol gibi alanların sunucu-taraflı doğrulanıp doğrulanmadığı TEST EDİLMEDİ; bu davranışsal bir işarettir, gerçek bir açık olup olmadığı KESİNLİKLE manuel doğrulama gerektirir (dönen veri gösterilmez).`, `⚠️ INDIREKTER/SCHWACHER INDIKATOR — KEIN direkter Schwachstellennachweis. Einzige Grundlage: Dieser Endpunkt wurde von der Analyse-Engine als Geschäftslogik-Kandidat ausgewählt und per Backend-GET als erreichbar befunden (HTTP ${r.status}). Ob Felder wie Preis/Menge/Rolle serverseitig validiert werden, wurde NICHT GETESTET; dies ist ein Verhaltenshinweis, ob eine echte Lücke vorliegt, erfordert ZWINGEND eine manuelle Verifizierung (zurückgegebene Daten werden nicht angezeigt).`, `⚠️ INDIRECT/WEAK INDICATOR — NOT direct vulnerability evidence. Sole basis: this endpoint was selected by the analysis engine as a business-logic candidate and found reachable via backend GET (HTTP ${r.status}). Whether fields such as price/quantity/role are validated server-side was NOT TESTED; this is a behavioural sign, whether a real flaw exists REQUIRES manual verification (returned data is not shown).`), confidence: 'low', severity: s.severity === 'high' ? 'medium' : s.severity, sideEffectRisk: 'none' });
       }
     }
   }
@@ -1767,7 +1767,7 @@ export async function collectRaceMassAssignEvidence(host: string, locale: string
     if (r && r.status > 0 && !ctx.stopped) {
       const accepted = (r.status === 200 || r.status === 201 || r.status === 302) && !/(error|hata|invalid|geçersiz|reddedil|not allowed|zorunlu|required)/i.test(r.text.slice(0, 3000));
       if (accepted) {
-        findings.push({ check: 'race_massassign', inputPoint: label, vulnerable: true, technique: 'mass-assignment (extra isAdmin/role field)', evidence: `Kayıt/profil benzeri forma fazladan "isAdmin/role" alanları eklendiğinde istek açık bir reddedilme olmadan kabul edildi (HTTP ${r.status}). Mass-assignment (over-posting) göstergesi; yetki değişikliği TEYİT EDİLMEDİ (sadece ilk yanıt gözlemlendi).`, confidence: 'low', severity: 'medium', sideEffectRisk: 'possible' });
+        findings.push({ check: 'race_massassign', inputPoint: label, vulnerable: true, technique: 'mass-assignment (extra isAdmin/role field)', evidence: t(`Kayıt/profil benzeri forma fazladan "isAdmin/role" alanları eklendiğinde istek açık bir reddedilme olmadan kabul edildi (HTTP ${r.status}). Mass-assignment (over-posting) göstergesi; yetki değişikliği TEYİT EDİLMEDİ (sadece ilk yanıt gözlemlendi).`, `Als einem registrierungs-/profilähnlichen Formular zusätzliche "isAdmin/role"-Felder hinzugefügt wurden, wurde die Anfrage ohne ausdrückliche Ablehnung akzeptiert (HTTP ${r.status}). Ein Mass-Assignment-(Over-Posting)-Indikator; eine Rechteänderung wurde NICHT BESTÄTIGT (nur die erste Antwort wurde beobachtet).`, `When extra "isAdmin/role" fields were added to a registration/profile-like form, the request was accepted without an explicit rejection (HTTP ${r.status}). A mass-assignment (over-posting) indicator; a privilege change was NOT CONFIRMED (only the first response was observed).`), confidence: 'low', severity: 'medium', sideEffectRisk: 'possible' });
       }
     }
   }
@@ -1783,7 +1783,7 @@ export async function collectRaceMassAssignEvidence(host: string, locale: string
       if (!url) continue;
       const r = await ctx.fetchOnce(url); // GET-only gozlem
       if (r && r.status > 0 && r.status < 500 && !/oturum|login|giriş yap|unauthorized|403|yetkisiz/i.test(r.text.slice(0, 1500))) {
-        findings.push({ check: 'race_massassign', inputPoint: (() => { try { return new URL(url).pathname; } catch { return s.inputPoint; } })(), vulnerable: true, technique: 'PentAGI ajanı seçti + backend GET ile gözlemledi', evidence: `⚠️ DOLAYLI/ZAYIF GÖSTERGE — doğrudan zafiyet kanıtı DEĞİLDİR. Tek dayanak: bu uç nokta PentAGI ajanınca over-posting/eşzamanlılık açısından aday seçildi ve backend GET ile erişilebilir bulundu (HTTP ${r.status}). Yetki değişikliği/kupon tüketimi gibi kesin doğrulama yıkıcı olduğundan YAPILMADI; gerçek bir açık olup olmadığı manuel test gerektirir.`, confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
+        findings.push({ check: 'race_massassign', inputPoint: (() => { try { return new URL(url).pathname; } catch { return s.inputPoint; } })(), vulnerable: true, technique: t('PentAGI ajanı seçti + backend GET ile gözlemledi', 'Von der Analyse-Engine ausgewählt + per Backend-GET beobachtet', 'Selected by the analysis engine + observed via backend GET'), evidence: t(`⚠️ DOLAYLI/ZAYIF GÖSTERGE — doğrudan zafiyet kanıtı DEĞİLDİR. Tek dayanak: bu uç nokta PentAGI ajanınca over-posting/eşzamanlılık açısından aday seçildi ve backend GET ile erişilebilir bulundu (HTTP ${r.status}). Yetki değişikliği/kupon tüketimi gibi kesin doğrulama yıkıcı olduğundan YAPILMADI; gerçek bir açık olup olmadığı manuel test gerektirir.`, `⚠️ INDIREKTER/SCHWACHER INDIKATOR — KEIN direkter Schwachstellennachweis. Einzige Grundlage: Dieser Endpunkt wurde von der Analyse-Engine als Over-Posting-/Nebenläufigkeits-Kandidat ausgewählt und per Backend-GET als erreichbar befunden (HTTP ${r.status}). Eine eindeutige Bestätigung wie Rechteänderung/Coupon-Verbrauch wurde NICHT durchgeführt, da destruktiv; ob eine echte Lücke vorliegt, erfordert einen manuellen Test.`, `⚠️ INDIRECT/WEAK INDICATOR — NOT direct vulnerability evidence. Sole basis: this endpoint was selected by the analysis engine as an over-posting/concurrency candidate and found reachable via backend GET (HTTP ${r.status}). Definitive confirmation such as privilege change/coupon consumption was NOT performed as it is destructive; whether a real flaw exists requires a manual test.`), confidence: 'low', severity: 'low', sideEffectRisk: 'none' });
       }
     }
   }

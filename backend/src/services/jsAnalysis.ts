@@ -128,17 +128,17 @@ export async function fetchClientCorpus(host: string): Promise<ClientCorpus> {
 }
 
 // ============================ A) GERÇEK SIRLAR ============================
-const REAL_SECRET_RULES: Array<{ id: string; re: RegExp; why: string; whyEn: string }> = [
-  { id: 'private_key', re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/g, why: 'Özel anahtar (private key) — imzalama/şifre çözme yetkisi verir.', whyEn: 'Private key — grants signing/decryption authority.' },
-  { id: 'aws_akia', re: /\bAKIA[0-9A-Z]{16}\b/g, why: 'AWS erişim anahtarı kimliği (AKIA…) — AWS hesabına programatik erişim.', whyEn: 'AWS access key id (AKIA…) — programmatic access to the AWS account.' },
-  { id: 'gcp_service_account', re: /"type"\s*:\s*"service_account"[\s\S]{0,400}?"private_key"\s*:\s*"-----BEGIN/g, why: 'Google Cloud service-account JSON (private_key içeriyor) — sunucu kimliği.', whyEn: 'Google Cloud service-account JSON (contains private_key) — server identity.' },
-  { id: 'stripe_secret', re: /\bsk_live_[0-9a-zA-Z]{20,}\b/g, why: 'Stripe GİZLİ anahtarı (sk_live_) — ödeme hesabında tam yetki (publishable pk_ İLE KARIŞTIRMA).', whyEn: 'Stripe SECRET key (sk_live_) — full authority on the payment account (do NOT confuse with the publishable pk_).' },
-  { id: 'github_token', re: /\bgh[posru]_[0-9A-Za-z]{36,}\b/g, why: 'GitHub kişisel erişim/uygulama token’ı — depo/kod erişimi.', whyEn: 'GitHub personal-access/app token — repository/code access.' },
-  { id: 'gitlab_token', re: /\bglpat-[0-9A-Za-z_-]{20,}\b/g, why: 'GitLab kişisel erişim token’ı.', whyEn: 'GitLab personal-access token.' },
-  { id: 'slack_token', re: /\bxox[baprs]-[0-9A-Za-z-]{10,}\b/g, why: 'Slack API token’ı — çalışma alanı erişimi.', whyEn: 'Slack API token — workspace access.' },
-  { id: 'db_conn_string', re: /\b(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis|amqps?):\/\/[^\s"'`]+:[^\s"'`@]+@[^\s"'`/]+/gi, why: 'Kimlik bilgili veritabanı/servis bağlantı dizesi (kullanıcı:parola@host) — doğrudan erişim.', whyEn: 'Database/service connection string with credentials (user:password@host) — direct access.' },
-  { id: 'sendgrid_key', re: /\bSG\.[0-9A-Za-z_-]{16,}\.[0-9A-Za-z_-]{16,}\b/g, why: 'SendGrid API anahtarı — e-posta gönderim yetkisi.', whyEn: 'SendGrid API key — e-mail sending authority.' },
-  { id: 'twilio_key', re: /\bSK[0-9a-fA-F]{32}\b/g, why: 'Twilio API anahtarı göstergesi.', whyEn: 'Twilio API key indicator.' },
+const REAL_SECRET_RULES: Array<{ id: string; re: RegExp; why: string; whyEn: string; whyDe: string }> = [
+  { id: 'private_key', re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/g, why: 'Özel anahtar (private key) — imzalama/şifre çözme yetkisi verir.', whyEn: 'Private key — grants signing/decryption authority.', whyDe: 'Privater Schlüssel — gewährt Signier-/Entschlüsselungsbefugnis.' },
+  { id: 'aws_akia', re: /\bAKIA[0-9A-Z]{16}\b/g, why: 'AWS erişim anahtarı kimliği (AKIA…) — AWS hesabına programatik erişim.', whyEn: 'AWS access key id (AKIA…) — programmatic access to the AWS account.', whyDe: 'AWS-Access-Key-ID (AKIA…) — programmatischer Zugriff auf das AWS-Konto.' },
+  { id: 'gcp_service_account', re: /"type"\s*:\s*"service_account"[\s\S]{0,400}?"private_key"\s*:\s*"-----BEGIN/g, why: 'Google Cloud service-account JSON (private_key içeriyor) — sunucu kimliği.', whyEn: 'Google Cloud service-account JSON (contains private_key) — server identity.', whyDe: 'Google-Cloud-Service-Account-JSON (enthält private_key) — Serveridentität.' },
+  { id: 'stripe_secret', re: /\bsk_live_[0-9a-zA-Z]{20,}\b/g, why: 'Stripe GİZLİ anahtarı (sk_live_) — ödeme hesabında tam yetki (publishable pk_ İLE KARIŞTIRMA).', whyEn: 'Stripe SECRET key (sk_live_) — full authority on the payment account (do NOT confuse with the publishable pk_).', whyDe: 'Stripe-GEHEIM-Schlüssel (sk_live_) — volle Befugnis über das Zahlungskonto (NICHT mit dem Publishable pk_ verwechseln).' },
+  { id: 'github_token', re: /\bgh[posru]_[0-9A-Za-z]{36,}\b/g, why: 'GitHub kişisel erişim/uygulama token’ı — depo/kod erişimi.', whyEn: 'GitHub personal-access/app token — repository/code access.', whyDe: 'GitHub-Personal-Access-/App-Token — Repository-/Code-Zugriff.' },
+  { id: 'gitlab_token', re: /\bglpat-[0-9A-Za-z_-]{20,}\b/g, why: 'GitLab kişisel erişim token’ı.', whyEn: 'GitLab personal-access token.', whyDe: 'GitLab-Personal-Access-Token.' },
+  { id: 'slack_token', re: /\bxox[baprs]-[0-9A-Za-z-]{10,}\b/g, why: 'Slack API token’ı — çalışma alanı erişimi.', whyEn: 'Slack API token — workspace access.', whyDe: 'Slack-API-Token — Workspace-Zugriff.' },
+  { id: 'db_conn_string', re: /\b(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis|amqps?):\/\/[^\s"'`]+:[^\s"'`@]+@[^\s"'`/]+/gi, why: 'Kimlik bilgili veritabanı/servis bağlantı dizesi (kullanıcı:parola@host) — doğrudan erişim.', whyEn: 'Database/service connection string with credentials (user:password@host) — direct access.', whyDe: 'Datenbank-/Dienst-Verbindungszeichenfolge mit Anmeldedaten (user:password@host) — direkter Zugriff.' },
+  { id: 'sendgrid_key', re: /\bSG\.[0-9A-Za-z_-]{16,}\.[0-9A-Za-z_-]{16,}\b/g, why: 'SendGrid API anahtarı — e-posta gönderim yetkisi.', whyEn: 'SendGrid API key — e-mail sending authority.', whyDe: 'SendGrid-API-Schlüssel — Befugnis zum E-Mail-Versand.' },
+  { id: 'twilio_key', re: /\bSK[0-9a-fA-F]{32}\b/g, why: 'Twilio API anahtarı göstergesi.', whyEn: 'Twilio API key indicator.', whyDe: 'Twilio-API-Schlüssel-Indikator.' },
 ];
 
 // PUBLIC-BY-DESIGN (istismar edilebilir SIR DEĞİL) — bulgu değil, "bilgilendirici" olarak etiketlenir.
@@ -251,8 +251,8 @@ export async function collectJsAnalysisEvidence(host: string, locale: string = '
           const sample = [...sources.matchAll(/"([^"]*(?:src|app|components?|pages?|services?)[^"]*\.[jt]sx?)"/gi)].slice(0, 3).map((m) => m[1]);
           findings.push({
             check: 'source_map_exposure', inputPoint: new URL(mapUrl).pathname, vulnerable: true,
-            technique: (en ? 'source-map accessibility' : 'source-map erişilebilirliği'),
-            evidence: (en ? `Accessible source-map (${new URL(mapUrl).pathname}) — the original source tree is exposed (${srcCount} source files${sample.length ? `; e.g. ${sample.join(', ')}` : ''}). Internal file paths/comments can leak.` : `Erişilebilir source-map (${new URL(mapUrl).pathname}) — orijinal kaynak ağacı ifşa oluyor (${srcCount} kaynak dosya${sample.length ? `; ör. ${sample.join(', ')}` : ''}). İç dosya yolları/yorumlar sızabilir.`),
+            technique: (en ? 'source-map accessibility' : de ? 'Source-Map-Zugänglichkeit' : 'source-map erişilebilirliği'),
+            evidence: (en ? `Accessible source-map (${new URL(mapUrl).pathname}) — the original source tree is exposed (${srcCount} source files${sample.length ? `; e.g. ${sample.join(', ')}` : ''}). Internal file paths/comments can leak.` : de ? `Zugängliche Source-Map (${new URL(mapUrl).pathname}) — der ursprüngliche Quellbaum wird offengelegt (${srcCount} Quelldateien${sample.length ? `; z. B. ${sample.join(', ')}` : ''}). Interne Dateipfade/Kommentare können abfließen.` : `Erişilebilir source-map (${new URL(mapUrl).pathname}) — orijinal kaynak ağacı ifşa oluyor (${srcCount} kaynak dosya${sample.length ? `; ör. ${sample.join(', ')}` : ''}). İç dosya yolları/yorumlar sızabilir.`),
             confidence: 'high', severity: 'low', sideEffectRisk: 'none',
           });
         }
@@ -266,8 +266,8 @@ export async function collectJsAnalysisEvidence(host: string, locale: string = '
         const v = matchVuln(lib.lib, lib.version);
         if (v) findings.push({
           check: 'vulnerable_js_lib', inputPoint: `${lib.display} ${lib.version}`, vulnerable: true,
-          technique: (en ? 'version-based library vulnerability indicator (retire.js logic)' : 'sürüm-tabanlı kütüphane zafiyet göstergesi (retire.js mantığı)'),
-          evidence: (en ? `${lib.display} version ${lib.version} was detected — a known vulnerability exists in this version: ${v.cves}. ${v.note}. A version-based indicator; **patch/backport confirmation is required** (your distribution may be patched).` : `${lib.display} sürüm ${lib.version} tespit edildi — bu sürümde bilinen güvenlik açığı: ${v.cves}. ${v.note}. Sürüm-tabanlı göstergedir; **yama/backport teyidi gerekir** (dağıtımınız yamalı olabilir).`),
+          technique: (en ? 'version-based library vulnerability indicator (retire.js logic)' : de ? 'versionsbasierter Bibliotheks-Schwachstellen-Indikator (retire.js-Logik)' : 'sürüm-tabanlı kütüphane zafiyet göstergesi (retire.js mantığı)'),
+          evidence: (en ? `${lib.display} version ${lib.version} was detected — a known vulnerability exists in this version: ${v.cves}. ${v.note}. A version-based indicator; **patch/backport confirmation is required** (your distribution may be patched).` : de ? `${lib.display} Version ${lib.version} wurde erkannt — in dieser Version besteht eine bekannte Schwachstelle: ${v.cves}. ${v.note}. Ein versionsbasierter Indikator; **eine Patch-/Backport-Bestätigung ist erforderlich** (Ihre Distribution könnte gepatcht sein).` : `${lib.display} sürüm ${lib.version} tespit edildi — bu sürümde bilinen güvenlik açığı: ${v.cves}. ${v.note}. Sürüm-tabanlı göstergedir; **yama/backport teyidi gerekir** (dağıtımınız yamalı olabilir).`),
           confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
         });
       }
@@ -283,8 +283,8 @@ export async function collectJsAnalysisEvidence(host: string, locale: string = '
       const v = matchVuln(lib.lib, lib.version);
       if (v) findings.push({
         check: 'vulnerable_js_lib', inputPoint: `${lib.display} ${lib.version} (CDN)`, vulnerable: true,
-        technique: (en ? 'version-based library vulnerability indicator (external CDN, version from URL)' : 'sürüm-tabanlı kütüphane zafiyet göstergesi (harici CDN, URL’den sürüm)'),
-        evidence: (en ? `${lib.display} version ${lib.version} (external CDN) — known vulnerability: ${v.cves}. ${v.note}. A version-based indicator; patch confirmation is required.` : `${lib.display} sürüm ${lib.version} (harici CDN) — bilinen güvenlik açığı: ${v.cves}. ${v.note}. Sürüm-tabanlı göstergedir; yama teyidi gerekir.`),
+        technique: (en ? 'version-based library vulnerability indicator (external CDN, version from URL)' : de ? 'versionsbasierter Bibliotheks-Schwachstellen-Indikator (externes CDN, Version aus URL)' : 'sürüm-tabanlı kütüphane zafiyet göstergesi (harici CDN, URL’den sürüm)'),
+        evidence: (en ? `${lib.display} version ${lib.version} (external CDN) — known vulnerability: ${v.cves}. ${v.note}. A version-based indicator; patch confirmation is required.` : de ? `${lib.display} Version ${lib.version} (externes CDN) — bekannte Schwachstelle: ${v.cves}. ${v.note}. Ein versionsbasierter Indikator; eine Patch-Bestätigung ist erforderlich.` : `${lib.display} sürüm ${lib.version} (harici CDN) — bilinen güvenlik açığı: ${v.cves}. ${v.note}. Sürüm-tabanlı göstergedir; yama teyidi gerekir.`),
         confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
       });
     }
@@ -320,8 +320,8 @@ function scanSecrets(text: string, where: string, findings: VFinding[], publicSe
     if (m) {
       findings.push({
         check: 'js_secret', inputPoint: `${where}:${rule.id}`, vulnerable: true,
-        technique: (en ? 'JS bundle static secret scan (regex)' : 'JS bundle statik sır taraması (regex)'),
-        evidence: (en ? `An indicator of a sensitive secret inside \`${where}\`: ${rule.whyEn} (Value REDACTED: \`${redact(m[0])}\`.) Client JS is public; a real secret here can be captured — it should be rotated/invalidated immediately.` : `\`${where}\` içinde hassas sır göstergesi: ${rule.why} (Değer REDAKTE: \`${redact(m[0])}\`.) İstemci JS'i herkese açıktır; buradaki gerçek sır ele geçirilebilir — derhal döndürülmeli/geçersizleştirilmeli.`),
+        technique: (en ? 'JS bundle static secret scan (regex)' : de ? 'JS-Bundle-statischer-Geheimnis-Scan (Regex)' : 'JS bundle statik sır taraması (regex)'),
+        evidence: (en ? `An indicator of a sensitive secret inside \`${where}\`: ${rule.whyEn} (Value REDACTED: \`${redact(m[0])}\`.) Client JS is public; a real secret here can be captured — it should be rotated/invalidated immediately.` : de ? `Ein Indikator für ein sensibles Geheimnis in \`${where}\`: ${rule.whyDe} (Wert REDIGIERT: \`${redact(m[0])}\`.) Client-JS ist öffentlich; ein echtes Geheimnis hier kann erfasst werden — es sollte sofort rotiert/invalidiert werden.` : `\`${where}\` içinde hassas sır göstergesi: ${rule.why} (Değer REDAKTE: \`${redact(m[0])}\`.) İstemci JS'i herkese açıktır; buradaki gerçek sır ele geçirilebilir — derhal döndürülmeli/geçersizleştirilmeli.`),
         confidence: rule.id === 'private_key' || rule.id === 'gcp_service_account' || rule.id === 'db_conn_string' ? 'high' : 'medium',
         severity: 'high', sideEffectRisk: 'none',
       });

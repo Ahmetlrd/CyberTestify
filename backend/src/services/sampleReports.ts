@@ -187,21 +187,24 @@ function sampleKeyFor(packageKey: string): string {
 
 // (de LANSMANI) Almanca örnek gövde: <fileKey>.de.md varsa onu OKU; yoksa TR gövdeye düş
 // (chrome yine Almanca render edilir). Böylece Almanca sample .md dosyaları eklendikçe otomatik devreye girer.
-function readSampleMd(fileKey: string, de: boolean): string {
-  if (de) {
-    try { return readFileSync(join(SAMPLES_DIR, `${fileKey}.de.md`), 'utf-8'); } catch { /* yok -> TR fallback */ }
+function readSampleMd(fileKey: string, locale: 'tr' | 'en' | 'de'): string {
+  if (locale === 'de' || locale === 'en') {
+    try { return readFileSync(join(SAMPLES_DIR, `${fileKey}.${locale}.md`), 'utf-8'); } catch { /* yok -> TR fallback */ }
   }
   return readFileSync(join(SAMPLES_DIR, `${fileKey}.md`), 'utf-8');
 }
-function readSampleFixMd(fileKey: string, de: boolean): string {
-  if (de) {
-    try { return readFileSync(join(SAMPLES_DIR, `${fileKey}_fix.de.md`), 'utf-8'); } catch { /* yok -> TR fallback */ }
+function readSampleFixMd(fileKey: string, locale: 'tr' | 'en' | 'de'): string {
+  if (locale === 'de' || locale === 'en') {
+    try { return readFileSync(join(SAMPLES_DIR, `${fileKey}_fix.${locale}.md`), 'utf-8'); } catch { /* yok -> TR fallback */ }
   }
   return readFileSync(join(SAMPLES_DIR, `${fileKey}_fix.md`), 'utf-8');
 }
+function bundleName(b: { displayName: string; displayNameEn: string; displayNameDe: string }, locale: 'tr' | 'en' | 'de'): string {
+  return locale === 'de' ? b.displayNameDe : locale === 'en' ? b.displayNameEn : b.displayName;
+}
 
 export async function getSampleReportPdf(packageKey: string, locale: 'tr' | 'en' | 'de' = 'tr'): Promise<Buffer> {
-  const de = locale === 'de';
+  const de = locale === 'de', en = locale === 'en';
   // Istenen anahtar (paket veya bundle) + locale bazinda cache — ayni ornek md'yi paylassalar bile
   // baslik (packageName) farkli olabilir, o yuzden REQUEST anahtari+locale ile cache'leriz.
   const cacheKey = `${packageKey}|${locale}`;
@@ -223,21 +226,21 @@ export async function getSampleReportPdf(packageKey: string, locale: 'tr' | 'en'
   let metaPackageKey: string | undefined;
 
   if (real) {
-    md = readSampleMd(real.fileKey, de);
+    md = readSampleMd(real.fileKey, locale);
     packageName = bundle
-      ? (de ? bundle.displayNameDe : bundle.displayName)
+      ? bundleName(bundle, locale)
       : localizedPackage(getPackageDef(real.fileKey as Parameters<typeof getPackageDef>[0]), locale).displayName;
     fixMarkdown = config.aiFixFreeCampaign
-      ? readSampleFixMd(real.fileKey, de)
+      ? readSampleFixMd(real.fileKey, locale)
       : null;
     assessOverride = undefined; // gerçek gövde -> risk zaten parse edilir
     hostname = real.hostname;
     metaPackageKey = packageKey;
   } else {
     const sampleKey = bundle ? BUNDLE_SAMPLE[packageKey] ?? DEFAULT_SAMPLE : sampleKeyFor(packageKey);
-    md = readSampleMd(sampleKey, de);
+    md = readSampleMd(sampleKey, locale);
     packageName = bundle
-      ? (de ? bundle.displayNameDe : bundle.displayName)
+      ? bundleName(bundle, locale)
       : localizedPackage(getPackageDef(sampleKey as Parameters<typeof getPackageDef>[0]), locale).displayName;
     // (LANSMAN KAMPANYASI) örnek raporda AI Çözüm Önerileri bölümü AÇIK (temsili içerik). Kapanınca kilitli.
     fixMarkdown = config.aiFixFreeCampaign ? (SAMPLE_FIX_MD[sampleKey] ?? SAMPLE_FIX_MD[DEFAULT_SAMPLE]) : null;
@@ -258,6 +261,8 @@ export async function getSampleReportPdf(packageKey: string, locale: 'tr' | 'en'
   const sampleNotice = packageKey === 'bundle_full_pentest'
     ? (de
         ? 'Dieser Beispielbericht stammt aus einer absichtlich verwundbar belassenen Testanwendung. Bei echten Websites variieren Anzahl und Schweregrad der Befunde je nach Architektur des Ziels erheblich.'
+        : en
+        ? 'This sample report is taken from an intentionally vulnerable test application. On real websites the number and severity of findings vary considerably depending on the target\'s architecture.'
         : 'Bu örnek rapor, bilerek zafiyetli bırakılmış bir test uygulamasından alınmıştır. Gerçek sitelerde bulgu sayısı ve şiddeti hedefin mimarisine göre önemli ölçüde değişir.')
     : null;
   const pdf = await renderReportPdf(
