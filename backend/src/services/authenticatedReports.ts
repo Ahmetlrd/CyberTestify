@@ -49,6 +49,15 @@ const COOKIE_CFG = {
   fixFoundDe: ['Fügen Sie Sitzungscookies die Flags **Secure + HttpOnly + SameSite=Strict/Lax** hinzu.', 'HttpOnly verhindert das Auslesen des Cookies per JavaScript (XSS); Secure verhindert die Preisgabe über einfaches HTTP; SameSite reduziert CSRF.'],
   fixCleanDe: ['Erzwingen Sie bei Sitzungscookies proaktiv die Flags Secure/HttpOnly/SameSite.'],
   cleanGenelDe: 'Bei den Sitzungscookies wurde kein fehlendes Sicherheits-Flag beobachtet (oder die Sitzung ist nicht cookie-basiert).',
+  whatCheckedEn: [
+    'Among the cookies observed after login, only real **server session cookies** were assessed.',
+    'For each session cookie, the **Secure / HttpOnly / SameSite** security flags were checked.',
+    'Analytics/3rd-party cookies (_ga, _fbp, _clck etc.) are not counted as session cookies (HttpOnly is impossible on them) — they are not assessed.',
+  ],
+  fixTitleEn: 'Cookie Security',
+  fixFoundEn: ['Add the **Secure + HttpOnly + SameSite=Strict/Lax** flags to session cookies.', 'HttpOnly prevents the cookie being read via JavaScript (XSS); Secure prevents leakage over plain HTTP; SameSite reduces CSRF.'],
+  fixCleanEn: ['Proactively enforce Secure/HttpOnly/SameSite flags on session cookies.'],
+  cleanGenelEn: 'No missing security flag was observed on the session cookies (or the session is not cookie-based).',
 };
 const FIXATION_CFG = {
   title: 'Session Fixation', whatChecked: [
@@ -69,6 +78,15 @@ const FIXATION_CFG = {
   fixFoundDe: ['**Erneuern Sie** bei erfolgreichem Login unbedingt den Sitzungsbezeichner (Session Regeneration); machen Sie die vor dem Login vergebene ID ungültig.'],
   fixCleanDe: ['Standardisieren Sie die Erneuerung der Sitzungs-ID beim Login (Session Regeneration).'],
   cleanGenelDe: 'Da das Sitzungscookie nach dem Login erneuert wurde (oder die Sitzung nicht cookie-basiert ist), wurde kein Fixation-Indikator beobachtet.',
+  whatCheckedEn: [
+    'The session cookie value taken from the home page BEFORE login (unauthenticated) was observed.',
+    'It was **compared** with the session cookie value AFTER login (if equal, the server does not renew the session).',
+    'A single GET only; no state was changed.',
+  ],
+  fixTitleEn: 'Session Fixation',
+  fixFoundEn: ['**Always renew** the session identifier on successful login (session regeneration); invalidate the id issued before login.'],
+  fixCleanEn: ['Make session-id renewal (session regeneration) standard on login.'],
+  cleanGenelEn: 'Because the session cookie was renewed after login (or the session is not cookie-based), no fixation indicator was observed.',
 };
 const LOGOUT_CFG = {
   title: 'Logout / Oturum Geçersizleştirme', whatChecked: [
@@ -89,6 +107,15 @@ const LOGOUT_CFG = {
   fixFoundDe: ['**Machen Sie** das Sitzungs-Token beim Logout **serverseitig ungültig** (Revocation/Expiry); das clientseitige Löschen des Tokens allein genügt nicht.'],
   fixCleanDe: ['Wenden Sie eine serverseitige Sitzungsinvalidierung (Revocation) an.'],
   cleanGenelDe: 'Da die Sitzung nach dem Logout ungültig gemacht wurde (oder kein serverseitiger Logout-Endpunkt vorhanden ist), wurde kein Befund beobachtet.',
+  whatCheckedEn: [
+    'A protected endpoint (whoami/profile) that returns 200 with the session was identified.',
+    'A logout endpoint callable via GET was tried (**no POST** — no state change).',
+    'It was checked whether the protected endpoint can be accessed again with the SAME token AFTER logout.',
+  ],
+  fixTitleEn: 'Session Invalidation',
+  fixFoundEn: ['**Invalidate the session token server-side** on logout (revocation/expiry); client-side token deletion alone is not enough.'],
+  fixCleanEn: ['Apply server-side session invalidation (revocation).'],
+  cleanGenelEn: 'Because the session was invalidated after logout (or there is no server-side logout endpoint), no finding was observed.',
 };
 const FORCED_CFG = {
   title: 'Forced Browsing / Fonksiyon-Seviye Yetki', whatChecked: [
@@ -109,6 +136,15 @@ const FORCED_CFG = {
   fixFoundDe: ['Wenden Sie an jedem Verwaltungs-/sensiblen Endpunkt eine **serverseitige Rollen-/Berechtigungsprüfung** an; ein bloßes Ausblenden in der UI genügt nicht.'],
   fixCleanDe: ['Schützen Sie Verwaltungs-Endpunkte durch serverseitige Rollenprüfung (proaktiv).'],
   cleanGenelDe: 'Es wurde kein Admin-/Verwaltungs-Endpunkt beobachtet, der mit einer niedrig privilegierten Sitzung erreichbar war.',
+  whatCheckedEn: [
+    'A **GET** request was sent to common admin/management endpoints with the session of the AVAILABLE (presumably low-privilege) test account.',
+    'To avoid false positives, only 200s returning content/JSON **DIFFERENT** from the home-page shell were counted as a finding.',
+    'A single attempt, GET-only, subject to the circuit breaker.',
+  ],
+  fixTitleEn: 'Function-Level Authorization',
+  fixFoundEn: ['Apply a **server-side role/permission check** on every management/sensitive endpoint; hiding in the UI alone is not enough.'],
+  fixCleanEn: ['Protect management endpoints with a server-side role check (proactive).'],
+  cleanGenelEn: 'No admin/management endpoint reachable with a low-privilege session was observed.',
 };
 
 // (İş A) NE KONTROL EDİLDİ ilk satırı advisor durumuna göre koşullu: KAPALI (varsayılan) -> deterministik dil;
@@ -121,6 +157,10 @@ const MULTISTEP_WC_DET = '**Deterministik olarak** çok-adımlı akış/fiyat-ku
 const MULTISTEP_WC_AI = '**Otonom Analiz Motoru** (yalnız JSON öneri) çok-adımlı akış/fiyat-kupon alanı seçti; backend YALNIZ **GET-gözlem** yaptı.';
 const MULTISTEP_WC_DET_DE = '**Deterministisch** wurde nach mehrstufigen Abläufen/Preis-Coupon-Feldern gesucht; das Backend führte NUR **GET-Beobachtung** durch.';
 const MULTISTEP_WC_AI_DE = 'Die **autonome Analyse-Engine** (nur JSON-Vorschlag) wählte mehrstufige Abläufe/Preis-Coupon-Felder aus; das Backend führte NUR **GET-Beobachtung** durch.';
+const PRIVESC_WC_DET_EN = 'The discovered authenticated surface was searched **deterministically** for forms/APIs with a privilege field (registration/profile/settings type).';
+const PRIVESC_WC_AI_EN = 'The **Autonomous Analysis Engine** (JSON suggestion only; sends no direct HTTP) selected forms/APIs with a privilege field from the discovered authenticated surface.';
+const MULTISTEP_WC_DET_EN = 'Multi-step flows/price-coupon fields were searched for **deterministically**; the backend performed **GET observation** ONLY.';
+const MULTISTEP_WC_AI_EN = 'The **Autonomous Analysis Engine** (JSON suggestion only) selected multi-step flows/price-coupon fields; the backend performed **GET observation** ONLY.';
 const PRIVESC_CFG = {
   title: 'Yetki Yükseltme (Privilege Escalation)', whatChecked: [
     PRIVESC_WC_DET,
@@ -142,6 +182,16 @@ const PRIVESC_CFG = {
   fixFoundDe: ['Binden Sie bei der Modellbindung per **Allowlist** nur erlaubte Felder; nehmen Sie Felder wie `role/isAdmin` NIEMALS vom Client entgegen.', 'Nehmen Sie die Rollenzuweisung serverseitig nur in autorisierten Abläufen vor.'],
   fixCleanDe: ['Wenden Sie Mass-Assignment-Schutz (Feld-Allowlist) an; akzeptieren Sie Rollen-/Berechtigungsfelder nicht vom Client (proaktiv).'],
   cleanGenelDe: 'Es wurde kein geeignetes Registrierungs-/Profilformular gefunden oder die `role/isAdmin`-Mass-Assignment-Sonde wurde nicht akzeptiert.',
+  whatCheckedEn: [
+    PRIVESC_WC_DET_EN,
+    'If a safely testable surface was found, ONE observational mass-assignment probe (`role/isAdmin` extra field) was applied with a **safe, authenticated-light** function.',
+    '⚠️ No real escalation was COMPLETED; no re-login with elevated privilege; the session was not left; account-changing/checkout targets were **not written to** (code-level blocklist).',
+  ],
+  confidenceNoteEn: 'The mass-assignment indicator was derived only from the first response (low confidence); definitive verification requires a manual test.',
+  fixTitleEn: 'Privilege Escalation / Mass-Assignment',
+  fixFoundEn: ['Bind only permitted fields with an **allowlist** in model binding; NEVER accept fields like `role/isAdmin` from the client.', 'Perform role assignment server-side only in authorized flows.'],
+  fixCleanEn: ['Apply mass-assignment protection (field allowlist); do not accept role/privilege fields from the client (proactive).'],
+  cleanGenelEn: 'No suitable registration/profile form was found, or the `role/isAdmin` mass-assignment probe was not accepted.',
 };
 const MULTISTEP_CFG = {
   title: 'Çok-Adımlı İş Mantığı', whatChecked: [
@@ -164,6 +214,16 @@ const MULTISTEP_CFG = {
   fixFoundDe: ['Verarbeiten Sie Preis-/Mengen-/Rabatt-/Coupon-Werte **niemals** mit dem vom Client gelieferten Wert; berechnen/validieren Sie sie serverseitig neu.', 'Erzwingen Sie in mehrstufigen Abläufen die Vorbedingung jedes Schritts serverseitig; verbrauchen Sie Coupons atomar als Einmal-Gebrauch.'],
   fixCleanDe: ['Validieren Sie kritische Werte serverseitig; wenden Sie eine Schrittreihenfolge- + Coupon-Wiederverwendungsprüfung an (proaktiv).'],
   cleanGenelDe: 'Es wurde kein beobachtbares clientseitiges Preis-/Coupon-Feld oder ein direkt erreichbarer „Bestätigungs"-Schritt gefunden.',
+  whatCheckedEn: [
+    MULTISTEP_WC_DET_EN,
+    'A client-modifiable hidden price/quantity/coupon field + a "confirmation" step reachable without a precondition were observed.',
+    '⚠️ Only up to the cart/form; **payment/checkout NOT completed** (code-level blocklist); no resource was consumed.',
+  ],
+  confidenceNoteEn: 'Business-logic vulnerabilities are context-specific; this check is at the surface/indicator level.',
+  fixTitleEn: 'Multi-Step Business Logic',
+  fixFoundEn: ['**Never** process price/quantity/discount/coupon values with the value coming from the client; recompute/validate them server-side.', 'Enforce the precondition of each step server-side in multi-step flows; consume coupons atomically as single-use.'],
+  fixCleanEn: ['Validate critical values server-side; apply step-order + coupon-reuse control (proactive).'],
+  cleanGenelEn: 'No observable client-side price/coupon field or directly reachable "confirmation" step was found.',
 };
 
 const JWT_CFG = {
@@ -187,6 +247,16 @@ const JWT_CFG = {
   fixFoundDe: ['**Fixieren Sie** den Signaturalgorithmus serverseitig (z. B. nur RS256/HS256); LEHNEN Sie `alg=none` und clientseitig gewählte Algorithmen AB.', 'Machen Sie das JWT-Signaturgeheimnis **stark/zufällig** (256-Bit+); legen Sie sensible Daten wie Geheimnis/Passwort NICHT in den Token-Körper (der JWT-Körper ist nicht verschlüsselt).', 'Fügen Sie dem Token `exp` (kurze Lebensdauer) hinzu; stützen Sie kritische Berechtigungs-/Rollenentscheidungen auf serverseitige Validierung statt auf Client-Claims.'],
   fixCleanDe: ['Fixieren Sie den Signaturalgorithmus, verwenden Sie ein starkes Geheimnis, fügen Sie `exp` hinzu und tragen Sie keine sensiblen Claims (proaktiv).'],
   cleanGenelDe: 'Es wurde kein JWT/Token-Sicherheitsindikator gefunden oder die Sitzung trägt kein JWT.',
+  whatCheckedEn: [
+    'If the session carries a **JWT bearer**, the token was decoded and analysed OFFLINE: the signature algorithm (**alg=none / unsigned**), whether the signing secret is **weak/common** (OFFLINE verification with common secrets), and **sensitive/excessive claims** in the token body (password/secret, role/privilege).',
+    'In addition, a SINGLE harmless observation: whether an unsigned (alg=none) forged token is ACCEPTED at a protected endpoint (observation only; the access was not used).',
+    '⚠️ No real exploitation — no token takeover/privilege escalation; only the security indicator was reported.',
+  ],
+  confidenceNoteEn: 'Weak-secret and alg=none ACCEPTANCE indicators are definitive (high confidence); claim observations are informational.',
+  fixTitleEn: 'JWT / Token Security',
+  fixFoundEn: ['**Pin** the signature algorithm server-side (e.g. RS256/HS256 only); REJECT `alg=none` and client-chosen alg.', 'Make the JWT signing secret **strong/random** (256-bit+); do NOT place sensitive data such as a secret/password in the token body (the JWT body is not encrypted).', 'Add `exp` (short-lived) to the token; base critical privilege/role decisions on server-side validation, not on client claims.'],
+  fixCleanEn: ['Pin the signature algorithm, use a strong secret, add `exp` and carry no sensitive claims (proactive).'],
+  cleanGenelEn: 'No JWT/token security indicator was found, or the session does not carry a JWT.',
 };
 
 const LOGIN_BYPASS_CFG = {
@@ -210,6 +280,16 @@ const LOGIN_BYPASS_CFG = {
   fixFoundDe: ['Verwenden Sie in Authentifizierungsabfragen **parametrisierte Abfragen / Prepared Statements**; fügen Sie Benutzereingaben niemals direkt in SQL ein.', 'Eingabevalidierung + sichere ORM-APIs; geben Sie bei fehlerhaftem Login eine einheitliche Fehlermeldung zurück.'],
   fixCleanDe: ['Wenden Sie parametrisierte Abfragen + Eingabevalidierung an (proaktiv); sichern Sie den Authentifizierungsablauf gegen SQLi ab.'],
   cleanGenelDe: 'Es wurde kein Login-Bypass-(SQLi-)Indikator gefunden oder es gab keinen prüfbaren Login-Endpunkt.',
+  whatCheckedEn: [
+    'The login endpoint was first sent **invalid credentials** (control); then classic SQLi payloads (`\' OR \'1\'=\'1` etc.) were tried and it was observed whether — contrary to the control — a session/success (token/2xx) was returned.',
+    'The login POST is already a permitted flow; it is a SINGLE, harmless observation.',
+    '⚠️ No session takeover/exploitation — only the observation of "whether an authentication-bypass indicator is present".',
+  ],
+  confidenceNoteEn: 'The indicator is based on comparison with the control attempt; definitive verification requires a manual test.',
+  fixTitleEn: 'Login Bypass / SQL Injection',
+  fixFoundEn: ['Use **parameterised queries / prepared statements** in authentication queries; never place user input directly into SQL.', 'Input validation + safe ORM APIs; return a uniform error message on failed login.'],
+  fixCleanEn: ['Apply parameterised queries + input validation (proactive); close the authentication flow to SQLi.'],
+  cleanGenelEn: 'No login-bypass (SQLi) indicator was found, or there was no testable login endpoint.',
 };
 
 // (blocker fix — part 2) Aktif Doğrulama'nın (login'siz) şablonundan MİRAS kalan "kimlik doğrulaması
@@ -965,10 +1045,10 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   // (FAZ D) SINIRLI/KONTROLLÜ AJAN KATMANI — priv-esc + çok-adımlı iş mantığı (ajan öneri, backend uygular).
   const privEv = await collectPrivilegeEscalationEvidence(host, session, locale).catch(() => null);
   // (İş A) advisor AÇIK (analyzed) ise AI-danışma dili; KAPALI (varsayılan) ise deterministik dil.
-  const privCfg = privEv?.agentStatus === 'analyzed' ? { ...PRIVESC_CFG, whatChecked: [PRIVESC_WC_AI, ...PRIVESC_CFG.whatChecked.slice(1)], whatCheckedDe: [PRIVESC_WC_AI_DE, ...(PRIVESC_CFG.whatCheckedDe ?? []).slice(1)] } : PRIVESC_CFG;
+  const privCfg = privEv?.agentStatus === 'analyzed' ? { ...PRIVESC_CFG, whatChecked: [PRIVESC_WC_AI, ...PRIVESC_CFG.whatChecked.slice(1)], whatCheckedDe: [PRIVESC_WC_AI_DE, ...(PRIVESC_CFG.whatCheckedDe ?? []).slice(1)], whatCheckedEn: [PRIVESC_WC_AI_EN, ...(PRIVESC_CFG.whatCheckedEn ?? []).slice(1)] } : PRIVESC_CFG;
   runs.push({ title: T('Yetki Yükseltme (Privilege Escalation)'), conf: 'Orta', rep: privEv ? buildActiveCheckReport(privEv, privCfg, locale) : null, inputs: privEv?.inputsFound ?? 0, probes: privEv?.probesSent ?? 0, fc: privEv?.findings.length ?? 0, agentCheck: true, agentUsed: privEv?.agentUsed ?? false, agentStatus: privEv?.agentStatus });
   const multiEv = await collectMultiStepBusinessLogicEvidence(host, session, locale).catch(() => null);
-  const multiCfg = multiEv?.agentStatus === 'analyzed' ? { ...MULTISTEP_CFG, whatChecked: [MULTISTEP_WC_AI, ...MULTISTEP_CFG.whatChecked.slice(1)], whatCheckedDe: [MULTISTEP_WC_AI_DE, ...(MULTISTEP_CFG.whatCheckedDe ?? []).slice(1)] } : MULTISTEP_CFG;
+  const multiCfg = multiEv?.agentStatus === 'analyzed' ? { ...MULTISTEP_CFG, whatChecked: [MULTISTEP_WC_AI, ...MULTISTEP_CFG.whatChecked.slice(1)], whatCheckedDe: [MULTISTEP_WC_AI_DE, ...(MULTISTEP_CFG.whatCheckedDe ?? []).slice(1)], whatCheckedEn: [MULTISTEP_WC_AI_EN, ...(MULTISTEP_CFG.whatCheckedEn ?? []).slice(1)] } : MULTISTEP_CFG;
   runs.push({ title: T('Çok-Adımlı İş Mantığı'), conf: 'Düşük', rep: multiEv ? buildActiveCheckReport(multiEv, multiCfg, locale) : null, inputs: multiEv?.inputsFound ?? 0, probes: multiEv?.probesSent ?? 0, fc: multiEv?.findings.length ?? 0, agentCheck: true, agentUsed: multiEv?.agentUsed ?? false, agentStatus: multiEv?.agentStatus });
   const advisorActive = privEv?.agentStatus === 'analyzed' || multiEv?.agentStatus === 'analyzed'; // (İş A) tek bayrak
   // (İŞ 3) JWT/token güvenliği + giriş baypası (SQLi göstergesi) — deterministik, gözlemsel.
