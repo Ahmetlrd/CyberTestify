@@ -8,8 +8,24 @@
  */
 import crypto from 'node:crypto';
 import { cachedOriginUrl } from './surfaceEvidence.js';
-import { ProbeCtx, type ActiveCheckEvidence, type VFinding } from './activeVerifyEvidence.js';
+import { ProbeCtx, discoverSurface, formCategory, type ActiveCheckEvidence, type VFinding } from './activeVerifyEvidence.js';
 import { type AuthSession, applyAuthHeaders } from './authSession.js';
+
+// (C — sağlamlaştırma) Sabit `/rest/user/login` VARSAYIMI yerine, keşfedilen form/endpoint'lerden
+// GERÇEK login POST hedefini tespit et (S1 login-SQLi hard-gate deseniyle aynı yaklaşım). Salt-gözlem
+// (discoverSurface paylaşılan/cache'li crawl; ek yazma yok) — bulunanlar aday listesinin BAŞINA konur.
+async function discoverLoginTargets(host: string, session?: AuthSession): Promise<string[]> {
+  const surf = await discoverSurface(host, session).catch(() => null);
+  if (!surf?.ok) return [];
+  const urls = new Set<string>();
+  // (1) POST form'larından login-kategorili aksiyonlar (action + alan adlarına göre formCategory).
+  const byAction = new Map<string, Set<string>>();
+  for (const ip of surf.inputs) if (ip.method === 'POST' && ip.source === 'form') { if (!byAction.has(ip.action)) byAction.set(ip.action, new Set()); byAction.get(ip.action)!.add(ip.param); }
+  for (const [action, fieldSet] of byAction) if (formCategory(action, [...fieldSet]) === 'login') urls.add(action);
+  // (2) Gözlemlenen durum-değiştiren API uçlarından login-benzeri POST'lar (ör. "POST /rest/user/login").
+  for (const w of surf.apiWrites) { const m = w.match(/POST\s+(\/\S+)/i); if (m && /login|signin|sign-in|auth\/login|logon/i.test(m[1])) urls.add(`${cachedOriginUrl(host)}${m[1]}`); }
+  return [...urls].slice(0, 3);
+}
 
 function b64urlDecode(s: string): string {
   return Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
@@ -125,9 +141,12 @@ const LOGIN_FAIL_RE = /(invalid|hatal|geçersiz|unauthor|yanlış|incorrect|deni
 export async function collectLoginBypassEvidence(host: string, loginUrl?: string, locale: string = 'tr'): Promise<ActiveCheckEvidence> {
   const de = locale === 'de', en = locale === 'en';
   const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
-  // Login ucu: bilinen (full_pentest authLogin) VEYA yaygın adaylar.
+  // Login ucu: bilinen (full_pentest authLogin) → (C) KEŞFEDİLEN gerçek login hedefi → yaygın adaylar.
   const candidates: string[] = [];
   if (loginUrl) candidates.push(loginUrl);
+  // (C) Keşfedilen gerçek login POST hedefini sabit-liste ÖNCESİNE ekle (her hedefte doğru path'te denenir).
+  const discovered = await discoverLoginTargets(host).catch(() => [] as string[]);
+  for (const u of discovered) if (!candidates.includes(u)) candidates.push(u);
   for (const p of ['/rest/user/login', '/api/login', '/api/auth/login', '/api/users/login', '/login', '/auth/login']) {
     const u = `${cachedOriginUrl(host)}${p}`;
     if (!candidates.includes(u)) candidates.push(u);
@@ -173,6 +192,11 @@ export async function collectLoginBypassEvidence(host: string, loginUrl?: string
     // ucu /login.jsp bypass etmese de gerçek injectable /api/login sonraki adaydadır — erken durma).
   }
 
+  // (C) Metodoloji şeffaflığı: sabit `/rest/user/login` VARSAYIMI yerine gerçek login hedefinde denendiğini belirt.
+  if (testedEndpoint) {
+    const fromDiscovery = discovered.includes(testedEndpoint);
+    notes.push(t(`Klasik SQLi feragat probu GERÇEK login hedefinde denendi: \`${new URL(testedEndpoint).pathname}\`${fromDiscovery ? ' (site keşfinden tespit edildi)' : ''}. Sabit uç varsayımı yerine keşfedilen form/endpoint önceliklidir; kontrol-vs-payload karşılaştırması korunur, oturum ele geçirme yapılmaz.`, `Der klassische SQLi-Verzichtstest wurde am ECHTEN Login-Ziel durchgeführt: \`${new URL(testedEndpoint).pathname}\`${fromDiscovery ? ' (durch Site-Erkundung ermittelt)' : ''}. Statt einer festen Endpunkt-Annahme haben erkannte Formulare/Endpunkte Vorrang; der Kontroll-vs-Payload-Vergleich bleibt erhalten, es erfolgt keine Sitzungsübernahme.`, `The classic SQLi waiver probe was run against the REAL login target: \`${new URL(testedEndpoint).pathname}\`${fromDiscovery ? ' (identified via site discovery)' : ''}. Instead of assuming a fixed endpoint, discovered forms/endpoints take priority; the control-vs-payload comparison is preserved and no session takeover is performed.`));
+  }
   if (!testedEndpoint) notes.push(t('Test edilebilir bir giriş (login) ucu bulunamadı — giriş baypası göstergesi kontrolü uygulanamadı.', 'Es wurde kein testbarer Login-Endpunkt gefunden — die Prüfung auf einen Login-Umgehungs-Indikator konnte nicht durchgeführt werden.', 'No testable login endpoint was found — the login-bypass indicator check could not be performed.'));
   else if (!findings.length) notes.push(t('Giriş baypası (SQLi) göstergesi bulunamadı — SQLi payload’ları geçersiz kimlik denemesinden farklı bir sonuç üretmedi.', 'Es wurde kein Login-Umgehungs-Indikator (SQLi) gefunden — die SQLi-Payloads erzeugten kein anderes Ergebnis als ein ungültiger Anmeldeversuch.', 'No login-bypass (SQLi) indicator was found — the SQLi payloads produced no different result from an invalid credential attempt.'));
   return { ok: true, pagesScanned: 0, inputsFound: testedEndpoint ? 1 : 0, probesSent: ctx.sent, findings, stopped: ctx.stopped, notes };
