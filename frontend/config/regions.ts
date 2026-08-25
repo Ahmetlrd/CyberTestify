@@ -119,11 +119,11 @@ export function isRegionCode(v: string | undefined | null): v is RegionCode {
   return !!v && (REGION_CODES as readonly string[]).includes(v);
 }
 
-// GÖRÜNÜR BÖLGELER: tr + de (Almanya lansmanı — 2026-08-24 public çıkış: site/checkout/rapor/
-// e-posta uçtan uca Almanca, iyzico+EUR, Alman legal sayfaları hazır). us/ae config'i ve tüm
-// çok-bölge altyapısı DURUYOR — görünürlük kapalı. Bölge açmak için: bu listeye ekle + ilgili
-// REGIONS[...].legalReady'yi true yap. Kod SİLİNMEDİ.
-export const VISIBLE_REGION_CODES: readonly RegionCode[] = ['tr', 'de'];
+// GÖRÜNÜR BÖLGELER: tr + de + en. /en (İngiltere/UK) 2026-08-25 public çıkış: site/checkout/
+// rapor/e-posta uçtan uca İngilizce, iyzico+GBP (EUR fiyatlarının kur-çevrimi), UK legal
+// sayfaları (taslak). us/ae config'i DURUYOR — görünürlük kapalı. Bölge açmak için: bu listeye
+// ekle + ilgili REGIONS[...].legalReady'yi true yap. Kod SİLİNMEDİ.
+export const VISIBLE_REGION_CODES: readonly RegionCode[] = ['tr', 'de', 'en'];
 export function isVisibleRegion(v: string | undefined | null): v is RegionCode {
   return isRegionCode(v) && VISIBLE_REGION_CODES.includes(v);
 }
