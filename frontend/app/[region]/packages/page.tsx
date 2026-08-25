@@ -209,12 +209,6 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         : 'border-2 border-accent/40'
                     } ${b.comingSoon ? 'opacity-90' : ''}`}
                   >
-                    {/* (USOM/SGB — YALNIZCA /tr) Keşif paketine dikkat-çekici olgusal rozet; /de-/en'de yok. */}
-                    {tr && b.key === 'bundle_recon' && !b.comingSoon && (
-                      <span className="absolute -top-3 right-6 whitespace-nowrap rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white shadow-sm">
-                        USOM Eşleme
-                      </span>
-                    )}
                     {b.comingSoon ? (
                       <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
                         {t3('Yakında', 'Bald', 'Soon')}
@@ -242,8 +236,20 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         )}
                       </span>
                     ) : hasSaving ? (
-                      <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
-                        %{savedPct} {t3('avantaj', 'Rabatt', 'off')}
+                      <span className="absolute -top-3 left-6 flex items-center gap-1.5">
+                        <span className="whitespace-nowrap rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
+                          %{savedPct} {t3('avantaj', 'Rabatt', 'off')}
+                        </span>
+                        {/* (USOM/SGB — YALNIZCA /tr) Keşif kartı olgusal rozet; %avantaj ile aynı kümede (yeşil+amber uyumu). /de-/en'de yok. */}
+                        {tr && b.key === 'bundle_recon' && (
+                          <span className="whitespace-nowrap rounded-pill bg-accent px-2.5 py-1 text-xs font-bold text-white">
+                            USOM Eşleme
+                          </span>
+                        )}
+                      </span>
+                    ) : tr && b.key === 'bundle_recon' && !b.comingSoon ? (
+                      <span className="absolute -top-3 left-6 rounded-pill bg-accent px-3 py-1 text-xs font-bold text-white">
+                        USOM Eşleme
                       </span>
                     ) : null}
                     <h3 className="text-lg font-bold text-brand">{b.displayName}</h3>
