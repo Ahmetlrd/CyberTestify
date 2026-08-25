@@ -128,26 +128,26 @@ export async function fetchClientCorpus(host: string): Promise<ClientCorpus> {
 }
 
 // ============================ A) GERÇEK SIRLAR ============================
-const REAL_SECRET_RULES: Array<{ id: string; re: RegExp; why: string }> = [
-  { id: 'private_key', re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/g, why: 'Özel anahtar (private key) — imzalama/şifre çözme yetkisi verir.' },
-  { id: 'aws_akia', re: /\bAKIA[0-9A-Z]{16}\b/g, why: 'AWS erişim anahtarı kimliği (AKIA…) — AWS hesabına programatik erişim.' },
-  { id: 'gcp_service_account', re: /"type"\s*:\s*"service_account"[\s\S]{0,400}?"private_key"\s*:\s*"-----BEGIN/g, why: 'Google Cloud service-account JSON (private_key içeriyor) — sunucu kimliği.' },
-  { id: 'stripe_secret', re: /\bsk_live_[0-9a-zA-Z]{20,}\b/g, why: 'Stripe GİZLİ anahtarı (sk_live_) — ödeme hesabında tam yetki (publishable pk_ İLE KARIŞTIRMA).' },
-  { id: 'github_token', re: /\bgh[posru]_[0-9A-Za-z]{36,}\b/g, why: 'GitHub kişisel erişim/uygulama token’ı — depo/kod erişimi.' },
-  { id: 'gitlab_token', re: /\bglpat-[0-9A-Za-z_-]{20,}\b/g, why: 'GitLab kişisel erişim token’ı.' },
-  { id: 'slack_token', re: /\bxox[baprs]-[0-9A-Za-z-]{10,}\b/g, why: 'Slack API token’ı — çalışma alanı erişimi.' },
-  { id: 'db_conn_string', re: /\b(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis|amqps?):\/\/[^\s"'`]+:[^\s"'`@]+@[^\s"'`/]+/gi, why: 'Kimlik bilgili veritabanı/servis bağlantı dizesi (kullanıcı:parola@host) — doğrudan erişim.' },
-  { id: 'sendgrid_key', re: /\bSG\.[0-9A-Za-z_-]{16,}\.[0-9A-Za-z_-]{16,}\b/g, why: 'SendGrid API anahtarı — e-posta gönderim yetkisi.' },
-  { id: 'twilio_key', re: /\bSK[0-9a-fA-F]{32}\b/g, why: 'Twilio API anahtarı göstergesi.' },
+const REAL_SECRET_RULES: Array<{ id: string; re: RegExp; why: string; whyEn: string }> = [
+  { id: 'private_key', re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/g, why: 'Özel anahtar (private key) — imzalama/şifre çözme yetkisi verir.', whyEn: 'Private key — grants signing/decryption authority.' },
+  { id: 'aws_akia', re: /\bAKIA[0-9A-Z]{16}\b/g, why: 'AWS erişim anahtarı kimliği (AKIA…) — AWS hesabına programatik erişim.', whyEn: 'AWS access key id (AKIA…) — programmatic access to the AWS account.' },
+  { id: 'gcp_service_account', re: /"type"\s*:\s*"service_account"[\s\S]{0,400}?"private_key"\s*:\s*"-----BEGIN/g, why: 'Google Cloud service-account JSON (private_key içeriyor) — sunucu kimliği.', whyEn: 'Google Cloud service-account JSON (contains private_key) — server identity.' },
+  { id: 'stripe_secret', re: /\bsk_live_[0-9a-zA-Z]{20,}\b/g, why: 'Stripe GİZLİ anahtarı (sk_live_) — ödeme hesabında tam yetki (publishable pk_ İLE KARIŞTIRMA).', whyEn: 'Stripe SECRET key (sk_live_) — full authority on the payment account (do NOT confuse with the publishable pk_).' },
+  { id: 'github_token', re: /\bgh[posru]_[0-9A-Za-z]{36,}\b/g, why: 'GitHub kişisel erişim/uygulama token’ı — depo/kod erişimi.', whyEn: 'GitHub personal-access/app token — repository/code access.' },
+  { id: 'gitlab_token', re: /\bglpat-[0-9A-Za-z_-]{20,}\b/g, why: 'GitLab kişisel erişim token’ı.', whyEn: 'GitLab personal-access token.' },
+  { id: 'slack_token', re: /\bxox[baprs]-[0-9A-Za-z-]{10,}\b/g, why: 'Slack API token’ı — çalışma alanı erişimi.', whyEn: 'Slack API token — workspace access.' },
+  { id: 'db_conn_string', re: /\b(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis|amqps?):\/\/[^\s"'`]+:[^\s"'`@]+@[^\s"'`/]+/gi, why: 'Kimlik bilgili veritabanı/servis bağlantı dizesi (kullanıcı:parola@host) — doğrudan erişim.', whyEn: 'Database/service connection string with credentials (user:password@host) — direct access.' },
+  { id: 'sendgrid_key', re: /\bSG\.[0-9A-Za-z_-]{16,}\.[0-9A-Za-z_-]{16,}\b/g, why: 'SendGrid API anahtarı — e-posta gönderim yetkisi.', whyEn: 'SendGrid API key — e-mail sending authority.' },
+  { id: 'twilio_key', re: /\bSK[0-9a-fA-F]{32}\b/g, why: 'Twilio API anahtarı göstergesi.', whyEn: 'Twilio API key indicator.' },
 ];
 
 // PUBLIC-BY-DESIGN (istismar edilebilir SIR DEĞİL) — bulgu değil, "bilgilendirici" olarak etiketlenir.
-const PUBLIC_BY_DESIGN_RULES: Array<{ id: string; label: string; labelDe: string; re: RegExp }> = [
-  { id: 'google_api_key', label: 'Google API anahtarı (Firebase/Maps browser key — public-by-design, referer/kota ile sınırlanır)', labelDe: 'Google-API-Schlüssel (Firebase/Maps Browser-Key — public-by-design, durch Referer/Kontingent begrenzt)', re: /\bAIza[0-9A-Za-z_-]{35}\b/g },
-  { id: 'stripe_publishable', label: 'Stripe publishable key (pk_ — public-by-design, gizli değildir)', labelDe: 'Stripe Publishable Key (pk_ — public-by-design, nicht geheim)', re: /\bpk_(?:live|test)_[0-9a-zA-Z]{20,}\b/g },
-  { id: 'ga_measurement', label: 'GA/GTM/Ads ölçüm kimliği (public-by-design)', labelDe: 'GA-/GTM-/Ads-Mess-ID (public-by-design)', re: /\b(?:G-[A-Z0-9]{6,}|GTM-[A-Z0-9]{5,}|UA-\d{4,}-\d+|AW-\d{6,})\b/g },
-  { id: 'recaptcha_site', label: 'reCAPTCHA SITE key (public-by-design; secret key ayrıdır)', labelDe: 'reCAPTCHA SITE-Key (public-by-design; der Secret-Key ist separat)', re: /\b6L[0-9A-Za-z_-]{38}\b/g },
-  { id: 'firebase_cfg', label: 'Firebase istemci yapılandırması (apiKey/authDomain/projectId — public-by-design, güvenlik Firebase kurallarındadır)', labelDe: 'Firebase-Client-Konfiguration (apiKey/authDomain/projectId — public-by-design, die Sicherheit liegt in den Firebase-Regeln)', re: /(?:authDomain|messagingSenderId|storageBucket)\s*:\s*["'][^"']+["']/g },
+const PUBLIC_BY_DESIGN_RULES: Array<{ id: string; label: string; labelDe: string; labelEn: string; re: RegExp }> = [
+  { id: 'google_api_key', label: 'Google API anahtarı (Firebase/Maps browser key — public-by-design, referer/kota ile sınırlanır)', labelDe: 'Google-API-Schlüssel (Firebase/Maps Browser-Key — public-by-design, durch Referer/Kontingent begrenzt)', labelEn: 'Google API key (Firebase/Maps browser key — public-by-design, restricted by referer/quota)', re: /\bAIza[0-9A-Za-z_-]{35}\b/g },
+  { id: 'stripe_publishable', label: 'Stripe publishable key (pk_ — public-by-design, gizli değildir)', labelDe: 'Stripe Publishable Key (pk_ — public-by-design, nicht geheim)', labelEn: 'Stripe publishable key (pk_ — public-by-design, not secret)', re: /\bpk_(?:live|test)_[0-9a-zA-Z]{20,}\b/g },
+  { id: 'ga_measurement', label: 'GA/GTM/Ads ölçüm kimliği (public-by-design)', labelDe: 'GA-/GTM-/Ads-Mess-ID (public-by-design)', labelEn: 'GA/GTM/Ads measurement id (public-by-design)', re: /\b(?:G-[A-Z0-9]{6,}|GTM-[A-Z0-9]{5,}|UA-\d{4,}-\d+|AW-\d{6,})\b/g },
+  { id: 'recaptcha_site', label: 'reCAPTCHA SITE key (public-by-design; secret key ayrıdır)', labelDe: 'reCAPTCHA SITE-Key (public-by-design; der Secret-Key ist separat)', labelEn: 'reCAPTCHA SITE key (public-by-design; the secret key is separate)', re: /\b6L[0-9A-Za-z_-]{38}\b/g },
+  { id: 'firebase_cfg', label: 'Firebase istemci yapılandırması (apiKey/authDomain/projectId — public-by-design, güvenlik Firebase kurallarındadır)', labelDe: 'Firebase-Client-Konfiguration (apiKey/authDomain/projectId — public-by-design, die Sicherheit liegt in den Firebase-Regeln)', labelEn: 'Firebase client configuration (apiKey/authDomain/projectId — public-by-design, security lies in the Firebase rules)', re: /(?:authDomain|messagingSenderId|storageBucket)\s*:\s*["'][^"']+["']/g },
 ];
 
 // ============================ C) BİLİNEN-ZAFİYETLİ KÜTÜPHANELER ============================
@@ -225,7 +225,7 @@ export async function collectJsAnalysisEvidence(host: string, locale: string = '
   const c = await fetchClientCorpus(host);
   if (!c.reachable) {
     return { ok: true, pagesScanned: 0, inputsFound: 0, probesSent: 1, findings, stopped: null,
-      notes: [t('Ana sayfa HTML çekilemedi — istemci-tarafı/JS analizi bu hedef için **kapsam dışıdır**.', 'Startseiten-HTML konnte nicht abgerufen werden — die clientseitige/JS-Analyse ist für dieses Ziel **außerhalb des Geltungsbereichs**.')] };
+      notes: [t('Ana sayfa HTML çekilemedi — istemci-tarafı/JS analizi bu hedef için **kapsam dışıdır**.', 'Startseiten-HTML konnte nicht abgerufen werden — die clientseitige/JS-Analyse ist für dieses Ziel **außerhalb des Geltungsbereichs**.', 'The home-page HTML could not be fetched — client-side/JS analysis is **out of scope** for this target.')] };
   }
 
   const publicSeen = new Set<string>();
@@ -251,8 +251,8 @@ export async function collectJsAnalysisEvidence(host: string, locale: string = '
           const sample = [...sources.matchAll(/"([^"]*(?:src|app|components?|pages?|services?)[^"]*\.[jt]sx?)"/gi)].slice(0, 3).map((m) => m[1]);
           findings.push({
             check: 'source_map_exposure', inputPoint: new URL(mapUrl).pathname, vulnerable: true,
-            technique: 'source-map erişilebilirliği',
-            evidence: `Erişilebilir source-map (${new URL(mapUrl).pathname}) — orijinal kaynak ağacı ifşa oluyor (${srcCount} kaynak dosya${sample.length ? `; ör. ${sample.join(', ')}` : ''}). İç dosya yolları/yorumlar sızabilir.`,
+            technique: (en ? 'source-map accessibility' : 'source-map erişilebilirliği'),
+            evidence: (en ? `Accessible source-map (${new URL(mapUrl).pathname}) — the original source tree is exposed (${srcCount} source files${sample.length ? `; e.g. ${sample.join(', ')}` : ''}). Internal file paths/comments can leak.` : `Erişilebilir source-map (${new URL(mapUrl).pathname}) — orijinal kaynak ağacı ifşa oluyor (${srcCount} kaynak dosya${sample.length ? `; ör. ${sample.join(', ')}` : ''}). İç dosya yolları/yorumlar sızabilir.`),
             confidence: 'high', severity: 'low', sideEffectRisk: 'none',
           });
         }
@@ -266,8 +266,8 @@ export async function collectJsAnalysisEvidence(host: string, locale: string = '
         const v = matchVuln(lib.lib, lib.version);
         if (v) findings.push({
           check: 'vulnerable_js_lib', inputPoint: `${lib.display} ${lib.version}`, vulnerable: true,
-          technique: 'sürüm-tabanlı kütüphane zafiyet göstergesi (retire.js mantığı)',
-          evidence: `${lib.display} sürüm ${lib.version} tespit edildi — bu sürümde bilinen güvenlik açığı: ${v.cves}. ${v.note}. Sürüm-tabanlı göstergedir; **yama/backport teyidi gerekir** (dağıtımınız yamalı olabilir).`,
+          technique: (en ? 'version-based library vulnerability indicator (retire.js logic)' : 'sürüm-tabanlı kütüphane zafiyet göstergesi (retire.js mantığı)'),
+          evidence: (en ? `${lib.display} version ${lib.version} was detected — a known vulnerability exists in this version: ${v.cves}. ${v.note}. A version-based indicator; **patch/backport confirmation is required** (your distribution may be patched).` : `${lib.display} sürüm ${lib.version} tespit edildi — bu sürümde bilinen güvenlik açığı: ${v.cves}. ${v.note}. Sürüm-tabanlı göstergedir; **yama/backport teyidi gerekir** (dağıtımınız yamalı olabilir).`),
           confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
         });
       }
@@ -283,17 +283,17 @@ export async function collectJsAnalysisEvidence(host: string, locale: string = '
       const v = matchVuln(lib.lib, lib.version);
       if (v) findings.push({
         check: 'vulnerable_js_lib', inputPoint: `${lib.display} ${lib.version} (CDN)`, vulnerable: true,
-        technique: 'sürüm-tabanlı kütüphane zafiyet göstergesi (harici CDN, URL’den sürüm)',
-        evidence: `${lib.display} sürüm ${lib.version} (harici CDN) — bilinen güvenlik açığı: ${v.cves}. ${v.note}. Sürüm-tabanlı göstergedir; yama teyidi gerekir.`,
+        technique: (en ? 'version-based library vulnerability indicator (external CDN, version from URL)' : 'sürüm-tabanlı kütüphane zafiyet göstergesi (harici CDN, URL’den sürüm)'),
+        evidence: (en ? `${lib.display} version ${lib.version} (external CDN) — known vulnerability: ${v.cves}. ${v.note}. A version-based indicator; patch confirmation is required.` : `${lib.display} sürüm ${lib.version} (harici CDN) — bilinen güvenlik açığı: ${v.cves}. ${v.note}. Sürüm-tabanlı göstergedir; yama teyidi gerekir.`),
         confidence: 'medium', severity: 'medium', sideEffectRisk: 'none',
       });
     }
   }
 
-  notes.push(t(`Tarandı: **${c.sameOriginJs.length}** same-origin JS dosyası + **${c.inlineScripts.length}** inline script; **${libsDetected.length}** kütüphane tespit edildi; **${mapsTried}** source-map adayı denendi. (${c.externalScripts.length} harici/CDN script sürüm için incelendi.)`, `Gescannt: **${c.sameOriginJs.length}** Same-Origin-JS-Dateien + **${c.inlineScripts.length}** Inline-Skripte; **${libsDetected.length}** Bibliothek(en) erkannt; **${mapsTried}** Source-Map-Kandidat(en) geprüft. (${c.externalScripts.length} externe/CDN-Skripte auf Version untersucht.)`));
-  if (libsDetected.length) notes.push(t(`Tespit edilen kütüphaneler: ${libsDetected.join(' · ')}.`, `Erkannte Bibliotheken: ${libsDetected.join(' · ')}.`));
-  if (publicSeen.size) notes.push(t(`Bilgilendirici (public-by-design — istismar edilebilir sır DEĞİL, bulgu sayılmaz): ${[...publicSeen].join(' · ')}.`, `Informativ (public-by-design — KEIN ausnutzbares Geheimnis, zählt nicht als Befund): ${[...publicSeen].join(' · ')}.`));
-  if (!c.sameOriginJs.length && !c.inlineScripts.length) notes.push(t('Sayfada analiz edilebilir JS bulunamadı (ör. sunucu-render, JS’siz sayfa) — bu hedefte JS analizi sınırlıdır.', 'Keine analysierbaren JS auf der Seite gefunden (z. B. serverseitig gerendert, Seite ohne JS) — die JS-Analyse ist bei diesem Ziel eingeschränkt.'));
+  notes.push(t(`Tarandı: **${c.sameOriginJs.length}** same-origin JS dosyası + **${c.inlineScripts.length}** inline script; **${libsDetected.length}** kütüphane tespit edildi; **${mapsTried}** source-map adayı denendi. (${c.externalScripts.length} harici/CDN script sürüm için incelendi.)`, `Gescannt: **${c.sameOriginJs.length}** Same-Origin-JS-Dateien + **${c.inlineScripts.length}** Inline-Skripte; **${libsDetected.length}** Bibliothek(en) erkannt; **${mapsTried}** Source-Map-Kandidat(en) geprüft. (${c.externalScripts.length} externe/CDN-Skripte auf Version untersucht.)`, `Scanned: **${c.sameOriginJs.length}** same-origin JS files + **${c.inlineScripts.length}** inline scripts; **${libsDetected.length}** library(ies) detected; **${mapsTried}** source-map candidate(s) tried. (${c.externalScripts.length} external/CDN scripts examined for version.)`));
+  if (libsDetected.length) notes.push(t(`Tespit edilen kütüphaneler: ${libsDetected.join(' · ')}.`, `Erkannte Bibliotheken: ${libsDetected.join(' · ')}.`, `Detected libraries: ${libsDetected.join(' · ')}.`));
+  if (publicSeen.size) notes.push(t(`Bilgilendirici (public-by-design — istismar edilebilir sır DEĞİL, bulgu sayılmaz): ${[...publicSeen].join(' · ')}.`, `Informativ (public-by-design — KEIN ausnutzbares Geheimnis, zählt nicht als Befund): ${[...publicSeen].join(' · ')}.`, `Informational (public-by-design — NOT an exploitable secret, not counted as a finding): ${[...publicSeen].join(' · ')}.`));
+  if (!c.sameOriginJs.length && !c.inlineScripts.length) notes.push(t('Sayfada analiz edilebilir JS bulunamadı (ör. sunucu-render, JS’siz sayfa) — bu hedefte JS analizi sınırlıdır.', 'Keine analysierbaren JS auf der Seite gefunden (z. B. serverseitig gerendert, Seite ohne JS) — die JS-Analyse ist bei diesem Ziel eingeschränkt.', 'No analysable JS was found on the page (e.g. server-rendered, JS-less page) — JS analysis is limited on this target.'));
 
   return { ok: true, pagesScanned: 1, inputsFound: c.sameOriginJs.length, probesSent: probes, findings, stopped: null, notes };
 }
@@ -309,10 +309,10 @@ function sourceMapUrl(jsUrl: string, body: string): string | null {
 
 // A) tek metinde sır tara — GERÇEK sır → finding; public-by-design → publicSeen (bilgilendirici).
 function scanSecrets(text: string, where: string, findings: VFinding[], publicSeen: Set<string>, locale: string = 'tr'): void {
-  const de = locale === 'de';
+  const de = locale === 'de', en = locale === 'en';
   for (const rule of PUBLIC_BY_DESIGN_RULES) {
     rule.re.lastIndex = 0;
-    if (rule.re.test(text)) publicSeen.add(de ? rule.labelDe : rule.label);
+    if (rule.re.test(text)) publicSeen.add(en ? rule.labelEn : de ? rule.labelDe : rule.label);
   }
   for (const rule of REAL_SECRET_RULES) {
     rule.re.lastIndex = 0;
@@ -320,8 +320,8 @@ function scanSecrets(text: string, where: string, findings: VFinding[], publicSe
     if (m) {
       findings.push({
         check: 'js_secret', inputPoint: `${where}:${rule.id}`, vulnerable: true,
-        technique: 'JS bundle statik sır taraması (regex)',
-        evidence: `\`${where}\` içinde hassas sır göstergesi: ${rule.why} (Değer REDAKTE: \`${redact(m[0])}\`.) İstemci JS'i herkese açıktır; buradaki gerçek sır ele geçirilebilir — derhal döndürülmeli/geçersizleştirilmeli.`,
+        technique: (en ? 'JS bundle static secret scan (regex)' : 'JS bundle statik sır taraması (regex)'),
+        evidence: (en ? `An indicator of a sensitive secret inside \`${where}\`: ${rule.whyEn} (Value REDACTED: \`${redact(m[0])}\`.) Client JS is public; a real secret here can be captured — it should be rotated/invalidated immediately.` : `\`${where}\` içinde hassas sır göstergesi: ${rule.why} (Değer REDAKTE: \`${redact(m[0])}\`.) İstemci JS'i herkese açıktır; buradaki gerçek sır ele geçirilebilir — derhal döndürülmeli/geçersizleştirilmeli.`),
         confidence: rule.id === 'private_key' || rule.id === 'gcp_service_account' || rule.id === 'db_conn_string' ? 'high' : 'medium',
         severity: 'high', sideEffectRisk: 'none',
       });
