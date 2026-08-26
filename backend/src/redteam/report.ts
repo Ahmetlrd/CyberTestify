@@ -266,6 +266,16 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
     return `${truncatedTop ? '<span class="elide">  ⋮ (önceki satırlar kısaltıldı)</span>\n' : ''}${body}${truncatedBot ? '\n<span class="elide">  ⋮ (sonraki satırlar kısaltıldı)</span>' : ''}`;
   };
 
+  // (P0-B MÜŞTERİ) Kanıt komutunu müşteri için temizle: --resolve host:port:IP (hedefin pinlenen IP'si),
+  // --connect-timeout, --max-time = bağlantı/altyapı plumbing'i → müşteri PDF'inde IP/timeout GİZLENİR.
+  // Kanıtın ANLAMI (yöntem + URL + payload + yansıyan gövde) korunur; yalnız iç bağlantı detayı düşer.
+  const custCmd = (cmd: string): string => admin ? cmd : String(cmd || '')
+    .replace(/\s--resolve\s+\S+/g, '')
+    .replace(/\s--connect-timeout\s+\d+/g, '')
+    .replace(/\s--max-time\s+\d+/g, '')
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '•••')   // kalan çıplak IPv4 → maskele
+    .replace(/\s{2,}/g, ' ').trim();
+
   const CONFIG_CATS = new Set(['cookie_config', 'security_header', 'info_disclosure']);
   const card = (f: BinderFinding, needsHuman: boolean) => {
     const rem = REMEDIATION[f.category] ?? REMEDIATION.bilinmeyen;
@@ -295,8 +305,8 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
       </tbody></table>
       ${ev && (ev.rawExcerpt || ev.command) ? `<div class="evbox">
         <div class="evlabel">HAM KANIT ${admin && ev.artifactRef ? `<span class="ref">${esc(ev.artifactRef)}</span>` : ''}${ev.marker ? ` <span class="mk">marker: ${esc(ev.marker)}</span>` : (ev.signature ? ` <span class="mk">imza: ${esc(ev.signature)}</span>` : '')} <span class="reddot">hassas veri redakte</span></div>
-        ${ev.command ? `<pre class="cmd">$ ${esc(ev.command)}</pre>` : ''}
-        ${ev.rawExcerpt ? `<pre class="raw">${evSnippet(ev.rawExcerpt, ev.marker || ev.signature)}</pre>` : ''}
+        ${ev.command ? `<pre class="cmd">$ ${esc(custCmd(ev.command))}</pre>` : ''}
+        ${ev.rawExcerpt ? `<pre class="raw">${evSnippet(admin ? ev.rawExcerpt : ev.rawExcerpt.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '•••'), ev.marker || ev.signature)}</pre>` : ''}
       </div>` : ''}
       <div class="fix"><b>Önerilen Düzeltme</b><br>${esc(rem.fix)}</div>
     </div>`;
@@ -387,7 +397,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
         <div class="cc"><b style="color:#15803d">${r.counts.kanitli}</b><span>Kanıtlı</span></div>
         <div class="cc"><b style="color:#a16207">${r.counts.belirsiz}</b><span>İnceleme</span></div>
         <div class="cc"><b style="color:#64748b">${r.eliminated}</b><span>Elenen</span></div>
-        <div class="cc"><b style="color:#334155">${r.counts.artifacts}</b><span>Ham artefakt</span></div>
+        ${admin ? `<div class="cc"><b style="color:#334155">${r.counts.artifacts}</b><span>Ham artefakt</span></div>` : ''}
       </div>
     </div>
     <div class="cover-warn">⚠ <b>DENEYSEL · DETERMİNİSTİK DEĞİL · resmi denetim/sertifikasyon DEĞİL.</b> Her "kanıtlı" bulgu saklanan ham kanıta bağlıdır.</div>
@@ -412,9 +422,9 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
 
   <h2 id="s-ozet">Yönetici Özeti</h2>
   <div class="exec">
-    <p style="margin:0 0 8px"><b>Ne test edildi:</b> Otonom bir yapay-zekâ ajanı (PentAGI), <b>${esc(r.meta.target)}</b> hedefini <b>${esc(r.meta.level)}</b> profilinde, izole ve cap-sınırlı bir ortamda gerçek saldırı teknikleriyle sınadı.</p>
+    <p style="margin:0 0 8px"><b>Ne test edildi:</b> Otonom bir yapay-zekâ ajanı (PentAGI), <b>${esc(r.meta.target)}</b> hedefini <b>${esc(r.meta.level)}</b> profilinde, izole ${admin ? 've cap-sınırlı ' : ''}bir ortamda gerçek saldırı teknikleriyle sınadı.</p>
     <p style="margin:0 0 8px"><b>Ne denendi (sayılarla):</b> ${esc(triedSentence)}. Kanıt-bağlama modeli: her iddia ajanın SÖZÜNE değil saklanan HAM kanıta (gerçek istek/yanıt, terminal çıktısı) bağlanır — deterministik imza varsa <b>kanıtlı</b>, kanıt var imza yoksa <b>inceleme gerektiren</b>, hiç izi yoksa (ya da hedef-dışı) <b>elenir</b>.</p>
-    <p style="margin:0 0 8px"><b>Ne bulunamadı / kapsam:</b> Bu koşu ${esc(r.meta.level)} profili ve cap-sınırlı süre/bütçeyle yürütüldü; kapsam yalnızca pinlenen hedeftir (${esc(r.meta.target)}). Kimlikli/derin testler ve S1 dışı teknik aileleri bu koşunun dışındadır — "kanıtlı bulgu yok", "zafiyet yok" anlamına gelmez.</p>
+    <p style="margin:0 0 8px"><b>Ne bulunamadı / kapsam:</b> Bu koşu ${esc(r.meta.level)} profili${admin ? ' ve cap-sınırlı süre/bütçeyle' : ' kapsamıyla'} yürütüldü; kapsam yalnızca pinlenen hedeftir (${esc(r.meta.target)}). Kimlikli/derin testler ve S1 dışı teknik aileleri bu koşunun dışındadır — "kanıtlı bulgu yok", "zafiyet yok" anlamına gelmez.</p>
     <p style="margin:0 0 8px"><b>Genel duruş:</b> ${esc(posture)}</p>
     <div class="notbox">
       <b>Bu rapor ne DEĞİLDİR?</b>
@@ -430,7 +440,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
       <div><b style="color:#15803d">${r.counts.kanitli}</b>Kanıtlı</div>
       <div><b style="color:#a16207">${r.counts.belirsiz}</b>İnceleme gerektiren</div>
       <div><b style="color:#64748b">${r.eliminated}</b>Elenen (hayalet)</div>
-      <div><b style="color:#334155">${r.counts.artifacts}</b>Ham artefakt</div>
+      ${admin ? `<div><b style="color:#334155">${r.counts.artifacts}</b>Ham artefakt</div>` : ''}
     </div>
   </div>
 
@@ -452,7 +462,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
       ? 'Efemer izole droplet; egress yalnız yetkili hedef + LLM; CyberTestify/dış/metadata engelli (ampirik doğrulandı)'
       : 'Test, her koşuda tek-kullanımlık ve izole bir ortamda yürütülür; dış erişim yalnızca yetkilendirilmiş hedefe sınırlıdır.'}</td></tr>
     <tr><th>Provenance</th><td>Yalnız pinlenen hedefe (${esc(r.meta.target)}) ait bulgular; hedef-dışı host referansları elenir</td></tr>
-    <tr><th>Bütçe</th><td>Sert cap (süre/kapsam); aşımda otomatik güvenli durdurma${admin && r.meta.costUsd != null ? ` — bu koşu ~$${Number(r.meta.costUsd).toFixed(4)}` : ''}</td></tr>
+    ${admin ? `<tr><th>Bütçe</th><td>Sert cap (süre/kapsam); aşımda otomatik güvenli durdurma${r.meta.costUsd != null ? ` — bu koşu ~$${Number(r.meta.costUsd).toFixed(4)}` : ''}</td></tr>` : ''}
     <tr><th>Yetki</th><td>Sahiplik/yetki beyanı + risk onayı ile; ${esc(r.meta.environment)} ortamı</td></tr>
   </tbody></table>
 
@@ -461,7 +471,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
   <div class="assur">
     <div class="ac"><b>${t.httpRequests ?? 0}</b><span>HTTP isteği</span></div>
     <div class="ac"><b>${t.endpointCount ?? (t.endpoints?.length ?? 0)}</b><span>Denenen uç-nokta</span></div>
-    <div class="ac"><b>${t.terminalArtifacts ?? r.counts.artifacts}</b><span>Terminal artefaktı</span></div>
+    ${admin ? `<div class="ac"><b>${t.terminalArtifacts ?? r.counts.artifacts}</b><span>Terminal artefaktı</span></div>` : ''}
     <div class="ac"><b>${t.families?.length ?? 0}</b><span>Teknik ailesi</span></div>
   </div>
   ${t.endpoints?.length ? `<div style="font-size:12px;color:#475569;margin-top:6px"><b>Denenen uç-noktalar:</b></div><div class="chips">${t.endpoints.map((e) => `<code>${esc(e)}</code>`).join('')}</div>` : ''}
@@ -470,7 +480,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
   <h2 id="s-sinir">Sınırlılıklar</h2>
   <ul class="lim">
     <li><b>Deneyseldir ve deterministik değildir:</b> aynı hedefte tekrar çalıştırıldığında farklı sonuç verebilir; resmi bir denetim/sertifikasyon (ASV/QSA) yerine geçmez.</li>
-    <li><b>Cap-sınırlı kapsam:</b> koşu; süre, token ve maliyet capleriyle sınırlıdır. Cap dolduğunda tarama, kapsamı tam bitirmeden durabilir.</li>
+    <li><b>Sınırlı kapsam:</b> koşu, ${admin ? 'süre, token ve maliyet capleriyle sınırlıdır. Cap dolduğunda' : 'tanımlı bir kapsamla sınırlıdır; kapsam dolduğunda'} tarama, kapsamı tam bitirmeden durabilir.</li>
     <li><b>Yalnız gözlemlenen kanıt:</b> "kanıtlı bulgu yok" ifadesi "hedef güvenli" anlamına gelmez — yalnız bu koşuda ham kanıta bağlanan bir zafiyet üretilmediğini belirtir.</li>
     <li><b>${esc(r.meta.level)} profili:</b> yalnızca bu profilin teknik aileleri denenmiştir; kimlikli/oturumlu derin testler ve S1 dışı vektörler kapsam dışıdır.</li>
     <li><b>İnsan doğrulaması:</b> "inceleme gerektiren" bulgular otomatik teyit edilmemiştir; üretim kararları öncesi bir uzmana doğrulatılmalıdır.</li>
@@ -478,9 +488,9 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
 
   <h2 id="s-ek">Ek: Artefakt Özeti</h2>
   <table class="scope"><tbody>
-    <tr><th>Ham artefakt (toplam)</th><td>${r.counts.artifacts}</td></tr>
+    ${admin ? `<tr><th>Ham artefakt (toplam)</th><td>${r.counts.artifacts}</td></tr>` : ''}
     <tr><th>HTTP isteği</th><td>${t.httpRequests ?? '—'}</td></tr>
-    <tr><th>Terminal artefaktı</th><td>${t.terminalArtifacts ?? '—'}</td></tr>
+    ${admin ? `<tr><th>Terminal artefaktı</th><td>${t.terminalArtifacts ?? '—'}</td></tr>` : ''}
     <tr><th>Kanıtlı / Belirsiz / Elenen</th><td>${r.counts.kanitli} / ${r.counts.belirsiz} / ${r.eliminated}</td></tr>
     ${admin && r.filteredMeta != null ? `<tr><th>Filtrelenen plan/meta iddia</th><td>${r.filteredMeta} <span class="ref">(subtask/plan/arama — kanıt değil, elendi)</span></td></tr>` : ''}
     ${admin && r.eliminatedReasons && Object.keys(r.eliminatedReasons).length ? `<tr><th>Eleme kırılımı</th><td>${Object.entries(r.eliminatedReasons).map(([k, v]) => `${esc(k)}: ${v}`).join(' · ')}</td></tr>` : ''}
