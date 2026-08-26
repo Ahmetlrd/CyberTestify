@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { OtpInput } from './OtpInput';
 
 // (2FA — müşteri hesap ayarları) Etkinleştir/kapat + QR + manuel anahtar + kurtarma kodları. tr/de/en.
 const T2 = {
@@ -18,8 +19,9 @@ const T2 = {
     recTitle: 'Kurtarma kodlarınızı kaydedin',
     recDesc: 'Telefonunuzu kaybederseniz bu kodlarla giriş yapabilirsiniz. Her kod bir kez kullanılır ve bu liste tekrar gösterilmez.',
     copyAll: 'Tümünü kopyala', done: 'Kaydettim',
-    disableHint: 'Kapatmak için mevcut 6 haneli kodunuzu (veya bir kurtarma kodunu) girin:',
+    disableHint: 'Kapatmak için mevcut 6 haneli kodunuzu girin:',
     confirmDisable: 'Kapat', disabling: 'Kapatılıyor…',
+    recoveryUse: 'Kurtarma kodu kullan', recoveryBack: '← 6 haneli kod', recoveryHint: 'Bir kurtarma kodunuzu girin:',
   },
   de: {
     title: 'Zwei-Faktor-Authentifizierung (2FA)',
@@ -34,8 +36,9 @@ const T2 = {
     recTitle: 'Speichern Sie Ihre Wiederherstellungscodes',
     recDesc: 'Wenn Sie Ihr Telefon verlieren, können Sie sich mit diesen Codes anmelden. Jeder Code ist einmal verwendbar und diese Liste wird nicht erneut angezeigt.',
     copyAll: 'Alle kopieren', done: 'Gespeichert',
-    disableHint: 'Zum Deaktivieren geben Sie Ihren aktuellen 6-stelligen Code (oder einen Wiederherstellungscode) ein:',
+    disableHint: 'Zum Deaktivieren geben Sie Ihren aktuellen 6-stelligen Code ein:',
     confirmDisable: 'Deaktivieren', disabling: 'Wird deaktiviert…',
+    recoveryUse: 'Wiederherstellungscode verwenden', recoveryBack: '← 6-stelliger Code', recoveryHint: 'Geben Sie einen Wiederherstellungscode ein:',
   },
   en: {
     title: 'Two-Factor Authentication (2FA)',
@@ -50,8 +53,9 @@ const T2 = {
     recTitle: 'Save your recovery codes',
     recDesc: 'If you lose your phone, you can sign in with these codes. Each code is single-use and this list is not shown again.',
     copyAll: 'Copy all', done: 'Saved',
-    disableHint: 'To disable, enter your current 6-digit code (or a recovery code):',
+    disableHint: 'To disable, enter your current 6-digit code:',
     confirmDisable: 'Disable', disabling: 'Disabling…',
+    recoveryUse: 'Use a recovery code', recoveryBack: '← 6-digit code', recoveryHint: 'Enter one of your recovery codes:',
   },
 } as const;
 
@@ -65,12 +69,13 @@ export function TwoFactorSection({ lang }: { lang: 'tr' | 'de' | 'en' }) {
   const [code, setCode] = useState('');
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [copied, setCopied] = useState('');
+  const [useRecovery, setUseRecovery] = useState(false); // kapatmada kurtarma kodu girişi
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { api.twofaStatus().then(setStatus).catch(() => setStatus({ enabled: false, remainingRecoveryCodes: 0 })); }, []);
   const copy = (txt: string, what: string) => { navigator.clipboard?.writeText(txt).then(() => { setCopied(what); setTimeout(() => setCopied(''), 1500); }); };
-  const reset = () => { setMode('idle'); setSetup(null); setCode(''); setError(null); };
+  const reset = () => { setMode('idle'); setSetup(null); setCode(''); setError(null); setUseRecovery(false); };
 
   async function startEnroll() {
     setBusy(true); setError(null);
@@ -92,11 +97,6 @@ export function TwoFactorSection({ lang }: { lang: 'tr' | 'de' | 'en' }) {
   }
   function finishRecovery() { setStatus({ enabled: true, remainingRecoveryCodes: recoveryCodes.length }); setRecoveryCodes([]); reset(); }
 
-  const codeField = (
-    <input inputMode={mode === 'disabling' ? 'text' : 'numeric'} placeholder="123456" value={code}
-      onChange={(e) => setCode(mode === 'disabling' ? e.target.value : e.target.value.replace(/\D/g, '').slice(0, 6))}
-      className="field text-center text-lg tracking-[0.4em]" style={{ fontFamily: 'ui-monospace, monospace' }} />
-  );
 
   return (
     <div className="rounded-card border border-line bg-white p-5">
@@ -138,7 +138,7 @@ export function TwoFactorSection({ lang }: { lang: 'tr' | 'de' | 'en' }) {
             </div>
           </div>
           <label className="label">{t.codeLabel}</label>
-          {codeField}
+          <OtpInput value={code} onChange={setCode} />
           {error && <p className="form-error">{error}</p>}
           <div className="flex gap-2">
             <button onClick={reset} className="btn-outline flex-1 justify-center">{t.cancel}</button>
@@ -161,8 +161,16 @@ export function TwoFactorSection({ lang }: { lang: 'tr' | 'de' | 'en' }) {
 
       {mode === 'disabling' && (
         <div className="mt-4 space-y-3">
-          <p className="text-xs text-ink-muted">{t.disableHint}</p>
-          {codeField}
+          <p className="text-xs text-ink-muted">{useRecovery ? t.recoveryHint : t.disableHint}</p>
+          {useRecovery ? (
+            <input inputMode="text" placeholder="xxxxx-xxxxx" value={code} onChange={(e) => setCode(e.target.value)}
+              className="field text-center text-lg tracking-[0.2em]" style={{ fontFamily: 'ui-monospace, monospace' }} />
+          ) : (
+            <OtpInput value={code} onChange={setCode} />
+          )}
+          <button type="button" onClick={() => { setUseRecovery(!useRecovery); setCode(''); setError(null); }} className="w-full text-xs text-ink-muted hover:underline">
+            {useRecovery ? t.recoveryBack : t.recoveryUse}
+          </button>
           {error && <p className="form-error">{error}</p>}
           <div className="flex gap-2">
             <button onClick={reset} className="btn-outline flex-1 justify-center">{t.cancel}</button>

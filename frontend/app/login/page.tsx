@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { api } from '../../lib/api';
 import { PasswordInput } from '../../components/PasswordInput';
 import { GoogleButton } from '../../components/GoogleButton';
+import { OtpInput } from '../../components/OtpInput';
 import { readRegionCookie } from '../../lib/region';
 import { getRegion } from '../../config/regions';
 
@@ -20,6 +21,7 @@ const T = {
     noAccount: 'Hesabınız yok mu?', register: 'Ücretsiz kayıt olun',
     twofaTitle: 'İki faktörlü doğrulama', twofaHint: 'Authenticator uygulamanızdaki 6 haneli kodu girin. Telefonunuz yoksa bir kurtarma kodu da girebilirsiniz.',
     verify: 'Doğrula ve gir', verifying: 'Doğrulanıyor…', back: '← Geri',
+    recoveryUse: 'Telefonum yok — kurtarma kodu gir', recoveryBack: '← Authenticator kodu kullan', recoveryHint: 'Bir kurtarma kodunuzu girin.',
   },
   de: {
     title: 'Anmelden', subtitle: 'Greifen Sie auf Ihr Konto zu und verwalten Sie Ihren Scan.',
@@ -30,6 +32,7 @@ const T = {
     noAccount: 'Noch kein Konto?', register: 'Kostenlos registrieren',
     twofaTitle: 'Zwei-Faktor-Authentifizierung', twofaHint: 'Geben Sie den 6-stelligen Code aus Ihrer Authenticator-App ein. Ohne Telefon können Sie auch einen Wiederherstellungscode eingeben.',
     verify: 'Bestätigen und anmelden', verifying: 'Wird überprüft…', back: '← Zurück',
+    recoveryUse: 'Kein Telefon — Wiederherstellungscode eingeben', recoveryBack: '← Authenticator-Code verwenden', recoveryHint: 'Geben Sie einen Wiederherstellungscode ein.',
   },
   en: {
     title: 'Sign in', subtitle: 'Access your account and manage your scan.',
@@ -40,6 +43,7 @@ const T = {
     noAccount: 'Don\'t have an account?', register: 'Register for free',
     twofaTitle: 'Two-factor authentication', twofaHint: 'Enter the 6-digit code from your authenticator app. Without your phone, you can also enter a recovery code.',
     verify: 'Verify and sign in', verifying: 'Verifying…', back: '← Back',
+    recoveryUse: 'No phone — enter a recovery code', recoveryBack: '← Use authenticator code', recoveryHint: 'Enter one of your recovery codes.',
   },
 } as const;
 
@@ -64,6 +68,7 @@ export default function LoginPage() {
   // (2FA) 2FA açık müşteride ikinci adım: stage token + kod.
   const [twofa, setTwofa] = useState<{ stageToken: string } | null>(null);
   const [code, setCode] = useState('');
+  const [useRecovery, setUseRecovery] = useState(false); // 6-haneli TOTP yerine kurtarma kodu girişi
   // (2FA — Google) OAuth 2FA ara-token'ı google/done'dan sessionStorage ile gelir → kod adımını aç.
   useEffect(() => {
     if (typeof window === 'undefined' || sp.get('twofa') !== '1') return;
@@ -103,19 +108,26 @@ export default function LoginPage() {
       {twofa ? (
         <div className="card p-8">
           <h1 className="text-2xl font-extrabold text-brand">{t.twofaTitle}</h1>
-          <p className="mt-1 text-sm text-ink-muted">{t.twofaHint}</p>
+          <p className="mt-1 text-sm text-ink-muted">{useRecovery ? t.recoveryHint : t.twofaHint}</p>
           <form onSubmit={handleVerify} className="mt-6 space-y-4">
-            <input
-              inputMode="text" autoFocus placeholder="123456" value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className="field text-center text-xl tracking-[0.4em]"
-              style={{ fontFamily: 'ui-monospace, monospace' }}
-            />
+            {useRecovery ? (
+              <input
+                inputMode="text" autoFocus placeholder="xxxxx-xxxxx" value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="field text-center text-lg tracking-[0.2em]"
+                style={{ fontFamily: 'ui-monospace, monospace' }}
+              />
+            ) : (
+              <OtpInput value={code} onChange={setCode} autoFocus onComplete={() => { /* kullanıcı Doğrula'ya basar */ }} />
+            )}
             {error && <p className="form-error">{error}</p>}
-            <button type="submit" disabled={busy || code.trim().length < 6} className="btn-primary w-full disabled:opacity-60">
+            <button type="submit" disabled={busy || (!useRecovery && code.length !== 6) || (useRecovery && code.trim().length < 6)} className="btn-primary w-full disabled:opacity-60">
               {busy ? t.verifying : t.verify}
             </button>
-            <button type="button" onClick={() => { setTwofa(null); setCode(''); setError(null); }} className="w-full text-sm text-ink-soft hover:underline">
+            <button type="button" onClick={() => { setUseRecovery(!useRecovery); setCode(''); setError(null); }} className="w-full text-xs text-ink-muted hover:underline">
+              {useRecovery ? t.recoveryBack : t.recoveryUse}
+            </button>
+            <button type="button" onClick={() => { setTwofa(null); setCode(''); setUseRecovery(false); setError(null); }} className="w-full text-sm text-ink-soft hover:underline">
               {t.back}
             </button>
           </form>

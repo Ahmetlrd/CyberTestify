@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { adminApi, ADMIN_TOKEN_KEY } from '../../../lib/adminApi';
+import { OtpInput } from '../../../components/OtpInput';
 
 type Step = 'pw' | 'verify' | 'enroll' | 'recovery';
 
@@ -16,6 +17,7 @@ export default function AdminLogin() {
   const [setup, setSetup] = useState<{ qrDataUrl: string; manualKey: string } | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [copied, setCopied] = useState('');
+  const [useRecovery, setUseRecovery] = useState(false); // verify adımında kurtarma kodu girişi
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -82,10 +84,17 @@ export default function AdminLogin() {
 
         {step === 'verify' && (
           <form onSubmit={submitVerify}>
-            <p style={{ ...small, margin: '0 0 16px' }}>Authenticator uygulamanızdaki <b>6 haneli kodu</b> girin. (Telefonunuz yoksa bir <b>kurtarma kodu</b> da girebilirsiniz.)</p>
-            <input style={codeInput} inputMode="text" autoFocus placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} />
+            <p style={{ ...small, margin: '0 0 16px' }}>{useRecovery ? <>Bir <b>kurtarma kodunuzu</b> girin.</> : <>Authenticator uygulamanızdaki <b>6 haneli kodu</b> girin.</>}</p>
+            {useRecovery ? (
+              <input style={codeInput} inputMode="text" autoFocus placeholder="xxxxx-xxxxx" value={code} onChange={(e) => setCode(e.target.value)} />
+            ) : (
+              <OtpInput value={code} onChange={setCode} theme="dark" autoFocus />
+            )}
             {error && <p style={{ color: '#fca5a5', fontSize: 13, marginTop: 14 }}>{error}</p>}
-            <button type="submit" disabled={busy} style={{ ...btn, opacity: busy ? 0.6 : 1 }}>{busy ? 'Doğrulanıyor…' : 'Doğrula ve gir'}</button>
+            <button type="submit" disabled={busy || (!useRecovery && code.length !== 6)} style={{ ...btn, opacity: busy || (!useRecovery && code.length !== 6) ? 0.6 : 1 }}>{busy ? 'Doğrulanıyor…' : 'Doğrula ve gir'}</button>
+            <button type="button" onClick={() => { setUseRecovery(!useRecovery); setCode(''); setError(null); }} style={{ width: '100%', marginTop: 12, background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>
+              {useRecovery ? '← Authenticator kodu kullan' : 'Telefonum yok — kurtarma kodu gir'}
+            </button>
           </form>
         )}
 
@@ -103,9 +112,8 @@ export default function AdminLogin() {
                 <button type="button" onClick={() => copy(setup.manualKey, 'key')} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #334155', background: '#334155', color: '#e2e8f0', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>{copied === 'key' ? 'Kopyalandı ✓' : 'Kopyala'}</button>
               </div>
             </div>
-            <label style={{ fontSize: 13, color: '#cbd5e1', display: 'block', marginTop: 16 }}>Uygulamadaki 6 haneli kodu girin
-              <input style={codeInput} inputMode="numeric" placeholder="123456" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
-            </label>
+            <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 16, marginBottom: 8 }}>Uygulamadaki 6 haneli kodu girin</div>
+            <OtpInput value={code} onChange={setCode} theme="dark" />
             {error && <p style={{ color: '#fca5a5', fontSize: 13, marginTop: 14 }}>{error}</p>}
             <button type="submit" disabled={busy || code.length !== 6} style={{ ...btn, opacity: busy || code.length !== 6 ? 0.6 : 1 }}>{busy ? 'Etkinleştiriliyor…' : '2FA’yı etkinleştir'}</button>
           </form>
