@@ -84,7 +84,13 @@ function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
     // (P1) XSS-ÖNCE + ŞARTLI ENCODE-RETRY: her uç için ham→encode retry döngüsü BAĞIMSIZ, plandan ÖNCE.
     `FIRST ACTIONS (do these BEFORE any recon/plan, within the first 2 minutes) — for EACH of the two search ` +
     `endpoints below run an INDEPENDENT reflected-XSS probe. ALWAYS use "curl -sk -i" (-i INCLUDES the HTTP ` +
-    `status line + headers) and SAVE THE FULL RESPONSE (status line, headers, AND body). First the RAW <script>:\n` +
+    // (P2 KANIT-YAKALAMA KÖK-NEDEN) Ajan "SAVE" kelimesini `-o /tmp/dosya`'ya kaydetme diye yorumlayıp
+    // yanıt GÖVDESİNİ dosyaya yazdı, stdout'a yalnız `-w` status'u geldi → platform SADECE terminal stdout'unu
+    // okur → gövde GÖRÜNMEZ → binder marker'ı bulamaz → kanıt "no-evidence" elenir. Bu yüzden -o/-w KESİN YASAK.
+    `status line + headers) and let the FULL RESPONSE (status line, headers, AND body) PRINT TO THE TERMINAL (stdout). ` +
+    `NEVER use -o/--output, and NEVER redirect with ">" — writing the response to a FILE makes the body INVISIBLE to the ` +
+    `platform (it reads ONLY your terminal stdout), so a saved body counts as NO evidence. NEVER use -w/--write-out as a ` +
+    `substitute for the body — the actual response BODY must appear in the terminal. First the RAW <script>:\n` +
     `  curl -sk -i --resolve ${d}:443:${pinnedIp} "https://${d}/bank/searchpage.jsp?searchStr=zqxmarker9173<script>alert(1)</script>"\n` +
     `  curl -sk -i --resolve ${d}:443:${pinnedIp} "https://${d}/search.jsp?query=zqxmarker9173<script>alert(1)</script>"\n` +
     `CONDITIONAL ENCODE-RETRY (CRITICAL): if a RAW-<script> probe returns a TRANSPORT-LEVEL rejection ` +
@@ -110,7 +116,8 @@ function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
     `use "curl -sk -i" so the full headers, including Set-Cookie and Server, are captured.) ` +
     `Aggressiveness (${job.level}): ${p}. ` +
     `EVIDENCE RULES (mandatory) — for EVERY request print the FULL curl command AND the FULL response (status line + body) ` +
-    `to the terminal; the report is built ONLY from these captured request/response pairs, NOT from your prose, plans, or ` +
+    `to the terminal STDOUT (never with -o/--output, never with ">", never -w instead of the body — a body saved to a file is ` +
+    `INVISIBLE and counts as NO evidence); the report is built ONLY from these captured request/response pairs, NOT from your prose, plans, or ` +
     `subtask lists. Every finding MUST reference a concrete captured request/response. Keep testing REAL endpoints until ` +
     `the budget cap — do NOT stop early, and do NOT spend time on web_search/browser/memorist.`
   );

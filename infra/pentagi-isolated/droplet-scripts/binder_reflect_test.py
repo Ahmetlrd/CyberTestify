@@ -38,5 +38,24 @@ ok(binder.reflected_xss('xss', [art(enc)]) is None, 'kodlanmış yansıma → KA
 ok(binder.reflected_xss('xss', [art("HTTP/1.1 403 Forbidden\r\n\r\n<script>zqxmarker9173<script>alert(1)</script>")]) is None,
    '4xx yanıt → KANITLI değil')
 
+# ————— KÖK-NEDEN (S1 FIX#2): -o dosya / -w-only artefaktı → gövde stdout'ta YOK → KANITLI DEĞİL —————
+# Ajan `curl -i -o /tmp/ep_a_raw.txt -w "---STATUS:%{http_code}---"` çalıştırınca yanıtın TAMAMI dosyaya
+# gider; binder'ın Postgres'ten okuduğu toolcall stdout'unda YALNIZ `-w` status satırı kalır (HTTP/ satırı
+# DEĞİL, gövde DEĞİL). parse_http HTTP durumu bulamaz → reflected_xss None → "no-evidence" elenir. TESPİT BU.
+OFILE_CMD = ('curl -sk -i --resolve testasp.vulnweb.com:443:1.2.3.4 '
+             '"https://testasp.vulnweb.com/bank/searchpage.jsp?searchStr=zqxmarker9173<script>alert(1)</script>" '
+             '-o /tmp/ep_a_raw.txt -w "\\n---STATUS:%{http_code}---\\n"')
+ofile_art = {'id': 'toolcall#3', 'kind': 'terminal', 'command': OFILE_CMD, 'rawText': '\n---STATUS:200---\n'}
+ok(binder.reflected_xss('xss', [ofile_art]) is None,
+   'KÖK-NEDEN: -o dosya/-w-only artefaktı (gövde stdout\'ta yok) → KANITLI değil (yanlış "Temiz"in sebebi)')
+
+# 6) FIX: AYNI payload komutu -o OLMADAN → gövde stdout'ta (status+başlık+gövde) → KANITLI XSS.
+# Prompt fix (-o yasak, gövde STDOUT) VE run_probes.py'nin ham-URL XSS probu bu şekli üretir.
+fixed_art = {'id': 'toolcall#3', 'kind': 'terminal', 'command': OFILE_CMD.replace(' -o /tmp/ep_a_raw.txt -w "\\n---STATUS:%{http_code}---\\n"', ''),
+             'rawText': "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<p>No results for: zqxmarker9173<script>alert(1)</script></p>"}
+rf = binder.reflected_xss('xss', [fixed_art])
+ok(bool(rf) and rf.get('signature') == 'reflected-unencoded',
+   'FIX: aynı istek -o OLMADAN (gövde stdout\'ta) → KANITLI reflected-XSS')
+
 print(f"\n=== {p} geçti, {f} başarısız ===")
 sys.exit(1 if f else 0)

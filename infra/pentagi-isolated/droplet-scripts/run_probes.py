@@ -127,6 +127,14 @@ def main():
         cmd = base + (f' --data-urlencode "{param}={payload}"' if param else '')
         raw = run(cmd)
         arts.append({'id': f'probe#{i + 1}', 'kind': 'terminal', 'command': cmd, 'rawText': raw})
+        # (KANIT-YAKALAMA) XSS: bazı uygulamalar marker'ı YALNIZ HAM URL-query'de yansıtır (encode edilmiş
+        # form farklı davranabilir). Ajanın GÖVDEYİ -o dosyaya yazıp kaybettiği durumun DETERMİNİSTİK telafisi:
+        # ajanın kanıtladığı istek ŞEKLİNİ (ham <script> doğrudan URL'de) AYNEN tekrar at ama gövdeyi STDOUT'a
+        # al (dosya YOK) → binder hangi form 2xx+gövdede-marker ise onu KANITLI'ya bağlar (ikisi de imza
+        # vermezse dürüstçe "denendi, imza yok"). İki artefakt = iki bağımsız yakalama şansı.
+        if fam == 'xss' and param:
+            rawcmd = f'{CURL} --resolve {a.target}:443:{a.ip} "https://{a.target}{path}?{param}={payload}"'
+            arts.append({'id': f'probe#{i + 1}b', 'kind': 'terminal', 'command': rawcmd, 'rawText': run(rawcmd)})
 
     try:
         json.dump({'artifacts': arts}, open(a.out, 'w'), ensure_ascii=False)
