@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { RegionSelector } from './RegionSelector';
 import type { RegionCode } from '../config/regions';
 
 /**
@@ -84,11 +83,7 @@ export function MobileMenu({
                   </>
                 )}
               </div>
-              {regionCode && (
-                <div className="mt-2 border-t border-line/70 pt-3">
-                  <RegionSelector current={regionCode} />
-                </div>
-              )}
+              {/* (Bölge seçici) Mobilde appbar'da zaten var — burada TEKRARLAMA (çift buton olmasın). */}
             </div>
           </div>
         </>

@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { REGIONS, VISIBLE_REGION_CODES, type RegionCode } from '../config/regions';
+import { useRouter, usePathname } from 'next/navigation';
+import { REGIONS, REGION_CODES, VISIBLE_REGION_CODES, type RegionCode } from '../config/regions';
 
 export function RegionSelector({ current }: { current: RegionCode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const cur = REGIONS[current];
 
@@ -16,8 +17,19 @@ export function RegionSelector({ current }: { current: RegionCode }) {
   function choose(code: RegionCode) {
     document.cookie = `region=${code}; path=/; max-age=${60 * 60 * 24 * 365}`;
     setOpen(false);
-    router.push(`/${code}`);
-    router.refresh();
+    // (UX) Bölge değiştirmek OTURUMU/SAYFAYI KAYBETTİRMEZ. Token localStorage'da kalır.
+    // - URL'de bölge segmenti olan sayfalar (/tr/paketler …) → AYNI alt-yolda yeni bölgeye geç.
+    // - Bölge'yi cookie'den okuyan sayfalar (/verify, /profile, /dashboard, /login …) → YERİNDE
+    //   kal, yalnız server-component'leri yeni cookie ile tazele (homepage'e ATMA → "logout" hissi yok).
+    const seg = (pathname ?? '/').split('/')[1] ?? '';
+    if ((REGION_CODES as readonly string[]).includes(seg)) {
+      const rest = (pathname ?? '').slice(seg.length + 1); // '/tr/paketler' → '/paketler'
+      router.push(`/${code}${rest}`);
+    } else {
+      // Cookie-tabanlı sayfa (çoğu client component dili mount'ta cookie'den okur): YERİNDE tam
+      // yenile → dil güncellenir, token localStorage'da KALIR (logout YOK, homepage'e atma YOK).
+      window.location.reload();
+    }
   }
 
   return (
