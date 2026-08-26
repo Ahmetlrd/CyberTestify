@@ -72,6 +72,83 @@ def parse_login_form(html, page_path):
     return None
 
 
+_STATIC_EXT = re.compile(r'\.(png|jpe?g|gif|svg|ico|css|js|woff2?|ttf|eot|pdf|zip|map)(\?|$)', re.I)
+
+
+def _norm_path(u, host=None):
+    """Bir href/action URL'inden HEDEF üzerindeki YOLU çıkar. Göreli → '/'-önekli path. Mutlak URL:
+    yalnız host == hedef ise path alınır (BAŞKA host / host bilinmiyorsa → None; harici linkin yolu
+    hedefe prob'lanmasın). mailto/js/tel/data/# → None. Query atılır."""
+    u = (u or '').strip()
+    if not u or u.startswith('#') or re.match(r'^(mailto:|javascript:|tel:|data:)', u, re.I):
+        return None
+    if re.match(r'^https?://', u, re.I):
+        m = re.match(r'^https?://([^/]+)(/[^?#]*)?', u, re.I)
+        if not m:
+            return None
+        uhost = (m.group(1) or '').lower().split(':')[0]
+        if not host or uhost != host.lower():
+            return None                    # harici/bilinmeyen host → hedefin uç'u DEĞİL, alma
+        u = m.group(2) or '/'
+    elif re.match(r'^//', u):
+        return None                        # protokol-göreli (//cdn...) → başka host, alma
+    else:
+        u = u.split('#', 1)[0].split('?', 1)[0]
+        if not u.startswith('/'):
+            u = '/' + u
+    return u or '/'
+
+
+def extract_entrypoints(html, host=None):
+    """(P3 DETERMİNİSTİK KEŞİF — salt-okunur, LLM yok) Ana sayfa HTML'inden hedefin GERÇEK parametreli
+    giriş noktalarını çıkar: (a) href="...?param=..." bağlantıları, (b) <form action>+ilk anlamlı <input name>.
+    Dönen: sırası korunmuş, tekrarsız [(path, param)]. Statik varlık uzantıları elenir. Hedefe-özel (asp/jsp/
+    php/aspx fark etmez) — hardcoded liste DEĞİL."""
+    out, seen = [], set()
+
+    def add(path, param):
+        if not path or not param or _STATIC_EXT.search(path):
+            return
+        key = (path, param)
+        if key not in seen:
+            seen.add(key)
+            out.append(key)
+
+    # (a) href="....?param=value" — ilk parametre adı
+    for m in re.finditer(r'''href\s*=\s*["']([^"']*\?[^"']+)["']''', html or '', re.I):
+        raw = m.group(1)
+        path = _norm_path(raw, host)
+        pm = re.search(r'\?([A-Za-z0-9_.\-]+)=', raw)
+        if path and pm:
+            add(path, pm.group(1))
+
+    # (b) <form action=...> + ilk anlamlı input (submit/gizli/düğme değil) → GET-benzeri arama/parametre formu
+    for m in re.finditer(r'<form\b([^>]*)>(.*?)</form>', html or '', re.I | re.S):
+        attrs, inner = m.group(1), m.group(2)
+        am = re.search(r'action\s*=\s*["\']?([^"\'\s>]*)', attrs, re.I)
+        path = _norm_path(am.group(1), host) if am and am.group(1) else None
+        if not path:
+            continue
+        for im in re.finditer(r'<input\b([^>]*)>', inner, re.I):
+            ia = im.group(1)
+            tm = re.search(r'type\s*=\s*["\']?([a-z]+)', ia, re.I)
+            itype = (tm.group(1).lower() if tm else 'text')
+            if itype in ('submit', 'button', 'image', 'reset', 'checkbox', 'radio', 'file', 'hidden', 'password'):
+                continue
+            nm = re.search(r'name\s*=\s*["\']?([^"\'\s>]+)', ia, re.I)
+            if nm:
+                add(path, nm.group(1))
+                break   # form başına ilk anlamlı param yeter
+    return out
+
+
+def discover_entrypoints(target, ip):
+    """Hedefin ana sayfasını (+ robots.txt izleri değil, yalnız HTML) çekip extract_entrypoints uygula.
+    Deterministik crawl (LLM yok); ajanın crawl'u zayıf/hardcoded'a düşse bile hedefin GERÇEK uçlarını bulur."""
+    home = run(f'{CURL} --resolve {target}:443:{ip} --resolve {target}:80:{ip} "https://{target}/"')
+    return extract_entrypoints(_http_body(home), target)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--plan', required=True)
@@ -135,6 +212,31 @@ def main():
         if fam == 'xss' and param:
             rawcmd = f'{CURL} --resolve {a.target}:443:{a.ip} "https://{a.target}{path}?{param}={payload}"'
             arts.append({'id': f'probe#{i + 1}b', 'kind': 'terminal', 'command': rawcmd, 'rawText': run(rawcmd)})
+
+    # (P3 DETERMİNİSTİK KEŞİF) Plan ajanın curl'lerinden besleniyordu; ajan crawl'u zayıfsa/hardcoded'a düşmüşse
+    # hedefin GERÇEK parametreli uçları hiç prob'lanmıyordu (ör. testasp/ASP'de plan yalnız 404 testfire path'ini
+    # taşıyordu). Burada hedefin ANA SAYFASINI deterministik crawl'layıp (LLM yok) plan'ın KAPSAMADIĞI gerçek
+    # giriş noktalarına XSS(ham+encode) + hafif SQLi probu atarız → hedefe-özel, stack-agnostik güvence.
+    covered = {(e.get('path'), e.get('param')) for e in plan.get('probes', []) if e.get('param')}
+    try:
+        discovered = discover_entrypoints(a.target, a.ip)
+    except Exception:
+        discovered = []  # best-effort — crawl asla koşuyu bozmaz
+    for path, param in discovered[:4]:
+        if (path, param) in covered:
+            continue
+        covered.add((path, param))
+        n = len(arts) + 1
+        xpay = 'zqxprobemarker7788<script>alert(1)</script>'
+        # XSS: ham URL-query (gövde stdout'ta) — bazı uygulamalar yalnız ham formu yansıtır
+        xcmd = f'{CURL} --resolve {a.target}:443:{a.ip} "https://{a.target}{path}?{param}={xpay}"'
+        arts.append({'id': f'disc#{n}', 'kind': 'terminal', 'command': xcmd, 'rawText': run(xcmd)})
+        # XSS: encode edilmiş form (transport-red durumunda uygulamaya ulaşır)
+        xecmd = f'{CURL} -G --resolve {a.target}:443:{a.ip} "https://{a.target}{path}" --data-urlencode "{param}={xpay}"'
+        arts.append({'id': f'disc#{n}e', 'kind': 'terminal', 'command': xecmd, 'rawText': run(xecmd)})
+        # Hafif SQLi: tek tırnak + OR 1=1 (binder davranışsal/hata imzasına bakar)
+        scmd = f'{CURL} -G --resolve {a.target}:443:{a.ip} "https://{a.target}{path}" --data-urlencode "{param}=\' OR \'1\'=\'1"'
+        arts.append({'id': f'disc#{n}s', 'kind': 'terminal', 'command': scmd, 'rawText': run(scmd)})
 
     try:
         json.dump({'artifacts': arts}, open(a.out, 'w'), ensure_ascii=False)

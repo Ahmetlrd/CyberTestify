@@ -81,36 +81,43 @@ function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
     `ENVIRONMENT LIMITS — web_search, browser, and memorist/vector-DB are NOT reachable here; DO NOT use them ` +
     `(they only waste budget and return nothing). Do NOT rely on any remembered "known vulnerabilities" list — ` +
     `report ONLY what you directly observe in real request/response pairs you capture with curl. ` +
-    // (P1) XSS-ÖNCE + ŞARTLI ENCODE-RETRY: her uç için ham→encode retry döngüsü BAĞIMSIZ, plandan ÖNCE.
-    `FIRST ACTIONS (do these BEFORE any recon/plan, within the first 2 minutes) — for EACH of the two search ` +
-    `endpoints below run an INDEPENDENT reflected-XSS probe. ALWAYS use "curl -sk -i" (-i INCLUDES the HTTP ` +
-    // (P2 KANIT-YAKALAMA KÖK-NEDEN) Ajan "SAVE" kelimesini `-o /tmp/dosya`'ya kaydetme diye yorumlayıp
-    // yanıt GÖVDESİNİ dosyaya yazdı, stdout'a yalnız `-w` status'u geldi → platform SADECE terminal stdout'unu
-    // okur → gövde GÖRÜNMEZ → binder marker'ı bulamaz → kanıt "no-evidence" elenir. Bu yüzden -o/-w KESİN YASAK.
-    `status line + headers) and let the FULL RESPONSE (status line, headers, AND body) PRINT TO THE TERMINAL (stdout). ` +
-    `NEVER use -o/--output, and NEVER redirect with ">" — writing the response to a FILE makes the body INVISIBLE to the ` +
-    `platform (it reads ONLY your terminal stdout), so a saved body counts as NO evidence. NEVER use -w/--write-out as a ` +
-    `substitute for the body — the actual response BODY must appear in the terminal. First the RAW <script>:\n` +
-    `  curl -sk -i --resolve ${d}:443:${pinnedIp} "https://${d}/bank/searchpage.jsp?searchStr=zqxmarker9173<script>alert(1)</script>"\n` +
-    `  curl -sk -i --resolve ${d}:443:${pinnedIp} "https://${d}/search.jsp?query=zqxmarker9173<script>alert(1)</script>"\n` +
-    `CONDITIONAL ENCODE-RETRY (CRITICAL): if a RAW-<script> probe returns a TRANSPORT-LEVEL rejection ` +
-    `(400/403/406 — the server/parser refused the request LINE, the app never processed the value), do NOT treat ` +
-    `that as "no finding". IMMEDIATELY, in the SAME minute and BEFORE any plan step, RE-SEND the SAME parameter ` +
-    `with a URL-ENCODED payload (%3Cscript%3E…%3C%2Fscript%3E) using curl -G --data-urlencode:\n` +
-    `  curl -sk -i -G --resolve ${d}:443:${pinnedIp} "https://${d}/bank/searchpage.jsp" --data-urlencode "searchStr=zqxmarker9173<script>alert(1)</script>"\n` +
-    `  curl -sk -i -G --resolve ${d}:443:${pinnedIp} "https://${d}/search.jsp" --data-urlencode "query=zqxmarker9173<script>alert(1)</script>"\n` +
-    `Each endpoint runs its OWN raw→encode-retry loop INDEPENDENTLY — one must NOT block the other, and you must ` +
-    `NOT defer the encode-retry to the end of the plan. Then verify whether zqxmarker9173 appears UNENCODED ` +
+    // (P3 HEDEF-ÖZEL KEŞİF — ASIL KÖK NEDEN) Hardcoded testfire path'leri (bank/searchpage.jsp, search.jsp)
+    // HER hedefte "zorunlu ilk aksiyon" olarak deneniyordu → testasp (ASP/IIS) gibi hedeflerde o path 404 →
+    // yansıma yok → yanlış "Temiz". Artık prob'lardan ÖNCE hedefin GERÇEK giriş noktaları keşfedilir; prob'lar
+    // keşfedilen uç'lara atılır. Hardcoded liste yalnız keşif HİÇ sonuç vermezse son-çare fallback.
+    `TARGET-SPECIFIC DISCOVERY FIRST (do this BEFORE any XSS/SQLi probe, in the first ~2-3 minutes) — the target's ` +
+    `real entry points are NOT known in advance and DIFFER per stack (ASP/.asp, JSP/.jsp, PHP/.php); do NOT assume any ` +
+    `preset path exists. (a) Fetch the homepage and 3-6 internal pages with "curl -sk -i --resolve ${d}:443:${pinnedIp} ...", ` +
+    `printing the FULL response to STDOUT. (b) From the captured HTML extract THIS target's OWN entry points: <a href> ` +
+    `links (ESPECIALLY those carrying a "?param=" query string), <form action=...> targets together with their ` +
+    `<input name=...> field names, and any URL that carries a parameter. (c) Also fetch /robots.txt and /sitemap.xml if ` +
+    `present and harvest paths from them. (d) Read the "Server" response header and the page extensions to prefer ` +
+    `stack-appropriate parameterized endpoints. Build a SHORT list of THIS target's real parameterized entry points ` +
+    `(path + parameter name) — these, NOT any preset path, are what you probe next. ` +
+    // (P2 KANIT-YAKALAMA — FIX#2) Gövde STDOUT'ta olmalı; -o/-w/> YASAK (dosyaya yazılan gövde platforma görünmez).
+    `EVIDENCE CAPTURE (applies to EVERY request): ALWAYS use "curl -sk -i" (-i INCLUDES the HTTP status line + headers) ` +
+    `and let the FULL RESPONSE (status line, headers, AND body) PRINT TO THE TERMINAL (stdout). NEVER use -o/--output, ` +
+    `NEVER redirect with ">", and NEVER use -w/--write-out as a substitute for the body — a response saved to a FILE is ` +
+    `INVISIBLE to the platform (it reads ONLY your terminal stdout) and counts as NO evidence. ` +
+    // (P0-1) ZORUNLU canlı checklist — KEŞFEDİLEN uç'lara; TEK bulgu bulmak koşuyu BİTİRMEZ.
+    `MANDATORY LIVE CHECKLIST (curl only, real target) — run these against the DISCOVERED entry points above; you MUST ` +
+    `complete ALL of steps 1-3 even if you already confirmed one reflected XSS (finding ONE issue does NOT complete the run):\n` +
+    `  STEP 1 — reflected-XSS marker probe on EACH discovered parameterized entry point. First send the RAW <script> ` +
+    `directly in the query (for a discovered PATH with parameter PARAM):\n` +
+    `    curl -sk -i --resolve ${d}:443:${pinnedIp} "https://${d}/<discovered-path>?<discovered-param>=zqxmarker9173<script>alert(1)</script>"\n` +
+    `  CONDITIONAL ENCODE-RETRY (CRITICAL): if the RAW probe returns a TRANSPORT-LEVEL rejection (400/403/406 — the ` +
+    `server/parser refused the request LINE, the app never processed the value), do NOT call it "no finding"; IMMEDIATELY ` +
+    `re-send the SAME parameter URL-ENCODED (%3Cscript%3E…%3C%2Fscript%3E) with curl -G --data-urlencode:\n` +
+    `    curl -sk -i -G --resolve ${d}:443:${pinnedIp} "https://${d}/<discovered-path>" --data-urlencode "<discovered-param>=zqxmarker9173<script>alert(1)</script>"\n` +
+    `  Each endpoint runs its OWN raw→encode-retry loop INDEPENDENTLY. Then verify whether zqxmarker9173 appears UNENCODED ` +
     `(literal <script>, NOT &lt;script&gt;) in the response BODY (the part AFTER the headers) of a 2xx response ` +
-    `(that is a KANITLI reflected XSS). Only if BOTH the raw AND the encoded attempt return 4xx/5xx for an ` +
-    `endpoint may you conclude "no finding" there. ` +
-    // (P0-1) ZORUNLU canlı checklist — numaralı adımlar; TEK bulgu bulmak koşuyu BİTİRMEZ.
-    `MANDATORY LIVE CHECKLIST (curl only, real target) — you MUST complete ALL of steps 1-3 for BOTH endpoints ` +
-    `even if you already confirmed one reflected XSS; finding ONE issue does NOT complete the run:\n` +
-    `  STEP 1 — reflected-XSS marker probe WITH encode-retry (the two endpoints above, each its own raw→encoded loop).\n` +
-    `  STEP 2 — light SQLi probe on at least one parameterized endpoint: append a single quote ' then ' OR 1=1 and ` +
+    `(that is a KANITLI reflected XSS). Conclude "no finding" for an endpoint ONLY if BOTH the raw AND the encoded attempt return 4xx/5xx.\n` +
+    `  STEP 2 — light SQLi probe on at least one DISCOVERED parameterized endpoint: append a single quote ' then ' OR 1=1 and ` +
     `capture the FULL response body; look for a SQL error string OR a clear behavioral difference vs the baseline.\n` +
-    `  STEP 3 — a SECOND distinct reflected-XSS reflection point (a different parameter/page than STEP 1), same marker method.\n` +
+    `  STEP 3 — a SECOND distinct reflected-XSS reflection point (a different DISCOVERED parameter/page than STEP 1), same marker method.\n` +
+    `FALLBACK — ONLY IF DISCOVERY FINDS NO PARAMETERIZED ENDPOINT AT ALL, then (and only then) try these common cross-stack ` +
+    `search paths as a last resort: /Search.asp?tfSearch= (ASP/IIS), /bank/searchpage.jsp?searchStr= and /search.jsp?query= ` +
+    `(JSP), /search.php?q= (PHP) — but the target's OWN discovered endpoints ALWAYS take priority over this list. ` +
     `(Cookie security flags and Server/version information-disclosure are extracted DETERMINISTICALLY by the platform from ` +
     `the responses you already captured — you do NOT need to assess them yourself; just make sure your STEP 1-3 requests ` +
     `use "curl -sk -i" so the full headers, including Set-Cookie and Server, are captured.) ` +
