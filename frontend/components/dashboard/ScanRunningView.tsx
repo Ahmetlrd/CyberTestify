@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LiveScanPhases, computeScanProgress } from './LiveScanPhases';
+import { localizedPackageName } from '../../lib/packageNames';
 
 /**
  * (Tasarım: Scan Status Page v2) MÜŞTERİ tarama-durumu görünümü — 2 kolon: adım şeridi + otomatik-not
@@ -75,6 +76,8 @@ const SRV = {
 
 export function ScanRunningView({ hostname, packageKey, packageName, startedAt, authConfirmedAt, feed, notStarted, dark, secondsPerPhase, verified, loginless, lang = 'tr' }: Props) {
   const L = SRV[lang === 'de' ? 'de' : lang === 'en' ? 'en' : 'tr'];
+  // (ÇOK-DİLLİ SCAN TYPE) order.packageName sipariş dilinde gelir → görüntüleme diline lokalize et.
+  const localizedPkgName = localizedPackageName(packageKey, packageName, lang);
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
 
@@ -168,7 +171,7 @@ export function ScanRunningView({ hostname, packageKey, packageName, startedAt, 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: isS1 ? 14 : 0, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: t.muted, textTransform: 'uppercase' }}>{L.scanType}</span>
             <span style={{ fontSize: 14, fontWeight: 800, color: t.title, background: dark ? 'rgba(245,166,35,0.12)' : '#FDF3DE', border: `1px solid ${dark ? 'rgba(245,166,35,0.3)' : '#F5D9A0'}`, borderRadius: 999, padding: '4px 12px' }}>
-              {isS1 ? 'S1 · Otonom AI Red Team' : (packageName || L.scanFallback)}
+              {isS1 ? 'S1 · Otonom AI Red Team' : (localizedPkgName || L.scanFallback)}
             </span>
           </div>
           {isS1 && (

@@ -11,6 +11,7 @@ import { GA_ID } from '../../../lib/consent';
 import { ScopeCertificate } from '../../../components/dashboard/ScopeCertificate';
 import { TwoFaNudge } from '../../../components/TwoFaNudge';
 import { readRegionCookie } from '../../../lib/region';
+import { localizedPackageName } from '../../../lib/packageNames';
 import { getRegion } from '../../../config/regions';
 
 const TERMINAL = new Set(['scan_completed', 'scan_failed', 'scope_violation', 'report_purged']);
@@ -323,7 +324,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
           {order?.amountMinorUnit != null && (
             <div className="mt-4 flex items-baseline justify-between rounded-card bg-white/70 px-4 py-3">
               <span className="text-sm text-ink-soft">
-                {hostname}{order?.packageName ? <> · {order.packageName}</> : null}
+                {hostname}{localizedPackageName(order?.packageKey, order?.packageName, lang) ? <> · {localizedPackageName(order?.packageKey, order?.packageName, lang)}</> : null}
               </span>
               <span className="text-2xl font-extrabold text-brand">
                 {(order.amountMinorUnit / 100).toLocaleString(lang === 'de' ? 'de-DE' : 'tr-TR', { minimumFractionDigits: 2 })}{' '}
