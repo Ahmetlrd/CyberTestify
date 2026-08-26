@@ -434,6 +434,30 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
             )}
           </div>
 
+          {/* (ANKET — /tr YALNIZ, non-blocking) "Raporunuz hazır" ile "AI Çözüm Önerileri" ARASINDA;
+              canlı/ışıltılı davet. Modal DEĞİL — indirmeyi engellemez. rel="noopener noreferrer": gizli
+              rapor URL'i/token referrer olarak Google'a SIZMAZ. /de-/en'de GÖRÜNMEZ (anket Türkçe). */}
+          {lang === 'tr' && (
+            <div className="flex flex-col gap-3 rounded-card border border-accent/50 bg-gradient-to-br from-accent-soft/70 to-brand-50/50 px-5 py-4 shadow-[0_2px_12px_rgba(245,166,35,0.18)] sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-bold text-ink">📝 Raporunuz nasıldı?</p>
+                <p className="mt-0.5 text-xs text-ink-soft">Anonim — görüşleriniz raporlarımızı geliştirir (1 dakika).</p>
+              </div>
+              <span className="relative inline-flex shrink-0 self-start sm:self-auto">
+                <span aria-hidden className="absolute -inset-1.5 animate-pulse rounded-pill bg-accent/35 blur-lg" />
+                <a
+                  href="https://forms.gle/NWYeG49GU6mZHFid6"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group relative inline-flex items-center justify-center gap-1.5 overflow-hidden rounded-pill bg-accent px-6 py-2.5 text-sm font-bold text-white shadow-[0_4px_16px_rgba(245,166,35,0.5)] ring-2 ring-accent/40 transition-all duration-200 hover:scale-[1.05] hover:shadow-[0_6px_26px_rgba(245,166,35,0.8)]"
+                >
+                  <span aria-hidden className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/45 to-transparent transition-transform duration-[900ms] group-hover:translate-x-full" />
+                  <span className="relative">Raporu değerlendirin (1 dk) →</span>
+                </a>
+              </span>
+            </div>
+          )}
+
           {/* (3) Ücretli eklenti: AI Çözüm Önerileri */}
           {order.report?.hasFixSuggestions && (
             <div className="card p-6">
@@ -497,23 +521,6 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               )}
             </div>
           )}
-        </div>
-      )}
-
-      {/* (ANKET — /tr YALNIZ, non-blocking) Rapor hazır olunca içeriğin ALTINDA küçük davet. Modal DEĞİL;
-          raporu görmeyi/indirmeyi engellemez. rel="noopener noreferrer": gizli rapor URL'i (token) referrer
-          olarak Google'a SIZMAZ. /de-/en'de GÖRÜNMEZ (anket Türkçe). */}
-      {status === 'scan_completed' && lang === 'tr' && (
-        <div className="mt-4 flex flex-col gap-2 rounded-card border border-line bg-brand-50/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-ink-muted">Anonim — görüşleriniz raporlarımızı geliştirir.</p>
-          <a
-            href="https://forms.gle/NWYeG49GU6mZHFid6"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 text-sm font-semibold text-accent-600 hover:underline"
-          >
-            Raporu değerlendirin (1 dk) →
-          </a>
         </div>
       )}
 
