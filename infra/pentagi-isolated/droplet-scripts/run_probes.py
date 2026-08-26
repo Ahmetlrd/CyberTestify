@@ -16,13 +16,28 @@ tamamlanmasını garanti eder; bulgu yalnız binder gerçek imza görürse çık
 """
 import sys, json, argparse, subprocess, re
 
+# (KANIT YAKALAMA SAĞLAMLAŞTIRMASI) YAVAŞ/flaky hedeflerde (ör. testasp.vulnweb.com) kanıt kaçmasın diye:
+# curl'ün KENDİ süre sınırı vardır (--max-time) → yavaş hedefte bile DÖNER ve o ana kadar aldığı GÖVDE
+# yakalanır (reflected-XSS marker'ı genelde gövdenin başındadır). subprocess timeout curl'ün ÜSTÜNDE bir
+# GÜVENLİK AĞIdır (curl kendi süresinde dönmezse); ve o durumda bile o ana kadarki çıktı KAYBEDİLMEZ.
+# ESKİ HATA: curl'e --max-time yoktu; subprocess timeout=45 curl'ü öldürüp TÜM çıktıyı atıyordu →
+# 'PROBE_TIMEOUT' → yakalı yanıt yok → gerçek reflected-XSS binder'da "no-evidence" diye ELENİYORDU.
+CONNECT_TIMEOUT = 15   # bağlantı kurulumu için üst sınır
+MAX_TIME = 40          # curl toplam süre — yavaş hedefte bile bu süre içinde alınan gövde yakalanır
+SUBPROC_TIMEOUT = 60   # curl --max-time'ın ÜSTÜNDE güvenlik ağı (curl kendi süresinde dönmezse)
+CURL = f'curl -sk -i --connect-timeout {CONNECT_TIMEOUT} --max-time {MAX_TIME}'
+
 
 def run(cmd):
     try:
-        p = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=45)
+        p = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=SUBPROC_TIMEOUT)
         return ((p.stdout or '') + (p.stderr or ''))[:20000]
-    except subprocess.TimeoutExpired:
-        return 'PROBE_TIMEOUT (45s)'
+    except subprocess.TimeoutExpired as e:
+        # curl kendi --max-time'ında dönmediyse: O ANA KADAR YAKALANAN çıktıyı KAYBETME (kanıt kaçmasın).
+        so = e.stdout.decode('utf-8', 'replace') if isinstance(e.stdout, (bytes, bytearray)) else (e.stdout or '')
+        se = e.stderr.decode('utf-8', 'replace') if isinstance(e.stderr, (bytes, bytearray)) else (e.stderr or '')
+        cap = (so + se)[:20000]
+        return cap if cap.strip() else f'PROBE_TIMEOUT ({SUBPROC_TIMEOUT}s)'
     except Exception as e:  # betik asla patlamamalı — best-effort
         return f'PROBE_ERROR: {e}'
 
@@ -81,7 +96,7 @@ def main():
             # keşfedilen alanlara SQLi payload'ı ile POST at. "Arama kutusuna tırnak" login testi SAYILMAZ.
             done = False
             for path in (e.get('candidates') or []):
-                getcmd = f'curl -sk -i --resolve {a.target}:443:{a.ip} --resolve {a.target}:80:{a.ip} "https://{a.target}{path}"'
+                getcmd = f'{CURL} --resolve {a.target}:443:{a.ip} --resolve {a.target}:80:{a.ip} "https://{a.target}{path}"'
                 getraw = run(getcmd)
                 form = parse_login_form(_http_body(getraw), path)
                 if not form:
@@ -93,7 +108,7 @@ def main():
                 elif not action.startswith('/'):
                     action = '/' + action
                 data = ' '.join(f'--data-urlencode "{n}={payload}"' for n in fields[:8])
-                postcmd = f'curl -sk -i -X POST --resolve {a.target}:443:{a.ip} "https://{a.target}{action}" {data}'
+                postcmd = f'{CURL} -X POST --resolve {a.target}:443:{a.ip} "https://{a.target}{action}" {data}'
                 raw = run(postcmd)
                 arts.append({'id': f'probe#{i + 1}', 'kind': 'terminal', 'command': postcmd, 'rawText': raw})
                 done = True
@@ -108,7 +123,7 @@ def main():
         path = e.get('path') or '/'
         param = e.get('param')
         # Ajanın kullandığı aynı curl disiplini: -sk -i (durum+başlık), --resolve ile YALNIZ pinlenen IP.
-        base = f'curl -sk -i -G --resolve {a.target}:443:{a.ip} "https://{a.target}{path}"'
+        base = f'{CURL} -G --resolve {a.target}:443:{a.ip} "https://{a.target}{path}"'
         cmd = base + (f' --data-urlencode "{param}={payload}"' if param else '')
         raw = run(cmd)
         arts.append({'id': f'probe#{i + 1}', 'kind': 'terminal', 'command': cmd, 'rawText': raw})
