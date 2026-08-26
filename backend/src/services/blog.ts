@@ -131,14 +131,17 @@ function trDayStart(now = new Date()): Date {
  * Worker her tick'te cagirir; restart-guvenli, cift-yayin YOK. Sira bossa sessizce gecer.
  */
 export async function publishDailyIfDue(): Promise<void> {
-  // Otomatik gunluk yayin YALNIZ tr (SEO otomasyonu). Almanca yazilari kullanici admin'den ELLE
-  // yayinlar (P5: "tek tek yukleyecek") — otomatik yayina girmezler.
-  const publishedToday = await prisma.blogPost.count({
-    where: { status: 'published', lang: 'tr', publishedAt: { gte: trDayStart() } },
-  });
-  if (publishedToday > 0) return; // bugun zaten yayinlandi
-  const done = await publishNextDraft('tr');
-  if (done) console.log(`[blog] otomatik yayinlandi: ${done.slug}`);
+  // Otomatik gunluk yayin HER GORUNUR BOLGE icin 1 makale: tr + de + en (SEO otomasyonu, 3 dilde).
+  // Bir dilde bugun zaten yayin varsa o dil atlanir; sira bossa sessizce gecer. Restart-guvenli.
+  const dayStart = trDayStart();
+  for (const lang of ['tr', 'de', 'en']) {
+    const publishedToday = await prisma.blogPost.count({
+      where: { status: 'published', lang, publishedAt: { gte: dayStart } },
+    });
+    if (publishedToday > 0) continue; // bu dilde bugun zaten yayinlandi
+    const done = await publishNextDraft(lang);
+    if (done) console.log(`[blog] otomatik yayinlandi (${lang}): ${done.slug}`);
+  }
 }
 
 // --- Okuma (public + admin) ---------------------------------------------------

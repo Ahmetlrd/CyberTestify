@@ -103,8 +103,8 @@ export const adminApi = {
   updateInvoice: (id: string, body: { status?: 'requested' | 'issued' | 'sent'; notes?: string }) =>
     areq<{ ok: boolean; status: string }>(`/admin/invoice-requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   // (SEO BLOG — çok-dilli: tr | de)
-  blogList: () =>
-    areq<{ posts: Array<{ id: string; title: string; slug: string; status: string; lang: string; createdAt: string; publishedAt: string | null }>; draftCount: number; publishedCount: number; lastPublishedAt: string | null }>('/admin/blog'),
+  blogList: (lang?: 'tr' | 'de' | 'en') =>
+    areq<{ posts: Array<{ id: string; title: string; slug: string; status: string; lang: string; createdAt: string; publishedAt: string | null }>; draftCount: number; publishedCount: number; lastPublishedAt: string | null }>(`/admin/blog${lang ? `?lang=${lang}` : ''}`),
   blogBulk: (text: string, lang: 'tr' | 'de' | 'en' = 'tr') =>
     areq<{ created: Array<{ title: string; slug: string }>; conflicts: string[]; errors: string[]; lang: string }>('/admin/blog/bulk', { method: 'POST', body: JSON.stringify({ text, lang }) }),
   blogPublishNext: (lang?: 'tr' | 'de' | 'en') =>

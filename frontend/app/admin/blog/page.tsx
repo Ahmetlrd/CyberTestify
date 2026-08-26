@@ -14,9 +14,10 @@ export default function AdminBlog() {
   const [error, setError] = useState<string | null>(null);
 
   function load() {
-    adminApi.blogList().then(setData).catch((e) => setError(e.message));
+    adminApi.blogList(lang).then(setData).catch((e) => setError(e.message));
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  // Dil sekmesi değişince liste + istatistik o dile göre yeniden yüklenir.
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [lang]);
 
   async function upload() {
     if (!text.trim() || busy) return;
@@ -47,6 +48,24 @@ export default function AdminBlog() {
       <H1>Blog</H1>
       {error && <p style={{ color: '#fca5a5' }}>{error}</p>}
 
+      {/* (Çok-dilli) Dil/bölge sekmesi — LİSTE, YÜKLEME ve YAYINLAMA hepsi seçili dile göre çalışır. */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {([['tr', '🇹🇷 Türkçe'], ['de', '🇩🇪 Deutsch'], ['en', '🇬🇧 English']] as const).map(([code, label]) => (
+          <button
+            key={code}
+            onClick={() => { setLang(code); setResult(null); setNote(null); }}
+            style={{
+              padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              border: '1px solid ' + (lang === code ? '#3b82f6' : '#334155'),
+              background: lang === code ? '#1e3a8a' : '#0f172a',
+              color: lang === code ? '#dbeafe' : '#94a3b8',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Istatistik */}
       {data && (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 16, fontSize: 13, color: '#cbd5e1' }}>
@@ -66,16 +85,10 @@ export default function AdminBlog() {
         <p style={{ color: '#94a3b8', fontSize: 12, margin: '0 0 8px' }}>
           Her makale <code style={{ color: '#fbbf24' }}>---</code> ile başlayan bir front-matter (title, description, slug) + ardından markdown içerik. Birden fazlasını ard arda yapıştırabilirsiniz. <code>draft</code> olarak eklenir; slug otomatik normalize edilir (Türkçe karakter → ascii).
         </p>
-        {/* (Çok-dilli) Bu yükleme hangi dile/bölgeye ait: tr → /tr/blog, de → /de/blog. Yalnız o rotada görünür. */}
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#cbd5e1', fontSize: 13, marginBottom: 8 }}>
-          Dil / Bölge:
-          <select value={lang} onChange={(e) => setLang(e.target.value as 'tr' | 'de' | 'en')} style={{ background: '#020617', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '4px 8px', fontSize: 13 }}>
-            <option value="tr">🇹🇷 Türkçe (/tr/blog)</option>
-            <option value="de">🇩🇪 Deutsch (/de/blog)</option>
-            <option value="en">🇬🇧 English (/en/blog)</option>
-          </select>
-          <span style={{ color: '#64748b', fontSize: 11 }}>Almanca yazılar otomatik günlük yayına GİRMEZ — elle “Şimdi yayınla”.</span>
-        </label>
+        {/* (Çok-dilli) Yükleme, üstteki DİL SEKMESİNE (şu an: {lang}) yapılır → yalnız /{lang}/blog'da görünür. */}
+        <p style={{ color: '#93c5fd', fontSize: 12, margin: '0 0 8px' }}>
+          Yükleme hedefi: <strong style={{ textTransform: 'uppercase' }}>{lang}</strong> (üstteki dil sekmesi). Her dil kendi <code>/{lang}/blog</code> rotasında yayınlanır ve her gün otomatik 1 makale her dile ayrı yayınlanır.
+        </p>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
