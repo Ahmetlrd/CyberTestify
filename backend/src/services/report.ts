@@ -34,7 +34,7 @@ import {
   generateSsrfVerifyReport, generateRceVerifyReport, generateFileUploadVerifyReport,
   generateBusinessLogicVerifyReport, generateRaceMassAssignVerifyReport,
 } from './activeVerifyReports.js';
-import { generateAuthenticatedReport } from './authenticatedReports.js';
+import { generateAuthenticatedReport, generateLoginlessFullPentestReport } from './authenticatedReports.js';
 import { authenticateOrder } from './authLogin.js';
 
 // (Tam Kapsamlı Pentest) AUTHENTICATED bundle — rapor (host) DEĞİL, ÖNCE login (order kimlik bilgisi)
@@ -352,7 +352,14 @@ export async function generateAndStoreReport(flowId: string) {
   // (LOGİNSİZ TEST) Müşteri loginsiz seçtiyse (sitede login yok / "loginsiz devam et") login ATLANIR;
   // authenticated rapor üretilmez, tarama unauthenticated yüzey kontrolleriyle TAMAMLANIR (fail DEĞİL).
   if (flow.order.package.key === AUTH_BUNDLE_KEY && flow.order.loginless) {
-    console.log(`[report][FULL] ${flow.orderId}: LOGİNSİZ mod — login atlandı, unauthenticated yüzey raporu üretilecek.`);
+    // (LOGİNSİZ) Paket ÇÖKMEZ: unauth aktif-doğrulama alt kümesi GERÇEKTEN çalışır; authed kontroller
+    // "İncelenemedi — login sağlanmadı" olarak işaretlenir. Boş/tek-satır rapor DEĞİL (hedef erişilebilirken).
+    try {
+      const built = await generateLoginlessFullPentestReport(flow.order.domain.hostname, locale);
+      if (built.findings.trim()) { findings = built.findings; fixText = built.fixText; console.log(`[report][FULL] ${flow.orderId}: LOGİNSİZ mod — unauthenticated yüzey raporu üretildi.`); }
+    } catch (err) {
+      console.error(`[report][FULL] ${flow.orderId}: loginsiz rapor hatası:`, err);
+    }
   } else if (flow.order.package.key === AUTH_BUNDLE_KEY) {
     const authRes = await authenticateOrder(flow.orderId);
     if (!authRes.ok) {

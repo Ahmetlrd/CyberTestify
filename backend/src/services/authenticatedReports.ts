@@ -25,9 +25,10 @@ import { collectActiveIndicatorsEvidence } from './activeIndicators.js';
 import { suggestPricingForHost } from './pricingModel.js';
 import { logScanStep } from './scanLogger.js';
 import {
-  buildActiveCheckReport, buildInjectionReport, buildIdorReport,
+  buildActiveCheckReport, buildInjectionReport, buildIdorReport, generateBundleActiveVerifyReport,
   RISK_WORD, RISK_WORD_DE, RISK_WORD_EN, SEV_DISP, levelRank, extractLevel, headlineOf, detailOnly, type Level,
 } from './activeVerifyReports.js';
+import { resolveOrigin } from './surfaceEvidence.js';
 import type { AuthSession } from './authSession.js';
 
 const COOKIE_CFG = {
@@ -1218,4 +1219,92 @@ export async function generateAuthenticatedReport(host: string, session: AuthSes
   void dataOk;
   // (part 2) MİRAS login'siz cümleleri authenticated bağlama çevir (kaynak şablonlara dokunmadan).
   return { findings: toAuthenticatedContext(findingsRaw, locale), fixText: toAuthenticatedContext(fixTextRaw, locale) };
+}
+
+// ======================================================================================
+// (LOGİNSİZ TAM PENTEST — nazik degradasyon) Müşteri "login'siz devam" seçtiğinde: paket ÇÖKMEZ.
+// Login gerektirmeyen alt küme (Aktif Doğrulama unauth: injection/IDOR göstergesi/SSRF/RCE/upload/
+// business/race) GERÇEKTEN çalışır; login-gerektiren authenticated kontroller "İncelenemedi — login
+// sağlanmadı" olarak ÜÇ-DURUM çerçevesinde işaretlenir ("temiz/bulgu yok" DEĞİL). Login'li akış (session
+// verilen generateAuthenticatedReport) BU FONKSİYONDAN ETKİLENMEZ — ayrı, yeni bir yol.
+// ======================================================================================
+
+// Ana sayfa HTTP durum kodu (403/401 = erişildi-ama-reddedildi ayrımı için). Yanıt yoksa 0.
+async function homepageStatus(origin: string): Promise<number> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10_000);
+  try {
+    const r = await fetch(`${origin}/`, { signal: ctrl.signal, redirect: 'manual', headers: { 'user-agent': 'CyberTestify-PassiveCheck/1.0' } });
+    return r.status;
+  } catch { return 0; } finally { clearTimeout(timer); }
+}
+
+// (P3.2/P3.3) ERİŞİLEBİLİR ama test edilebilir yüzey YOK — "ulaşılamadı" ASLA DENMEZ (site yanıt veriyor).
+// status 403/401 → "erişimi reddediyor (WAF)"; aksi (200-statik/404/belirsiz) → "test edilebilir dinamik
+// yüzey elde edilemedi". unscannableReport ile AYNI "İncelenemedi" markörü (pdf amber) ama mesaj DOĞRU.
+function reachableNoSurfaceReport(host: string, status: number, locale: string): { findings: string; fixText: string } {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
+  const H = t('YÖNETİCİ ÖZETİ', 'MANAGEMENTZUSAMMENFASSUNG', 'EXECUTIVE SUMMARY');
+  const G = t('GENEL DEĞERLENDİRME', 'GESAMTBEWERTUNG', 'OVERALL ASSESSMENT');
+  const R = t('TESPİT EDİLEN RİSKLER', 'FESTGESTELLTE RISIKEN', 'IDENTIFIED RISKS');
+  const level = t('İncelenemedi', 'Nicht prüfbar', 'Not assessable');
+  const rl = t('Risk Seviyesi', 'Risikostufe', 'Risk level');
+  const blocked = status === 403 || status === 401;
+  const reason = blocked
+    ? t(`erişimi **reddediyor** (HTTP ${status} — WAF/erişim kısıtı)`, `verweigert den **Zugriff** (HTTP ${status} — WAF/Zugriffsbeschränkung)`, `**denies access** (HTTP ${status} — WAF/access restriction)`)
+    : t(`yanıt veriyor ancak **test edilebilir bir dinamik yüzey** (form/parametre/API) elde edilemedi (statik içerik veya erişim kısıtı olabilir)`, `antwortet, aber es konnte **keine prüfbare dynamische Oberfläche** (Formular/Parameter/API) ermittelt werden (statischer Inhalt oder Zugriffsbeschränkung möglich)`, `responds but **no testable dynamic surface** (form/parameter/API) could be obtained (static content or access restriction possible)`);
+  const findings =
+    `## ${H}\n\n` +
+    t(`- **Genel risk seviyesi: İncelenemedi** — hedef (${host}) ${reason}.`, `- **Gesamtrisikostufe: Nicht prüfbar** — das Ziel (${host}) ${reason}.`, `- **Overall risk level: Not assessable** — the target (${host}) ${reason}.`) + `\n` +
+    t(`- Bu sonuç sitenin GÜVENLİ olduğu anlamına **GELMEZ** ve "ulaşılamadı" da **DEĞİLDİR** — site erişilebilir.`, `- Dieses Ergebnis bedeutet **NICHT**, dass die Website SICHER ist, und ist auch **NICHT** „nicht erreichbar" — die Website ist erreichbar.`, `- This result does **NOT** mean the website is SECURE, and it is **NOT** "unreachable" either — the site is reachable.`) + `\n` +
+    t(`- **Önerilen ilk adım:** ${blocked ? 'Tarayıcı IP\'sine erişim izni (allowlist) verin veya WAF kuralını gevşetip' : 'Test edilebilir bir uygulama yüzeyi (form/giriş/parametre) olan bir hedefte'} taramayı tekrarlayın.`, `- **Empfohlener erster Schritt:** ${blocked ? 'Erlauben Sie die Scanner-IP (Allowlist) oder lockern Sie die WAF-Regel und' : 'Wiederholen Sie die Prüfung bei einem Ziel mit einer prüfbaren Anwendungsoberfläche (Formular/Login/Parameter) und'} wiederholen Sie die Prüfung.`, `- **Recommended first step:** ${blocked ? 'Allow the scanner IP (allowlist) or relax the WAF rule, then' : 'Repeat the scan on a target that has a testable application surface (form/login/parameter);'} repeat the scan.`) + `\n\n` +
+    `## ${G}\n\n**${rl}: ${level}**\n\n` +
+    t(`Sunucu **yanıt veriyor** (yani "ulaşılamadı" değil) ancak ${blocked ? `HTTP ${status} ile erişimi reddettiği` : 'test edilebilir bir dinamik yüzey elde edilemediği'} için kontroller çalıştırılamadı. Bu rapor bir "temiz/güvenli" sonucu **DEĞİLDİR**.`, `Der Server **antwortet** (also nicht „nicht erreichbar"), aber da er ${blocked ? `den Zugriff mit HTTP ${status} verweigerte` : 'keine prüfbare dynamische Oberfläche lieferte'}, konnten die Kontrollen nicht ausgeführt werden. Dieser Bericht ist **KEIN** „sauberes/sicheres" Ergebnis.`, `The server **responds** (so it is not "unreachable"), but because it ${blocked ? `denied access with HTTP ${status}` : 'did not yield a testable dynamic surface'}, the controls could not be run. This report is **NOT** a "clean/secure" result.`) + `\n\n` +
+    `## ${R}\n\n_` + t('Test edilebilir yüzey elde edilemedi — sonuç değerlendirilemez (ama hedef erişilebilir).', 'Es konnte keine prüfbare Oberfläche ermittelt werden — das Ergebnis ist nicht bewertbar (das Ziel ist jedoch erreichbar).', 'No testable surface could be obtained — the result is not assessable (but the target is reachable).') + `_\n`;
+  return { findings, fixText: '' };
+}
+
+// Login-gerektiren authenticated kontroller — hepsi "İncelenemedi — login sağlanmadı" (üç-durum; temiz DEĞİL).
+function loginlessAuthedSection(locale: string): string {
+  const de = locale === 'de', en = locale === 'en';
+  const t = (trS: string, deS: string, enS?: string) => (de ? deS : en ? (enS ?? trS) : trS);
+  const controls = de
+    ? ['Sitzungs-Cookie-Flags', 'Session Fixation', 'Logout / Sitzungsentwertung', 'Forced Browsing / Funktionsebenen-Autorisierung', 'Authentifizierte Injektion (SQLi/XSS)', 'Authentifiziertes IDOR (eigene Ressourcen)', 'Rechteausweitung (Privilege Escalation)', 'Mehrstufige Geschäftslogik', 'JWT-/Token-Sicherheit', 'Authentifizierungstiefe', 'Sitzungssicherheitstiefe']
+    : en
+    ? ['Session Cookie Flags', 'Session Fixation', 'Logout / Session Invalidation', 'Forced Browsing / Function-Level Authorization', 'Authenticated Injection (SQLi/XSS)', 'Authenticated IDOR (own resources)', 'Privilege Escalation', 'Multi-Step Business Logic', 'JWT / Token Security', 'Authentication Depth', 'Session Security Depth']
+    : ['Oturum Çerezi Bayrakları', 'Session Fixation', 'Logout / Oturum Geçersizleştirme', 'Forced Browsing / Fonksiyon-Seviye Yetki', 'Authenticated Enjeksiyon (SQLi/XSS)', 'Authenticated IDOR (kendi kaynakları)', 'Yetki Yükseltme (Privilege Escalation)', 'Çok-Adımlı İş Mantığı', 'JWT / Token Güvenliği', 'Kimlik-Doğrulama Derinliği', 'Oturum Güvenliği Derinliği'];
+  const state = t('⚠️ İncelenemedi — login sağlanmadı', '⚠️ Nicht prüfbar — keine Anmeldung', '⚠️ Not assessable — no login provided');
+  const rows = controls.map((c) => `| ${c} | ${state} |`).join('\n');
+  const head = t('KİMLİK-DOĞRULAMALI KONTROLLER — İNCELENEMEDİ (LOGİN SAĞLANMADI)', 'AUTHENTIFIZIERTE KONTROLLEN — NICHT PRÜFBAR (KEINE ANMELDUNG)', 'AUTHENTICATED CONTROLS — NOT ASSESSABLE (NO LOGIN PROVIDED)');
+  const colC = t('Kontrol', 'Kontrolle', 'Control');
+  const colR = t('Sonuç', 'Ergebnis', 'Result');
+  return `## ${head}\n\n` +
+    t('Bu tarama bir **TEST hesabı sağlanmadan** (login\'siz) yapıldı. Aşağıdaki oturum-içi (giriş sonrası) kontroller **çalıştırılamadı**. Bu bir **"güvenli/temiz" sonucu DEĞİLDİR** — yalnızca login olmadan değerlendirilemediklerini gösterir:',
+      'Dieser Scan wurde **ohne Bereitstellung eines TEST-Kontos** (ohne Anmeldung) durchgeführt. Die folgenden Kontrollen im angemeldeten Kontext konnten **nicht ausgeführt werden**. Dies ist **KEIN „sicheres/sauberes" Ergebnis** — es zeigt lediglich, dass sie ohne Anmeldung nicht bewertet werden konnten:',
+      'This scan was performed **without a TEST account** (no login). The following logged-in (post-authentication) controls **could not be run**. This is **NOT a "secure/clean" result** — it only shows they could not be assessed without a login:') + `\n\n` +
+    `| ${colC} | ${colR} |\n|-----|-----|\n${rows}\n\n` +
+    `> ${t('Authenticated kontroller (yetkilendirme, IDOR-kendi-kaynağı, oturum güvenliği, JWT, iş mantığı) bir oturum gerektirir. Bir **TEST hesabı** sağlanırsa bu alanlar da değerlendirilebilir.',
+      'Authentifizierte Kontrollen (Autorisierung, IDOR eigener Ressourcen, Sitzungssicherheit, JWT, Geschäftslogik) erfordern eine Sitzung. Wird ein **TEST-Konto** bereitgestellt, können auch diese Bereiche bewertet werden.',
+      'Authenticated controls (authorization, own-resource IDOR, session security, JWT, business logic) require a session. If a **TEST account** is provided, these areas can also be assessed.')}\n`;
+}
+
+/** Login'siz Tam Pentest raporu: unauth aktif doğrulama (gerçek) + authed kontroller "İncelenemedi". */
+export async function generateLoginlessFullPentestReport(host: string, locale: string = 'tr'): Promise<{ findings: string; fixText: string }> {
+  const o = await resolveOrigin(host);
+  // (P3.1) GERÇEKTEN ulaşılamaz (DNS yok / hiçbir yanıt yok) — "ulaşılamadı" YALNIZ burada.
+  if (!o.reachable) return { findings: unscannableReport(host, locale === 'de' ? 'Kontrollen' : locale === 'en' ? 'checks' : 'kontroller', locale).findings, fixText: '' };
+  // Unauth aktif doğrulama (login gerektirmeyen alt küme) — gerçekten çalışır.
+  const av = await generateBundleActiveVerifyReport(host, locale).catch(() => null);
+  const avUnscannable = !av || /İncelenemedi|Nicht prüfbar|Not assessable/i.test(av.findings.slice(0, 500));
+  const authedSection = loginlessAuthedSection(locale);
+  if (!avUnscannable && av) {
+    // Unauth yüzey VAR → gerçek aktif-doğrulama raporu + authed "İncelenemedi" bölümü.
+    return { findings: `${av.findings.trim()}\n\n${authedSection}`, fixText: av.fixText };
+  }
+  // (P3.2/P3.3) Erişilebilir ama test edilebilir yüzey yok — "ulaşılamadı" ASLA (reachable=true burada).
+  // 403/401 → "reddedildi"; aksi → "test edilebilir yüzey yok". unscannableReport KULLANILMAZ (o "ulaşılamadı" der).
+  const status = await homepageStatus(o.origin);
+  const base = reachableNoSurfaceReport(host, status, locale);
+  return { findings: `${base.findings.trim()}\n\n${authedSection}`, fixText: '' };
 }
