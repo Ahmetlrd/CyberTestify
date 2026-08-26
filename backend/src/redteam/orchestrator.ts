@@ -70,12 +70,22 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
   const p = LEVEL_CFG[job.level].profile;
   const d = job.domain;
+  // (P4 ASILI-HEDEF KÖK NEDEN — FIX#4) Ajanın KENDİ curl'lerinde --max-time yoktu; yavaş/asılı hedefte
+  // (ör. testasp datacenter IP'sinden) baseline curl sonsuza asıldı → ajan 30s hareketsiz → watchdog
+  // koşuyu ÖLDÜRDÜ → keşif/prob hiç çalışamadı → boş "Temiz". Bu yüzden HER curl bounded olmalı.
+  const ct = `curl -sk -i --connect-timeout 10 --max-time 25`;
   return (
     `You are an authorized penetration tester. Target application: https://${d}/ (the operator owns it). ` +
     // Pinlenen IP'ye bağlan AMA Host/SNI = domain gönder → doğru vhost GERÇEK uygulamayı sunar.
     `Connect ONLY to the pinned IP ${pinnedIp}, but ALWAYS send Host: ${d} and SNI ${d} ` +
-    `(e.g. curl -sk --resolve ${d}:443:${pinnedIp} --resolve ${d}:80:${pinnedIp} "https://${d}/..."). ` +
+    `(e.g. curl -sk --connect-timeout 10 --max-time 25 --resolve ${d}:443:${pinnedIp} --resolve ${d}:80:${pinnedIp} "https://${d}/..."). ` +
     `Do NOT re-resolve the domain and do NOT touch any other host. ` +
+    // (P4/FIX#4) ZORUNLU TIMEOUT — timeout'suz tek bir asılı curl TÜM koşuyu 30s-hareketsizlik hard-stop'una sürükler.
+    `MANDATORY TIMEOUTS — EVERY curl you run MUST include "--connect-timeout 10 --max-time 25" (baseline homepage ` +
+    `fetch, discovery/robots/sitemap fetches, and ALL XSS/SQLi probes — NO exception). NEVER run a curl WITHOUT ` +
+    `--max-time: a single hung request (a slow/rate-limited target) with no timeout stalls you, and after 30s of ` +
+    `inactivity the run is force-stopped before discovery even begins. A curl that times out is FINE — it returns ` +
+    `promptly and you move on to the next endpoint; a curl with no --max-time is NOT fine. ` +
     // (P1) İzole ortamda erişilemeyen araçlar — bunlara zaman/bütçe HARCAMA (bu koşuda ajan 11 dk'yı
     // web_search/browser/memorist'te yaktı, asıl XSS payload'ını hiç göndermedi).
     `ENVIRONMENT LIMITS — web_search, browser, and memorist/vector-DB are NOT reachable here; DO NOT use them ` +
@@ -87,7 +97,7 @@ function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
     // keşfedilen uç'lara atılır. Hardcoded liste yalnız keşif HİÇ sonuç vermezse son-çare fallback.
     `TARGET-SPECIFIC DISCOVERY FIRST (do this BEFORE any XSS/SQLi probe, in the first ~2-3 minutes) — the target's ` +
     `real entry points are NOT known in advance and DIFFER per stack (ASP/.asp, JSP/.jsp, PHP/.php); do NOT assume any ` +
-    `preset path exists. (a) Fetch the homepage and 3-6 internal pages with "curl -sk -i --resolve ${d}:443:${pinnedIp} ...", ` +
+    `preset path exists. (a) Fetch the homepage and 3-6 internal pages with "${ct} --resolve ${d}:443:${pinnedIp} ...", ` +
     `printing the FULL response to STDOUT. (b) From the captured HTML extract THIS target's OWN entry points: <a href> ` +
     `links (ESPECIALLY those carrying a "?param=" query string), <form action=...> targets together with their ` +
     `<input name=...> field names, and any URL that carries a parameter. (c) Also fetch /robots.txt and /sitemap.xml if ` +
@@ -95,7 +105,8 @@ function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
     `stack-appropriate parameterized endpoints. Build a SHORT list of THIS target's real parameterized entry points ` +
     `(path + parameter name) — these, NOT any preset path, are what you probe next. ` +
     // (P2 KANIT-YAKALAMA — FIX#2) Gövde STDOUT'ta olmalı; -o/-w/> YASAK (dosyaya yazılan gövde platforma görünmez).
-    `EVIDENCE CAPTURE (applies to EVERY request): ALWAYS use "curl -sk -i" (-i INCLUDES the HTTP status line + headers) ` +
+    `EVIDENCE CAPTURE (applies to EVERY request): ALWAYS use "${ct}" (-i INCLUDES the HTTP status line + headers, ` +
+    `and the timeouts keep a slow endpoint from stalling the run) ` +
     `and let the FULL RESPONSE (status line, headers, AND body) PRINT TO THE TERMINAL (stdout). NEVER use -o/--output, ` +
     `NEVER redirect with ">", and NEVER use -w/--write-out as a substitute for the body — a response saved to a FILE is ` +
     `INVISIBLE to the platform (it reads ONLY your terminal stdout) and counts as NO evidence. ` +
@@ -104,11 +115,11 @@ function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
     `complete ALL of steps 1-3 even if you already confirmed one reflected XSS (finding ONE issue does NOT complete the run):\n` +
     `  STEP 1 — reflected-XSS marker probe on EACH discovered parameterized entry point. First send the RAW <script> ` +
     `directly in the query (for a discovered PATH with parameter PARAM):\n` +
-    `    curl -sk -i --resolve ${d}:443:${pinnedIp} "https://${d}/<discovered-path>?<discovered-param>=zqxmarker9173<script>alert(1)</script>"\n` +
+    `    ${ct} --resolve ${d}:443:${pinnedIp} "https://${d}/<discovered-path>?<discovered-param>=zqxmarker9173<script>alert(1)</script>"\n` +
     `  CONDITIONAL ENCODE-RETRY (CRITICAL): if the RAW probe returns a TRANSPORT-LEVEL rejection (400/403/406 — the ` +
     `server/parser refused the request LINE, the app never processed the value), do NOT call it "no finding"; IMMEDIATELY ` +
     `re-send the SAME parameter URL-ENCODED (%3Cscript%3E…%3C%2Fscript%3E) with curl -G --data-urlencode:\n` +
-    `    curl -sk -i -G --resolve ${d}:443:${pinnedIp} "https://${d}/<discovered-path>" --data-urlencode "<discovered-param>=zqxmarker9173<script>alert(1)</script>"\n` +
+    `    ${ct} -G --resolve ${d}:443:${pinnedIp} "https://${d}/<discovered-path>" --data-urlencode "<discovered-param>=zqxmarker9173<script>alert(1)</script>"\n` +
     `  Each endpoint runs its OWN raw→encode-retry loop INDEPENDENTLY. Then verify whether zqxmarker9173 appears UNENCODED ` +
     `(literal <script>, NOT &lt;script&gt;) in the response BODY (the part AFTER the headers) of a 2xx response ` +
     `(that is a KANITLI reflected XSS). Conclude "no finding" for an endpoint ONLY if BOTH the raw AND the encoded attempt return 4xx/5xx.\n` +
@@ -120,7 +131,7 @@ function levelPrompt(job: RedTeamJobInput, pinnedIp: string): string {
     `(JSP), /search.php?q= (PHP) — but the target's OWN discovered endpoints ALWAYS take priority over this list. ` +
     `(Cookie security flags and Server/version information-disclosure are extracted DETERMINISTICALLY by the platform from ` +
     `the responses you already captured — you do NOT need to assess them yourself; just make sure your STEP 1-3 requests ` +
-    `use "curl -sk -i" so the full headers, including Set-Cookie and Server, are captured.) ` +
+    `use "${ct}" so the full headers, including Set-Cookie and Server, are captured.) ` +
     `Aggressiveness (${job.level}): ${p}. ` +
     `EVIDENCE RULES (mandatory) — for EVERY request print the FULL curl command AND the FULL response (status line + body) ` +
     `to the terminal STDOUT (never with -o/--output, never with ">", never -w instead of the body — a body saved to a file is ` +
@@ -433,8 +444,20 @@ export async function runPipeline(ctx: OrchestratorCtx): Promise<{
       agentSec,             // (P0-5) yalnız ajan süresi
       elapsedSec: totalSec, // (P0-5) toplam süre (provision+setup+campaign+bind+report) — runner override edebilir
     });
+    // (P2/FIX#4 — DÜRÜST SAĞLIK NOTU) Hedef HİÇ geçerli HTTP yanıtı vermediyse (tüm curl'ler boş/timeout →
+    // hiçbir artefaktta "HTTP/x" durum satırı yok) rapor "kanıtlı yok = Temiz = güvenli" yanılgısına düşmesin.
+    // overallRisk DEĞİŞMEZ (binder hesaplar); yalnız şeffaf uyarı. Yanıt-veren hedefte (anyHttp) hiç tetiklenmez.
+    try {
+      const arts = (rawFlow as { artifacts?: Array<{ rawText?: string }> } | undefined)?.artifacts ?? [];
+      const anyHttp = arts.some((a) => /HTTP\/\d/.test(a?.rawText ?? ''));
+      if (report && !anyHttp && report.counts.kanitli === 0) {
+        report.healthNote = 'Hedef bu koşuda geçerli bir HTTP yanıtı vermedi (yavaş/kısıtlı/asılı — istekler zaman ' +
+          'aşımına uğradı). Test edilebilir yüzey ALINAMADI; "kanıtlı bulgu yok / Temiz" ifadesi "hedef güvenli" ' +
+          'anlamına GELMEZ. Hedefe yanıt veren bir ağ konumundan taramayı tekrarlayın.';
+      }
+    } catch { /* sağlık notu best-effort — raporu asla bozma */ }
     // (P0-5) Süre farkını DÜRÜSTÇE açıkla: ajan-süresi cap'i aşamaz; toplam süre infra fazlarını da içerir.
-    await record({ phase: 'report', ok: true, detail: `rapor: kanıtlı ${report.counts.kanitli} · belirsiz ${report.counts.belirsiz} · elenen ${report.eliminated} · risk ${report.overallRisk} · süre: ajan ${agentSec ?? '?'}s / toplam ${totalSec}s (fark = infra: provision+setup+bind+teardown)` });
+    await record({ phase: 'report', ok: true, detail: `rapor: kanıtlı ${report.counts.kanitli} · belirsiz ${report.counts.belirsiz} · elenen ${report.eliminated} · risk ${report.overallRisk}${report.healthNote ? ' · ⚠ hedef-yanıtsız' : ''} · süre: ajan ${agentSec ?? '?'}s / toplam ${totalSec}s (fark = infra: provision+setup+bind+teardown)` });
 
     return { ok: true, steps, report, rawFlow, binderTrace, liveCostUsd, agentSec };
   } catch (e) {

@@ -96,6 +96,10 @@ export type RedTeamReport = {
   // (BAĞIMSIZ WATCHDOG — D5) Koşu cap/watchdog tarafından ZORLA durdurulduysa dürüst not (yarım kalan
   // istek/yanıt çiftleri zaten P0-2 kuralı gereği kanıt sayılmaz — rapor bozulmaz, yalnız şeffaf bir not eklenir).
   stoppedReason?: string;
+  // (P2/FIX#4 — DÜRÜST SAĞLIK NOTU) Hedef geçerli bir HTTP yanıtı vermediyse (yavaş/kısıtlı/asılı → tüm
+  // istekler timeout) "kanıtlı yok = Temiz = güvenli" YANILGISINI önle. overallRisk'i şişirmez/değiştirmez;
+  // yalnız şeffaf bir uyarı ekler (üç-durum dürüstlüğü: test edilebilir yüzey ALINAMADI).
+  healthNote?: string;
 };
 
 const RISK_LABEL: Record<string, string> = {
@@ -404,6 +408,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
   </section>
 
   ${r.stoppedReason ? `<div class="disc" style="background:#fef2f2;border-color:#f87171;border-left-color:#dc2626;color:#7f1d1d">⏱ KOŞU ZORLA DURDURULDU: ${esc(r.stoppedReason)}</div>` : ''}
+  ${r.healthNote ? `<div class="disc" style="background:#fffbeb;border-color:#f59e0b;border-left-color:#d97706;color:#78350f">⚠ HEDEF YANIT VERMEDİ: ${esc(r.healthNote)}</div>` : ''}
 
   <h2 id="s-ozet">Yönetici Özeti</h2>
   <div class="exec">
