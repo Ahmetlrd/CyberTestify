@@ -53,14 +53,14 @@ export default function AdminRedTeamDetail({ params }: { params: { id: string } 
     return () => clearInterval(t);
   }, [params.id]);
 
-  async function openReport(kind: 'html' | 'pdf') {
+  async function openReport(kind: 'html' | 'pdf', view?: 'customer') {
     try {
-      const blob = await adminApi.redteamReportBlob(params.id, kind);
+      const blob = await adminApi.redteamReportBlob(params.id, kind, view);
       const url = URL.createObjectURL(blob);
       if (kind === 'pdf') {
         const a = document.createElement('a');
         a.href = url;
-        a.download = `redteam-${params.id.slice(0, 8)}.pdf`;
+        a.download = `redteam-${params.id.slice(0, 8)}${view === 'customer' ? '-musteri' : ''}.pdf`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -215,9 +215,11 @@ export default function AdminRedTeamDetail({ params }: { params: { id: string } 
                   </div>
                 ))}
               </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <button onClick={() => openReport('html')} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#7dd3fc', cursor: 'pointer', fontSize: 12 }}>Raporu Gör</button>
-                <button onClick={() => openReport('pdf')} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#a3e635', cursor: 'pointer', fontSize: 12 }}>PDF indir</button>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                <button onClick={() => openReport('html')} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#7dd3fc', cursor: 'pointer', fontSize: 12 }}>Raporu Gör (admin)</button>
+                <button onClick={() => openReport('pdf')} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#a3e635', cursor: 'pointer', fontSize: 12 }}>PDF indir (admin)</button>
+                <button onClick={() => openReport('html', 'customer')} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #F5A623', background: '#0f172a', color: '#F5A623', cursor: 'pointer', fontSize: 12 }}>Müşteri Görünümü</button>
+                <button onClick={() => openReport('pdf', 'customer')} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #F5A623', background: '#1a1206', color: '#F5A623', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>Müşteri PDF indir</button>
               </div>
             </>
           ) : <p style={{ fontSize: 13, color: '#64748b' }}>Henüz rapor yok (koşu tamamlanınca sınıflandırma gelir).</p>}

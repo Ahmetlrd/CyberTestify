@@ -136,8 +136,9 @@ export const adminApi = {
   redteamCreate: (body: { domain: string; level: string; modelConfig?: Record<string, string>; capCallsOverride?: number; capSecOverride?: number; capCostOverride?: number; dryRun?: boolean }) =>
     areq<{ ok: boolean; jobId: string; dryRun: boolean; estimate: any }>('/admin/redteam-jobs', { method: 'POST', body: JSON.stringify(body) }),
   // Tam rapor: okunur HTML + indirilebilir PDF (auth header gerektiği için fetch→blob).
-  redteamReportBlob: async (id: string, kind: 'html' | 'pdf'): Promise<Blob> => {
-    const res = await fetch(`${API_URL}/admin/redteam-jobs/${id}/report.${kind}`, { headers: adminHeaders() });
+  redteamReportBlob: async (id: string, kind: 'html' | 'pdf', view?: 'customer'): Promise<Blob> => {
+    const qs = view === 'customer' ? '?view=customer' : '';
+    const res = await fetch(`${API_URL}/admin/redteam-jobs/${id}/report.${kind}${qs}`, { headers: adminHeaders() });
     if (res.status === 401 && typeof window !== 'undefined') { window.localStorage.removeItem(ADMIN_TOKEN_KEY); window.location.href = '/admin/login'; }
     if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(friendlyAdminError(b, res.status, 'Rapor şu an alınamadı.')); }
     return res.blob();
