@@ -500,6 +500,23 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
         </div>
       )}
 
+      {/* (ANKET — /tr YALNIZ, non-blocking) Rapor hazır olunca içeriğin ALTINDA küçük davet. Modal DEĞİL;
+          raporu görmeyi/indirmeyi engellemez. rel="noopener noreferrer": gizli rapor URL'i (token) referrer
+          olarak Google'a SIZMAZ. /de-/en'de GÖRÜNMEZ (anket Türkçe). */}
+      {status === 'scan_completed' && lang === 'tr' && (
+        <div className="mt-4 flex flex-col gap-2 rounded-card border border-line bg-brand-50/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-ink-muted">Anonim — görüşleriniz raporlarımızı geliştirir.</p>
+          <a
+            href="https://forms.gle/NWYeG49GU6mZHFid6"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 text-sm font-semibold text-accent-600 hover:underline"
+          >
+            Raporu değerlendirin (1 dk) →
+          </a>
+        </div>
+      )}
+
       {status === 'scope_violation' && (
         <p className="mt-6 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {t.scopeViolation}
