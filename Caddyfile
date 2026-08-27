@@ -29,13 +29,10 @@ cybertestify.com {
 	reverse_proxy frontend:3000
 }
 
-# app.cybertestify.com -> apex'e yonlendir (path+query korunur). TEMPORARY (302) —
-# bilerek kalici(301) DEGIL: gecmiste yon degistiren 301'ler tarayici cache'inde
-# takildigindan, geri alinabilir kalsin diye. app artik ayri bir site DEGIL.
-app.cybertestify.com {
-	import sec_headers
-	redir https://cybertestify.com{uri}
-}
+# app.cybertestify.com KALDIRILDI — artık sunulmuyor (redirect bloğu silindi). Neden: app. ayrı bir
+# site değil; tarayıcı yönlendirme sırasında bu domain'i "ziyaret edilmiş" sayıp iOS Passwords/AutoFill'e
+# ikinci bir hesap adayı olarak düşürüyordu. Blok kalkınca Caddy bu host için sertifika almaz; app. artık
+# TLS'te ölür (geri istenirse blok yeniden eklenir). DNS'te app A kaydı da kaldırılabilir (opsiyonel).
 
 # www.cybertestify.com -> apex'e yonlendir. DNS A kaydi (www -> 164.92.223.208) eklendi;
 # Caddy bu blokla Let's Encrypt sertifikasini otomatik alir. Kullanici www yazsa da

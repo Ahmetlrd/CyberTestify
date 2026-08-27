@@ -35,10 +35,9 @@ app.set('trust proxy', 1);
 // Guvenlik basliklari (CSP, HSTS vb.). API oldugu icin varsayilan yeterli.
 app.use(helmet());
 
-// Izin verilen origin'ler. ONEMLI: cybertestify.com (apex) VE app.cybertestify.com AYNI
-// uygulamayi paralel sunuyor (yonlendirme YOK) — kullanici hangi domain'den girerse girsin
-// API cagrilari CORS'a takilmamali. Bu yuzden apex + TUM alt alan adlarini (app./www./admin.)
-// tek regex ile kabul ederiz; ayrica FRONTEND_URL/ADMIN_URL ve localhost (dev) izinli.
+// Izin verilen origin'ler: apex (cybertestify.com) + gecerli alt alan adlari (www./admin.).
+// NOT: app.cybertestify.com ARTIK YOK (Caddy'de kaldirildi) — regex generic oldugu icin ayrica
+// islem gerekmez; app. host'undan istek gelmez. FRONTEND_URL/ADMIN_URL ve localhost (dev) de izinli.
 const staticOrigins = new Set(
   [config.frontendUrl, ...config.adminUrl.split(',')].map((s) => s.trim()).filter(Boolean),
 );
