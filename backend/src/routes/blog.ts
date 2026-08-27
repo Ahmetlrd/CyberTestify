@@ -25,5 +25,9 @@ blogRouter.get('/images/:id', async (req, res) => {
   if (!img) return res.status(404).end();
   res.setHeader('Content-Type', img.mime);
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  // (KRİTİK) helmet varsayılanı CORP=same-origin → tarayıcı bu görseli BAŞKA origin'de (cybertestify.com /
+  // admin.cybertestify.com sayfaları, OG scraper'lar) GÖMEMEZ (kırık görsel). Bunlar HERKESE açık kapak
+  // görselleri; her yerde gömülebilmeli → CORP'u cross-origin yap.
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.send(img.data);
 });
