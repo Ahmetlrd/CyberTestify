@@ -6,7 +6,8 @@ import { isRegionCode } from '../../../config/regions';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const SITE = 'https://cybertestify.com';
 
-type Post = { title: string; description: string; slug: string; publishedAt: string | null };
+type Post = { title: string; description: string; slug: string; publishedAt: string | null; coverImageId?: string | null };
+const coverUrl = (id?: string | null) => (id ? `${API}/blog/images/${id}` : null);
 
 // Bölge -> blog dili. Şu an yalnız tr ve de blog var (us/ae görünmez). Bilinmeyen -> tr.
 function blogLang(region: string): 'tr' | 'de' | 'en' {
@@ -85,13 +86,22 @@ export default async function BlogPage({ params }: { params: { region: string } 
         <p className="text-sm text-ink-muted">{t.empty}</p>
       ) : (
         <div className="space-y-5">
-          {posts.map((p) => (
-            <Link key={p.slug} href={`/${params.region}/blog/${p.slug}`} className="card block p-6 transition hover:border-accent/60">
-              <h2 className="text-lg font-bold text-brand">{p.title}</h2>
-              {p.description && <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">{p.description}</p>}
-              <p className="mt-3 text-xs text-ink-muted">{fmtDate(p.publishedAt)}</p>
-            </Link>
-          ))}
+          {posts.map((p) => {
+            const cover = coverUrl(p.coverImageId);
+            return (
+              <Link key={p.slug} href={`/${params.region}/blog/${p.slug}`} className="card block overflow-hidden transition hover:border-accent/60">
+                {cover && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={cover} alt={p.title} loading="lazy" className="h-44 w-full object-cover" />
+                )}
+                <div className="p-6">
+                  <h2 className="text-lg font-bold text-brand">{p.title}</h2>
+                  {p.description && <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">{p.description}</p>}
+                  <p className="mt-3 text-xs text-ink-muted">{fmtDate(p.publishedAt)}</p>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
     </main>

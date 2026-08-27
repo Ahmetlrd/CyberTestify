@@ -7,7 +7,10 @@ import { isRegionCode } from '../../../../config/regions';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const SITE = 'https://cybertestify.com';
 
-type Post = { title: string; description: string; slug: string; contentHtml: string; publishedAt: string | null };
+type Post = { title: string; description: string; slug: string; contentHtml: string; publishedAt: string | null; coverImageId?: string | null };
+
+// Kapak görseli mutlak URL'i (og:image + hero). API host'undan (uzun cache'li) sunulur.
+const coverUrl = (id?: string | null) => (id ? `${API}/blog/images/${id}` : null);
 
 function blogLang(region: string): 'tr' | 'de' | 'en' {
   return region === 'de' ? 'de' : region === 'en' ? 'en' : 'tr';
@@ -28,6 +31,7 @@ export async function generateMetadata({ params }: { params: { region: string; s
   const post = await getPost(params.slug, lang);
   if (!post) return { title: lang === 'de' ? 'Artikel nicht gefunden — CyberTestify' : lang === 'en' ? 'Article not found — CyberTestify' : 'Yazı bulunamadı — CyberTestify' };
   const url = `${SITE}/${params.region}/blog/${post.slug}`;
+  const cover = coverUrl(post.coverImageId);
   return {
     title: `${post.title} — CyberTestify`,
     description: post.description,
@@ -42,8 +46,9 @@ export async function generateMetadata({ params }: { params: { region: string; s
       url,
       siteName: 'CyberTestify',
       publishedTime: post.publishedAt ?? undefined,
+      ...(cover ? { images: [{ url: cover, alt: post.title }] } : {}),
     },
-    twitter: { card: 'summary_large_image', title: post.title, description: post.description },
+    twitter: { card: 'summary_large_image', title: post.title, description: post.description, ...(cover ? { images: [cover] } : {}) },
   };
 }
 
@@ -71,8 +76,10 @@ export default async function BlogPostPage({ params }: { params: { region: strin
       logo: { '@type': 'ImageObject', url: `${SITE}/logo.svg` },
     },
     mainEntityOfPage: { '@type': 'WebPage', '@id': url },
+    ...(coverUrl(post.coverImageId) ? { image: [coverUrl(post.coverImageId)] } : {}),
     url,
   };
+  const cover = coverUrl(post.coverImageId);
   return (
     <main className="container-page max-w-3xl py-14">
       <JsonLd data={articleLd} />
@@ -80,6 +87,10 @@ export default async function BlogPostPage({ params }: { params: { region: strin
       <article className="mt-6">
         <h1 className="text-3xl font-extrabold text-brand sm:text-4xl">{post.title}</h1>
         {post.publishedAt && <p className="mt-2 text-xs text-ink-muted">{fmtDate(post.publishedAt)}</p>}
+        {cover && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cover} alt={post.title} className="mt-6 w-full rounded-xl border border-ink-100 object-cover" style={{ maxHeight: 420 }} />
+        )}
         <div className="blog-body mt-8" dangerouslySetInnerHTML={{ __html: post.contentHtml }} />
       </article>
     </main>

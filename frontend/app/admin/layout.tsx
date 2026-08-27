@@ -15,6 +15,7 @@ const NAV = [
   { href: '/admin/scope-violations', label: 'Kapsam İhlalleri' },
   { href: '/admin/report-access', label: 'Rapor Erişim' },
   { href: '/admin/blog', label: 'Blog' },
+  { href: '/admin/photos', label: 'Fotolar' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

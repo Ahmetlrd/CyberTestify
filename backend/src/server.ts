@@ -65,6 +65,9 @@ app.use('/webhooks', express.raw({ type: '*/*' }), (req, _res, next) => {
 });
 app.use('/webhooks', webhooksRouter);
 
+// (BLOG GÖRSEL YÜKLEME) base64 görsel gövdesi 256kb'ı aşabilir → bu path için ÖNCE büyük-limitli parser
+// (req._body set eder, global parser bu path'te tekrar parse etmez). Diğer tüm path'ler 256kb'da kalır.
+app.use('/admin/blog-images', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '256kb' }));
 
 // --- Rate limiting -------------------------------------------------------

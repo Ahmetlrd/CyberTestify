@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { adminApi } from '../../../lib/adminApi';
 import { H1, Table, fmtDate } from '../../../components/admin/ui';
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const coverUrl = (id: string) => `${API}/blog/images/${id}`;
+
 export default function AdminBlog() {
   const [data, setData] = useState<any>(null);
   const [text, setText] = useState('');
@@ -12,6 +15,21 @@ export default function AdminBlog() {
   const [result, setResult] = useState<{ created: any[]; conflicts: string[]; errors: string[] } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Kapak override: belirli görsel seçme modal'ı (post'un kategorisindeki görseller).
+  const [picker, setPicker] = useState<{ postId: string; category: string | null } | null>(null);
+  const [pickerImgs, setPickerImgs] = useState<any[]>([]);
+
+  async function reroll(postId: string) {
+    try { await adminApi.blogCoverReroll(postId); load(); } catch (e: any) { setError(e.message); }
+  }
+  async function openPicker(postId: string, category: string | null) {
+    setPicker({ postId, category });
+    setPickerImgs(await adminApi.blogImages(category || undefined).catch(() => []));
+  }
+  async function pick(imageId: string) {
+    if (!picker) return;
+    try { await adminApi.blogCoverSet(picker.postId, imageId); setPicker(null); load(); } catch (e: any) { setError(e.message); }
+  }
 
   function load() {
     adminApi.blogList(lang).then(setData).catch((e) => setError(e.message));
@@ -40,6 +58,7 @@ export default function AdminBlog() {
     } catch (e: any) { setError(e.message); }
   }
 
+  const miniBtn: React.CSSProperties = { background: '#0b1120', border: '1px solid #334155', color: '#7dd3fc', borderRadius: 5, padding: '2px 6px', fontSize: 10, cursor: 'pointer', whiteSpace: 'nowrap' };
   const box: React.CSSProperties = { background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: 14, marginBottom: 16 };
   const badge = (s: string) => ({ background: s === 'published' ? '#166534' : s === 'draft' ? '#7c5e10' : '#334155', color: '#e2e8f0', padding: '2px 8px', borderRadius: 999, fontSize: 11 });
 
@@ -121,16 +140,44 @@ export default function AdminBlog() {
       {/* Liste */}
       {data && (
         <Table
-          columns={['Başlık', 'Dil', 'Slug', 'Durum', 'Oluşturuldu', 'Yayınlandı']}
+          columns={['Başlık', 'Dil', 'Kapak', 'Kategori', 'Slug', 'Durum', 'Yayınlandı']}
           rows={data.posts.map((p: any) => [
             p.title,
             <span key="lg" style={{ background: '#1e293b', color: '#93c5fd', padding: '2px 8px', borderRadius: 999, fontSize: 11, textTransform: 'uppercase' }}>{p.lang ?? 'tr'}</span>,
+            <div key="cv" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {p.coverImageId
+                ? <img src={coverUrl(p.coverImageId)} alt="" style={{ width: 46, height: 30, objectFit: 'cover', borderRadius: 4, border: p.coverManual ? '2px solid #F5A623' : '1px solid #334155' }} />
+                : <span style={{ width: 46, height: 30, borderRadius: 4, border: '1px dashed #475569', display: 'inline-block' }} />}
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <button onClick={() => reroll(p.id)} title="Kategoriden rastgele yeniden seç" style={miniBtn}>🎲 yeniden</button>
+                <button onClick={() => openPicker(p.id, p.category)} title="Belirli görsel seç" style={miniBtn}>🖼 seç</button>
+              </span>
+            </div>,
+            <span key="ct" style={{ fontSize: 11, color: '#94a3b8' }}>{p.category ?? '—'}</span>,
             p.status === 'published' ? <a key="l" href={`/${p.lang ?? 'tr'}/blog/${p.slug}`} target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa' }}>/{p.lang ?? 'tr'}/blog/{p.slug}</a> : `/${p.slug}`,
             <span key="s" style={badge(p.status)}>{p.status}</span>,
-            fmtDate(p.createdAt),
             p.publishedAt ? fmtDate(p.publishedAt) : '—',
           ])}
         />
+      )}
+
+      {picker && (
+        <div onClick={() => setPicker(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: 16, maxWidth: 720, maxHeight: '80vh', overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <b style={{ color: '#e2e8f0' }}>Kapak seç {picker.category ? `— ${picker.category}` : ''}</b>
+              <button onClick={() => setPicker(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18 }}>×</button>
+            </div>
+            {pickerImgs.length === 0 ? <p style={{ color: '#64748b', fontSize: 13 }}>Bu kategoride görsel yok. Fotolar sayfasından ekleyebilirsin.</p> : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(120px,1fr))', gap: 8 }}>
+                {pickerImgs.map((im: any) => (
+                  <img key={im.id} src={coverUrl(im.id)} alt="" onClick={() => pick(im.id)}
+                    style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 6, border: '1px solid #334155', cursor: 'pointer' }} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </>
   );

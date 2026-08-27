@@ -1,5 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import { prisma } from '../db.js';
+import { guessCategory } from './blogCategories.js';
+import { assignCover } from './blogImages.js';
 
 /**
  * SEO otomatik blog — DB tabanli (git-commit YOK).
@@ -102,7 +104,8 @@ export async function createDraftsFromBulk(text: string, lang = 'tr'): Promise<{
     const exists = await prisma.blogPost.findUnique({ where: { slug_lang: { slug: a.slug, lang } }, select: { id: true } });
     if (exists) { conflicts.push(`"${a.title}" (${a.slug}) — slug zaten mevcut (${lang}).`); continue; }
     seenInBatch.add(a.slug);
-    await prisma.blogPost.create({ data: { title: a.title, description: a.description, slug: a.slug, contentMd: a.contentMd, status: 'draft', lang } });
+    // İçerikten DETERMİNİSTİK kategori tahmini (LLM yok) — yayında kapak eşleştirmesi için.
+    await prisma.blogPost.create({ data: { title: a.title, description: a.description, slug: a.slug, contentMd: a.contentMd, status: 'draft', lang, category: guessCategory(a.title, a.contentMd) } });
     created.push({ title: a.title, slug: a.slug });
   }
   return { created, conflicts, errors };
@@ -116,7 +119,11 @@ export async function publishNextDraft(lang?: string): Promise<{ slug: string; t
     orderBy: { createdAt: 'asc' },
   });
   if (!draft) return null;
-  await prisma.blogPost.update({ where: { id: draft.id }, data: { status: 'published', publishedAt: new Date() } });
+  // Kategori boşsa (eski draft) yayında içerikten tahmin et — kapak ataması doğru kategoriden olsun.
+  const category = draft.category ?? guessCategory(draft.title, draft.contentMd);
+  await prisma.blogPost.update({ where: { id: draft.id }, data: { status: 'published', publishedAt: new Date(), category } });
+  // Kapak görseli ata (kategori eşleşen görsellerden LRU+rastgele; yoksa herhangi biri). Best-effort.
+  await assignCover(draft.id).catch(() => {});
   return { slug: draft.slug, title: draft.title };
 }
 
@@ -149,14 +156,14 @@ export async function listPublished(lang = 'tr') {
   return prisma.blogPost.findMany({
     where: { status: 'published', lang },
     orderBy: { publishedAt: 'desc' },
-    select: { title: true, description: true, slug: true, publishedAt: true },
+    select: { title: true, description: true, slug: true, publishedAt: true, coverImageId: true, category: true },
   });
 }
 
 export async function getPublishedBySlug(slug: string, lang = 'tr') {
   const post = await prisma.blogPost.findFirst({
     where: { slug, lang, status: 'published' },
-    select: { title: true, description: true, slug: true, contentMd: true, publishedAt: true },
+    select: { title: true, description: true, slug: true, contentMd: true, publishedAt: true, coverImageId: true, category: true },
   });
   if (!post) return null;
   return { ...post, contentHtml: renderContentHtml(post.contentMd) };
@@ -166,7 +173,7 @@ export async function listAllAdmin(lang?: string) {
   const posts = await prisma.blogPost.findMany({
     where: lang ? { lang } : {},
     orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
-    select: { id: true, title: true, slug: true, status: true, lang: true, createdAt: true, publishedAt: true },
+    select: { id: true, title: true, slug: true, status: true, lang: true, createdAt: true, publishedAt: true, category: true, coverImageId: true, coverManual: true },
   });
   const draftCount = posts.filter((p) => p.status === 'draft').length;
   const publishedCount = posts.filter((p) => p.status === 'published').length;

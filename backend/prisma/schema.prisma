@@ -520,9 +520,35 @@ model BlogPost {
   createdAt   DateTime  @default(now())
   publishedAt DateTime? // null = henuz yayinlanmadi
 
+  // (KAPAK GORSELI — SEO/sosyal) category: icerikten DETERMINISTIK tahmin (blogCategories.guessCategory,
+  // LLM yok). coverImageId: yayinda kategoriye gore atanan kapak (BlogImage, LRU secim). coverManual:
+  // admin elle sectiyse true -> otomatik yeniden-atama YAPILMAZ. Kapak -> hero + og:image + Article schema.
+  category     String?
+  coverImageId String?
+  coverManual  Boolean  @default(false)
+
   @@unique([slug, lang])
   @@index([status, lang, publishedAt])
   @@index([status, createdAt])
+}
+
+// (BLOG GORSEL KUTUPHANESI) Admin "Fotolar" sayfasindan kategori-etiketli gorseller yuklenir; yayinda
+// makalenin (tahmin edilen) kategorisine gore rastgele/LRU bir gorsel kapak olarak atanir. Bayt DB'de
+// tutulur (BYTEA) ve /blog-images/:id ile UZUN cache header'i ile sunulur. Yukleme ONCESI tarayicida
+// WebP'ye donusturulup boyutlandirilir (sayfa hizi/LCP bozulmasin). lastUsedAt = LRU icin (cesitlilik).
+model BlogImage {
+  id         String    @id @default(uuid())
+  category   String // sabit taksonomi (blogCategories.ts) — hem etiket hem guessCategory ciktisi
+  mime       String    @default("image/webp")
+  data       Bytes // optimize WebP bayt
+  width      Int?
+  height     Int?
+  alt        String? // opsiyonel; yoksa makale basligi alt-metin olur
+  usedCount  Int       @default(0)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([category, lastUsedAt])
 }
 
 // (GÖZLEMLENEBİLİRLİK) Taramanın adım-adım YAPILANDIRILMIŞ logu — admin panelde "arkada ne oldu"

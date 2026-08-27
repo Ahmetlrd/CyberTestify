@@ -6,6 +6,8 @@ import { config } from '../config.js';
 import { checkEgressProxyHealth } from '../services/egressHealth.js';
 import { sendRefundNotice, sendReportReady } from '../services/mailer.js';
 import { createDraftsFromBulk, listAllAdmin, publishNextDraft, normalizeBlogLang } from '../services/blog.js';
+import { BLOG_CATEGORIES } from '../services/blogCategories.js';
+import { listImages, createImage, deleteImage, assignCover, setCoverManual } from '../services/blogImages.js';
 import { enqueueOrStartScan } from '../services/orchestrator.js';
 import { hasTestCredential } from '../services/testCredentials.js';
 import { decryptReport, decryptSecret } from '../services/crypto.js';
@@ -534,6 +536,48 @@ adminRouter.post('/blog/publish-next', async (req, res) => {
   if (!done) return res.json({ ok: true, published: null, message: 'Sırada yayınlanacak taslak yok.' });
   console.log(`[admin][blog] elle yayinlandi: ${done.slug}`);
   res.json({ ok: true, published: done });
+});
+
+// --- (BLOG FOTOLAR) kategori-etiketli görsel kütüphanesi + makale kapak override -----------------
+// Kategori taksonomisi (görsel etiketleme dropdown'u + tahmin çıktısı aynı liste).
+adminRouter.get('/blog-categories', (_req, res) => {
+  res.json(BLOG_CATEGORIES.map((c) => ({ slug: c.slug, label: c.label })));
+});
+
+// Görsel listesi (bayt DÖNMEZ — yalnız meta; thumbnail /blog/images/:id ile çekilir).
+adminRouter.get('/blog-images', async (req, res) => {
+  const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+  res.json(await listImages(category));
+});
+
+// Görsel yükle (base64; büyük-limitli json parser server.ts'te bu path'e ayrı bağlandı).
+adminRouter.post('/blog-images', async (req, res) => {
+  try {
+    const { category, dataBase64, width, height, alt } = req.body ?? {};
+    if (typeof category !== 'string' || typeof dataBase64 !== 'string') return res.status(400).json({ error: 'category ve dataBase64 zorunlu.' });
+    const img = await createImage({ category, dataBase64, width: Number(width) || undefined, height: Number(height) || undefined, alt: typeof alt === 'string' ? alt : undefined });
+    res.json({ ok: true, image: img });
+  } catch (e) { res.status(400).json({ error: (e as Error).message }); }
+});
+
+adminRouter.delete('/blog-images/:id', async (req, res) => {
+  await deleteImage(req.params.id);
+  res.json({ ok: true });
+});
+
+// Makale kapak override: yeniden çek (force LRU) veya belirli görseli sabitle.
+adminRouter.post('/blog/:id/cover/reroll', async (req, res) => {
+  const cover = await assignCover(req.params.id, { force: true });
+  res.json({ ok: true, coverImageId: cover });
+});
+
+adminRouter.post('/blog/:id/cover', async (req, res) => {
+  try {
+    const imageId = typeof req.body?.imageId === 'string' ? req.body.imageId : '';
+    if (!imageId) return res.status(400).json({ error: 'imageId zorunlu.' });
+    await setCoverManual(req.params.id, imageId);
+    res.json({ ok: true, coverImageId: imageId });
+  } catch (e) { res.status(400).json({ error: (e as Error).message }); }
 });
 
 // --- Kapsam ihlali audit log'u ------------------------------------------------

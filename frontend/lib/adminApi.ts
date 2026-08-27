@@ -109,6 +109,15 @@ export const adminApi = {
     areq<{ created: Array<{ title: string; slug: string }>; conflicts: string[]; errors: string[]; lang: string }>('/admin/blog/bulk', { method: 'POST', body: JSON.stringify({ text, lang }) }),
   blogPublishNext: (lang?: 'tr' | 'de' | 'en') =>
     areq<{ ok: boolean; published: { slug: string; title: string } | null; message?: string }>('/admin/blog/publish-next', { method: 'POST', body: JSON.stringify(lang ? { lang } : {}) }),
+  // (BLOG FOTOLAR) kategori-etiketli görsel kütüphanesi + makale kapak override
+  blogCategories: () => areq<Array<{ slug: string; label: { tr: string; de: string; en: string } }>>('/admin/blog-categories'),
+  blogImages: (category?: string) =>
+    areq<Array<{ id: string; category: string; mime: string; width: number | null; height: number | null; alt: string | null; usedCount: number; lastUsedAt: string | null; createdAt: string }>>(`/admin/blog-images${category ? `?category=${category}` : ''}`),
+  blogImageUpload: (body: { category: string; dataBase64: string; width?: number; height?: number; alt?: string }) =>
+    areq<{ ok: boolean; image: { id: string } }>('/admin/blog-images', { method: 'POST', body: JSON.stringify(body) }),
+  blogImageDelete: (id: string) => areq<{ ok: boolean }>(`/admin/blog-images/${id}`, { method: 'DELETE' }),
+  blogCoverReroll: (postId: string) => areq<{ ok: boolean; coverImageId: string | null }>(`/admin/blog/${postId}/cover/reroll`, { method: 'POST', body: '{}' }),
+  blogCoverSet: (postId: string, imageId: string) => areq<{ ok: boolean; coverImageId: string }>(`/admin/blog/${postId}/cover`, { method: 'POST', body: JSON.stringify({ imageId }) }),
   systemHealth: () => areq<any>('/admin/system-health'),
 
   // (HER ŞEYİ GÖSTER) Müşteri detay: alan adları + siparişler + raporlar + planlı taramalar + rızalar.
