@@ -87,10 +87,11 @@ export function middleware(req: NextRequest) {
   if (pathname === '/legal' || pathname.startsWith('/legal/')) {
     return NextResponse.redirect(new URL(`/${region}${pathname}`, req.url));
   }
-  // (Cok-dilli blog) Eski cıplak /blog(/...) -> KALICI /tr/blog (301). Eski indeksli URL'ler/bağlantılar
-  // kırılmasın; /tr/blog içerik/davranış aynı kalır. /de/blog yukarıda ayrıca ele alındı.
-  if (pathname === '/blog' || pathname.startsWith('/blog/')) {
-    return NextResponse.redirect(new URL(`/tr${pathname}`, req.url), 301);
+  // (Cok-dilli blog) Eski cıplak /blog LİSTELEME -> KALICI /tr/blog (301). /de/blog yukarıda ele alındı.
+  // Eski /blog/<slug> YAZI sayfaları burada DEĞİL, app/blog/[slug]/route.ts'te DİLİNE göre 301/410 edilir
+  // (yazı EN'de olabilir → körlemesine /tr'ye atmak 404 üretiyordu). O yüzden <slug> aşağı 'pass' eder.
+  if (pathname === '/blog') {
+    return NextResponse.redirect(new URL('/tr/blog', req.url), 301);
   }
 
   // Uygulama/hukuki/statik/admin rotalar bölge-bağımsız — dokunma.
