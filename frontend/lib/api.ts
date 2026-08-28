@@ -242,6 +242,8 @@ export const api = {
       discountType?: 'percentage' | 'fixed'; discountValue?: number;
       originalAmountMinorUnit?: number; discountMinorUnit?: number; finalAmountMinorUnit?: number; currency?: string;
     }>('/orders/promo/preview', { method: 'POST', body: JSON.stringify({ code, ...target, region }) }),
+  // Aktif basit_tarama promo kodu (varsa) — checkout'ta Basit Tarama seçiliyken kampanya bloğu için.
+  activeBasitPromo: () => request<{ promo: { code: string } | null }>('/promo/active-basit'),
   // (Fatura talebi — MANUEL) ödemesi tamamlanmış sipariş için fatura bilgisi gönder/güncelle.
   requestInvoice: (orderId: string, body: {
     type: 'bireysel' | 'kurumsal';

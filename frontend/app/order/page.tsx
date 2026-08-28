@@ -9,6 +9,7 @@ import { readRegionCookie } from '../../lib/region';
 import { getRegion, type RegionCode } from '../../config/regions';
 import { formatMoney } from '../../config/i18n';
 import { DynamicContract } from '../../components/DynamicContract';
+import { PromoCodeChip } from '../../components/PromoCodeChip';
 
 type ActiveTest = { scope: { does: string[]; doesNot: string[] }; riskText: string; consentVersion: string };
 type Pkg = {
@@ -387,6 +388,9 @@ export default function OrderPage() {
   const [promoInput, setPromoInput] = useState('');
   const [promo, setPromo] = useState<{ valid: boolean; error?: string; code?: string; discountMinorUnit?: number; finalAmountMinorUnit?: number } | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
+  // Aktif basit_tarama promo kodu (kampanya bloğu — yalnız Basit Tarama seçiliyken gösterilir).
+  const [activePromo, setActivePromo] = useState<{ code: string } | null>(null);
+  useEffect(() => { api.activeBasitPromo().then((r) => setActivePromo(r.promo)).catch(() => setActivePromo(null)); }, []);
 
   // (Faz 3 v2) active-light — tek risk-kabul checkbox'i (ek alan yok).
   const [atRisk, setAtRisk] = useState(false);
@@ -1221,6 +1225,21 @@ export default function OrderPage() {
       {(selected || selectedBundle) && !intlComingSoon && (
         <div className="mt-5 rounded-card border border-brand-100 bg-white px-4 py-3 text-sm">
           <label className="label">{L.promoLabel}</label>
+          {selected === 'basit_tarama' && activePromo?.code && (
+            <PromoCodeChip
+              code={activePromo.code}
+              labels={{
+                campaign: deLang ? 'AKTIONSANGEBOT' : enLang ? 'LAUNCH OFFER' : 'KAMPANYAYA ÖZEL',
+                copy: deLang ? 'Kopieren' : enLang ? 'Copy' : 'Kopyala',
+                copied: deLang ? 'Kopiert!' : enLang ? 'Copied!' : 'Kopyalandı!',
+                hint: deLang
+                  ? 'Geben Sie diesen Code unten ein, um den Basis-Scan kostenlos zu erhalten.'
+                  : enLang
+                  ? 'Enter this code below to get the Basic Scan for free.'
+                  : 'Bu kodu aşağıya girerek Basit Tarama’yı ücretsiz alın.',
+              }}
+            />
+          )}
           <div className="mt-1 flex gap-2">
             <input
               value={promoInput}
