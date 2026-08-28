@@ -154,7 +154,10 @@ function ScoreRing({ score, grade, gradeWord }: { score: number; grade: string; 
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export function InstantScan() {
+// (TÜRKÇE-LEAK FIX) Bölge-önekli sayfada (/de, /en) InstantScan dili URL'den GELMELİ; aksi halde
+// cookie'ye/tr-default'a düşüp SSR'da Türkçe metin basıyordu (ör. "Doğrulama bekleniyor…" → /de leak).
+// langProp verilirse (ana sayfa URL bölgesinden) kesin kullanılır; verilmezse cookie'ye düşülür.
+export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { lang?: 'tr' | 'de' | 'en'; regionCode?: string } = {}) {
   const [url, setUrl] = useState('');
   const [website, setWebsite] = useState(''); // HONEYPOT
   const [token, setToken] = useState<string | null>(null);
@@ -164,13 +167,14 @@ export function InstantScan() {
   const [result, setResult] = useState<InstantScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const turnstile = useRef<TurnstileHandle>(null);
-  const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
-  const [regionCode, setRegionCode] = useState('tr');
+  const [lang, setLang] = useState<'tr' | 'de' | 'en'>(langProp ?? 'tr');
+  const [regionCode, setRegionCode] = useState(regionCodeProp ?? 'tr');
   useEffect(() => {
+    if (langProp) return; // URL bölgesi verildi → kesin; cookie'ye düşme (leak yok)
     const r = getRegion(readRegionCookie());
     setLang(r.lang === 'de' ? 'de' : r.lang === 'en' ? 'en' : 'tr');
     setRegionCode(r.code);
-  }, []);
+  }, [langProp]);
   const L = IS[lang];
   const PHASES = L.phases;
   const packagesHref = `/${regionCode}/packages`;

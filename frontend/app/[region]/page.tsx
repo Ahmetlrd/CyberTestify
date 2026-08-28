@@ -113,7 +113,9 @@ const DOT_BG = {
 
 const TRUST_ICONS = ['M9 12l2 2 4-4', 'M12 2l7 4v6c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6l7-4z', 'M4 12l6 6L20 6'];
 
-function Hero({ d }: { d: Dict }) {
+function Hero({ d, region }: { d: Dict; region: RegionConfig }) {
+  // (TÜRKÇE-LEAK FIX) InstantScan dilini URL bölgesinden geç (cookie'ye düşüp /de'de Türkçe basmasın).
+  const scanLang = region.code === 'de' ? 'de' : region.code === 'en' ? 'en' : 'tr';
   return (
     <section className="relative overflow-hidden bg-brand-deep text-white">
       <div className="pointer-events-none absolute inset-0" style={DOT_BG} />
@@ -144,7 +146,7 @@ function Hero({ d }: { d: Dict }) {
 
         {/* ÜCRETSİZ ANLIK ÖN-TARAMA — landing'in birincil dönüşüm kancası (pasif, gerçek, üç-durum). */}
         <div className="animate-fade-up mx-auto mt-12 max-w-2xl">
-          <InstantScan />
+          <InstantScan lang={scanLang} regionCode={region.code} />
         </div>
 
         <div className="mx-auto mt-12 flex max-w-2xl flex-wrap items-center justify-center gap-3">
@@ -402,7 +404,7 @@ export default function RegionHome({ params }: { params: { region: string } }) {
       {/* (StoryBrand sırası) Hero(sonuç) → Problem/Stakes → Çözüm(hız/fiyat) → Plan(3 adım) →
           Farklılaşma(fix kodu) → Kanıt&Güven(why + trust) → SSS → Son CTA. */}
       <CampaignBanner region={region} />
-      <Hero d={d} />
+      <Hero d={d} region={region} />
       <ProblemSection d={d} />
       <AutonomousSection region={region} />
       <HowItWorks d={d} />
