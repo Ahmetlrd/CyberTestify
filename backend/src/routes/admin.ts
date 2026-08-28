@@ -5,7 +5,7 @@ import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { checkEgressProxyHealth } from '../services/egressHealth.js';
 import { sendRefundNotice, sendReportReady } from '../services/mailer.js';
-import { createDraftsFromBulk, listAllAdmin, publishNextDraft, normalizeBlogLang } from '../services/blog.js';
+import { createDraftsFromBulk, listAllAdmin, publishNextDraft, normalizeBlogLang, deleteDraft, updateDraft } from '../services/blog.js';
 import { BLOG_CATEGORIES } from '../services/blogCategories.js';
 import { listImages, createImage, deleteImage, assignCover, setCoverManual } from '../services/blogImages.js';
 import { enqueueOrStartScan } from '../services/orchestrator.js';
@@ -536,6 +536,33 @@ adminRouter.post('/blog/publish-next', async (req, res) => {
   if (!done) return res.json({ ok: true, published: null, message: 'Sırada yayınlanacak taslak yok.' });
   console.log(`[admin][blog] elle yayinlandi: ${done.slug}`);
   res.json({ ok: true, published: done });
+});
+
+// Taslak SİL (yayınlanmışa dokunmaz — servis garanti eder).
+adminRouter.delete('/blog/:id', async (req, res) => {
+  const r = await deleteDraft(req.params.id);
+  if (!r.ok) return res.status(400).json({ error: r.reason });
+  console.log(`[admin][blog] taslak silindi: ${r.deleted.slug}`);
+  res.json({ ok: true, deleted: r.deleted });
+});
+
+// Taslak DÜZENLE (title/description/contentMd/category — yalnız taslak).
+adminRouter.patch('/blog/:id', async (req, res) => {
+  const r = await updateDraft(req.params.id, {
+    title: typeof req.body?.title === 'string' ? req.body.title : undefined,
+    description: typeof req.body?.description === 'string' ? req.body.description : undefined,
+    contentMd: typeof req.body?.contentMd === 'string' ? req.body.contentMd : undefined,
+    category: typeof req.body?.category === 'string' ? req.body.category : undefined,
+  });
+  if (!r.ok) return res.status(400).json({ error: r.reason });
+  res.json({ ok: true });
+});
+
+// Tek taslağın TAM içeriğini getir (düzenleme kutusu için).
+adminRouter.get('/blog/:id', async (req, res) => {
+  const post = await prisma.blogPost.findUnique({ where: { id: req.params.id }, select: { id: true, title: true, description: true, slug: true, lang: true, status: true, contentMd: true, category: true } });
+  if (!post) return res.status(404).json({ error: 'Bulunamadı.' });
+  res.json(post);
 });
 
 // --- (BLOG FOTOLAR) kategori-etiketli görsel kütüphanesi + makale kapak override -----------------

@@ -118,6 +118,10 @@ export const adminApi = {
   blogImageDelete: (id: string) => areq<{ ok: boolean }>(`/admin/blog-images/${id}`, { method: 'DELETE' }),
   blogCoverReroll: (postId: string) => areq<{ ok: boolean; coverImageId: string | null }>(`/admin/blog/${postId}/cover/reroll`, { method: 'POST', body: '{}' }),
   blogCoverSet: (postId: string, imageId: string) => areq<{ ok: boolean; coverImageId: string }>(`/admin/blog/${postId}/cover`, { method: 'POST', body: JSON.stringify({ imageId }) }),
+  blogGet: (id: string) => areq<{ id: string; title: string; description: string; slug: string; lang: string; status: string; contentMd: string; category: string | null }>(`/admin/blog/${id}`),
+  blogUpdate: (id: string, patch: { title?: string; description?: string; contentMd?: string; category?: string }) =>
+    areq<{ ok: boolean }>(`/admin/blog/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  blogDelete: (id: string) => areq<{ ok: boolean; deleted?: { title: string; slug: string } }>(`/admin/blog/${id}`, { method: 'DELETE' }),
   systemHealth: () => areq<any>('/admin/system-health'),
 
   // (HER ŞEYİ GÖSTER) Müşteri detay: alan adları + siparişler + raporlar + planlı taramalar + rızalar.

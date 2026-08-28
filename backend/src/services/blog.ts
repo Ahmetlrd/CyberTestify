@@ -183,3 +183,54 @@ export async function listAllAdmin(lang?: string) {
     .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
   return { posts, draftCount, publishedCount, lastPublishedAt };
 }
+
+// --- Taslak yönetimi (SERT KURAL: YALNIZ taslak; yayınlanmışa DOKUNMA) ---------
+/** Taslağı sil. status='published' ise REDDEDER (geri alınamaz + trafik/backlink gider). */
+export async function deleteDraft(id: string): Promise<{ ok: true; deleted: { title: string; slug: string } } | { ok: false; reason: string }> {
+  const post = await prisma.blogPost.findUnique({ where: { id }, select: { title: true, slug: true, status: true } });
+  if (!post) return { ok: false, reason: 'Bulunamadı.' };
+  if (post.status === 'published') return { ok: false, reason: 'Yayınlanmış içerik silinemez (yalnız taslak).' };
+  await prisma.blogPost.delete({ where: { id } });
+  return { ok: true, deleted: { title: post.title, slug: post.slug } };
+}
+
+/** Taslağı düzenle (title/description/contentMd/category). Yayınlanmışsa REDDEDER. */
+export async function updateDraft(id: string, patch: { title?: string; description?: string; contentMd?: string; category?: string }): Promise<{ ok: boolean; reason?: string }> {
+  const post = await prisma.blogPost.findUnique({ where: { id }, select: { status: true, title: true, contentMd: true } });
+  if (!post) return { ok: false, reason: 'Bulunamadı.' };
+  if (post.status === 'published') return { ok: false, reason: 'Yayınlanmış içerik düzenlenemez (yalnız taslak).' };
+  const data: Record<string, unknown> = {};
+  if (typeof patch.title === 'string' && patch.title.trim()) data.title = patch.title.trim();
+  if (typeof patch.description === 'string') data.description = patch.description.trim();
+  if (typeof patch.contentMd === 'string' && patch.contentMd.trim()) {
+    data.contentMd = patch.contentMd;
+    // İçerik değiştiyse kategoriyi (patch'te yoksa) yeniden tahmin et.
+    if (!patch.category) data.category = guessCategory((patch.title ?? post.title), patch.contentMd);
+  }
+  if (typeof patch.category === 'string' && patch.category) data.category = patch.category;
+  if (Object.keys(data).length === 0) return { ok: false, reason: 'Değişiklik yok.' };
+  await prisma.blogPost.update({ where: { id }, data });
+  return { ok: true };
+}
+
+/**
+ * İçerik yükleyici (toplu üretim için). (slug,lang) anahtarına göre:
+ *  - kayıt YOKSA → taslak oluştur
+ *  - varsa ve TASLAK → içeriği güncelle (skeleton→tam genişletme)
+ *  - varsa ve YAYINLANMIŞ → DOKUNMA, 'skipped-published' dön (SERT KURAL)
+ * Kategori verilmezse içerikten tahmin edilir.
+ */
+export async function upsertDraft(a: { slug: string; lang: string; title: string; description: string; contentMd: string; category?: string }):
+  Promise<'created' | 'updated' | 'skipped-published'> {
+  const lang = normalizeBlogLang(a.lang);
+  const slug = slugify(a.slug || a.title);
+  const category = a.category ?? guessCategory(a.title, a.contentMd);
+  const existing = await prisma.blogPost.findUnique({ where: { slug_lang: { slug, lang } }, select: { id: true, status: true } });
+  if (existing) {
+    if (existing.status === 'published') return 'skipped-published'; // ASLA dokunma
+    await prisma.blogPost.update({ where: { id: existing.id }, data: { title: a.title, description: a.description, contentMd: a.contentMd, category } });
+    return 'updated';
+  }
+  await prisma.blogPost.create({ data: { title: a.title, description: a.description, slug, contentMd: a.contentMd, status: 'draft', lang, category } });
+  return 'created';
+}

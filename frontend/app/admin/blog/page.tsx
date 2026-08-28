@@ -30,6 +30,23 @@ export default function AdminBlog() {
     if (!picker) return;
     try { await adminApi.blogCoverSet(picker.postId, imageId); setPicker(null); load(); } catch (e: any) { setError(e.message); }
   }
+  // Taslak düzenle/sil (yayınlanmışa dokunulmaz — backend garanti eder; UI de butonu göstermez).
+  const [editing, setEditing] = useState<{ id: string; title: string; description: string; contentMd: string; category: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  async function openEdit(id: string) {
+    try { const p = await adminApi.blogGet(id); setEditing({ id, title: p.title, description: p.description, contentMd: p.contentMd, category: p.category ?? '' }); }
+    catch (e: any) { setError(e.message); }
+  }
+  async function saveEdit() {
+    if (!editing) return;
+    setSaving(true);
+    try { await adminApi.blogUpdate(editing.id, { title: editing.title, description: editing.description, contentMd: editing.contentMd, category: editing.category || undefined }); setEditing(null); load(); }
+    catch (e: any) { setError(e.message); } finally { setSaving(false); }
+  }
+  async function del(id: string, title: string) {
+    if (!confirm(`Taslağı sil?\n"${title}"\n(Yalnız taslak silinir; yayınlanmışa dokunulmaz.)`)) return;
+    try { await adminApi.blogDelete(id); load(); } catch (e: any) { setError(e.message); }
+  }
 
   function load() {
     adminApi.blogList(lang).then(setData).catch((e) => setError(e.message));
@@ -59,6 +76,8 @@ export default function AdminBlog() {
   }
 
   const miniBtn: React.CSSProperties = { background: '#0b1120', border: '1px solid #334155', color: '#7dd3fc', borderRadius: 5, padding: '2px 6px', fontSize: 10, cursor: 'pointer', whiteSpace: 'nowrap' };
+  const editLbl: React.CSSProperties = { display: 'block', fontSize: 11, color: '#94a3b8', margin: '8px 0 3px' };
+  const editInput: React.CSSProperties = { width: '100%', background: '#0b1120', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '7px 9px', fontSize: 13 };
   const box: React.CSSProperties = { background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: 14, marginBottom: 16 };
   const badge = (s: string) => ({ background: s === 'published' ? '#166534' : s === 'draft' ? '#7c5e10' : '#334155', color: '#e2e8f0', padding: '2px 8px', borderRadius: 999, fontSize: 11 });
 
@@ -140,7 +159,7 @@ export default function AdminBlog() {
       {/* Liste */}
       {data && (
         <Table
-          columns={['Başlık', 'Dil', 'Kapak', 'Kategori', 'Slug', 'Durum', 'Yayınlandı']}
+          columns={['Başlık', 'Dil', 'Kapak', 'Kategori', 'Slug', 'Durum', 'Yayınlandı', 'İşlem']}
           rows={data.posts.map((p: any) => [
             p.title,
             <span key="lg" style={{ background: '#1e293b', color: '#93c5fd', padding: '2px 8px', borderRadius: 999, fontSize: 11, textTransform: 'uppercase' }}>{p.lang ?? 'tr'}</span>,
@@ -157,8 +176,37 @@ export default function AdminBlog() {
             p.status === 'published' ? <a key="l" href={`/${p.lang ?? 'tr'}/blog/${p.slug}`} target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa' }}>/{p.lang ?? 'tr'}/blog/{p.slug}</a> : `/${p.slug}`,
             <span key="s" style={badge(p.status)}>{p.status}</span>,
             p.publishedAt ? fmtDate(p.publishedAt) : '—',
+            p.status === 'draft'
+              ? <span key="op" style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => openEdit(p.id)} style={miniBtn}>düzenle</button>
+                  <button onClick={() => del(p.id, p.title)} style={{ ...miniBtn, color: '#f87171', borderColor: '#7f1d1d' }}>sil</button>
+                </span>
+              : <span key="op" style={{ fontSize: 10, color: '#475569' }}>korumalı</span>,
           ])}
         />
+      )}
+
+      {editing && (
+        <div onClick={() => setEditing(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: 16, width: 'min(900px,95vw)', maxHeight: '90vh', overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <b style={{ color: '#e2e8f0' }}>Taslağı düzenle</b>
+              <button onClick={() => setEditing(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18 }}>×</button>
+            </div>
+            <label style={editLbl}>Başlık</label>
+            <input value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} style={editInput} />
+            <label style={editLbl}>Meta açıklama (SEO ~155 karakter)</label>
+            <input value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} style={editInput} />
+            <label style={editLbl}>Kategori (boş bırakılırsa içerikten tahmin edilir)</label>
+            <input value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })} placeholder="ör. web-guvenligi" style={editInput} />
+            <label style={editLbl}>İçerik (Markdown)</label>
+            <textarea value={editing.contentMd} onChange={(e) => setEditing({ ...editing, contentMd: e.target.value })} rows={18} style={{ ...editInput, fontFamily: 'ui-monospace,monospace', fontSize: 12, resize: 'vertical' }} />
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button onClick={saveEdit} disabled={saving} style={{ ...miniBtn, padding: '7px 16px', fontSize: 13, background: '#166534', color: '#e2e8f0', borderColor: '#166534' }}>{saving ? 'Kaydediliyor…' : 'Kaydet'}</button>
+              <button onClick={() => setEditing(null)} style={{ ...miniBtn, padding: '7px 16px', fontSize: 13 }}>İptal</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {picker && (
