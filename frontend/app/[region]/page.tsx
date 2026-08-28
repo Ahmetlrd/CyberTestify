@@ -111,8 +111,8 @@ function PromoBanner({ region, code }: { region: RegionConfig; code: string }) {
     >
       {/* Mobil: kompakt (küçük font/padding, rozet+mesaj TEK satır içinde inline, kuyruk+CTA gizli). Masaüstü: tam. */}
       <div className="container-page flex flex-wrap items-center justify-center gap-x-2 gap-y-1 py-1.5 text-center text-xs font-semibold leading-tight sm:gap-x-3 sm:py-2.5 sm:text-sm">
-        <span className="min-w-0">
-          <span className="mr-1.5 inline-block rounded-pill bg-white/20 px-2 py-0.5 align-middle text-[10px] font-extrabold uppercase tracking-wide sm:text-xs">
+        <span className="flex min-w-0 flex-col items-center gap-0.5 sm:block">
+          <span className="inline-block rounded-pill bg-white/20 px-2 py-0.5 align-middle text-[10px] font-extrabold uppercase tracking-wide sm:mr-1.5 sm:text-xs">
             {pick3(region.lang, 'KAMPANYAYA ÖZEL', 'AKTIONSANGEBOT', 'LAUNCH OFFER')}
           </span>
           <span className="sm:hidden">
@@ -151,8 +151,8 @@ async function CampaignBanner({ region }: { region: RegionConfig }) {
     >
       {/* Mobil: kompakt tek-satır (küçük font/padding, kısa mesaj, CTA gizli). Masaüstü: tam mesaj. */}
       <div className="container-page flex flex-wrap items-center justify-center gap-x-2 gap-y-1 py-1.5 text-center text-xs font-semibold leading-tight sm:gap-x-3 sm:py-2.5 sm:text-sm">
-        <span className="min-w-0">
-          <span className="mr-1.5 inline-block rounded-pill bg-white/20 px-2 py-0.5 align-middle text-[10px] font-extrabold uppercase tracking-wide sm:text-xs">
+        <span className="flex min-w-0 flex-col items-center gap-0.5 sm:block">
+          <span className="inline-block rounded-pill bg-white/20 px-2 py-0.5 align-middle text-[10px] font-extrabold uppercase tracking-wide sm:mr-1.5 sm:text-xs">
             {pick3(region.lang, 'KAMPANYAYA ÖZEL', 'AKTIONSANGEBOT', 'LAUNCH OFFER')}
           </span>
           <span className="sm:hidden">
