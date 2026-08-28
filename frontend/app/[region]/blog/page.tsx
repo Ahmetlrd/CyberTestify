@@ -49,8 +49,8 @@ export function generateMetadata({ params }: { params: { region: string } }): Me
     title: t.metaTitle,
     description: t.metaDesc,
     alternates: {
-      canonical: `/${params.region}/blog`,
-      languages: { tr: `${SITE}/tr/blog`, de: `${SITE}/de/blog`, en: `${SITE}/en/blog` },
+      canonical: `${SITE}/${params.region}/blog`,
+      languages: { tr: `${SITE}/tr/blog`, de: `${SITE}/de/blog`, en: `${SITE}/en/blog`, 'x-default': `${SITE}/tr/blog` },
     },
     openGraph: { type: 'website', siteName: 'CyberTestify', url: `${SITE}/${params.region}/blog`, title: t.metaTitle, description: t.subtitle },
   };

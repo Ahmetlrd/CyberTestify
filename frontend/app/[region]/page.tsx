@@ -37,7 +37,12 @@ export function generateMetadata({ params }: { params: { region: string } }): Me
   return {
     title,
     description,
-    alternates: { canonical: url },
+    // (SEO) canonical = KENDİ dili; diller birbirine canonical VERMEZ — karşılıklı hreflang + x-default ile
+    // ilişkilenir (aksi halde /de,/en "alternate/duplicate" diye index-dışı kalır).
+    alternates: {
+      canonical: url,
+      languages: { tr: `${SITE}/tr`, de: `${SITE}/de`, en: `${SITE}/en`, 'x-default': `${SITE}/tr` },
+    },
     openGraph: { type: 'website', siteName: 'CyberTestify', url, title, description, locale: region.lang === 'tr' ? 'tr_TR' : region.lang === 'de' ? 'de_DE' : 'en_US' },
     twitter: { card: 'summary_large_image', title, description },
   };

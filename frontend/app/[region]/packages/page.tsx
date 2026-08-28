@@ -23,11 +23,15 @@ export function generateStaticParams() {
 export function generateMetadata({ params }: { params: { region: string } }) {
   const region = getRegion(params.region);
   const d = getDict(region).pkg;
-  const url = `https://cybertestify.com/${region.code}/packages`;
+  const SITE = 'https://cybertestify.com';
+  const url = `${SITE}/${region.code}/packages`;
   return {
     title: d.metaTitle,
     description: d.metaDesc,
-    alternates: { canonical: url },
+    alternates: {
+      canonical: url,
+      languages: { tr: `${SITE}/tr/packages`, de: `${SITE}/de/packages`, en: `${SITE}/en/packages`, 'x-default': `${SITE}/tr/packages` },
+    },
     openGraph: { type: 'website', siteName: 'CyberTestify', url, title: d.metaTitle, description: d.metaDesc, locale: region.lang === 'tr' ? 'tr_TR' : region.lang === 'de' ? 'de_DE' : 'en_US' },
     twitter: { card: 'summary_large_image', title: d.metaTitle, description: d.metaDesc },
   };

@@ -35,10 +35,9 @@ export async function generateMetadata({ params }: { params: { region: string; s
   return {
     title: `${post.title} — CyberTestify`,
     description: post.description,
-    alternates: {
-      canonical: url,
-      languages: { tr: `${SITE}/tr/blog/${post.slug}`, de: `${SITE}/de/blog/${post.slug}`, en: `${SITE}/en/blog/${post.slug}` },
-    },
+    // (SEO) Yazı çevirileri FARKLI slug taşır (aynı slug diğer dilde 404 olurdu) → yazı-bazlı hreflang
+    // VERİLMEZ; yalnız kendi diline canonical. Diller-arası ilişki blog INDEX'inde hreflang ile kurulur.
+    alternates: { canonical: url },
     openGraph: {
       title: post.title,
       description: post.description,

@@ -7,52 +7,67 @@ const SITE = 'https://cybertestify.com';
 // eklenir (gunde 1 yayin icin ziyadesiyle yeterli, redeploy gerekmez).
 export const revalidate = 900;
 
+type Post = { slug: string; publishedAt: string | null };
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  let posts: Array<{ slug: string; publishedAt: string | null }> = [];
-  let dePosts: Array<{ slug: string; publishedAt: string | null }> = [];
+  let posts: Post[] = [], dePosts: Post[] = [], enPosts: Post[] = [];
   try {
-    const [rTr, rDe] = await Promise.all([
+    const [rTr, rDe, rEn] = await Promise.all([
       fetch(`${API}/blog/posts?lang=tr`, { next: { revalidate: 3600 } }),
       fetch(`${API}/blog/posts?lang=de`, { next: { revalidate: 3600 } }),
+      fetch(`${API}/blog/posts?lang=en`, { next: { revalidate: 3600 } }),
     ]);
     if (rTr.ok) posts = await rTr.json();
     if (rDe.ok) dePosts = await rDe.json();
+    if (rEn.ok) enPosts = await rEn.json();
   } catch {
     /* API erisilemezse yalniz statik rotalar */
   }
 
   const now = new Date();
-  // Yalniz INDEKSLENEBILIR public icerik (login/register robots'ta Disallow — sitemap'te YOK).
-  const staticRoutes: MetadataRoute.Sitemap = [
-    { url: `${SITE}/tr`, lastModified: now, changeFrequency: 'weekly', priority: 1 },
-    { url: `${SITE}/tr/packages`, lastModified: now, changeFrequency: 'weekly', priority: 0.9 },
-    { url: `${SITE}/tr/blog`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
+  // (SEO/hreflang) Yapısal sayfalar 3 dilde (tr/de/en) AYNI yolla var → her giriş karşılıklı
+  // hreflang + x-default taşır. Diller birbirine canonical VERMEZ; hreflang ile ilişkilenir.
+  const langAlt = (path: string) => ({
+    languages: {
+      tr: `${SITE}/tr${path}`, de: `${SITE}/de${path}`, en: `${SITE}/en${path}`, 'x-default': `${SITE}/tr${path}`,
+    },
+  });
+  const structural: MetadataRoute.Sitemap = (['tr', 'de', 'en'] as const).flatMap((lang) => [
+    { url: `${SITE}/${lang}`, lastModified: now, changeFrequency: 'weekly' as const, priority: lang === 'tr' ? 1 : 0.8, alternates: langAlt('') },
+    { url: `${SITE}/${lang}/packages`, lastModified: now, changeFrequency: 'weekly' as const, priority: lang === 'tr' ? 0.9 : 0.7, alternates: langAlt('/packages') },
+    { url: `${SITE}/${lang}/blog`, lastModified: now, changeFrequency: 'daily' as const, priority: lang === 'tr' ? 0.8 : 0.6, alternates: langAlt('/blog') },
+  ]);
+
+  // Kurumsal sayfalar — bölge-öneksiz (tek dil, Türkçe içerik).
+  const corporate: MetadataRoute.Sitemap = [
     { url: `${SITE}/hakkimizda`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
     { url: `${SITE}/iletisim`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
     { url: `${SITE}/acik-kaynak`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
   ];
 
-  // (SEO) Hukuki sayfalar — footer'dan linkli, kendi canonical'ıyla indekslenmeli (eskiden /tr'ye
-  // canonical veriyorlardı → GSC "kopya" diyordu). Sitemap'e ekleyerek keşif/indeks sinyali güçlenir.
+  // (SEO) Hukuki sayfalar — YALNIZ /tr indekslenebilir (kendi canonical'ıyla). /de ve /en hukuki
+  // sayfaları noindex olduğu için sitemap'e ALINMAZ. TR hukuki ≠ DE/EN hukuki (farklı belge) → hreflang yok.
   const legalSlugs = ['kullanim-kosullari', 'gizlilik', 'kvkk-aydinlatma', 'cerez', 'mesafeli-satis', 'on-bilgilendirme', 'iptal-iade', 'sorumluluk-reddi'];
   const legalRoutes: MetadataRoute.Sitemap = legalSlugs.map((slug) => ({
     url: `${SITE}/tr/legal/${slug}`, lastModified: now, changeFrequency: 'yearly', priority: 0.3,
   }));
 
-  const blogRoutes: MetadataRoute.Sitemap = posts.map((p) => ({
-    url: `${SITE}/tr/blog/${p.slug}`,
-    lastModified: p.publishedAt ? new Date(p.publishedAt) : now,
-    changeFrequency: 'monthly',
-    priority: 0.7,
-  }));
+  // Blog yazıları — her dil KENDİ slug'ıyla (çeviriler farklı slug taşıdığından yazı-bazlı hreflang
+  // VERİLMEZ; kırık hreflang'dan kaçınmak için yazılar kendi diliyle, alternates'sız listelenir).
+  const blogRoutes = (lang: 'tr' | 'de' | 'en', list: Post[]): MetadataRoute.Sitemap =>
+    list.map((p) => ({
+      url: `${SITE}/${lang}/blog/${p.slug}`,
+      lastModified: p.publishedAt ? new Date(p.publishedAt) : now,
+      changeFrequency: 'monthly' as const,
+      priority: 0.7,
+    }));
 
-  // (Cok-dilli blog) /de blog yazilari — su an bos olabilir (henuz Almanca icerik yok).
-  const deBlogRoutes: MetadataRoute.Sitemap = dePosts.map((p) => ({
-    url: `${SITE}/de/blog/${p.slug}`,
-    lastModified: p.publishedAt ? new Date(p.publishedAt) : now,
-    changeFrequency: 'monthly',
-    priority: 0.7,
-  }));
-
-  return [...staticRoutes, ...legalRoutes, ...blogRoutes, ...deBlogRoutes];
+  return [
+    ...structural,
+    ...corporate,
+    ...legalRoutes,
+    ...blogRoutes('tr', posts),
+    ...blogRoutes('de', dePosts),
+    ...blogRoutes('en', enPosts),
+  ];
 }

@@ -62,6 +62,7 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
     const pdf = await htmlToPdfBuffer(html, `CyberTestify · Otonom AI Red Team (deneysel) · ${reportNo}`);
     await prisma.report.update({ where: { id: report.id }, data: { deliveredAt: new Date() } });
     res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow'); // gerçek müşteri raporu — asla indexlenmez
     res.setHeader('Content-Disposition', `attachment; filename="cybertestify-redteam-${reportNo}.pdf"`);
     return res.send(pdf);
   }
@@ -115,6 +116,7 @@ reportsRouter.post('/:orderId/download', requireAuth, async (req, res) => {
   await prisma.report.update({ where: { id: report.id }, data: { deliveredAt: new Date() } });
 
   res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow'); // gerçek müşteri raporu — asla indexlenmez
   res.setHeader('Content-Disposition', `attachment; filename="cybertestify-rapor-${report.orderId}.pdf"`);
   res.send(pdf);
 });
@@ -201,6 +203,7 @@ reportsRouter.post('/:orderId/fix-suggestions/download', requireAuth, async (req
       accessSecret: parsed.data.accessSecret,
     });
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow'); // gerçek müşteri çözüm önerileri — asla indexlenmez
     res.setHeader('Content-Disposition', `attachment; filename="cozum-onerileri-${report.orderId}.md"`);
     res.send(plaintext);
   } catch {
