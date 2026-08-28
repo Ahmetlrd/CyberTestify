@@ -8,7 +8,14 @@ export function RegionSelector({ current }: { current: RegionCode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const cur = REGIONS[current];
+
+  // (BUG DÜZELTME) `current` prop'u KÖK layout'ta cookie'den okunur; kök layout client-navigasyonda
+  // YENİDEN RENDER EDİLMEZ → router.push('/de') sonrası sayfa güncellenir ama seçicideki bölge ESKİ kalır.
+  // Çözüm: bölge-önekli sayfalarda (/tr, /de/...) görünen bölgeyi URL'den TÜRET (kaynak-doğru); yoksa
+  // (cookie-tabanlı sayfa; zaten reload ediliyor) prop'a düş. Böylece usePathname değişince seçici tazelenir.
+  const seg = (pathname ?? '/').split('/')[1] ?? '';
+  const active: RegionCode = (REGION_CODES as readonly string[]).includes(seg) ? (seg as RegionCode) : current;
+  const cur = REGIONS[active];
 
   // GEÇİCİ: Tek görünür bölge (TR) varken bölge seçici gösterilmez. Görünür bölge
   // sayısı >1 olunca (us/ae açılınca) seçici otomatik geri gelir.
@@ -56,10 +63,10 @@ export function RegionSelector({ current }: { current: RegionCode }) {
                   <button
                     onClick={() => choose(code)}
                     className={`flex w-full items-center gap-2 px-3.5 py-2 text-left text-sm hover:bg-brand-50 ${
-                      code === current ? 'font-semibold text-brand' : 'text-ink-soft'
+                      code === active ? 'font-semibold text-brand' : 'text-ink-soft'
                     }`}
                     role="option"
-                    aria-selected={code === current}
+                    aria-selected={code === active}
                   >
                     <span>{r.flag}</span>
                     <span>{r.label}</span>

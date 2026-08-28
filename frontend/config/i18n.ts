@@ -16,6 +16,9 @@ export interface Dict {
     ctaSecondary: string;
     trust: [string, string, string];
   };
+  // (StoryBrand) Problem + Stakes — hero'dan hemen sonra: "neden önemli / neden şimdi".
+  // Korku-pazarlaması / mutlak vaat YOK; uyum terimi bölgeye göre (tr=KVKK, de=DSGVO, en=UK GDPR).
+  problem: { eyebrow: string; title: string; body: string; stakes: string; bridge: string };
   auto: {
     eyebrow: string;
     titleA: string;
@@ -83,15 +86,22 @@ export interface Dict {
 const tr: Dict = {
   nav: { how: 'Nasıl Çalışır', why: 'Neden Biz', packages: 'Paketler', login: 'Giriş', cta: 'Ücretsiz Doğrula', panel: 'Panelim', logout: 'Çıkış', profile: 'Profil', otonom: 'Otonom AI Red Team' },
   hero: {
-    badge: 'Yapay zekâ destekli otomasyon · İnsan pentester beklemeyin',
-    titleA: 'Sitenizin güvenliğini,',
-    titleHi: 'dakikalar içinde',
-    titleB: 'yapay zekâ destekli taramayla test edin',
+    badge: 'Yapay zekâ destekli otomasyon · Deterministik doğrulama',
+    titleA: 'Sitenizdeki güvenlik açıklarını',
+    titleHi: 'saldırganlardan önce',
+    titleB: 'görün',
     subtitle:
-      'Web siteniz için yapay zeka destekli, hızlı ve uygun fiyatlı güvenlik ön değerlendirmesi. Resmi pentest/denetim yerine geçmez; dakikalar içinde aksiyon alınabilir bir rapor üretir. Alan adınızı doğrulayın, paketinizi seçin, şifreli raporunuzu alın.',
-    ctaPrimary: 'Ücretsiz Doğrula ve Başla',
+      'CyberTestify web sitenizi dakikalar içinde kontrol eder, doğrulanmış güvenlik sorunlarını gösterir ve nasıl düzelteceğinizi anlatır — yapay zekâ destekli otomasyon ve deterministik doğrulamayla. Resmi pentest yerine geçmez; ama onun için haftalarca beklemeniz gerekmez.',
+    ctaPrimary: 'Sitemi Ücretsiz Kontrol Et',
     ctaSecondary: 'Nasıl Çalışır?',
     trust: ['KVKK’ya Uygun Veri İşleme', 'Uçtan Uca Şifreli Rapor', 'Sadece Doğrulanmış Alan Adları'],
+  },
+  problem: {
+    eyebrow: 'Neden önemli',
+    title: 'Sitenizin çalışıyor olması, güvenli olduğu anlamına gelmez.',
+    body: 'Çoğu güvenlik açığı, siteniz gayet normal çalışırken sessizce durur — ta ki biri onu fark edene kadar. Ekranda hiçbir belirti görmezsiniz; ama açık oradadır.',
+    stakes: 'Gözden kaçan bir güvenlik açığı; veri sızıntısına, müşteri güveninin kaybına, hizmet kesintisine veya KVKK gibi uyumluluk risklerine dönüşebilir.',
+    bridge: 'CyberTestify bu sorunları bir saldırı ya da denetim sonrasında değil, mümkün olduğunca erken görmenize yardımcı olur. Güvenlik testinin çoğu zaman pahalı, teknik ve zaman alıcı olabildiğini biliyoruz — bu yüzden onu hızlı, anlaşılır ve uygun fiyatlı hale getirdik.',
   },
   auto: {
     eyebrow: 'Yapay Zekâ Destekli Otomasyon · Asıl Farkımız',
@@ -109,13 +119,12 @@ const tr: Dict = {
   },
   steps: {
     eyebrow: 'Nasıl Çalışır',
-    title: 'Dört adımda, baştan sona',
+    title: 'Üç adımda: Doğrula → Tara → Düzelt',
     stepWord: 'ADIM',
     items: [
-      { t: 'Alan adınızı doğrulayın', d: 'DNS TXT kaydıyla sahipliğinizi kanıtlayın — dakikalar sürer.' },
-      { t: 'Paketinizi seçin', d: 'Sabit kapsam, sabit fiyat. Sürpriz maliyet yok.' },
-      { t: 'Otomatik güvenlik taraması', d: 'Yapay zekâ destekli tarama saniyeler içinde başlar, arka planda çalışır.' },
-      { t: 'Şifreli raporunuzu indirin', d: 'Uçtan uca şifreli, size özel tek kullanımlık kodla açılır.' },
+      { t: 'Doğrulayın', d: 'Alan adınızın sahipliğini DNS TXT kaydıyla kanıtlayın. Doğrulama ücretsizdir ve dakikalar sürer.' },
+      { t: 'Tarayın', d: 'Paketinizi seçin; yapay zekâ destekli tarama saniyeler içinde başlar ve doğrulanmış güvenlik sorunlarını ortaya çıkarır.' },
+      { t: 'Düzeltin', d: 'Her bulgu için platformunuza özel, uygulamaya hazır düzeltme adımlarını içeren şifreli raporunuzu alın.' },
     ],
   },
   why: {
@@ -131,7 +140,7 @@ const tr: Dict = {
   finalCta: {
     title: 'Sitenizi test etmeye hazır mısınız?',
     subtitle: 'Doğrulama ücretsiz. Yalnızca taramayı başlattığınızda ödeme yaparsınız.',
-    primary: 'Ücretsiz Doğrula ve Başla',
+    primary: 'Sitemi Ücretsiz Kontrol Et',
     secondary: 'Fiyatları Gör →',
   },
   footer: {
@@ -268,15 +277,22 @@ const tr: Dict = {
 const en: Dict = {
   nav: { how: 'How It Works', why: 'Why Us', packages: 'Pricing', login: 'Log in', cta: 'Verify Free', panel: 'My Panel', logout: 'Log out', profile: 'Profile', otonom: 'Autonomous AI Red Team' },
   hero: {
-    badge: 'AI-assisted automation · No waiting for a human pentester',
-    titleA: 'Test your website’s security with',
-    titleHi: 'AI-assisted scanning',
-    titleB: 'starting in minutes',
+    badge: 'AI-assisted automation · Deterministic verification',
+    titleA: 'See the security flaws in your site',
+    titleHi: 'before attackers do',
+    titleB: '',
     subtitle:
-      'AI-powered, fast and affordable security pre-assessment for your website. Not a substitute for a formal pentest/audit; it produces an actionable report in minutes. Verify your domain, pick a package, get your encrypted report.',
-    ctaPrimary: 'Verify Free & Start',
+      'CyberTestify checks your website in minutes, shows you validated security issues, and tells you how to fix them — with AI-assisted automation and deterministic verification. It is not a substitute for a formal pentest; but you won’t wait weeks for one.',
+    ctaPrimary: 'Scan My Site Free',
     ctaSecondary: 'How It Works?',
     trust: ['Privacy-First', 'End-to-End Encrypted Report', 'Verified Domains Only'],
+  },
+  problem: {
+    eyebrow: 'Why it matters',
+    title: 'A working website is not the same as a secure one.',
+    body: 'Most vulnerabilities sit silently while your site runs perfectly normally — until someone notices them. You see no sign on screen; but the hole is there.',
+    stakes: 'A missed vulnerability can turn into a data breach, loss of customer trust, service downtime, or compliance risks such as UK GDPR.',
+    bridge: 'CyberTestify helps you see these problems as early as possible — not after an attack or an audit. We know security testing can be expensive, technical and time-consuming — so we made it fast, understandable and affordable.',
   },
   auto: {
     eyebrow: 'AI-Assisted Automation · Our Real Difference',
@@ -294,13 +310,12 @@ const en: Dict = {
   },
   steps: {
     eyebrow: 'How It Works',
-    title: 'Four steps, end to end',
+    title: 'Three steps: Verify → Scan → Fix',
     stepWord: 'STEP',
     items: [
-      { t: 'Verify your domain', d: 'Prove ownership with a DNS TXT record — takes minutes.' },
-      { t: 'Pick your package', d: 'Fixed scope, fixed price. No surprise costs.' },
-      { t: 'Automated security scan', d: 'The AI-assisted scan starts in seconds and runs in the background.' },
-      { t: 'Download your encrypted report', d: 'End-to-end encrypted, opened with your one-time code.' },
+      { t: 'Verify', d: 'Prove ownership of your domain with a DNS TXT record. Verification is free and takes minutes.' },
+      { t: 'Scan', d: 'Pick your package; the AI-assisted scan starts in seconds and surfaces validated security issues.' },
+      { t: 'Fix', d: 'Get your encrypted report with platform-specific, ready-to-apply remediation steps for every finding.' },
     ],
   },
   why: {
@@ -316,7 +331,7 @@ const en: Dict = {
   finalCta: {
     title: 'Ready to test your site?',
     subtitle: 'Verification is free. You only pay when you start a scan.',
-    primary: 'Verify Free & Start',
+    primary: 'Scan My Site Free',
     secondary: 'See Pricing →',
   },
   footer: {
@@ -455,15 +470,22 @@ const en: Dict = {
 const de: Dict = {
   nav: { how: 'So funktioniert’s', why: 'Warum wir', packages: 'Preise', login: 'Anmelden', cta: 'Kostenlos prüfen', panel: 'Mein Bereich', logout: 'Abmelden', profile: 'Profil', otonom: 'Autonomes AI Red Team' },
   hero: {
-    badge: 'KI-gestützte Automatisierung · Kein Warten auf einen menschlichen Pentester',
-    titleA: 'Testen Sie die Sicherheit Ihrer Website mit',
-    titleHi: 'KI-gestütztem Scanning',
-    titleB: 'in wenigen Minuten',
+    badge: 'KI-gestützte Automatisierung · Deterministische Verifizierung',
+    titleA: 'Sehen Sie die Sicherheitslücken Ihrer Website,',
+    titleHi: 'bevor Angreifer sie finden',
+    titleB: '',
     subtitle:
-      'KI-gestützte, schnelle und günstige Sicherheits-Vorabbewertung für Ihre Website. Kein Ersatz für einen formellen Pentest/Audit; sie erstellt in Minuten einen umsetzbaren Bericht. Domain verifizieren, Paket wählen, verschlüsselten Bericht erhalten.',
-    ctaPrimary: 'Kostenlos prüfen & starten',
+      'CyberTestify prüft Ihre Website in wenigen Minuten, zeigt Ihnen verifizierte Sicherheitsprobleme und erklärt, wie Sie sie beheben — mit KI-gestützter Automatisierung und deterministischer Verifizierung. Kein Ersatz für einen formellen Pentest; aber Sie warten nicht wochenlang darauf.',
+    ctaPrimary: 'Meine Website kostenlos prüfen',
     ctaSecondary: 'So funktioniert’s',
     trust: ['Datenschutz zuerst', 'Ende-zu-Ende-verschlüsselter Bericht', 'Nur verifizierte Domains'],
+  },
+  problem: {
+    eyebrow: 'Warum es zählt',
+    title: 'Eine funktionierende Website ist nicht dasselbe wie eine sichere.',
+    body: 'Die meisten Schwachstellen liegen still, während Ihre Website ganz normal läuft — bis jemand sie bemerkt. Auf dem Bildschirm sehen Sie kein Zeichen; doch die Lücke ist da.',
+    stakes: 'Eine übersehene Schwachstelle kann zu einem Datenleck, dem Verlust von Kundenvertrauen, Ausfallzeiten oder Compliance-Risiken wie der DSGVO werden.',
+    bridge: 'CyberTestify hilft Ihnen, diese Probleme so früh wie möglich zu sehen — nicht erst nach einem Angriff oder einem Audit. Wir wissen, dass Sicherheitstests oft teuer, technisch und zeitaufwändig sein können — deshalb haben wir sie schnell, verständlich und bezahlbar gemacht.',
   },
   auto: {
     eyebrow: 'KI-gestützte Automatisierung · Unser echter Unterschied',
@@ -481,13 +503,12 @@ const de: Dict = {
   },
   steps: {
     eyebrow: 'So funktioniert’s',
-    title: 'Vier Schritte, von Anfang bis Ende',
+    title: 'Drei Schritte: Verifizieren → Scannen → Beheben',
     stepWord: 'SCHRITT',
     items: [
-      { t: 'Domain verifizieren', d: 'Weisen Sie den Besitz mit einem DNS-TXT-Eintrag nach — in Minuten erledigt.' },
-      { t: 'Paket wählen', d: 'Fester Umfang, fester Preis. Keine Überraschungskosten.' },
-      { t: 'Automatisierter Sicherheitsscan', d: 'Der KI-gestützte Scan startet in Sekunden und läuft im Hintergrund.' },
-      { t: 'Verschlüsselten Bericht herunterladen', d: 'Ende-zu-Ende-verschlüsselt, geöffnet mit Ihrem Einmal-Code.' },
+      { t: 'Verifizieren', d: 'Weisen Sie den Besitz Ihrer Domain mit einem DNS-TXT-Eintrag nach. Die Verifizierung ist kostenlos und dauert Minuten.' },
+      { t: 'Scannen', d: 'Wählen Sie Ihr Paket; der KI-gestützte Scan startet in Sekunden und deckt verifizierte Sicherheitsprobleme auf.' },
+      { t: 'Beheben', d: 'Erhalten Sie Ihren verschlüsselten Bericht mit plattform-spezifischen, einsatzbereiten Behebungsschritten für jeden Befund.' },
     ],
   },
   why: {
@@ -503,7 +524,7 @@ const de: Dict = {
   finalCta: {
     title: 'Bereit, Ihre Website zu testen?',
     subtitle: 'Die Verifizierung ist kostenlos. Sie zahlen erst, wenn Sie einen Scan starten.',
-    primary: 'Kostenlos prüfen & starten',
+    primary: 'Meine Website kostenlos prüfen',
     secondary: 'Preise ansehen →',
   },
   footer: {

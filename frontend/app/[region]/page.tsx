@@ -163,11 +163,35 @@ function Hero({ d }: { d: Dict }) {
   );
 }
 
+// (StoryBrand) PROBLEM + STAKES — hero'dan hemen sonra "neden önemli / neden şimdi".
+// Korku-pazarlaması / mutlak vaat YOK; ölçülü, gerçekçi dil. Uyum terimi dict'te bölgeye göre (KVKK/DSGVO/UK GDPR).
+function ProblemSection({ d }: { d: Dict }) {
+  return (
+    <section className="border-b border-line bg-white">
+      <div className="container-page py-16 sm:py-20">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="eyebrow">{d.problem.eyebrow}</p>
+          <h2 className="mt-3 text-3xl font-extrabold text-brand sm:text-4xl">{d.problem.title}</h2>
+          <p className="mt-4 text-lg leading-relaxed text-ink-soft">{d.problem.body}</p>
+        </div>
+        <div className="mx-auto mt-8 max-w-2xl rounded-card border border-amber-200 bg-amber-50/70 p-5">
+          <p className="flex items-start gap-3 text-sm leading-relaxed text-amber-900">
+            <svg viewBox="0 0 24 24" className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+            </svg>
+            <span>{d.problem.stakes}</span>
+          </p>
+        </div>
+        <p className="mx-auto mt-6 max-w-2xl text-center leading-relaxed text-ink-soft">{d.problem.bridge}</p>
+      </div>
+    </section>
+  );
+}
+
 const STEP_ICONS = [
-  'M3 12h4l3 8 4-16 3 8h4',
-  'M4 6h16M4 12h16M4 18h10',
-  'M12 3a4 4 0 014 4v1a5 5 0 01-8 0V7a4 4 0 014-4zM6 21v-2a6 6 0 0112 0v2',
-  'M6 10V7a6 6 0 1112 0v3M5 10h14v10H5z',
+  'M9 12l2 2 4-4M12 2l7 4v6c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6l7-4z',
+  'M11 3a8 8 0 105.3 14M21 21l-4.3-4.3',
+  'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M9 15l2 2 4-4',
 ];
 
 function HowItWorks({ d }: { d: Dict }) {
@@ -177,7 +201,7 @@ function HowItWorks({ d }: { d: Dict }) {
         <p className="eyebrow">{d.steps.eyebrow}</p>
         <h2 className="mt-3 text-3xl font-extrabold text-brand sm:text-4xl">{d.steps.title}</h2>
       </div>
-      <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {d.steps.items.map((s, i) => (
           <div key={s.t} className="card p-6">
             <div className="flex h-11 w-11 items-center justify-center rounded-card bg-brand-50 text-brand">
@@ -375,8 +399,11 @@ export default function RegionHome({ params }: { params: { region: string } }) {
   const d = getDict(region);
   return (
     <>
+      {/* (StoryBrand sırası) Hero(sonuç) → Problem/Stakes → Çözüm(hız/fiyat) → Plan(3 adım) →
+          Farklılaşma(fix kodu) → Kanıt&Güven(why + trust) → SSS → Son CTA. */}
       <CampaignBanner region={region} />
       <Hero d={d} />
+      <ProblemSection d={d} />
       <AutonomousSection region={region} />
       <HowItWorks d={d} />
       <SolutionSection region={region} />
