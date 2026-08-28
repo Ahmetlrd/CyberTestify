@@ -10,6 +10,7 @@ import { Turnstile, type TurnstileHandle } from '../../components/Turnstile';
 import { useRef } from 'react';
 import { readRegionCookie } from '../../lib/region';
 import { getRegion } from '../../config/regions';
+import { trackEvent } from '../../lib/analytics';
 
 // (Çok-bölge) Client sayfa; dili cookie'den (hydration-safe). /de'de onay metni AGB+Datenschutz'a
 // bağlanır (KVKK DEĞİL); doğrulama mesajları Almanca.
@@ -93,6 +94,8 @@ export default function RegisterPage() {
     try {
       const res = await api.register(email, password, terms, token);
       window.localStorage.setItem('token', res.token);
+      // (GA4 huni) Hesap oluşturuldu — kayıt formu bir kez submit edildiği için tek sefer (PII yok).
+      trackEvent('sign_up', { method: 'password' });
       // YENI hesap (emailVerified=false) -> once dogrulama ekrani. Mevcut/verified -> next.
       if (res.emailVerified === false) router.push(`/verify-email?next=${encodeURIComponent(next)}`);
       else router.push(next);

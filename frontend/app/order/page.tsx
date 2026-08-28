@@ -10,6 +10,7 @@ import { getRegion, type RegionCode } from '../../config/regions';
 import { formatMoney } from '../../config/i18n';
 import { DynamicContract } from '../../components/DynamicContract';
 import { PromoCodeChip } from '../../components/PromoCodeChip';
+import { trackEvent, currencyForRegion } from '../../lib/analytics';
 
 type ActiveTest = { scope: { does: string[]; doesNot: string[] }; riskText: string; consentVersion: string };
 type Pkg = {
@@ -587,6 +588,8 @@ export default function OrderPage() {
           startAt: startAtIso,
           region,
         });
+        // (GA4 huni) Zamanlanmış/ileri-tarihli tarama oluşturuldu = aktivasyon (scan_start).
+        trackEvent('scan_start', { region, package: selected, mode: recurring ? 'recurring' : 'scheduled' });
         router.push('/schedules');
         return;
       }
@@ -604,11 +607,19 @@ export default function OrderPage() {
         needsAuthCreds && hasCreds ? { username: authUser.trim(), password: authPass } : undefined, // loginsizse gönderilmez
         promo?.valid ? promo.code : undefined,
       );
+      // (GA4 huni) Sipariş oluşturuldu = tarama aktivasyonu (ücretsiz promo dahil; tek submit → tek sefer, PII yok).
+      trackEvent('scan_start', { region, package: selected });
       // %100 promo ile odendiyse odeme sayfasi YOK — dogrudan siparis detayina git.
       if (res.paidWithPromo) {
         router.push(`/dashboard/${res.orderId}`);
         return;
       }
+      // (GA4 huni) Ödeme sayfasına yönlendiriliyor = begin_checkout (satışa en yakın sinyal). Değer bölge para birimiyle.
+      trackEvent('begin_checkout', {
+        value: unitAmountMinor / 100,
+        currency: selectedPkg?.currency ?? currencyForRegion(region),
+        items: [{ item_name: selected }],
+      });
       window.location.href = res.paymentPageUrl!;
     } catch (err: any) {
       // (0) E-posta dogrulanmamis -> satin alma engellendi (409). Dogrulama ekranina yonlendir.
@@ -649,6 +660,16 @@ export default function OrderPage() {
         promoCode: promo?.valid ? promo.code : undefined,
         lowScopeAcknowledged: showLowScopeWarning ? lowScopeAck : undefined,
       });
+      // (GA4 huni) Bundle siparişi oluşturuldu = tarama aktivasyonu (scan_start; ücretsiz promo dahil, PII yok).
+      trackEvent('scan_start', { region, package: selectedBundle.key });
+      // (GA4 huni) Ödeme akışına giriliyorsa (promo değilse) begin_checkout — bundle toplamı, bölge para birimi.
+      if (!res.paidWithPromo) {
+        trackEvent('begin_checkout', {
+          value: (res.bundleTotalMinorUnit ?? selectedBundle.amountMinorUnit ?? 0) / 100,
+          currency: res.currency ?? currencyForRegion(region),
+          items: [{ item_name: selectedBundle.key }],
+        });
+      }
       // %100 promo -> odeme YOK, dogrudan siparis paneli. Aksi halde: TR'de backend TEK gercek
       // iyzico CheckoutForm baslatir (paymentPageUrl) -> oraya yonlendir (tekil akisla ayni).
       // paymentPageUrl yoksa (TR disi placeholder) eski /pay bundle ekranina dus.

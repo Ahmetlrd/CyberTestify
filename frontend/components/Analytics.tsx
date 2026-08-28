@@ -4,6 +4,8 @@ import Script from 'next/script';
 import { useEffect } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { GA_ID, loadClarity } from '../lib/consent';
+import { trackEvent } from '../lib/analytics';
+import { REGION_CODES } from '../config/regions';
 
 /**
  * (GA4 + Microsoft Clarity) — HER ZAMAN AÇIK. Site sahibinin kararıyla çerez onayı gating'i KALDIRILDI:
@@ -28,6 +30,33 @@ export function Analytics() {
       page_title: document.title,
     });
   }, [pathname, searchParams]);
+
+  // (GA4 ikincil — gözlem) Fiyat sayfası görüntüleme: /{bölge}/packages'a her gelişte TEK sefer.
+  // pathname'e bağlı → SPA'de doğru sayfaya girişte bir kez; query değişimi TEKRAR tetiklemez.
+  useEffect(() => {
+    if (!GA_ID) return;
+    const seg = (pathname ?? '/').split('/');
+    if (seg[2] === 'packages' && (REGION_CODES as readonly string[]).includes(seg[1])) {
+      trackEvent('view_pricing', { region: seg[1] });
+    }
+  }, [pathname]);
+
+  // (GA4 ikincil — gözlem) Örnek rapor görüntüleme: tüm site genelindeki sample-report linklerine
+  // DELEGE tıklama dinleyicisi (tek yer, her anchor'ı yakalar). Paket anahtarı + bölge href'ten
+  // türetilir — PII YOK. capture:true ki target=_blank yeni sekme açmadan önce yakalansın.
+  useEffect(() => {
+    if (!GA_ID || typeof document === 'undefined') return;
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement | null)?.closest?.('a[href*="/orders/sample-report/"]') as HTMLAnchorElement | null;
+      if (!a) return;
+      const href = a.getAttribute('href') || '';
+      const pkg = href.match(/\/orders\/sample-report\/([^/?#]+)/)?.[1];
+      const region = href.match(/[?&]region=([a-z]{2})/)?.[1];
+      trackEvent('view_sample_report', { package: pkg ? decodeURIComponent(pkg) : undefined, region });
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, []);
 
   if (!GA_ID) return null;
 
