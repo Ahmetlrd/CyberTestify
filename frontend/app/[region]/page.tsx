@@ -9,6 +9,7 @@ import { VISIBLE_REGION_CODES, isRegionCode, getRegion, type RegionConfig } from
 import { getDict, type Dict } from '../../config/i18n';
 
 const SITE = 'https://cybertestify.com';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export function generateStaticParams() {
   return VISIBLE_REGION_CODES.map((region) => ({ region }));
@@ -73,7 +74,51 @@ const FAQ_DE = [
 // NEXT_PUBLIC_AI_FIX_FREE_CAMPAIGN=false (env tanımsızsa varsayılan: AÇIK/gösterilir).
 const AI_FIX_FREE_CAMPAIGN = process.env.NEXT_PUBLIC_AI_FIX_FREE_CAMPAIGN !== 'false';
 
-function CampaignBanner({ region }: { region: RegionConfig }) {
+// (PROMO ŞERİDİ) Aktif basit_tarama promo kodu VARSA ona öncelik ver: "şu kodla BASİT TARAMAYI hemen
+// ücretsiz deneyin". Kod pasifleştirilince (admin/DB active=false) endpoint null döner → AI-fix
+// kampanyasına (ya da hiçbir şeye) düşülür. Server component: promo kodunu API'den okur.
+async function fetchActivePromo(): Promise<{ code: string } | null> {
+  try {
+    const r = await fetch(`${API_BASE}/promo/active-basit`, { next: { revalidate: 60 } });
+    if (!r.ok) return null;
+    return (await r.json()).promo ?? null;
+  } catch { return null; }
+}
+
+function PromoBanner({ region, code }: { region: RegionConfig; code: string }) {
+  const tr = region.lang === 'tr';
+  const de = region.lang === 'de';
+  return (
+    <Link
+      href={`/${region.code}/packages`}
+      className="group sticky top-16 z-30 block bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 text-white shadow-sm"
+    >
+      <div className="container-page flex flex-wrap items-center justify-center gap-x-3 gap-y-1 py-2.5 text-center text-sm font-semibold">
+        <span className="rounded-pill bg-white/20 px-2.5 py-0.5 text-xs font-extrabold tracking-wide">
+          {pick3(region.lang, 'KAMPANYAYA ÖZEL', 'AKTIONSANGEBOT', 'LAUNCH OFFER')}
+        </span>
+        <span>
+          {tr ? (
+            <><strong className="rounded bg-white px-1.5 py-0.5 font-mono text-emerald-700">{code}</strong> koduyla <strong>Basit Tarama’yı hemen ÜCRETSİZ deneyin</strong></>
+          ) : de ? (
+            <>Mit dem Code <strong className="rounded bg-white px-1.5 py-0.5 font-mono text-emerald-700">{code}</strong> den <strong>Basis-Scan jetzt KOSTENLOS testen</strong></>
+          ) : (
+            <>Use code <strong className="rounded bg-white px-1.5 py-0.5 font-mono text-emerald-700">{code}</strong> to try the <strong>Basic Scan FREE now</strong></>
+          )}
+        </span>
+        <span className="inline-flex items-center gap-1 underline decoration-white/50 underline-offset-2 group-hover:decoration-white">
+          {pick3(region.lang, 'Hemen başla', 'Jetzt starten', 'Start now')}
+          <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+async function CampaignBanner({ region }: { region: RegionConfig }) {
+  // Öncelik: aktif basit_tarama promo şeridi (kullanıcı isteği). Yoksa AI-fix kampanyası.
+  const promo = await fetchActivePromo();
+  if (promo?.code) return <PromoBanner region={region} code={promo.code} />;
   if (!AI_FIX_FREE_CAMPAIGN) return null;
   const tr = region.lang === 'tr';
   const de = region.lang === 'de';

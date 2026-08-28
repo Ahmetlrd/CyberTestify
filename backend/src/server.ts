@@ -15,6 +15,7 @@ import { paymentsRouter } from './routes/payments.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { reportsRouter } from './routes/reports.js';
 import { blogRouter } from './routes/blog.js';
+import { activeBasitPromoCode } from './services/promo.js';
 import { internalRouter } from './routes/internal.js';
 import { schedulesRouter } from './routes/schedules.js';
 import { adminAuthRouter } from './routes/adminAuth.js';
@@ -110,6 +111,12 @@ app.use('/orders', apiLimiter, ordersRouter);
 app.use('/payments', paymentsRouter);
 app.use('/reports', apiLimiter, reportsRouter);
 app.use('/blog', apiLimiter, blogRouter); // PUBLIC blog (yalniz published; auth yok)
+// (PROMOSYON ŞERİDİ) PUBLIC: ana sayfa "KAMPANYAYA ÖZEL" şeridi aktif basit_tarama promo kodunu buradan
+// okur (auth yok). Kod pasifleştirilince null döner → şerit gizlenir.
+app.get('/promo/active-basit', apiLimiter, async (_req, res) => {
+  try { res.json({ promo: await activeBasitPromoCode() }); }
+  catch { res.json({ promo: null }); }
+});
 app.use('/schedules', apiLimiter, schedulesRouter);
 // (OTONOM AI RED TEAM — 3b beta kapısı) /unlock kendi sıkı limiter'ını router içinde uygular.
 app.use('/beta', apiLimiter, betaRouter);

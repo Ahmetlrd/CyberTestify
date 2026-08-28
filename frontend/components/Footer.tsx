@@ -1,8 +1,11 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { COMPANY } from '../lib/company';
 import { Logo } from './Logo';
 import { CookiePrefsButton } from './CookiePrefsButton';
-import type { RegionConfig } from '../config/regions';
+import { getRegion, REGION_CODES, type RegionConfig } from '../config/regions';
 import { getDict } from '../config/i18n';
 
 const LEGAL_LINKS_TR: Array<[string, string]> = [
@@ -37,9 +40,16 @@ const NAV_LINKS_TR = { about: 'Hakkımızda', blog: 'Blog', openSource: 'Açık 
 const NAV_LINKS_EN = { about: 'About', blog: 'Blog', openSource: 'Open Source', contact: 'Contact & Business Info →' };
 
 export function Footer({ region }: { region: RegionConfig }) {
-  const d = getDict(region).footer;
-  const isDe = region.lang === 'de';
-  const isEn = region.lang === 'en';
+  // (BUG DÜZELTME) Footer kök layout'ta cookie-region ile render edilir; kök layout client-navigasyonda
+  // YENİDEN RENDER EDİLMEZ → bölge değişince yasal başlıklar/linkler ESKİ dil/bölgede kalıyordu. Çözüm:
+  // bölge-önekli sayfada aktif bölgeyi URL'den TÜRET (RegionSelector ile aynı desen); yoksa prop'a düş.
+  const pathname = usePathname();
+  const seg = (pathname ?? '/').split('/')[1] ?? '';
+  const activeRegion = (REGION_CODES as readonly string[]).includes(seg) ? getRegion(seg) : region;
+
+  const d = getDict(activeRegion).footer;
+  const isDe = activeRegion.lang === 'de';
+  const isEn = activeRegion.lang === 'en';
   const legalLinks = isDe ? LEGAL_LINKS_DE : isEn ? LEGAL_LINKS_EN : LEGAL_LINKS_TR;
   const nav = isDe ? NAV_LINKS_DE : isEn ? NAV_LINKS_EN : NAV_LINKS_TR;
   // Künye/Impressum → /de'de Alman Impressum sayfası; TR'de mevcut /iletisim korunur.
@@ -58,15 +68,15 @@ export function Footer({ region }: { region: RegionConfig }) {
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/70">{d.tagline}</p>
             <p className="mt-4 text-sm">
               {d.questions}{' '}
-              <a href={`mailto:${region.supportEmail}`} className="font-medium text-accent hover:underline">
-                {region.supportEmail}
+              <a href={`mailto:${activeRegion.supportEmail}`} className="font-medium text-accent hover:underline">
+                {activeRegion.supportEmail}
               </a>
             </p>
             <p className="mt-2 flex flex-wrap gap-x-4 text-sm">
               <Link href="/hakkimizda" className="font-medium text-white/80 hover:text-white hover:underline">
                 {nav.about}
               </Link>
-              <Link href={`/${region.code}/blog`} className="font-medium text-white/80 hover:text-white hover:underline">
+              <Link href={`/${activeRegion.code}/blog`} className="font-medium text-white/80 hover:text-white hover:underline">
                 {nav.blog}
               </Link>
               <Link href="/acik-kaynak" className="font-medium text-white/80 hover:text-white hover:underline">
@@ -80,11 +90,11 @@ export function Footer({ region }: { region: RegionConfig }) {
 
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-widest text-white/50">{d.legal}</h3>
-            {region.legalReady ? (
+            {activeRegion.legalReady ? (
               <ul className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 {legalLinks.map(([label, href]) => (
                   <li key={href}>
-                    <Link href={`/${region.code}${href}`} className="text-sm text-white/70 transition hover:text-white">
+                    <Link href={`/${activeRegion.code}${href}`} className="text-sm text-white/70 transition hover:text-white">
                       {label}
                     </Link>
                   </li>

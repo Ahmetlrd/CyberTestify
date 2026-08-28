@@ -17,7 +17,7 @@ export interface PromoResult {
  * siparis aninda ayni mantik). Kod bulunamaz/pasif/suresi dolmus/limit dolmussa gecersiz.
  * Indirim tutari [0, amount] araligina kelepcelenir (negatif/asiri koruma).
  */
-export async function evaluatePromo(codeRaw: string, amountMinorUnit: number, locale: string = 'tr'): Promise<PromoResult> {
+export async function evaluatePromo(codeRaw: string, amountMinorUnit: number, locale: string = 'tr', packageKey?: string): Promise<PromoResult> {
   const de = locale === 'de', en = locale === 'en';
   const t = (tr: string, deS: string, enS: string) => (de ? deS : en ? enS : tr);
   const code = (codeRaw ?? '').trim().toUpperCase();
@@ -26,6 +26,11 @@ export async function evaluatePromo(codeRaw: string, amountMinorUnit: number, lo
   if (!promo || !promo.active) return { valid: false, error: t('Kod geçersiz veya pasif.', 'Code ungültig oder inaktiv.', 'Code is invalid or inactive.') };
   if (promo.expiresAt && promo.expiresAt.getTime() < Date.now()) return { valid: false, error: t('Kodun süresi dolmuş.', 'Der Code ist abgelaufen.', 'The code has expired.') };
   if (promo.maxUses != null && promo.usedCount >= promo.maxUses) return { valid: false, error: t('Kod kullanım limiti dolmuş.', 'Nutzungslimit des Codes erreicht.', 'The code has reached its usage limit.') };
+  // (PAKET KISITI) Koda paket kilidi konmuşsa (ör. yalnız basit_tarama), farklı pakette geçersiz.
+  // Bu, %100 bir kodun her pakedi bedava yapmasını engeller. packageKey bilinmeyen çağrılarda da reddedilir.
+  if (promo.packageKey && promo.packageKey !== packageKey) {
+    return { valid: false, error: t('Bu kod yalnız belirli bir pakette geçerlidir.', 'Dieser Code gilt nur für ein bestimmtes Paket.', 'This code is only valid for a specific package.') };
+  }
 
   const raw =
     promo.discountType === 'percentage'
@@ -41,6 +46,24 @@ export async function evaluatePromo(codeRaw: string, amountMinorUnit: number, lo
     discountMinorUnit: discount,
     finalAmountMinorUnit: amountMinorUnit - discount,
   };
+}
+
+/**
+ * Ana sayfa "KAMPANYAYA ÖZEL" şeridi için: şu an AKTİF, süresi geçmemiş ve YALNIZ basit_tarama'ya
+ * kısıtlı promo kodu (varsa). Kod pasifleştirilince (active=false) null döner → şerit otomatik gizlenir.
+ * "Ben iptal et diyene kadar" = active=true; iptal = active=false.
+ */
+export async function activeBasitPromoCode(): Promise<{ code: string; discountType: string; discountValue: number } | null> {
+  const now = new Date();
+  return prisma.promoCode.findFirst({
+    where: {
+      active: true,
+      packageKey: 'basit_tarama',
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { code: true, discountType: true, discountValue: true },
+  });
 }
 
 type Db = PrismaClient | Prisma.TransactionClient;

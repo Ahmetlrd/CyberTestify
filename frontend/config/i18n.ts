@@ -92,7 +92,7 @@ const tr: Dict = {
     titleB: 'görün',
     subtitle:
       'CyberTestify web sitenizi dakikalar içinde kontrol eder, doğrulanmış güvenlik sorunlarını gösterir ve nasıl düzelteceğinizi anlatır — yapay zekâ destekli otomasyon ve deterministik doğrulamayla. Resmi pentest yerine geçmez; ama onun için haftalarca beklemeniz gerekmez.',
-    ctaPrimary: 'Sitemi Ücretsiz Kontrol Et',
+    ctaPrimary: 'Hemen Ücretsiz Başla',
     ctaSecondary: 'Nasıl Çalışır?',
     trust: ['KVKK’ya Uygun Veri İşleme', 'Uçtan Uca Şifreli Rapor', 'Sadece Doğrulanmış Alan Adları'],
   },
@@ -140,7 +140,7 @@ const tr: Dict = {
   finalCta: {
     title: 'Sitenizi test etmeye hazır mısınız?',
     subtitle: 'Doğrulama ücretsiz. Yalnızca taramayı başlattığınızda ödeme yaparsınız.',
-    primary: 'Sitemi Ücretsiz Kontrol Et',
+    primary: 'Hemen Ücretsiz Başla',
     secondary: 'Fiyatları Gör →',
   },
   footer: {
@@ -283,7 +283,7 @@ const en: Dict = {
     titleB: '',
     subtitle:
       'CyberTestify checks your website in minutes, shows you validated security issues, and tells you how to fix them — with AI-assisted automation and deterministic verification. It is not a substitute for a formal pentest; but you won’t wait weeks for one.',
-    ctaPrimary: 'Scan My Site Free',
+    ctaPrimary: 'Start Free Now',
     ctaSecondary: 'How It Works?',
     trust: ['Privacy-First', 'End-to-End Encrypted Report', 'Verified Domains Only'],
   },
@@ -331,7 +331,7 @@ const en: Dict = {
   finalCta: {
     title: 'Ready to test your site?',
     subtitle: 'Verification is free. You only pay when you start a scan.',
-    primary: 'Scan My Site Free',
+    primary: 'Start Free Now',
     secondary: 'See Pricing →',
   },
   footer: {
@@ -476,7 +476,7 @@ const de: Dict = {
     titleB: '',
     subtitle:
       'CyberTestify prüft Ihre Website in wenigen Minuten, zeigt Ihnen verifizierte Sicherheitsprobleme und erklärt, wie Sie sie beheben — mit KI-gestützter Automatisierung und deterministischer Verifizierung. Kein Ersatz für einen formellen Pentest; aber Sie warten nicht wochenlang darauf.',
-    ctaPrimary: 'Meine Website kostenlos prüfen',
+    ctaPrimary: 'Jetzt kostenlos starten',
     ctaSecondary: 'So funktioniert’s',
     trust: ['Datenschutz zuerst', 'Ende-zu-Ende-verschlüsselter Bericht', 'Nur verifizierte Domains'],
   },
@@ -524,7 +524,7 @@ const de: Dict = {
   finalCta: {
     title: 'Bereit, Ihre Website zu testen?',
     subtitle: 'Die Verifizierung ist kostenlos. Sie zahlen erst, wenn Sie einen Scan starten.',
-    primary: 'Meine Website kostenlos prüfen',
+    primary: 'Jetzt kostenlos starten',
     secondary: 'Preise ansehen →',
   },
   footer: {

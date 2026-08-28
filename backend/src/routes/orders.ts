@@ -359,7 +359,7 @@ ordersRouter.post('/', createLimiter, requireAuth, async (req, res) => {
   let effectiveAmount = amountMinorUnit;
   let promoApplied: Awaited<ReturnType<typeof evaluatePromo>> | null = null;
   if (parsed.data.promoCode) {
-    const p = await evaluatePromo(parsed.data.promoCode, amountMinorUnit, localeFor(region));
+    const p = await evaluatePromo(parsed.data.promoCode, amountMinorUnit, localeFor(region), packageKey);
     if (!p.valid) return res.status(400).json({ error: p.error ?? 'Promo code is invalid.' });
     promoApplied = p;
     effectiveAmount = p.finalAmountMinorUnit!;
@@ -595,7 +595,8 @@ ordersRouter.post('/bundle', createLimiter, requireAuth, async (req, res) => {
   let promoFree = false;
   let promoApplied: Awaited<ReturnType<typeof evaluatePromo>> | null = null;
   if (parsed.data.promoCode) {
-    const p = await evaluatePromo(parsed.data.promoCode, price.amountMinorUnit, localeFor(region));
+    // Bundle akışı: paket kısıtı bundleKey ile (basit_tarama-kısıtlı kod burada geçerli DEĞİL → reddedilir).
+    const p = await evaluatePromo(parsed.data.promoCode, price.amountMinorUnit, localeFor(region), parsed.data.bundleKey);
     if (!p.valid) return res.status(400).json({ error: p.error ?? 'Promo code is invalid.' });
     promoApplied = p;
     promoFree = p.finalAmountMinorUnit === 0;
@@ -853,7 +854,7 @@ ordersRouter.post('/promo/preview', requireAuth, async (req, res) => {
   } else {
     return res.status(400).json({ valid: false, error: M(reqLoc(req), 'Geçersiz istek.', 'Ungültige Anfrage.', 'Invalid request.') });
   }
-  const result = await evaluatePromo(parsed.data.code, amountMinorUnit, localeFor(parsed.data.region));
+  const result = await evaluatePromo(parsed.data.code, amountMinorUnit, localeFor(parsed.data.region), parsed.data.packageKey ?? parsed.data.bundleKey);
   res.json({ ...result, currency });
 });
 

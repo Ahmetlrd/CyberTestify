@@ -485,6 +485,9 @@ model PromoCode {
   maxUses       Int? // null = sinirsiz
   usedCount     Int       @default(0)
   expiresAt     DateTime? // null = suresiz
+  // (PAKET KISITI) null = tüm paketlerde geçerli; set = YALNIZ bu packageKey'de geçerli. %100 kodun
+  // her pakedi bedava yapmasını önler (ör. yalnız 'basit_tarama'). evaluatePromo bunu doğrular.
+  packageKey    String?
   createdAt     DateTime  @default(now())
 
   usages PromoCodeUsage[]
