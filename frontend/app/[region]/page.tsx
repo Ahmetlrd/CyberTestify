@@ -95,8 +95,9 @@ function PromoBanner({ region, code }: { region: RegionConfig; code: string }) {
   const de = region.lang === 'de';
   const codePill = <strong className="rounded bg-white px-1.5 py-0.5 font-mono text-orange-600">{code}</strong>;
   // AI-fix kampanyası hâlâ açıksa promo mesajının yanına "AI önerileri de ücretsiz" eklenir (kullanıcı isteği).
+  // AI-fix kampanyası açıksa promo mesajının kuyruğuna eklenir — MOBİLDE GİZLİ (şerit tek satır kalsın).
   const aiFix = AI_FIX_FREE_CAMPAIGN ? (
-    <span className="opacity-95">
+    <span className="hidden opacity-95 sm:inline">
       {pick3(region.lang, ' · üstelik tüm raporlarda AI Çözüm Önerileri de ÜCRETSİZ',
         ' · zudem KI-Lösungsempfehlungen KOSTENLOS in jedem Bericht',
         ' · plus AI Fix Suggestions FREE on every report')}
@@ -108,20 +109,24 @@ function PromoBanner({ region, code }: { region: RegionConfig; code: string }) {
       /* Sticky: global Nav'ın hemen altına sabitlenir. Renk: önceki kampanya rengi (amber/orange). */
       className="group sticky top-16 z-30 block bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 text-white shadow-sm"
     >
-      <div className="container-page flex flex-wrap items-center justify-center gap-x-3 gap-y-1 py-2.5 text-center text-sm font-semibold">
-        <span className="rounded-pill bg-white/20 px-2.5 py-0.5 text-xs font-extrabold tracking-wide">
-          {pick3(region.lang, 'KAMPANYAYA ÖZEL', 'AKTIONSANGEBOT', 'LAUNCH OFFER')}
+      {/* Mobil: kompakt (küçük font/padding, rozet+mesaj TEK satır içinde inline, kuyruk+CTA gizli). Masaüstü: tam. */}
+      <div className="container-page flex flex-wrap items-center justify-center gap-x-2 gap-y-1 py-1.5 text-center text-xs font-semibold leading-tight sm:gap-x-3 sm:py-2.5 sm:text-sm">
+        <span className="min-w-0">
+          <span className="mr-1.5 inline-block rounded-pill bg-white/20 px-2 py-0.5 align-middle text-[10px] font-extrabold uppercase tracking-wide sm:text-xs">
+            {pick3(region.lang, 'KAMPANYAYA ÖZEL', 'AKTIONSANGEBOT', 'LAUNCH OFFER')}
+          </span>
+          <span className="sm:hidden">
+            {tr ? (<>{codePill} → Basit Tarama <strong>ÜCRETSİZ</strong></>)
+              : de ? (<>{codePill} → Basis-Scan <strong>KOSTENLOS</strong></>)
+              : (<>{codePill} → Basic Scan <strong>FREE</strong></>)}
+          </span>
+          <span className="hidden sm:inline">
+            {tr ? (<>{codePill} koduyla <strong>Basit Tarama’yı hemen ÜCRETSİZ deneyin</strong>{aiFix}</>)
+              : de ? (<>Mit dem Code {codePill} den <strong>Basis-Scan jetzt KOSTENLOS testen</strong>{aiFix}</>)
+              : (<>Use code {codePill} to try the <strong>Basic Scan FREE now</strong>{aiFix}</>)}
+          </span>
         </span>
-        <span>
-          {tr ? (
-            <>{codePill} koduyla <strong>Basit Tarama’yı hemen ÜCRETSİZ deneyin</strong>{aiFix}</>
-          ) : de ? (
-            <>Mit dem Code {codePill} den <strong>Basis-Scan jetzt KOSTENLOS testen</strong>{aiFix}</>
-          ) : (
-            <>Use code {codePill} to try the <strong>Basic Scan FREE now</strong>{aiFix}</>
-          )}
-        </span>
-        <span className="inline-flex items-center gap-1 underline decoration-white/50 underline-offset-2 group-hover:decoration-white">
+        <span className="hidden items-center gap-1 underline decoration-white/50 underline-offset-2 group-hover:decoration-white sm:inline-flex">
           {pick3(region.lang, 'Hemen başla', 'Jetzt starten', 'Start now')}
           <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
         </span>
@@ -144,20 +149,24 @@ async function CampaignBanner({ region }: { region: RegionConfig }) {
          aşağı kaydırınca kampanya şeridi kaybolmaz. */
       className="group sticky top-16 z-30 block bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 text-white shadow-sm"
     >
-      <div className="container-page flex flex-wrap items-center justify-center gap-x-3 gap-y-1 py-2.5 text-center text-sm font-semibold">
-        <span className="rounded-pill bg-white/20 px-2.5 py-0.5 text-xs font-extrabold tracking-wide">
-          {pick3(region.lang, 'KAMPANYAYA ÖZEL', 'AKTIONSANGEBOT', 'LAUNCH OFFER')}
+      {/* Mobil: kompakt tek-satır (küçük font/padding, kısa mesaj, CTA gizli). Masaüstü: tam mesaj. */}
+      <div className="container-page flex flex-wrap items-center justify-center gap-x-2 gap-y-1 py-1.5 text-center text-xs font-semibold leading-tight sm:gap-x-3 sm:py-2.5 sm:text-sm">
+        <span className="min-w-0">
+          <span className="mr-1.5 inline-block rounded-pill bg-white/20 px-2 py-0.5 align-middle text-[10px] font-extrabold uppercase tracking-wide sm:text-xs">
+            {pick3(region.lang, 'KAMPANYAYA ÖZEL', 'AKTIONSANGEBOT', 'LAUNCH OFFER')}
+          </span>
+          <span className="sm:hidden">
+            {tr ? (<>AI Çözüm Önerileri <strong>ÜCRETSİZ</strong></>)
+              : de ? (<>KI-Empfehlungen <strong>KOSTENLOS</strong></>)
+              : (<>AI Fix Suggestions <strong>FREE</strong></>)}
+          </span>
+          <span className="hidden sm:inline">
+            {tr ? (<>Kısa süreliğine <strong>tüm raporlarda AI Çözüm Önerileri ÜCRETSİZ</strong></>)
+              : de ? (<>Für kurze Zeit <strong>KI-Lösungsempfehlungen KOSTENLOS</strong> in jedem Bericht</>)
+              : (<>For a limited time <strong>AI Fix Suggestions are FREE</strong> on every report</>)}
+          </span>
         </span>
-        <span>
-          {tr ? (
-            <>Kısa süreliğine <strong>tüm raporlarda AI Çözüm Önerileri ÜCRETSİZ</strong></>
-          ) : de ? (
-            <>Für kurze Zeit <strong>KI-Lösungsempfehlungen KOSTENLOS</strong> in jedem Bericht</>
-          ) : (
-            <>For a limited time <strong>AI Fix Suggestions are FREE</strong> on every report</>
-          )}
-        </span>
-        <span className="inline-flex items-center gap-1 underline decoration-white/50 underline-offset-2 group-hover:decoration-white">
+        <span className="hidden items-center gap-1 underline decoration-white/50 underline-offset-2 group-hover:decoration-white sm:inline-flex">
           {pick3(region.lang, 'Paketleri gör', 'Pakete ansehen', 'View packages')}
           <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
         </span>
