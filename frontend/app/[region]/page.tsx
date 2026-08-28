@@ -88,10 +88,20 @@ async function fetchActivePromo(): Promise<{ code: string } | null> {
 function PromoBanner({ region, code }: { region: RegionConfig; code: string }) {
   const tr = region.lang === 'tr';
   const de = region.lang === 'de';
+  const codePill = <strong className="rounded bg-white px-1.5 py-0.5 font-mono text-orange-600">{code}</strong>;
+  // AI-fix kampanyası hâlâ açıksa promo mesajının yanına "AI önerileri de ücretsiz" eklenir (kullanıcı isteği).
+  const aiFix = AI_FIX_FREE_CAMPAIGN ? (
+    <span className="opacity-95">
+      {pick3(region.lang, ' · üstelik tüm raporlarda AI Çözüm Önerileri de ÜCRETSİZ',
+        ' · zudem KI-Lösungsempfehlungen KOSTENLOS in jedem Bericht',
+        ' · plus AI Fix Suggestions FREE on every report')}
+    </span>
+  ) : null;
   return (
     <Link
       href={`/${region.code}/packages`}
-      className="group sticky top-16 z-30 block bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 text-white shadow-sm"
+      /* Sticky: global Nav'ın hemen altına sabitlenir. Renk: önceki kampanya rengi (amber/orange). */
+      className="group sticky top-16 z-30 block bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 text-white shadow-sm"
     >
       <div className="container-page flex flex-wrap items-center justify-center gap-x-3 gap-y-1 py-2.5 text-center text-sm font-semibold">
         <span className="rounded-pill bg-white/20 px-2.5 py-0.5 text-xs font-extrabold tracking-wide">
@@ -99,11 +109,11 @@ function PromoBanner({ region, code }: { region: RegionConfig; code: string }) {
         </span>
         <span>
           {tr ? (
-            <><strong className="rounded bg-white px-1.5 py-0.5 font-mono text-emerald-700">{code}</strong> koduyla <strong>Basit Tarama’yı hemen ÜCRETSİZ deneyin</strong></>
+            <>{codePill} koduyla <strong>Basit Tarama’yı hemen ÜCRETSİZ deneyin</strong>{aiFix}</>
           ) : de ? (
-            <>Mit dem Code <strong className="rounded bg-white px-1.5 py-0.5 font-mono text-emerald-700">{code}</strong> den <strong>Basis-Scan jetzt KOSTENLOS testen</strong></>
+            <>Mit dem Code {codePill} den <strong>Basis-Scan jetzt KOSTENLOS testen</strong>{aiFix}</>
           ) : (
-            <>Use code <strong className="rounded bg-white px-1.5 py-0.5 font-mono text-emerald-700">{code}</strong> to try the <strong>Basic Scan FREE now</strong></>
+            <>Use code {codePill} to try the <strong>Basic Scan FREE now</strong>{aiFix}</>
           )}
         </span>
         <span className="inline-flex items-center gap-1 underline decoration-white/50 underline-offset-2 group-hover:decoration-white">

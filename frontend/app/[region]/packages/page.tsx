@@ -4,6 +4,7 @@ import { VISIBLE_REGION_CODES, isRegionCode, getRegion } from '../../../config/r
 import { getDict, formatMoney } from '../../../config/i18n';
 import { JsonLd } from '../../../components/JsonLd';
 import { renderEmphasis, stripEmphasis } from '../../../lib/richText';
+import { PromoCodeChip } from '../../../components/PromoCodeChip';
 
 type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean; bundleOnly?: boolean; bundleName?: string | null };
 type Bundle = {
@@ -52,12 +53,24 @@ async function getBundles(region: string): Promise<Bundle[]> {
   }
 }
 
+// Aktif basit_tarama promo kodu (varsa) — Basit Tarama kartında kampanya olarak gösterilir.
+async function getActivePromo(): Promise<{ code: string } | null> {
+  try {
+    const r = await fetch(`${API}/promo/active-basit`, { next: { revalidate: 60 } });
+    if (!r.ok) return null;
+    return (await r.json()).promo ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function PackagesPage({ params }: { params: { region: string } }) {
   if (!isRegionCode(params.region)) notFound();
   const region = getRegion(params.region);
   const d = getDict(region).pkg;
   const packages = await getPackages(region.code);
   const bundles = await getBundles(region.code);
+  const basitPromo = await getActivePromo();
   // SATIS MODELI: tekil satis KAPALI — SADECE basit_tarama tekil ("6. paket") satilir; digerleri
   // yalniz bundle icinde. basit_tarama'yi accordion'dan AYIR, bundle'larin yanina belirgin kart yap.
   // SATIS MODELI: SADECE paketler. basit_tarama giris-seviyesi bir PAKET olarak grid'in
@@ -176,6 +189,20 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         'An external-surface pre-assessment; no active penetration test or in-depth code audit.')}
                     </div>
                   </div>
+                  {basitPromo?.code && (
+                    <PromoCodeChip
+                      code={basitPromo.code}
+                      labels={{
+                        campaign: t3('KAMPANYAYA ÖZEL', 'AKTIONSANGEBOT', 'LAUNCH OFFER'),
+                        copy: t3('Kopyala', 'Kopieren', 'Copy'),
+                        copied: t3('Kopyalandı!', 'Kopiert!', 'Copied!'),
+                        hint: t3(
+                          'Bu kodu ödeme adımında girerek Basit Tarama’yı ücretsiz alın.',
+                          'Geben Sie diesen Code an der Kasse ein, um den Basis-Scan kostenlos zu erhalten.',
+                          'Enter this code at checkout to get the Basic Scan for free.'),
+                      }}
+                    />
+                  )}
                   <a
                     href={`${API}/orders/sample-report/${basit.key}?v=lansman1&region=${region.code}`}
                     target="_blank"
