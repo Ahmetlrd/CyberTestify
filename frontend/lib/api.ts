@@ -1,6 +1,41 @@
 import { readRegionCookie } from './region';
+import { getRegion } from '../config/regions';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+
+// (Çok-bölge) API katmanı React dışı — dili region cookie'sinden türetir. Ağ/oturum/limit gibi
+// kod-tarafı hata mesajları böylece /de /en'de de doğru dilde çıkar (ham "Load failed" gösterilmez).
+function apiLang(): 'tr' | 'de' | 'en' {
+  const l = getRegion(readRegionCookie()).lang;
+  return l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr';
+}
+const MSG = {
+  network: {
+    tr: 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.',
+    de: 'Server nicht erreichbar. Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.',
+    en: 'Could not reach the server. Please check your internet connection and try again.',
+  },
+  timeout: {
+    tr: 'İstek zaman aşımına uğradı. Bağlantınız yavaş olabilir; lütfen tekrar deneyin.',
+    de: 'Zeitüberschreitung der Anfrage. Ihre Verbindung ist möglicherweise langsam; bitte versuchen Sie es erneut.',
+    en: 'The request timed out. Your connection may be slow; please try again.',
+  },
+  expired: {
+    tr: 'Oturumunuz sona ermiş görünüyor. Lütfen tekrar giriş yapın.',
+    de: 'Ihre Sitzung ist offenbar abgelaufen. Bitte melden Sie sich erneut an.',
+    en: 'Your session appears to have expired. Please sign in again.',
+  },
+  tooMany: {
+    tr: 'Çok fazla deneme yapıldı. Lütfen biraz bekleyip tekrar deneyin.',
+    de: 'Zu viele Versuche. Bitte warten Sie einen Moment und versuchen Sie es erneut.',
+    en: 'Too many attempts. Please wait a moment and try again.',
+  },
+  generic: {
+    tr: 'İşlem şu an tamamlanamadı. Lütfen bilgileri kontrol edip tekrar deneyin.',
+    de: 'Die Aktion konnte derzeit nicht abgeschlossen werden. Bitte prüfen Sie die Angaben und versuchen Sie es erneut.',
+    en: 'The action could not be completed right now. Please check your details and try again.',
+  },
+} as const;
 
 // (ÜCRETSİZ ANLIK ÖN-TARAMA) sonuç tipi — üç-durum + skor + ≤3 bulgu başlığı.
 export type InstantFinding = { title: string; severity: 'high' | 'medium' | 'low' };
@@ -47,9 +82,10 @@ function friendlyError(body: any, status: number): string {
     if (Array.isArray((e as any).formErrors) && (e as any).formErrors[0]) return String((e as any).formErrors[0]);
   }
   if (typeof body?.message === 'string' && body.message.trim()) return body.message;
-  if (status === 401) return 'Oturumunuz sona ermiş görünüyor. Lütfen tekrar giriş yapın.';
-  if (status === 429) return 'Çok fazla deneme yapıldı. Lütfen biraz bekleyip tekrar deneyin.';
-  return 'İşlem şu an tamamlanamadı. Lütfen bilgileri kontrol edip tekrar deneyin.';
+  const lang = apiLang();
+  if (status === 401) return MSG.expired[lang];
+  if (status === 429) return MSG.tooMany[lang];
+  return MSG.generic[lang];
 }
 
 async function request<T>(path: string, options: RequestInit & { timeoutMs?: number } = {}): Promise<T> {
@@ -68,6 +104,15 @@ async function request<T>(path: string, options: RequestInit & { timeoutMs?: num
         ...init.headers,
       },
     });
+  } catch (e: any) {
+    // (AĞ HATASI) fetch'in KENDİSİ throw etti: bağlantı yok/kesildi (Safari "Load failed", Chrome
+    // "Failed to fetch") ya da zaman aşımı (AbortError). Ham tarayıcı metnini GÖSTERME → bölgeye göre
+    // dostça, anlaşılır mesaj. (HTTP hata YANITLARI aşağıda ayrıca friendlyError ile ele alınır.)
+    const lang = apiLang();
+    const isTimeout = e?.name === 'AbortError';
+    const err = new Error(isTimeout ? MSG.timeout[lang] : MSG.network[lang]) as Error & { networkError?: boolean };
+    err.networkError = true;
+    throw err;
   } finally {
     if (timer) clearTimeout(timer);
   }
