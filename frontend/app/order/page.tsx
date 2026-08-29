@@ -986,7 +986,7 @@ export default function OrderPage() {
   );
 
   return (
-    <main className="container-page max-w-6xl py-10 pb-28 lg:py-14 lg:pb-14">
+    <main className="container-page max-w-6xl py-10 pb-36 lg:py-14 lg:pb-14">
       <div>
         <h1 className="text-2xl font-extrabold text-brand sm:text-3xl">{L.title}</h1>
         <p className="mt-1 text-sm text-ink-soft">{L.sub}</p>
@@ -1436,34 +1436,45 @@ export default function OrderPage() {
         </aside>
       </div>{/* ===== grid sonu ===== */}
 
-      {/* ================= MOBİL: kaydırmada sabit alt çubuk (özet + CTA) ================= */}
+      {/* ================= MOBİL: kaydırmada sabit alt çubuk (özet önizleme + CTA) ================= */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 px-4 py-2.5 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur lg:hidden">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-xs font-semibold text-brand">{selName ?? L.noPackage}</p>
-            {hostname && <p className="truncate text-[11px] text-ink-muted">{hostname}</p>}
-            <p className="text-sm font-extrabold text-ink">
-              {formatMoney(totalMinor, getRegion(region))}
-              <span className="ml-1 text-[10px] font-normal text-ink-muted">{L.kdv}</span>
-            </p>
+        <div className="mx-auto max-w-6xl">
+          {/* Önizleme (paket/host/tutar) + CTA aynı satırda; buton HER ZAMAN kompakt → önizleme kırpılmaz/ezilmez. */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-brand">{selName ?? L.noPackage}</p>
+              {hostname && <p className="truncate text-[11px] text-ink-muted">{hostname}</p>}
+              <p className="text-sm font-extrabold text-ink">
+                {formatMoney(totalMinor, getRegion(region))}
+                <span className="ml-1 text-[10px] font-normal text-ink-muted">{L.kdv}</span>
+              </p>
+            </div>
+            {needsDomainVerify ? (
+              <button type="button" onClick={() => router.push(verifyHref)} className="btn-primary shrink-0 px-5">
+                {L.mobileVerify}
+              </button>
+            ) : (
+              <button onClick={onCta} disabled={ctaDisabled} className="btn-primary shrink-0 px-5 disabled:cursor-not-allowed disabled:opacity-50">
+                {ctaLabel}
+              </button>
+            )}
           </div>
-          {needsDomainVerify ? (
-            <button type="button" onClick={() => router.push(verifyHref)} className="btn-primary shrink-0 px-5">
-              {L.mobileVerify}
-            </button>
-          ) : disabledHint?.scroll ? (
-            <button type="button" onClick={() => scrollToTarget(disabledHint.target ?? 'onaylar')} className="shrink-0 rounded-pill border border-amber-400 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800">
-              {disabledHint.text}
-            </button>
-          ) : (
-            <button onClick={onCta} disabled={ctaDisabled} className="btn-primary shrink-0 px-5 disabled:cursor-not-allowed disabled:opacity-50">
-              {ctaLabel}
-            </button>
+          {/* Buton neden pasif? — TAM GENİŞLİK, önizlemenin ALTINDA (üstünde/yanında DEĞİL): uzun metin
+              kutuyu ezmez; kaydırma gerektiren uyarıda tıklayınca ilgili bölüme götürür. */}
+          {!needsDomainVerify && disabledHint && (
+            disabledHint.scroll ? (
+              <button
+                type="button"
+                onClick={() => scrollToTarget(disabledHint.target ?? 'onaylar')}
+                className="mt-2 block w-full rounded-card border border-amber-300 bg-amber-50 px-3 py-1.5 text-center text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                {disabledHint.text}
+              </button>
+            ) : (
+              <p className="mt-2 text-center text-[11px] font-semibold text-amber-700">{disabledHint.text}</p>
+            )
           )}
         </div>
-        {disabledHint && !disabledHint.scroll && (
-          <p className="mx-auto mt-1 max-w-6xl text-[11px] font-semibold text-amber-700">{disabledHint.text}</p>
-        )}
       </div>
     </main>
   );
