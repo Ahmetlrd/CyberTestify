@@ -126,6 +126,12 @@ export const adminApi = {
 
   // (HER ŞEYİ GÖSTER) Müşteri detay: alan adları + siparişler + raporlar + planlı taramalar + rızalar.
   customerDetail: (id: string) => areq<any>(`/admin/customers/${id}`),
+  // (TEMİZLİK) Müşteri hesabını ve TÜM bağlı verisini (sipariş/rapor/alan adı/plan/onay/fatura) siler.
+  // Yanlışlıkla silmeye karşı sunucu tarafında da e-posta teyidi ZORUNLU (confirmEmail).
+  customerDelete: (id: string, confirmEmail: string) =>
+    areq<{ ok: boolean; email: string; deleted: Record<string, number> }>(`/admin/customers/${id}`, {
+      method: 'DELETE', body: JSON.stringify({ confirmEmail }),
+    }),
   // Tüm alan adları (global; müşteri e-postasıyla).
   domains: (page = 1, q = '') => areq<Page<any>>(`/admin/domains?page=${page}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
 

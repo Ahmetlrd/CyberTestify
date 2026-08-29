@@ -119,6 +119,58 @@ adminRouter.get('/customers/:id', async (req, res) => {
   res.json({ ...rest, hasGoogle: !!googleId });
 });
 
+// --- Musteri SILME (hesap + TUM bagli veri) -----------------------------------
+// Kullanim: cop/test hesaplarini (ornek: asdsads@asdsaasd.com) tamamen temizlemek.
+// Semada onDelete:Cascade YOK -> cocuk kayitlar DOGRU SIRAYLA elle silinir; tek transaction
+// (hepsi ya da hicbiri). Raporlar DB'de (Bytes) tutuldugu icin diskte artik dosya kalmaz.
+// GUVENLIK: yalniz requireAdmin + IP allowlist arkasinda; UI'da ayrica e-posta yazarak teyit istenir.
+adminRouter.delete('/customers/:id', async (req, res) => {
+  const id = req.params.id;
+  const customer = await prisma.customer.findUnique({
+    where: { id },
+    select: { id: true, email: true, orders: { select: { id: true } }, domains: { select: { id: true } } },
+  });
+  if (!customer) return res.status(404).json({ error: 'Musteri bulunamadi.' });
+
+  // (TEYIT) Yanlislikla silmeye karsi ikinci kapi: govdede tam e-posta gonderilmeli.
+  const confirmEmail = typeof req.body?.confirmEmail === 'string' ? req.body.confirmEmail.trim().toLowerCase() : '';
+  if (confirmEmail !== customer.email.toLowerCase()) {
+    return res.status(400).json({ error: 'Silme onaylanmadi: e-posta eslesmiyor.' });
+  }
+
+  const orderIds = customer.orders.map((o) => o.id);
+  const deleted = await prisma.$transaction(async (tx) => {
+    // 1) FK'siz denetim/analiz kayitlari (PII icerir) — once temizle.
+    const accessLogs = await tx.reportAccessLog.deleteMany({ where: { customerId: id } });
+    const promoUsages = orderIds.length
+      ? await tx.promoCodeUsage.deleteMany({ where: { OR: [{ customerId: id }, { orderId: { in: orderIds } }] } })
+      : await tx.promoCodeUsage.deleteMany({ where: { customerId: id } });
+    // 2) RedTeamJob (loglari onDelete:Cascade ile gider) — Order'dan ONCE (orderId FK).
+    const redTeamJobs = await tx.redTeamJob.deleteMany({
+      where: orderIds.length ? { OR: [{ customerId: id }, { orderId: { in: orderIds } }] } : { customerId: id },
+    });
+    // 3) Order'a bagli 1:1 / 1:N cocuklar (ScanLog Order silinince cascade gider).
+    const reports = orderIds.length ? await tx.report.deleteMany({ where: { orderId: { in: orderIds } } }) : { count: 0 };
+    const flows = orderIds.length ? await tx.flow.deleteMany({ where: { orderId: { in: orderIds } } }) : { count: 0 };
+    const testCreds = orderIds.length ? await tx.testCredential.deleteMany({ where: { orderId: { in: orderIds } } }) : { count: 0 };
+    const invoices = orderIds.length ? await tx.invoiceRequest.deleteMany({ where: { orderId: { in: orderIds } } }) : { count: 0 };
+    const consents = await tx.activeTestConsent.deleteMany({ where: { customerId: id } });
+    // 4) Musteriye bagli planlar -> siparisler -> alan adlari -> hesap.
+    const schedules = await tx.scheduledScan.deleteMany({ where: { customerId: id } });
+    const orders = await tx.order.deleteMany({ where: { customerId: id } });
+    const domains = await tx.domain.deleteMany({ where: { customerId: id } });
+    await tx.customer.delete({ where: { id } });
+    return {
+      reports: reports.count, orders: orders.count, domains: domains.count, schedules: schedules.count,
+      flows: flows.count, consents: consents.count, invoices: invoices.count, testCredentials: testCreds.count,
+      redTeamJobs: redTeamJobs.count, promoUsages: promoUsages.count, accessLogs: accessLogs.count,
+    };
+  });
+
+  console.log(`[admin] musteri SILINDI: ${customer.email} (${id})`, deleted);
+  res.json({ ok: true, email: customer.email, deleted });
+});
+
 // --- Tum alan adlari (global; musteri e-postasi ile) --------------------------
 adminRouter.get('/domains', async (req, res) => {
   const { skip, take, page, pageSize } = paginate(req.query);
