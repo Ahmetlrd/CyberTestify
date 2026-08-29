@@ -1,10 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { readRegionCookie } from '../lib/region';
+import { getRegion } from '../config/regions';
+
+const ARIA = {
+  tr: { show: 'Şifreyi göster', hide: 'Şifreyi gizle' },
+  de: { show: 'Passwort anzeigen', hide: 'Passwort verbergen' },
+  en: { show: 'Show password', hide: 'Hide password' },
+} as const;
 
 /**
  * Şifre alanı + göster/gizle göz ikonu. type="password" ↔ "text" arası geçiş.
  * Kayıt (şifre + şifre tekrar) ve login şifre alanlarında kullanılır.
+ * (Çok-bölge) aria-label dili cookie'den türetilir — /de /en'de Türkçe sızmaz.
  */
 export function PasswordInput({
   value,
@@ -22,6 +31,9 @@ export function PasswordInput({
   autoComplete?: string;
 }) {
   const [show, setShow] = useState(false);
+  const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
+  useEffect(() => { const l = getRegion(readRegionCookie()).lang; setLang(l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr'); }, []);
+  const aria = ARIA[lang];
   return (
     <div className="relative">
       <input
@@ -37,7 +49,7 @@ export function PasswordInput({
       <button
         type="button"
         onClick={() => setShow((s) => !s)}
-        aria-label={show ? 'Şifreyi gizle' : 'Şifreyi göster'}
+        aria-label={show ? aria.hide : aria.show}
         className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-ink-muted transition hover:text-ink"
         tabIndex={-1}
       >

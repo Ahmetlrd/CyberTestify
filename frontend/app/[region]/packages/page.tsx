@@ -98,14 +98,14 @@ export default async function PackagesPage({ params }: { params: { region: strin
   const svc = (name: string, description: string, minMinor: number) => ({
     '@type': 'Service',
     name,
-    serviceType: 'Web güvenliği ön-değerlendirme',
+    serviceType: t3('Web güvenliği ön-değerlendirme', 'Web-Sicherheits-Vorabbewertung', 'Web security pre-assessment'),
     description,
     provider: { '@type': 'Organization', name: 'CyberTestify', url: SITE },
-    areaServed: 'TR',
+    areaServed: region.code === 'de' ? 'DE' : region.code === 'en' ? 'GB' : 'TR',
     offers: {
       '@type': 'Offer',
       priceCurrency: region.currency,
-      priceSpecification: { '@type': 'PriceSpecification', minPrice: (minMinor / 100).toFixed(2), priceCurrency: region.currency, description: 'Başlangıç fiyatı' },
+      priceSpecification: { '@type': 'PriceSpecification', minPrice: (minMinor / 100).toFixed(2), priceCurrency: region.currency, description: t3('Başlangıç fiyatı', 'Ab-Preis', 'Starting price') },
       url: `${SITE}/${region.code}/packages`,
     },
   });

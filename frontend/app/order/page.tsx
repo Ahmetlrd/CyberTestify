@@ -942,7 +942,7 @@ export default function OrderPage() {
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="label !mb-1 !text-ink">{L.acUser}</span>
-          <input placeholder="test@örnek.com" value={authUser} onChange={(e) => { setAuthUser(e.target.value); setLoginCheck('idle'); }} className="field border-line/80" autoComplete="off" />
+          <input placeholder="test@example.com" value={authUser} onChange={(e) => { setAuthUser(e.target.value); setLoginCheck('idle'); }} className="field border-line/80" autoComplete="off" />
         </label>
         <label className="block">
           <span className="label !mb-1 !text-ink">{L.acPass}</span>

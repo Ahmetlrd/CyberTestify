@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import type { RegionCode } from '../config/regions';
+import { getRegion, type RegionCode } from '../config/regions';
+
+const MENU_ARIA = { tr: 'Menü', de: 'Menü', en: 'Menu' } as const;
 
 /**
  * Mobil (md altı) gezinme menüsü. Nav linkleri desktop'ta `md:flex` ile görünür;
@@ -24,6 +26,8 @@ export function MobileMenu({
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+  const mlang = getRegion(regionCode).lang;
+  const menuAria = MENU_ARIA[mlang === 'de' ? 'de' : mlang === 'en' ? 'en' : 'tr'];
 
   useEffect(() => {
     setLoggedIn(typeof window !== 'undefined' && !!window.localStorage.getItem('token'));
@@ -33,7 +37,7 @@ export function MobileMenu({
     <div className="md:hidden">
       <button
         type="button"
-        aria-label="Menü"
+        aria-label={menuAria}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line/70 text-brand"

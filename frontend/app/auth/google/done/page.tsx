@@ -1,13 +1,17 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { readRegionCookie } from '../../../../lib/region';
+import { getRegion } from '../../../../config/regions';
 
 // Backend Google callback'i buraya FRAGMENT ile yonlendirir: /auth/google/done#token=...&next=...
 // Token FRONTEND origin'inin localStorage'ina yazilir (backend origin'inden yazilamaz), sonra
 // 'next'e gecilir. Fragment sunucuya/Referer'a gitmez → token log'lara sizmaz.
 export default function GoogleDonePage() {
   const router = useRouter();
+  const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
+  useEffect(() => { const l = getRegion(readRegionCookie()).lang; setLang(l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr'); }, []);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const frag = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -32,7 +36,9 @@ export default function GoogleDonePage() {
 
   return (
     <main className="container-page max-w-md py-24 text-center">
-      <p className="text-sm text-ink-muted">Google ile giriş tamamlanıyor…</p>
+      <p className="text-sm text-ink-muted">
+        {lang === 'de' ? 'Anmeldung mit Google wird abgeschlossen…' : lang === 'en' ? 'Completing sign-in with Google…' : 'Google ile giriş tamamlanıyor…'}
+      </p>
     </main>
   );
 }

@@ -1,11 +1,16 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { readRegionCookie } from '../lib/region';
+import { getRegion } from '../config/regions';
+
+const ARIA_CODE = { tr: 'Doğrulama kodu', de: 'Bestätigungscode', en: 'Verification code' } as const;
 
 // (2FA) iCloud tarzı 6-kutucuklu doğrulama kodu girişi: otomatik ilerleme, backspace, yapıştır (paste).
 // Tema: 'light' (müşteri) | 'dark' (admin panel). Değer = birleşik rakam dizisi (ör. "123456").
+// (Çok-bölge) ariaLabel verilmezse dili cookie'den türetir — /de /en'de Türkçe aria sızmaz.
 export function OtpInput({
-  value, onChange, length = 6, theme = 'light', autoFocus = false, ariaLabel = 'Doğrulama kodu', onComplete,
+  value, onChange, length = 6, theme = 'light', autoFocus = false, ariaLabel, onComplete,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -16,6 +21,9 @@ export function OtpInput({
   onComplete?: (v: string) => void;
 }) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
+  const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
+  useEffect(() => { const l = getRegion(readRegionCookie()).lang; setLang(l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr'); }, []);
+  const label = ariaLabel ?? ARIA_CODE[lang];
   const chars = Array.from({ length }, (_, i) => value[i] ?? '');
   const focus = (i: number) => { if (i >= 0 && i < length) refs.current[i]?.focus(); };
 
@@ -53,7 +61,7 @@ export function OtpInput({
   };
 
   return (
-    <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }} role="group" aria-label={ariaLabel}>
+    <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }} role="group" aria-label={label}>
       {chars.map((c, i) => (
         <input
           key={i}
@@ -66,7 +74,7 @@ export function OtpInput({
           autoComplete="one-time-code"
           maxLength={1}
           autoFocus={autoFocus && i === 0}
-          aria-label={`${ariaLabel} ${i + 1}`}
+          aria-label={`${label} ${i + 1}`}
           style={box}
         />
       ))}

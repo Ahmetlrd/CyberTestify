@@ -22,6 +22,7 @@ const T = {
     twofaTitle: 'İki faktörlü doğrulama', twofaHint: 'Authenticator uygulamanızdaki 6 haneli kodu girin. Telefonunuz yoksa bir kurtarma kodu da girebilirsiniz.',
     verify: 'Doğrula ve gir', verifying: 'Doğrulanıyor…', back: '← Geri',
     recoveryUse: 'Telefonum yok — kurtarma kodu gir', recoveryBack: '← Authenticator kodu kullan', recoveryHint: 'Bir kurtarma kodunuzu girin.',
+    errUnexpected: 'Beklenmeyen yanıt.',
   },
   de: {
     title: 'Anmelden', subtitle: 'Greifen Sie auf Ihr Konto zu und verwalten Sie Ihren Scan.',
@@ -33,6 +34,7 @@ const T = {
     twofaTitle: 'Zwei-Faktor-Authentifizierung', twofaHint: 'Geben Sie den 6-stelligen Code aus Ihrer Authenticator-App ein. Ohne Telefon können Sie auch einen Wiederherstellungscode eingeben.',
     verify: 'Bestätigen und anmelden', verifying: 'Wird überprüft…', back: '← Zurück',
     recoveryUse: 'Kein Telefon — Wiederherstellungscode eingeben', recoveryBack: '← Authenticator-Code verwenden', recoveryHint: 'Geben Sie einen Wiederherstellungscode ein.',
+    errUnexpected: 'Unerwartete Antwort.',
   },
   en: {
     title: 'Sign in', subtitle: 'Access your account and manage your scan.',
@@ -44,6 +46,7 @@ const T = {
     twofaTitle: 'Two-factor authentication', twofaHint: 'Enter the 6-digit code from your authenticator app. Without your phone, you can also enter a recovery code.',
     verify: 'Verify and sign in', verifying: 'Verifying…', back: '← Back',
     recoveryUse: 'No phone — enter a recovery code', recoveryBack: '← Use authenticator code', recoveryHint: 'Enter one of your recovery codes.',
+    errUnexpected: 'Unexpected response.',
   },
 } as const;
 
@@ -86,7 +89,7 @@ export default function LoginPage() {
       const r = await api.login(email, password);
       if (r.twofaRequired && r.stageToken) { setTwofa({ stageToken: r.stageToken }); setBusy(false); return; }
       if (r.token) { window.localStorage.setItem('token', r.token); router.push(next); return; }
-      setError('Beklenmeyen yanıt.'); setBusy(false);
+      setError(t.errUnexpected); setBusy(false);
     } catch (err: any) {
       setError(err.message);
       setBusy(false);
