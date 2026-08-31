@@ -6,7 +6,7 @@ import { DeLegalArticle } from '../../../../components/DeLegalArticle';
 
 export const metadata: Metadata = {
   title: 'Impressum — CyberTestify',
-  description: 'Angaben gemäß § 5 TMG für CyberTestify.',
+  description: 'Angaben gemäß § 5 DDG für CyberTestify.',
   alternates: { canonical: '/de/legal/impressum' },
   robots: { index: true, follow: true },
 };
@@ -16,7 +16,7 @@ export default function Page({ params }: { params: { region: string } }) {
   if (params.region !== 'de') notFound();
   return (
     <DeLegalArticle title="Impressum">
-      <p><strong>Angaben gemäß § 5 TMG:</strong></p>
+      <p><strong>Angaben gemäß § 5 DDG:</strong></p>
 
       {/* PLATZHALTER — GERÇEK şirket unvanı, Registergericht/Registernummer, USt-IdNr. ve adres
           OPERATÖR tarafından doldurulmalıdır. Uydurulmadı; kullanıcının verdiği metin aynen korundu. */}

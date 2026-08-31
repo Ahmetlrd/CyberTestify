@@ -16,7 +16,6 @@ export default function Page({ params }: { params: { region: string } }) {
   if (params.region !== 'en') notFound();
   return (
     <EnLegalArticle title="Terms &amp; Conditions">
-      <p><em>Last updated: 31 August 2026</em></p>
 
       <h2>1. About the service</h2>
       <p>

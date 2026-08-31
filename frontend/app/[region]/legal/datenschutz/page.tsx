@@ -16,7 +16,6 @@ export default function Page({ params }: { params: { region: string } }) {
   if (params.region !== 'de') notFound();
   return (
     <DeLegalArticle title="Datenschutzerklärung">
-      <p><em>Stand: 31. August 2026</em></p>
 
       <h2>1. Verantwortlicher</h2>
       <p>

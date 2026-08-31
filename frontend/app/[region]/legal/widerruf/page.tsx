@@ -16,7 +16,6 @@ export default function Page({ params }: { params: { region: string } }) {
   if (params.region !== 'de') notFound();
   return (
     <DeLegalArticle title="Widerrufsbelehrung">
-      <p><em>Stand: 31. August 2026</em></p>
 
       <h2>1. Digitale Inhalte / Dienstleistung</h2>
       <p>

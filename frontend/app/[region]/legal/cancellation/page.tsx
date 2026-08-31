@@ -16,7 +16,6 @@ export default function Page({ params }: { params: { region: string } }) {
   if (params.region !== 'en') notFound();
   return (
     <EnLegalArticle title="Cancellation &amp; Refund Policy">
-      <p><em>Last updated: 31 August 2026</em></p>
 
       <h2>1. Digital service</h2>
       <p>

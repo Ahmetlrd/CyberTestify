@@ -16,7 +16,6 @@ export default function Page({ params }: { params: { region: string } }) {
   if (params.region !== 'de') notFound();
   return (
     <DeLegalArticle title="Allgemeine Geschäftsbedingungen">
-      <p><em>Stand: 31. August 2026</em></p>
 
       <h2>1. Leistungsbeschreibung</h2>
       <p>
