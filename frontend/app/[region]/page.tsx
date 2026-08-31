@@ -197,30 +197,30 @@ function Hero({ d, region }: { d: Dict; region: RegionConfig }) {
           <span className="badge animate-fade-up border-white/15 bg-white/10 text-white/85">
             <span className="h-1.5 w-1.5 rounded-full bg-accent" /> {d.hero.badge}
           </span>
-          <h1 className="animate-fade-up mt-6 text-4xl font-extrabold leading-[1.08] sm:text-5xl md:text-[3.4rem]">
+        </div>
+
+        {/* ÜCRETSİZ ANLIK ÖN-TARAMA — sayfanın EN ÜSTÜNDE, manşet metninin ÜSTÜNDE (kullanıcı isteği):
+            ziyaretçinin ilk gördüğü ve kayıt istemeden hemen yapabileceği şey bu. */}
+        <div className="animate-fade-up mx-auto mt-8 max-w-2xl">
+          <InstantScan lang={scanLang} regionCode={region.code} />
+        </div>
+
+        <div className="mx-auto mt-14 max-w-3xl text-center">
+          <h1 className="animate-fade-up text-4xl font-extrabold leading-[1.08] sm:text-5xl md:text-[3.4rem]">
             {d.hero.titleA} <span className="text-accent">{d.hero.titleHi}</span> {d.hero.titleB}
           </h1>
           <p className="animate-fade-up mx-auto mt-6 max-w-xl text-lg leading-relaxed text-white/75">
             {d.hero.subtitle}
           </p>
-        </div>
-
-        {/* ÜCRETSİZ ANLIK ÖN-TARAMA — landing'in BİRİNCİL dönüşüm kancası (pasif, gerçek, üç-durum).
-            Manşetin HEMEN ALTINDA: ziyaretçinin ilk gördüğü ve hemen yapabileceği şey bu (sürtünmesiz,
-            kayıt istemez). Eskiden CTA butonlarının ALTINDAydı ve katlamanın dışına düşüyordu. */}
-        <div className="animate-fade-up mx-auto mt-10 max-w-2xl">
-          <InstantScan lang={scanLang} regionCode={region.code} />
-        </div>
-
-        {/* İKİNCİL aksiyonlar — tarama kutusuyla YARIŞMASIN diye dolgulu birincil buton kullanılmaz:
-            kayıt hafif çerçeveli, "nasıl çalışır" düz bağlantı. Böylece tek net birincil aksiyon kalır. */}
-        <div className="animate-fade-up mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-5">
-          <Link href="/register" className="btn w-full border border-white/30 text-white hover:bg-white/10 sm:w-auto">
-            {d.hero.ctaPrimary}
-          </Link>
-          <Link href="#nasil-calisir" className="text-sm font-semibold text-white/75 underline underline-offset-4 transition hover:text-white">
-            {d.hero.ctaSecondary}
-          </Link>
+          {/* CTA renkleri ORİJİNAL: turuncu dolgulu birincil + beyaz çerçeveli ikincil. */}
+          <div className="animate-fade-up mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link href="/register" className="btn-primary w-full sm:w-auto">
+              {d.hero.ctaPrimary}
+            </Link>
+            <Link href="#nasil-calisir" className="btn w-full border border-white/25 text-white hover:bg-white/10 sm:w-auto">
+              {d.hero.ctaSecondary}
+            </Link>
+          </div>
         </div>
 
         <div className="mx-auto mt-12 flex max-w-2xl flex-wrap items-center justify-center gap-3">
