@@ -108,7 +108,7 @@ const VER_T = {
     invoiceSent: 'Fatura gönderildi',
     invoiceRequested: 'Fatura talebi ✓',
     requestInvoice: 'Fatura talep et',
-    viewReport: 'Raporu Gör',
+    viewReport: 'Raporu aç',
     unarchive: 'Arşivden çıkar',
     archive: 'Arşivle',
     myPanel: 'Panelim',
@@ -171,7 +171,7 @@ const VER_T = {
     invoiceSent: 'Rechnung gesendet',
     invoiceRequested: 'Rechnung angefordert ✓',
     requestInvoice: 'Rechnung anfordern',
-    viewReport: 'Bericht ansehen',
+    viewReport: 'Bericht öffnen',
     unarchive: 'Aus Archiv entfernen',
     archive: 'Archivieren',
     myPanel: 'Mein Bereich',
@@ -234,7 +234,7 @@ const VER_T = {
     invoiceSent: 'Invoice sent',
     invoiceRequested: 'Invoice requested ✓',
     requestInvoice: 'Request invoice',
-    viewReport: 'View report',
+    viewReport: 'Open report',
     unarchive: 'Unarchive',
     archive: 'Archive',
     myPanel: 'My dashboard',
@@ -648,29 +648,40 @@ export default function VerifyHub() {
   );
 
   const orderCard = (o: Order, isArchived: boolean) => (
-    // MOBİL: dikey yığ (bilgi üstte, eylemler altta sarar) — aksi halde host + 4 buton yan yana sıkışıp
-    // üst üste biniyordu. sm+ : yatay (bilgi solda, eylemler sağda).
-    <div key={o.id} className="card p-4">
+    // (FORMAT) Her sipariş AYRI kart değil; tek kart içinde ayraçlı SATIR (sıkışıklık gider, nefes alır).
+    // Kilit ikonu + alan adı + "Raporu aç" ÜÇÜ DE aynı yere (rapor sayfası) gider.
+    // MOBİL: dikey yığ; sm+ : yatay (bilgi solda, eylemler sağda). RENKLER DEĞİŞMEDİ.
+    <div key={o.id} className="px-5 py-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <button onClick={() => router.push(`/dashboard/${o.id}`)} className="min-w-0 text-left sm:flex-1">
-          <div className="truncate font-semibold text-ink">{o.hostname}</div>
-          <div className="mt-0.5 text-xs text-ink-muted">
-            {o.packageName} · {new Date(o.createdAt).toLocaleDateString(dateLocale)}
-          </div>
+        <button
+          onClick={() => router.push(`/dashboard/${o.id}`)}
+          className="group flex min-w-0 items-center gap-3.5 text-left sm:flex-1"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 transition group-hover:bg-brand-100">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" className="text-brand" aria-hidden>
+              <rect x="5" y="10.5" width="14" height="9.5" rx="2" />
+              <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+            </svg>
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate font-mono text-[15px] font-semibold text-ink group-hover:text-brand">{o.hostname}</span>
+            <span className="mt-0.5 block truncate text-xs text-ink-muted">
+              {o.packageName} · {new Date(o.createdAt).toLocaleDateString(dateLocale)}
+            </span>
+          </span>
         </button>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:shrink-0">
-          <span className="badge">{ORDER_STATUS_LABEL[lang][o.status] ?? o.status}</span>
+          <span className="badge gap-1.5">
+            <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
+            {ORDER_STATUS_LABEL[lang][o.status] ?? o.status}
+          </span>
           {/* (UX) Rapor hazırsa: rozet TEK BAŞINA tıklanabilir görünmüyordu; net bir CTA butonu
               ekleniyor. Erişim akışı (kod/doğrulama) DEĞİŞMEZ — sadece görünür/tıklanabilir hedef. */}
           {(o.status === 'scan_completed' || o.status === 'report_delivered') && (
             <button
               onClick={() => router.push(`/dashboard/${o.id}`)}
-              className="inline-flex items-center gap-1.5 rounded-pill bg-accent px-4 py-1.5 text-xs font-bold text-ink shadow-sm transition hover:bg-accent-hover"
+              className="rounded-pill bg-accent px-5 py-2 text-xs font-bold text-ink shadow-sm transition hover:bg-accent-hover"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <path d="M14 2v6h6" />
-              </svg>
               {T.viewReport}
             </button>
           )}
@@ -777,21 +788,24 @@ export default function VerifyHub() {
                     {archivedOrders && archivedOrders.length > 0 ? ` (${archivedOrders.length})` : ''}
                   </button>
                 </div>
-                <div className="mt-3 space-y-2.5">{shownHistory.map((o) => orderCard(o, false))}</div>
-                {orders.length > HISTORY_PREVIEW && (
-                  <button
-                    onClick={() => setShowAllHistory((v) => !v)}
-                    className="mt-3 text-sm font-medium text-accent-600 hover:underline"
-                  >
-                    {showAllHistory ? T.showLess : T.showAll(orders.length)}
-                  </button>
-                )}
+                {/* (FORMAT) Tek kart + satır ayraçları; "Tümünü gör" kartın alt şeridi olarak içeride. */}
+                <div className="card mt-3 divide-y divide-line overflow-hidden">
+                  {shownHistory.map((o) => orderCard(o, false))}
+                  {orders.length > HISTORY_PREVIEW && (
+                    <button
+                      onClick={() => setShowAllHistory((v) => !v)}
+                      className="w-full px-5 py-3.5 text-left text-sm font-semibold text-accent-600 transition hover:bg-brand-50/50"
+                    >
+                      {showAllHistory ? T.showLess : `${T.showAll(orders.length)} →`}
+                    </button>
+                  )}
+                </div>
 
                 {showArchived && (
                   <div className="mt-6 border-t border-line pt-6">
                     <h3 className="text-xs font-bold uppercase tracking-wide text-ink-muted">{T.archived}</h3>
                     {archivedOrders && archivedOrders.length > 0 ? (
-                      <div className="mt-2 space-y-2.5">{archivedOrders.map((o) => orderCard(o, true))}</div>
+                      <div className="card mt-2 divide-y divide-line overflow-hidden">{archivedOrders.map((o) => orderCard(o, true))}</div>
                     ) : (
                       <p className="mt-2 text-sm text-ink-muted">{T.noArchivedScans}</p>
                     )}
