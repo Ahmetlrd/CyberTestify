@@ -30,7 +30,7 @@ export type CompareLabels = {
   eyebrow: string; title: string; subtitle: string;
   rowPrice: string; rowKind: string; rowChecks: string; rowScope: string; rowEvidence: string;
   rowSample: string; rowDns: string; rowExperimental: string; rowFit: string;
-  yes: string; no: string; deterministic: string; experimentalTag: string; experimentalNote: string;
+  yes: string; no: string; deterministic: string; experimentalTag: string;
   view: string; scrollHint: string;
   // Sihirbaz
   wizTitle: string; wizIntro: string; wizQ1: string; wizQ2: string; wizQ3: string;
@@ -99,10 +99,15 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
   ];
 
   return (
-    <section className="mt-16">
-      <p className="eyebrow">{L.eyebrow}</p>
-      <h2 className="mt-2 text-2xl font-extrabold text-brand sm:text-3xl">{L.title}</h2>
-      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-soft">{L.subtitle}</p>
+    <section id="karsilastirma" className="mt-20 scroll-mt-24 border-t border-line pt-14">
+      {/* Bölüm başlığı: sayfa içinde kaybolmasın diye ortalanmış, rozetli ve büyük punto. */}
+      <div className="text-center">
+        <span className="inline-block rounded-pill bg-accent-soft px-4 py-1.5 text-xs font-extrabold uppercase tracking-widest text-brand">
+          {L.eyebrow}
+        </span>
+        <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-brand sm:text-4xl">{L.title}</h2>
+        <p className="mx-auto mt-3 max-w-2xl text-base leading-relaxed text-ink-soft">{L.subtitle}</p>
+      </div>
 
       {/* ================= SİHİRBAZ ================= */}
       <div className="mt-8 rounded-card border border-brand-100 bg-brand-50/40 p-5">
@@ -190,7 +195,7 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
                 <th key={c.key} className="border-b border-line p-3 text-left align-bottom">
                   <span className="block font-extrabold text-brand">{c.name}</span>
                   {c.badge && (
-                    <span className={`mt-1 inline-block rounded-pill px-2 py-0.5 text-[10px] font-bold ${c.experimental ? 'bg-amber-100 text-amber-800' : 'bg-accent-soft text-accent-700'}`}>{c.badge}</span>
+                    <span className={`mt-1 inline-block rounded-pill px-2 py-0.5 text-[10px] font-bold ${c.experimental ? 'bg-amber-100 text-amber-800' : 'bg-accent-soft text-brand'}`}>{c.badge}</span>
                   )}
                 </th>
               ))}
@@ -224,7 +229,7 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-extrabold text-brand">{c.name}</p>
               {c.badge && (
-                <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${c.experimental ? 'bg-amber-100 text-amber-800' : 'bg-accent-soft text-accent-700'}`}>{c.badge}</span>
+                <span className={`rounded-pill px-2 py-0.5 text-[10px] font-bold ${c.experimental ? 'bg-amber-100 text-amber-800' : 'bg-accent-soft text-brand'}`}>{c.badge}</span>
               )}
             </div>
             <dl className="mt-3 space-y-1.5 text-sm">
@@ -240,12 +245,6 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
         ))}
       </div>
 
-      {/* Deneysel uyarısı — tabloya girmesi bu uyarıyı GİZLEMEZ, netleştirir. */}
-      {cols.some((c) => c.experimental) && (
-        <p className="mt-5 rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900">
-          <strong>{L.experimentalTag}:</strong> {L.experimentalNote}
-        </p>
-      )}
     </section>
   );
 }

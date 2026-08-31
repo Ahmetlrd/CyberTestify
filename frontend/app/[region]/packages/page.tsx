@@ -580,10 +580,6 @@ export default async function PackagesPage({ params }: { params: { region: strin
               yes: t3('Var', 'Ja', 'Yes'), no: t3('Yok', 'Nein', 'No'),
               deterministic: t3('Deterministik', 'Deterministisch', 'Deterministic'),
               experimentalTag: t3('Deneysel', 'Experimentell', 'Experimental'),
-              experimentalNote: t3(
-                'Deneysel, deterministik olmayan bir taramadır; sonuçlar koşudan koşuya değişebilir ve resmî pentest/denetim yerine geçmez.',
-                'Ein experimenteller, nicht deterministischer Scan; die Ergebnisse können von Lauf zu Lauf variieren und ersetzen keinen offiziellen Pentest bzw. kein Audit.',
-                'An experimental, non-deterministic scan; results can vary between runs and it does not replace a formal pentest or audit.'),
               view: t3('İncele', 'Ansehen', 'View'),
               scrollHint: t3('Tabloyu yandan kaydırabilirsiniz.', 'Sie können die Tabelle seitlich scrollen.', 'You can scroll the table sideways.'),
               wizTitle: t3('Size uygun paketi bulun', 'Finden Sie das passende Paket', 'Find the right package'),
