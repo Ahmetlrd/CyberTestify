@@ -51,7 +51,7 @@ const USD_CENTS: Record<string, number> = {
 // bundlePrice). /de'de gizli paketler (Uyum: kvkk/pci/iso) ve S1 dahil edilmedi (görünmüyorlar).
 const EUR_CENTS: Record<string, number> = {
   // Tekil / Basit
-  basit_tarama: 1900, // €19
+  basit_tarama: 5500, // €55 (kullanıcının verdiği gerçek liste)
   // Dış Yüzey & Yapılandırma üyeleri
   ssl_tls: 2500, // €25
   header_leak: 2500, // €25
@@ -76,17 +76,19 @@ const EUR_CENTS: Record<string, number> = {
 };
 
 // ============================================================================
-// GBP fiyatları (İngiltere/UK) — Almanya EUR fiyatlarının KUR ÇEVRİMİ.
+// GBP fiyatları (İngiltere/UK) — GERÇEK SABİT LİSTE (kur çevrimi YOK).
 // ----------------------------------------------------------------------------
-// Vedat'ın kararıyla: /de EUR tutarları GBP_PER_EUR oranıyla çevrilip tam-pound'a
-// yuvarlanır (ör. €499 → £429). Bu kur-çevrimi kanonik başlangıçtır; Vedat tekil
-// paket rakamlarını dilerse buradan elle düzenleyebilir (o zaman EUR×kur yerine
-// o pakete sabit değer yazın). Uyum paketi üyeleri (kvkk/pci/iso) ve S1 /en'de
-// gizli olduğundan dahil edilmedi.
-const GBP_PER_EUR = 0.86; // EUR→GBP kur (£1 ≈ €1.16); Vedat güncelleyebilir
-const GBP_CENTS: Record<string, number> = Object.fromEntries(
-  Object.entries(EUR_CENTS).map(([key, eur]) => [key, Math.round((eur * GBP_PER_EUR) / 100) * 100]),
-);
+// ÖNCEDEN: GBP = EUR × 0.86 formülüyle türetiliyordu. Formül KALDIRILDI çünkü
+// (a) artık kullanıcının verdiği gerçek GBP fiyatları var, (b) formül + eksik
+// DB satırı birleşince /en'de Basit Tarama £699 gösteriliyordu (TRY rakamının
+// GBP etiketiyle sessizce sızması). Sessiz yanlış fiyat riski bir daha doğmasın
+// diye türetme tamamen silindi: bir paketin GBP fiyatı YOKSA burada da yoktur.
+// NOT: müşteriye /en'de yalnız basit_tarama tekil satılır; bundle'lar sabit
+// nihai fiyatla (bkz bundles.ts finalPriceMinorUnitEn) satılır, üye tutarları
+// bundleMemberAmounts ile toplamı TAM tutacak şekilde dağıtılır.
+const GBP_CENTS: Record<string, number> = {
+  basit_tarama: 4900, // £49 (kullanıcının verdiği gerçek liste)
+};
 
 const TRY_PER_USD = 47.5; // yaklasik kur — USD turetimi icin
 const AED_PER_USD = 3.67; // sabit (BAE dirhemi USD'ye peg)

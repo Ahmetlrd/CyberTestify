@@ -39,6 +39,14 @@ export interface ComboBundle {
   /** UI'da "Amiral Gemisi/Premium" cercevesi/rozeti — en kapsamli paket (Tam Kapsamlı Pentest). */
   flagship?: boolean;
   /** true ise "Yakında" — listelenir ama satin ALINAMAZ (createBundleOrder reddeder). */
+  // (GERCEK FIYAT) /de ve /en icin SABIT nihai fiyat + gosterim capasi. TR'deki
+  // finalPriceMinorUnitTr/anchorOriginalMinorUnitTr deseninin AYNISI. Verilmezse
+  // eski davranis (uye toplami x (1-discountPct)) korunur.
+  // Capa = nihai / 0.8 -> ekranda tutarli %20 indirim gorunur (kullanici karari).
+  finalPriceMinorUnitDe?: number;
+  anchorOriginalMinorUnitDe?: number;
+  finalPriceMinorUnitEn?: number;
+  anchorOriginalMinorUnitEn?: number;
   comingSoon?: boolean;
   /**
    * true ise SABIT fiyat YOK; UI "Kuruma özel teklif / İletişime geçin" gosterir (self-servis DEGIL).
@@ -57,6 +65,8 @@ export interface ComboBundle {
 export const COMBO_BUNDLES: ComboBundle[] = [
   {
     key: 'bundle_surface',
+    finalPriceMinorUnitDe: 9900, anchorOriginalMinorUnitDe: 12400, // €99 (üstü çizili €124)
+    finalPriceMinorUnitEn: 8900, anchorOriginalMinorUnitEn: 11100, // £89 (üstü çizili £111)
     displayName: 'Dış Yüzey & Yapılandırma Paketi',
     displayNameEn: 'External Surface & Configuration Bundle',
     displayNameDe: 'Paket Externe Angriffsfläche & Konfiguration',
@@ -75,6 +85,8 @@ export const COMBO_BUNDLES: ComboBundle[] = [
   },
   {
     key: 'bundle_recon',
+    finalPriceMinorUnitDe: 10900, anchorOriginalMinorUnitDe: 13600, // €109 (üstü çizili €136)
+    finalPriceMinorUnitEn: 9900, anchorOriginalMinorUnitEn: 12400, // £99 (üstü çizili £124)
     displayName: 'Keşif Paketi',
     displayNameEn: 'Discovery Bundle',
     displayNameDe: 'Reconnaissance-Paket',
@@ -111,6 +123,8 @@ export const COMBO_BUNDLES: ComboBundle[] = [
   },
   {
     key: 'bundle_active_verify',
+    finalPriceMinorUnitDe: 27900, anchorOriginalMinorUnitDe: 34900, // €279 (üstü çizili €349)
+    finalPriceMinorUnitEn: 24900, anchorOriginalMinorUnitEn: 31100, // £249 (üstü çizili £311)
     displayName: 'Aktif Doğrulama Paketi',
     displayNameEn: 'Active Verification Bundle',
     displayNameDe: 'Paket Aktive Verifikation',
@@ -140,6 +154,8 @@ export const COMBO_BUNDLES: ComboBundle[] = [
   },
   {
     key: 'bundle_full_pentest',
+    finalPriceMinorUnitDe: 39900, anchorOriginalMinorUnitDe: 49900, // €399 (üstü çizili €499)
+    finalPriceMinorUnitEn: 34900, anchorOriginalMinorUnitEn: 43600, // £349 (üstü çizili £436)
     displayName: 'Tam Kapsamlı Pentest Paketi',
     displayNameEn: 'Full-Scope Pentest Bundle',
     displayNameDe: 'Umfassendes Pentest-Paket',
@@ -230,6 +246,10 @@ export function bundlePrice(
       ? PRICE_OVERRIDE_MINOR
       : region === 'tr' && bundle.finalPriceMinorUnitTr != null
       ? bundle.finalPriceMinorUnitTr
+      : region === 'de' && bundle.finalPriceMinorUnitDe != null
+      ? bundle.finalPriceMinorUnitDe
+      : region === 'en' && bundle.finalPriceMinorUnitEn != null
+      ? bundle.finalPriceMinorUnitEn
       : Math.round(singlesSum * (1 - bundle.discountPct / 100));
   // GOSTERILEN "orijinal" (ustu cizili): pazarlama anchor'i varsa O; yoksa uye tekil toplami.
   // Test override'da anchor da esitlenir -> sahte "%100 indirim" gorunmez.
@@ -238,6 +258,10 @@ export function bundlePrice(
       ? PRICE_OVERRIDE_MINOR
       : region === 'tr' && bundle.anchorOriginalMinorUnitTr != null
       ? bundle.anchorOriginalMinorUnitTr
+      : region === 'de' && bundle.anchorOriginalMinorUnitDe != null
+      ? bundle.anchorOriginalMinorUnitDe
+      : region === 'en' && bundle.anchorOriginalMinorUnitEn != null
+      ? bundle.anchorOriginalMinorUnitEn
       : singlesSum;
   const effectiveDiscountPct =
     originalMinorUnit > 0 ? Math.max(0, Math.round((1 - amountMinorUnit / originalMinorUnit) * 100)) : 0;

@@ -726,28 +726,22 @@ ordersRouter.post('/bundle', createLimiter, requireAuth, async (req, res) => {
   // tek conversationId/basketId; callback token ile hepsini paid yapar (bkz initiateBundlePayment
   // + handleIyzicoCallback). Onceden bundle HIC odeme baslatmiyor, hep gorsel /pay placeholder'ina
   // dusuyordu → bundle odemesi CALISMIYORDU. Tekil akis (createOrder) DEGISMEDI.
-  if (region === 'tr') {
-    let payment;
-    try {
-      payment = await initiateBundlePayment(createdOrderIds);
-    } catch (err: any) {
-      console.error(`[bundle] odeme baslatilamadi (orders ${createdOrderIds.join(',')}):`, err?.message ?? err);
-      return res.status(503).json({
-        error: M(reqLoc(req), 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin veya destek ile iletişime geçin.', 'Die Zahlung konnte derzeit nicht gestartet werden. Bitte versuchen Sie es später erneut oder kontaktieren Sie den Support.', 'Payment could not be started right now. Please try again later or contact support.'),
-        orderIds: createdOrderIds,
-      });
-    }
-    return res.json({ bundleKey, orderIds: createdOrderIds, bundleTotalMinorUnit: price.amountMinorUnit, currency: price.currency, ...payment });
+  // (COK-BOLGE ODEME) Onceden burada `region === 'tr'` kapisi vardi: TR disinda bundle HIC odeme
+  // baslatmiyor, `paymentPending` ile gorsel /pay placeholder'ina dusuyordu -> /de ve /en'de
+  // bundle SATIN ALINAMIYORDU (cikmaz sokak). TEKIL paket akisi (createOrder -> initiatePayment)
+  // zaten bolge kisiti OLMADAN gercek iyzico ile calisiyordu; bundle artik AYNI akisa baglandi.
+  // Para birimi order.currency'den map edilir (iyziCurrency: TRY/USD/EUR/GBP).
+  let payment;
+  try {
+    payment = await initiateBundlePayment(createdOrderIds);
+  } catch (err: any) {
+    console.error(`[bundle] odeme baslatilamadi (orders ${createdOrderIds.join(',')}):`, err?.message ?? err);
+    return res.status(503).json({
+      error: M(reqLoc(req), 'Ödeme şu an başlatılamadı. Lütfen daha sonra tekrar deneyin veya destek ile iletişime geçin.', 'Die Zahlung konnte derzeit nicht gestartet werden. Bitte versuchen Sie es später erneut oder kontaktieren Sie den Support.', 'Payment could not be started right now. Please try again later or contact support.'),
+      orderIds: createdOrderIds,
+    });
   }
-
-  // TR disi (stripe/paddle henuz canli DEGIL): mevcut placeholder davranisi korunur (paymentPending).
-  return res.json({
-    bundleKey,
-    orderIds: createdOrderIds,
-    bundleTotalMinorUnit: price.amountMinorUnit,
-    currency: price.currency,
-    paymentPending: true,
-  });
+  return res.json({ bundleKey, orderIds: createdOrderIds, bundleTotalMinorUnit: price.amountMinorUnit, currency: price.currency, ...payment });
 });
 
 // (İÇ KALİTE KAPISI + retry) Müşteriye GÖSTERİLEN durum. 'awaiting_admin_review' (admin onayı
