@@ -400,7 +400,6 @@ export async function sendReportReady(orderId: string, accessSecret: string): Pr
         <span style="font-size:12px;color:#8a9794;display:block;margin-bottom:8px">📋 Ihr Bericht-Zugangscode</span>
         <span style="display:inline-block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;font-weight:800;letter-spacing:1px;color:#123F3A;background:#ffffff;border:1px solid #d7e3df;border-radius:8px;padding:10px 14px;user-select:all;-webkit-user-select:all;-moz-user-select:all">${esc(accessSecret)}</span>
       
-        <span style="font-size:11px;color:#8a9794;display:block;margin-top:8px">Zum Kopieren auf den Code tippen und gedrückt halten.</span>
       </p>
       <p style="color:#8a9794;font-size:12px">Teilen Sie diesen Code mit niemandem. Er wird nur für den Zugriff auf diesen Bericht benötigt.</p>`
       : lang === 'en'
@@ -410,7 +409,6 @@ export async function sendReportReady(orderId: string, accessSecret: string): Pr
         <span style="font-size:12px;color:#8a9794;display:block;margin-bottom:8px">📋 Your report access code</span>
         <span style="display:inline-block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;font-weight:800;letter-spacing:1px;color:#123F3A;background:#ffffff;border:1px solid #d7e3df;border-radius:8px;padding:10px 14px;user-select:all;-webkit-user-select:all;-moz-user-select:all">${esc(accessSecret)}</span>
       
-        <span style="font-size:11px;color:#8a9794;display:block;margin-top:8px">Tap and hold the code to copy it.</span>
       </p>
       <p style="color:#8a9794;font-size:12px">Do not share this code with anyone. It is only needed to access this report.</p>`
       : `<p><strong>${esc(o.domain.hostname)}</strong> için <strong>${esc(o.package.displayName)}</strong> raporunuz hazır.</p>
@@ -419,7 +417,6 @@ export async function sendReportReady(orderId: string, accessSecret: string): Pr
         <span style="font-size:12px;color:#8a9794;display:block;margin-bottom:8px">📋 Rapor erişim şifreniz</span>
         <span style="display:inline-block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;font-weight:800;letter-spacing:1px;color:#123F3A;background:#ffffff;border:1px solid #d7e3df;border-radius:8px;padding:10px 14px;user-select:all;-webkit-user-select:all;-moz-user-select:all">${esc(accessSecret)}</span>
       
-        <span style="font-size:11px;color:#8a9794;display:block;margin-top:8px">Kopyalamak için kodun üzerine uzun basın.</span>
       </p>
       <p style="color:#8a9794;font-size:12px">Bu şifreyi kimseyle paylaşmayın. Yalnızca bu rapora erişim için gereklidir.</p>`;
     const html = layout({ lang, heading: lang === 'de' ? 'Ihr Bericht ist fertig' : lang === 'en' ? 'Your report is ready' : 'Raporunuz hazır', bodyHtml: body, cta: { label: lang === 'de' ? 'Bericht ansehen' : lang === 'en' ? 'View report' : 'Raporu görüntüle', url: `${config.frontendUrl}/dashboard/${o.id}` } });
