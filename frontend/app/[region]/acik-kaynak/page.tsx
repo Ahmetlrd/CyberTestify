@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { cookies } from 'next/headers';
-import { getRegion } from '../../config/regions';
+import { notFound } from 'next/navigation';
+import { VISIBLE_REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 
 // (Çok-bölge) Bölge-bağımsız kök sayfa; dili region cookie'sinden alır (hakkimizda/iletisim ile aynı desen).
 // MIT lisans metni HUKUKİ bildirim olduğundan çevrilmez — İngilizce orijinal aynen kalır.
@@ -53,23 +53,34 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.`;
 
-function pick() {
-  const region = getRegion(cookies().get('region')?.value);
+// (URL TUTARLILIGI) Dil artik COOKIE'den degil URL bolgesinden gelir; sayfa /{bolge}/acik-kaynak altinda.
+const SITE_URL = 'https://cybertestify.com';
+
+function pick(regionCode: string) {
+  const region = getRegion(regionCode);
   const lang = region.lang === 'de' ? 'de' : region.lang === 'en' ? 'en' : 'tr';
   return { t: T[lang] };
 }
 
-export function generateMetadata() {
-  const { t } = pick();
+export function generateStaticParams() {
+  return VISIBLE_REGION_CODES.map((region) => ({ region }));
+}
+
+export function generateMetadata({ params }: { params: { region: string } }) {
+  const { t } = pick(params.region);
   return {
     title: t.metaTitle,
     description: t.metaDesc,
-    alternates: { canonical: '/acik-kaynak' },
+    alternates: {
+      canonical: `${SITE_URL}/${params.region}/acik-kaynak`,
+      languages: { tr: `${SITE_URL}/tr/acik-kaynak`, de: `${SITE_URL}/de/acik-kaynak`, en: `${SITE_URL}/en/acik-kaynak`, 'x-default': `${SITE_URL}/tr/acik-kaynak` },
+    },
   };
 }
 
-export default function OpenSourcePage() {
-  const { t } = pick();
+export default function OpenSourcePage({ params }: { params: { region: string } }) {
+  if (!isRegionCode(params.region)) notFound();
+  const { t } = pick(params.region);
   return (
     <main className="container-page max-w-2xl py-14">
       <h1 className="text-3xl font-extrabold text-brand">{t.title}</h1>
@@ -86,7 +97,7 @@ export default function OpenSourcePage() {
       </section>
 
       <p className="mt-8 text-sm text-ink-soft">
-        <Link href="/hakkimizda" className="text-accent-600 underline">{t.back}</Link>
+        <Link href={`/${params.region}/hakkimizda`} className="text-accent-600 underline">{t.back}</Link>
       </p>
     </main>
   );

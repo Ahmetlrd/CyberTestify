@@ -108,6 +108,7 @@ const VER_T = {
     invoiceSent: 'Fatura gönderildi',
     invoiceRequested: 'Fatura talebi ✓',
     requestInvoice: 'Fatura talep et',
+    viewReport: 'Raporu Gör',
     unarchive: 'Arşivden çıkar',
     archive: 'Arşivle',
     myPanel: 'Panelim',
@@ -170,6 +171,7 @@ const VER_T = {
     invoiceSent: 'Rechnung gesendet',
     invoiceRequested: 'Rechnung angefordert ✓',
     requestInvoice: 'Rechnung anfordern',
+    viewReport: 'Bericht ansehen',
     unarchive: 'Aus Archiv entfernen',
     archive: 'Archivieren',
     myPanel: 'Mein Bereich',
@@ -232,6 +234,7 @@ const VER_T = {
     invoiceSent: 'Invoice sent',
     invoiceRequested: 'Invoice requested ✓',
     requestInvoice: 'Request invoice',
+    viewReport: 'View report',
     unarchive: 'Unarchive',
     archive: 'Archive',
     myPanel: 'My dashboard',
@@ -657,6 +660,20 @@ export default function VerifyHub() {
         </button>
         <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:shrink-0">
           <span className="badge">{ORDER_STATUS_LABEL[lang][o.status] ?? o.status}</span>
+          {/* (UX) Rapor hazırsa: rozet TEK BAŞINA tıklanabilir görünmüyordu; net bir CTA butonu
+              ekleniyor. Erişim akışı (kod/doğrulama) DEĞİŞMEZ — sadece görünür/tıklanabilir hedef. */}
+          {(o.status === 'scan_completed' || o.status === 'report_delivered') && (
+            <button
+              onClick={() => router.push(`/dashboard/${o.id}`)}
+              className="inline-flex items-center gap-1.5 rounded-pill bg-accent px-4 py-1.5 text-xs font-bold text-ink shadow-sm transition hover:bg-accent-hover"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6" />
+              </svg>
+              {T.viewReport}
+            </button>
+          )}
           {/* (Fatura talebi) ödemesi tamamlanmış siparişte talep/durum — form dashboard'ta (#fatura). */}
           {o.paid && (
             <button onClick={() => router.push(`/dashboard/${o.id}#fatura`)} className="btn-ghost text-xs text-accent-700">

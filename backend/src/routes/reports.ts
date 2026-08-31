@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zodError } from '../httpErrors.js';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { decryptReport } from '../services/crypto.js';
+import { decryptReport, decryptSecret } from '../services/crypto.js';
 import { renderReportPdf, htmlToPdfBuffer } from '../services/pdf.js';
 import { renderRedTeamFullHtml, redteamReportNo } from '../redteam/report.js';
 import { PASSIVE_EXTRAS_DELIM } from '../services/passiveExtras.js';
@@ -13,11 +13,64 @@ import { getBundle } from '../services/bundles.js';
 
 const M = (loc: string, tr: string, de: string, en: string): string => (loc === 'de' ? de : loc === 'en' ? en : tr);
 import { evaluatePromo } from '../services/promo.js';
+import { sendReportReady } from '../services/mailer.js';
 import { initiateFixSuggestionPayment } from '../services/payment/iyzico.js';
 
 export const reportsRouter = Router();
 
 const downloadSchema = z.object({ accessSecret: z.string().min(10, 'Geçerli bir rapor erişim kodu girin.') });
+
+// --- Erisim kodunu TEKRAR GONDER ---------------------------------------------
+// NOT (guvenlik modeli DEGISMEDI): erisim kodu raporun SIFRELEME ANAHTARIDIR
+// (decryptReport(accessSecret)). Bu yuzden kod "yenilenip eskisi gecersiz kilinamaz" —
+// yenilemek raporu yeniden sifrelemeyi gerektirirdi. Burada yapilan tek sey, AYNI kodu
+// hesabin dogrulanmis e-postasina TEKRAR gondermektir: ayni kanal, ayni tek-kod, ek risk yok.
+// Kod sunucuda zaten pepper ile sifreli emanette (devAccessSecret) tutuluyor.
+const RESEND_LIMIT = new Map<string, number[]>(); // orderId -> gonderim zaman damgalari
+function resendAllowed(orderId: string): { ok: true } | { ok: false; retryAfterSec: number } {
+  const now = Date.now();
+  const hits = (RESEND_LIMIT.get(orderId) ?? []).filter((t) => now - t < 60 * 60 * 1000);
+  const lastMinute = hits.filter((t) => now - t < 60 * 1000);
+  if (lastMinute.length >= 1) return { ok: false, retryAfterSec: Math.ceil((60 * 1000 - (now - lastMinute[0])) / 1000) };
+  if (hits.length >= 3) return { ok: false, retryAfterSec: Math.ceil((60 * 60 * 1000 - (now - hits[0])) / 1000) };
+  hits.push(now);
+  RESEND_LIMIT.set(orderId, hits);
+  return { ok: true };
+}
+
+reportsRouter.post('/:orderId/resend-code', requireAuth, async (req, res) => {
+  const loc = localeFor(req.body?.region);
+  const report = await prisma.report.findFirst({
+    where: { orderId: req.params.orderId, order: { customerId: req.customerId! } },
+    select: { devAccessSecret: true, adminReleasedAt: true },
+  });
+  if (!report) return res.status(404).json({ error: M(loc, 'Rapor bulunamadı.', 'Bericht nicht gefunden.', 'Report not found.') });
+  // Admin onay kapisi acikken rapor henuz musteride degil -> kod da gonderilmez.
+  if (config.adminReportGate && !report.adminReleasedAt) {
+    return res.status(409).json({ error: M(loc, 'Raporunuz henüz hazır değil.', 'Ihr Bericht ist noch nicht bereit.', 'Your report is not ready yet.') });
+  }
+  const gate = resendAllowed(req.params.orderId);
+  if (!gate.ok) {
+    res.setHeader('Retry-After', String(gate.retryAfterSec));
+    return res.status(429).json({
+      error: M(loc,
+        `Çok sık istek. Lütfen ${gate.retryAfterSec} saniye sonra tekrar deneyin.`,
+        `Zu häufige Anfragen. Bitte versuchen Sie es in ${gate.retryAfterSec} Sekunden erneut.`,
+        `Too many requests. Please try again in ${gate.retryAfterSec} seconds.`),
+    });
+  }
+  if (!report.devAccessSecret) {
+    return res.status(409).json({ error: M(loc, 'Kod otomatik gönderilemiyor. Lütfen destek ile iletişime geçin.', 'Der Code kann nicht automatisch gesendet werden. Bitte kontaktieren Sie den Support.', 'The code cannot be resent automatically. Please contact support.') });
+  }
+  let accessSecret: string;
+  try { accessSecret = decryptSecret(report.devAccessSecret); }
+  catch { return res.status(500).json({ error: M(loc, 'Kod çözülemedi. Lütfen destek ile iletişime geçin.', 'Code konnte nicht entschlüsselt werden. Bitte kontaktieren Sie den Support.', 'Could not recover the code. Please contact support.') }); }
+
+  const sent = await sendReportReady(req.params.orderId, accessSecret);
+  if (!sent) return res.status(502).json({ error: M(loc, 'E-posta gönderilemedi. Lütfen tekrar deneyin.', 'E-Mail konnte nicht gesendet werden. Bitte erneut versuchen.', 'The email could not be sent. Please try again.') });
+  console.log(`[reports] erisim kodu TEKRAR gonderildi — siparis ${req.params.orderId}`);
+  res.json({ ok: true });
+});
 
 // Rapor indirme: musteri hem oturum acmis olmali (requireAuth) HEM DE
 // e-posta ile ayrica gonderilen tek seferlik erisim sifresini girmeli.

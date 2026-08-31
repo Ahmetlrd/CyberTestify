@@ -139,11 +139,20 @@ function LockIcon({ open }: { open: boolean }) {
 // DEĞİŞMEDİ. Renkler site marka token'larıyla (Nav/Footer ile uyumlu kalsın diye).
 const RR = {
   tr: { eyebrow: 'Sipariş Durumu · Tamamlandı', processTitle: 'Süreç',
-        steps: ['Sahiplik doğrulandı', 'Tarama çalıştı', 'Bulgular değerlendirildi', 'Rapor hazır'] },
+        steps: ['Sahiplik doğrulandı', 'Tarama çalıştı', 'Bulgular değerlendirildi', 'Rapor hazır'],
+        resend: 'Kodu tekrar gönder', resendBusy: 'Gönderiliyor…',
+        resendOk: 'Erişim kodu e-posta adresinize yeniden gönderildi.',
+        resendFail: 'Kod gönderilemedi. Lütfen tekrar deneyin.' },
   de: { eyebrow: 'Bestellstatus · Abgeschlossen', processTitle: 'Ablauf',
-        steps: ['Inhaberschaft bestätigt', 'Scan ausgeführt', 'Befunde bewertet', 'Bericht fertig'] },
+        steps: ['Inhaberschaft bestätigt', 'Scan ausgeführt', 'Befunde bewertet', 'Bericht fertig'],
+        resend: 'Code erneut senden', resendBusy: 'Wird gesendet…',
+        resendOk: 'Der Zugangscode wurde erneut an Ihre E-Mail-Adresse gesendet.',
+        resendFail: 'Der Code konnte nicht gesendet werden. Bitte erneut versuchen.' },
   en: { eyebrow: 'Order status · Completed', processTitle: 'Process',
-        steps: ['Ownership verified', 'Scan completed', 'Findings assessed', 'Report ready'] },
+        steps: ['Ownership verified', 'Scan completed', 'Findings assessed', 'Report ready'],
+        resend: 'Resend code', resendBusy: 'Sending…',
+        resendOk: 'The access code has been re-sent to your email address.',
+        resendFail: 'The code could not be sent. Please try again.' },
 } as const;
 
 export default function OrderDashboard({ params }: { params: { orderId: string } }) {
@@ -286,6 +295,32 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   // (TASARIM) Rapor hazır ekranı iki kolonlu → dar kap yerine geniş kap.
   const wide = active || status === 'scan_completed';
   const rr = RR[lang];
+  // (KAMPANYA SADELESTIRME) AI kampanya bloğu HER ziyarette büyük/vurgulu çıkıyordu; üst üste binen
+  // "ücretsiz" mesajları fiyat güvenilirliğini zedeliyor. Artık sipariş başına YALNIZ İLK görüntülemede
+  // tam blok, sonrasında tek satırlık sessiz not. Fiyat/indirim ORANI değişmez, sadece görünürlük.
+  const [fixPromoSeen, setFixPromoSeen] = useState<boolean | null>(null);
+  // (UX) "Kodu tekrar gönder" — e-postayı bulamayan kullanıcı kilitli kalmasın.
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendMsg, setResendMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function handleResendCode() {
+    setResendBusy(true);
+    setResendMsg(null);
+    try {
+      await api.resendReportCode(params.orderId);
+      setResendMsg({ ok: true, text: rr.resendOk });
+    } catch (e: any) {
+      setResendMsg({ ok: false, text: e?.message || rr.resendFail });
+    } finally {
+      setResendBusy(false);
+    }
+  }
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const k = `ct_fixpromo_${params.orderId}`;
+    const seen = window.localStorage.getItem(k) === '1';
+    setFixPromoSeen(seen);
+    if (!seen) window.localStorage.setItem(k, '1');
+  }, [params.orderId]);
 
   let feed: Array<{ seq: number; text: string }> = [];
   try {
@@ -489,6 +524,22 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
             {dlError && (
               <p className="mt-2 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{dlError}</p>
             )}
+            {/* (UX) E-postayı bulamayanlar için: AYNI kod yeniden gönderilir (sunucuda dk/saat limiti var). */}
+            {!unlocked && (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  disabled={resendBusy}
+                  className="text-xs font-semibold text-accent-600 underline underline-offset-2 hover:text-brand disabled:opacity-60"
+                >
+                  {resendBusy ? rr.resendBusy : rr.resend}
+                </button>
+                {resendMsg && (
+                  <span className={`text-xs ${resendMsg.ok ? 'text-emerald-700' : 'text-red-600'}`}>{resendMsg.text}</span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* (ANKET — /tr YALNIZ, non-blocking) "Raporunuz hazır" ile "AI Çözüm Önerileri" ARASINDA;
@@ -522,7 +573,13 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               <p className="mt-1 text-xs text-ink-muted">{t.fixSub}</p>
               {order.report.fixSuggestionsUnlocked ? (
                 <>
-                  {order.report.fixCampaignFree && (
+                  {order.report.fixCampaignFree && fixPromoSeen === true && (
+                    <p className="mt-3 text-xs text-ink-muted">
+                      <span className="mr-1.5 rounded-pill bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand">{t.campaign}</span>
+                      <strong className="text-ink">0 {order.currency}</strong>{t.campaignFree}
+                    </p>
+                  )}
+                  {order.report.fixCampaignFree && fixPromoSeen === false && (
                     <div className="mt-3 flex flex-wrap items-center gap-2 rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
                       <span className="rounded-pill bg-amber-500 px-2.5 py-0.5 text-xs font-extrabold text-white">{t.campaign}</span>
                       <span className="font-semibold text-amber-900">

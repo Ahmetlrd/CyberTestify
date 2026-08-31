@@ -72,7 +72,7 @@ export default function NotFound() {
         <div className="mt-3 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm font-semibold">
           <Link href={`/${code}/packages`} className="text-accent-600 hover:underline">{t.packages}</Link>
           <Link href={`/${code}/blog`} className="text-accent-600 hover:underline">{t.blog}</Link>
-          <Link href={lang === 'de' ? '/de/legal/impressum' : lang === 'en' ? '/en/legal/business-info' : '/iletisim'} className="text-accent-600 hover:underline">{t.contact}</Link>
+          <Link href={lang === 'de' ? '/de/legal/impressum' : lang === 'en' ? '/en/legal/business-info' : `/${code}/iletisim`} className="text-accent-600 hover:underline">{t.contact}</Link>
         </div>
       </div>
     </main>

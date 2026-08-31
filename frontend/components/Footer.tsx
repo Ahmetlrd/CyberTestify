@@ -53,7 +53,8 @@ export function Footer({ region }: { region: RegionConfig }) {
   const legalLinks = isDe ? LEGAL_LINKS_DE : isEn ? LEGAL_LINKS_EN : LEGAL_LINKS_TR;
   const nav = isDe ? NAV_LINKS_DE : isEn ? NAV_LINKS_EN : NAV_LINKS_TR;
   // Künye/Impressum → /de'de Alman Impressum sayfası; TR'de mevcut /iletisim korunur.
-  const contactHref = isDe ? '/de/legal/impressum' : isEn ? '/en/legal/business-info' : '/iletisim';
+  // (URL TUTARLILIGI) Tum footer linkleri artik /{bolge}/... deseninde.
+  const contactHref = isDe ? '/de/legal/impressum' : isEn ? '/en/legal/business-info' : `/${activeRegion.code}/iletisim`;
 
   return (
     <footer className="mt-24 bg-brand-deep text-white/80">
@@ -73,13 +74,13 @@ export function Footer({ region }: { region: RegionConfig }) {
               </a>
             </p>
             <p className="mt-2 flex flex-wrap gap-x-4 text-sm">
-              <Link href="/hakkimizda" className="font-medium text-white/80 hover:text-white hover:underline">
+              <Link href={`/${activeRegion.code}/hakkimizda`} className="font-medium text-white/80 hover:text-white hover:underline">
                 {nav.about}
               </Link>
               <Link href={`/${activeRegion.code}/blog`} className="font-medium text-white/80 hover:text-white hover:underline">
                 {nav.blog}
               </Link>
-              <Link href="/acik-kaynak" className="font-medium text-white/80 hover:text-white hover:underline">
+              <Link href={`/${activeRegion.code}/acik-kaynak`} className="font-medium text-white/80 hover:text-white hover:underline">
                 {nav.openSource}
               </Link>
               <Link href={contactHref} className="font-medium text-white/80 hover:text-white hover:underline">

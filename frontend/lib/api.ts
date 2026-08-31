@@ -356,6 +356,10 @@ export const api = {
     region: string;
   }) => request<{ id: string }>('/schedules', { method: 'POST', body: JSON.stringify(body) }),
   cancelSchedule: (id: string) => request<{ ok: boolean }>(`/schedules/${id}`, { method: 'DELETE' }),
+  // (UX) Erişim kodunu TEKRAR GÖNDER — AYNI kod hesabın e-postasına yeniden yollanır
+  // (kod raporun şifreleme anahtarı olduğu için yenilenmez; güvenlik modeli değişmedi).
+  resendReportCode: (orderId: string) =>
+    request<{ ok: boolean }>(`/reports/${orderId}/resend-code`, { method: 'POST', body: JSON.stringify({ region: readRegionCookie() }) }),
   downloadReport: async (orderId: string, accessSecret: string) => {
     const res = await fetch(`${API_URL}/reports/${orderId}/download`, {
       method: 'POST',

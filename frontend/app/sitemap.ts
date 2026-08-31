@@ -38,12 +38,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE}/${lang}/blog`, lastModified: now, changeFrequency: 'daily' as const, priority: lang === 'tr' ? 0.8 : 0.6, alternates: langAlt('/blog') },
   ]);
 
-  // Kurumsal sayfalar — bölge-öneksiz (tek dil, Türkçe içerik).
-  const corporate: MetadataRoute.Sitemap = [
-    { url: `${SITE}/hakkimizda`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${SITE}/iletisim`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
-    { url: `${SITE}/acik-kaynak`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
-  ];
+  // (URL TUTARLILIĞI) Kurumsal sayfalar artık bölge-önekli (/{bölge}/hakkimizda …) ve her bölgede
+  // KENDİ dilinde. Eski önek-siz adresler middleware'de 301 → burada YALNIZ yeni adresler listelenir.
+  const corporate: MetadataRoute.Sitemap = (
+    [['hakkimizda', 0.5, 'monthly'], ['iletisim', 0.4, 'monthly'], ['acik-kaynak', 0.3, 'yearly']] as const
+  ).flatMap(([slug, prio, freq]) =>
+    (['tr', 'de', 'en'] as const).map((lang) => ({
+      url: `${SITE}/${lang}/${slug}`,
+      lastModified: now,
+      changeFrequency: freq as 'monthly' | 'yearly',
+      priority: lang === 'tr' ? prio : prio - 0.1,
+      alternates: langAlt(`/${slug}`),
+    })),
+  );
 
   // (SEO) Hukuki sayfalar — YALNIZ /tr indekslenebilir (kendi canonical'ıyla). /de ve /en hukuki
   // sayfaları noindex olduğu için sitemap'e ALINMAZ. TR hukuki ≠ DE/EN hukuki (farklı belge) → hreflang yok.

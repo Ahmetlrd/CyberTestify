@@ -1,6 +1,6 @@
-import { cookies } from 'next/headers';
-import { COMPANY } from '../../lib/company';
-import { getRegion } from '../../config/regions';
+import { COMPANY } from '../../../lib/company';
+import { notFound } from 'next/navigation';
+import { VISIBLE_REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 
 // (Çok-bölge) Bölge-bağımsız kök sayfa; dili region cookie'sinden alır (tr | de). us/ae (en) → tr'ye
 // düşer (görünmez). /de bağlamında Türkçe SIZMAZ.
@@ -31,24 +31,35 @@ const T = {
   },
 } as const;
 
-function pick() {
-  const region = getRegion(cookies().get('region')?.value);
+// (URL TUTARLILIGI) Dil artik COOKIE'den degil URL bolgesinden gelir; sayfa /{bolge}/iletisim altinda.
+const SITE_URL = 'https://cybertestify.com';
+
+function pick(regionCode: string) {
+  const region = getRegion(regionCode);
   const lang = region.lang === 'de' ? 'de' : region.lang === 'en' ? 'en' : 'tr';
   return T[lang];
 }
 
-export function generateMetadata() {
-  const t = pick();
+export function generateStaticParams() {
+  return VISIBLE_REGION_CODES.map((region) => ({ region }));
+}
+
+export function generateMetadata({ params }: { params: { region: string } }) {
+  const t = pick(params.region);
   return {
     title: t.metaTitle,
     description: t.metaDesc,
-    alternates: { canonical: '/iletisim' },
-    openGraph: { type: 'website' as const, siteName: 'CyberTestify', url: 'https://cybertestify.com/iletisim', title: t.metaTitle, description: t.metaDesc },
+    alternates: {
+      canonical: `${SITE_URL}/${params.region}/iletisim`,
+      languages: { tr: `${SITE_URL}/tr/iletisim`, de: `${SITE_URL}/de/iletisim`, en: `${SITE_URL}/en/iletisim`, 'x-default': `${SITE_URL}/tr/iletisim` },
+    },
+    openGraph: { type: 'website' as const, siteName: 'CyberTestify', url: `${SITE_URL}/${params.region}/iletisim`, title: t.metaTitle, description: t.metaDesc },
   };
 }
 
-export default function Page() {
-  const t = pick();
+export default function Page({ params }: { params: { region: string } }) {
+  if (!isRegionCode(params.region)) notFound();
+  const t = pick(params.region);
   return (
     <main className="container-page max-w-2xl py-14">
       <h1 className="text-3xl font-extrabold text-brand">{t.title}</h1>

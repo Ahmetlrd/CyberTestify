@@ -94,8 +94,28 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
               <p className="text-pretty" style={{ color: C.textSoft, lineHeight: 1.7, margin: 0 }}>{d.whatBody}</p>
             </div>
             <div>
-              <h2 style={{ fontSize: 'clamp(22px, 4.5vw, 26px)', letterSpacing: '-.02em', margin: '0 0 14px', fontWeight: 700 }}>Deneysel doğayı kabul eden ekipler</h2>
-              <p className="text-pretty" style={{ color: C.textSoft, lineHeight: 1.7, margin: 0 }}>{d.whatFor}</p>
+              {/* (NETLİK) Uyarılar zayıflatılmadı; buraya bir ÖN-FİLTRE eklendi ki kullanıcı
+                  "bu benim için mi?" sorusunu CTA'ya tıklamadan ÖNCE yanıtlasın. */}
+              <h2 style={{ fontSize: 'clamp(22px, 4.5vw, 26px)', letterSpacing: '-.02em', margin: '0 0 14px', fontWeight: 700 }}>Kime uygun?</h2>
+              <p className="text-pretty" style={{ color: C.textSoft, lineHeight: 1.7, margin: '0 0 18px' }}>{d.whatFor}</p>
+              <div style={{ display: 'grid', gap: 14 }}>
+                <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px' }}>
+                  <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: C.text }}>✓ Uygun</p>
+                  <ul style={{ margin: 0, paddingLeft: 18, color: C.textSoft, fontSize: 14, lineHeight: 1.65 }}>
+                    <li>Kendi güvenlik/teknik ekibi olan, bulguları kendi değerlendirebilen kurumlar</li>
+                    <li>Deneysel ve deterministik olmayan sonuçları kabul etmeye açık ekipler</li>
+                    <li>Deterministik paketleri zaten çalıştırmış, ek bir bakış açısı arayanlar</li>
+                  </ul>
+                </div>
+                <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px' }}>
+                  <p style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: C.text }}>✗ Uygun değil</p>
+                  <ul style={{ margin: 0, paddingLeft: 18, color: C.textSoft, fontSize: 14, lineHeight: 1.65 }}>
+                    <li>Resmî pentest/denetim raporu gerekenler (bu hizmet onun yerine geçmez)</li>
+                    <li>Her koşuda birebir aynı, tekrarlanabilir çıktı bekleyenler</li>
+                    <li>İlk kez tarama yaptıracaklar — <a href={`/${region.code}/packages`} style={{ color: C.amber, fontWeight: 600 }}>Basit Tarama</a> ile başlamak daha doğru</li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -205,7 +225,7 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
       </section>
 
       {/* ————————————————————————— UYARILAR ————————————————————————— */}
-      <section style={{ borderBottom: `1px solid ${C.border}`, background: `linear-gradient(${C.bg}, ${C.bgAlt})` }}>
+      <section id="deneysel" style={{ scrollMarginTop: 90, borderBottom: `1px solid ${C.border}`, background: `linear-gradient(${C.bg}, ${C.bgAlt})` }}>
         <div className="container-page" style={{ padding: 'clamp(48px,8vw,72px) 0' }}>
           <div style={{ maxWidth: 800, margin: '0 auto', border: `1px solid ${C.amberSoftBorder}`, borderRadius: 16, background: C.amberSoftBg, padding: '36px 40px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22 }}>
@@ -242,7 +262,15 @@ export default function OtonomRedTeamPage({ params }: { params: { region: string
         <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse 700px 360px at 50% 100%, ${C.amberSoftBg}, transparent 70%)`, pointerEvents: 'none' }} />
         <div className="container-page" style={{ position: 'relative', padding: 'clamp(56px,10vw,88px) 0', textAlign: 'center' }}>
           <h2 className="text-balance" style={{ fontSize: 'clamp(26px, 6vw, 38px)', letterSpacing: '-.025em', margin: '0 auto 14px', fontWeight: 700, maxWidth: 640 }}>{d.ctaBandTitle}</h2>
-          <p style={{ color: C.textSoft, fontSize: 16, margin: '0 0 30px' }}>{d.levels[0].price} · {d.levels[0].name}</p>
+          <p style={{ color: C.textSoft, fontSize: 16, margin: '0 0 12px' }}>{d.levels[0].price} · {d.levels[0].name}</p>
+          {/* (NETLİK) CTA'dan önce bağlam: uyarı gizlenmiyor, aksine oraya yönlendiriliyor. */}
+          <p style={{ color: C.textSoft, fontSize: 13.5, margin: '0 0 26px' }}>
+            Satın almadan önce:{' '}
+            <a href="#deneysel" style={{ color: C.amber, fontWeight: 600, textDecoration: 'underline' }}>
+              deneysel katmanın sınırlarını okuyun
+            </a>{' '}
+            — bu tarama deterministik değildir.
+          </p>
           <a href="#panel" style={{ display: 'inline-block', background: C.amber, color: '#0a1c18', padding: '16px 44px', borderRadius: 12, fontWeight: 700, fontSize: 17, boxShadow: `0 0 48px ${C.amberGlow}` }}>{d.ctaBandBtn}</a>
         </div>
       </section>

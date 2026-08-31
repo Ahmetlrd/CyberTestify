@@ -94,6 +94,12 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/tr/blog', req.url), 301);
   }
 
+  // (URL TUTARLILIGI) Kurumsal sayfalar artik bolge-onekli (/{bolge}/hakkimizda ...). Eski onek-siz
+  // adresler KALICI 301 ile ziyaretcinin bolgesine tasinir -> eski link/otorite korunur, 404 uretilmez.
+  if (['/hakkimizda', '/iletisim', '/acik-kaynak'].includes(pathname)) {
+    return NextResponse.redirect(new URL(`/${region}${pathname}`, req.url), 301);
+  }
+
   // Uygulama/hukuki/statik/admin rotalar bölge-bağımsız — dokunma.
   return pass();
 }

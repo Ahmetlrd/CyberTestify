@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { cookies } from 'next/headers';
-import { COMPANY } from '../../lib/company';
-import { getRegion } from '../../config/regions';
+import { notFound } from 'next/navigation';
+import { COMPANY } from '../../../lib/company';
+import { VISIBLE_REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 
 // (Çok-bölge) Bölge-bağımsız kök sayfa; dili region cookie'sinden alır (tr | de). /de'de KVKK yerine
 // DSGVO, "Türkçe rapor" yerine "Deutscher Bericht" — düz çeviri değil, bağlam uyarlaması.
@@ -161,26 +161,37 @@ const T = {
   },
 } as const;
 
-function pick() {
-  const region = getRegion(cookies().get('region')?.value);
+// (URL TUTARLILIGI) Dil artik COOKIE'den degil URL bolgesinden gelir; sayfa /{bolge}/hakkimizda altinda.
+const SITE_URL = 'https://cybertestify.com';
+
+function pick(regionCode: string) {
+  const region = getRegion(regionCode);
   const lang = region.lang === 'de' ? 'de' : region.lang === 'en' ? 'en' : 'tr';
   return { t: T[lang], home: `/${region.code}` };
 }
 
-export function generateMetadata() {
-  const { t } = pick();
+export function generateStaticParams() {
+  return VISIBLE_REGION_CODES.map((region) => ({ region }));
+}
+
+export function generateMetadata({ params }: { params: { region: string } }) {
+  const { t } = pick(params.region);
   return {
     title: t.metaTitle,
     description: t.metaDesc,
-    alternates: { canonical: '/hakkimizda' },
-    openGraph: { type: 'website' as const, siteName: 'CyberTestify', url: 'https://cybertestify.com/hakkimizda', title: t.metaTitle, description: t.metaDesc },
+    alternates: {
+      canonical: `${SITE_URL}/${params.region}/hakkimizda`,
+      languages: { tr: `${SITE_URL}/tr/hakkimizda`, de: `${SITE_URL}/de/hakkimizda`, en: `${SITE_URL}/en/hakkimizda`, 'x-default': `${SITE_URL}/tr/hakkimizda` },
+    },
+    openGraph: { type: 'website' as const, siteName: 'CyberTestify', url: `${SITE_URL}/${params.region}/hakkimizda`, title: t.metaTitle, description: t.metaDesc },
   };
 }
 
 const H = ({ html }: { html: string }) => <span dangerouslySetInnerHTML={{ __html: html }} />;
 
-export default function Page() {
-  const { t } = pick();
+export default function Page({ params }: { params: { region: string } }) {
+  if (!isRegionCode(params.region)) notFound();
+  const { t } = pick(params.region);
   return (
     <main className="container-page max-w-2xl py-14">
       <h1 className="text-3xl font-extrabold text-brand">{t.title}</h1>
@@ -246,7 +257,7 @@ export default function Page() {
 
       <p className="mt-6 text-sm text-ink-muted">
         {t.moreHtml}{' '}
-        <Link href="/iletisim" className="text-accent-600 underline">{t.moreLink}</Link>{' '}
+        <Link href={`/${params.region}/iletisim`} className="text-accent-600 underline">{t.moreLink}</Link>{' '}
         {t.moreTail}
       </p>
     </main>
