@@ -41,8 +41,12 @@ Dieses Ziel antwortet nicht über HTTPS; die Kommunikation läuft unverschlüsse
 | Befund | Schweregrad | Beschreibung |
 |-------|--------|----------|
 | HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation) | Hoch | Die Website antwortet nicht auf HTTPS; der gesamte ein- und ausgehende Datenverkehr wird unverschlüsselt (im Klartext) übertragen — ein Angreifer im selben Netzwerk kann den Verkehr abhören, Sitzungen/Passwörter stehlen oder Inhalte verändern. Die Prüfung wurde über http:// durchgeführt. |
-| Kritische Sicherheits-Header fehlen (Content-Security-Policy, X-Frame-Options) | Mittel | Es gibt keine browserseitige Verteidigung gegen XSS- und/oder Clickjacking-Angriffe. Fehlt auf ALLEN 8 geprüften eindeutigen Seiten. |
-| Zusätzliche Sicherheits-Header fehlen (X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy, Permissions-Policy) | Mittel | Die Tiefenverteidigung ist schwach; einzeln von geringer Auswirkung, erweitern sie zusammen jedoch die Angriffsfläche. Fehlt auf ALLEN 8 geprüften eindeutigen Seiten. |
+| Kritischer Sicherheits-Header fehlt: Content-Security-Policy | Mittel | Der Browser kann nicht einschränken, welche Ressourcen geladen werden; keine grundlegende Verteidigung gegen XSS und Content-Injection. Fehlt auf ALLEN 8 geprüften einzigartigen Seiten. |
+| Kritischer Sicherheits-Header fehlt: X-Frame-Options | Mittel | Die Seite kann in das iframe einer fremden Website eingebettet werden; Nutzer können per Clickjacking getäuscht werden. Fehlt auf ALLEN 8 geprüften einzigartigen Seiten. |
+| Sicherheits-Header fehlt: X-Content-Type-Options | Mittel | Der Browser kann den Inhaltstyp erraten (MIME-Sniffing); hochgeladene Dateien könnten wie Skripte ausgeführt werden. Fehlt auf ALLEN 8 geprüften einzigartigen Seiten. |
+| Sicherheits-Header fehlt: Strict-Transport-Security | Mittel | Die HTTPS-Pflicht wird dem Browser nicht mitgeteilt; bei Erstanfragen besteht SSL-Stripping-/MITM-Risiko. Fehlt auf ALLEN 8 geprüften einzigartigen Seiten. |
+| Sicherheits-Header fehlt: Referrer-Policy | Mittel | An externe Links wird die vollständige URL (Referer) gesendet; Sitzungs-/Datenschutzinformationen können abfließen. Fehlt auf ALLEN 8 geprüften einzigartigen Seiten. |
+| Sicherheits-Header fehlt: Permissions-Policy | Mittel | Sensible APIs wie Kamera/Mikrofon/Standort sind nicht eingeschränkt; Drittinhalte könnten sie missbrauchen. Fehlt auf ALLEN 8 geprüften einzigartigen Seiten. |
 
 ## POSITIVE ZUSICHERUNG — GEPRÜFTE BEREICHE
 

@@ -110,7 +110,8 @@ Yaygın hassas yollar tek GET ile kontrol edildi (içerik doğrulandı — yaln�
 | Hassas dosya erişilebilir (`/db.sql`) | Yüksek | İçerik doğrulandı; yapılandırma/kaynak sızıntısı riski. Erişim derhal engellenmeli. |
 | Eski/desteksiz yazılım sürümü ifşa ediliyor (PHP/7.1.26 — EOL) | Yüksek | PHP 7.x serisi resmen desteklenmiyor (7.x güvenlik güncellemeleri 2022 sonunda bitti). Bilinen çok sayıda güvenlik açığı yamasız kalır. CWE-1104 · OWASP A06:2021 (Güncel Olmayan/Savunmasız Bileşenler). Çözüm: güncel ve desteklenen bir PHP sürümüne (8.2+) yükseltin; sürüm imzasını gizleyin (expose_php=Off). |
 | Güncel olmayan yazılım sürümü ifşa ediliyor (Apache/2.4.25 — çok eski yama) | Orta | Apache 2.4 serisi desteklenmekle birlikte Apache/2.4.25 çok eski bir yama düzeyidir; aradaki güvenlik yamaları uygulanmamış görünüyor. CWE-1104 · OWASP A06:2021 (Güncel Olmayan/Savunmasız Bileşenler). Çözüm: 2.4 serisinin güncel yamasına yükseltin; sürüm imzasını gizleyin (ServerTokens Prod). |
-| Kritik güvenlik başlıkları eksik (Content-Security-Policy, X-Frame-Options) | Orta | XSS/clickjacking’e karşı tarayıcı savunması zayıf. (2/2 sayfada eksik) |
+| Kritik güvenlik başlığı eksik: Content-Security-Policy | Orta | Tarayıcı hangi kaynakların yükleneceğini kısıtlayamıyor; XSS ve içerik enjeksiyonuna karşı temel savunma yok. Taranan 2 benzersiz sayfanın TAMAMINDA eksik. |
+| Kritik güvenlik başlığı eksik: X-Frame-Options | Orta | Sayfa başka bir sitenin iframe’ine gömülebilir; clickjacking ile kullanıcı kandırılabilir. Taranan 2 benzersiz sayfanın TAMAMINDA eksik. |
 | Ek başlıklar eksik (Strict-Transport-Security, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection) | Orta | Savunma derinliği zayıf. (2/2 sayfada eksik) |
 
 ## DNS & E-posta Güvenliği

@@ -41,8 +41,12 @@ Bu hedef HTTPS üzerinden yanıt vermiyor; iletişim şifresiz (düz metin) HTTP
 | Bulgu | Şiddet | Açıklama |
 |-------|--------|----------|
 | HTTPS desteklenmiyor (şifresiz iletişim) | Yüksek | Site HTTPS'e yanıt vermiyor; sayfaya gelen/giden tüm trafik şifresiz (düz metin) taşınıyor — aynı ağdaki bir saldırgan trafiği dinleyebilir, oturum/şifre çalabilir veya içeriği değiştirebilir. Tarama http:// üzerinden yürütüldü. |
-| Kritik güvenlik başlıkları eksik (Content-Security-Policy, X-Frame-Options) | Orta | XSS ve/veya clickjacking saldırılarına karşı tarayıcı seviyesinde savunma bulunmuyor. Taranan 8 benzersiz sayfanın TAMAMINDA eksik. |
-| Ek güvenlik başlıkları eksik (X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy, Permissions-Policy) | Orta | Savunma derinliği zayıf; tek tek düşük etkili olsa da birlikte saldırı yüzeyini genişletir. Taranan 8 benzersiz sayfanın TAMAMINDA eksik. |
+| Kritik güvenlik başlığı eksik: Content-Security-Policy | Orta | Tarayıcı hangi kaynakların yükleneceğini kısıtlayamıyor; XSS ve içerik enjeksiyonuna karşı temel savunma yok. Taranan 8 benzersiz sayfanın TAMAMINDA eksik. |
+| Kritik güvenlik başlığı eksik: X-Frame-Options | Orta | Sayfa başka bir sitenin iframe’ine gömülebilir; clickjacking ile kullanıcı kandırılabilir. Taranan 8 benzersiz sayfanın TAMAMINDA eksik. |
+| Güvenlik başlığı eksik: X-Content-Type-Options | Orta | Tarayıcı içerik türünü tahmin edebilir (MIME-sniffing); yüklenen dosyalar script gibi çalıştırılabilir. Taranan 8 benzersiz sayfanın TAMAMINDA eksik. |
+| Güvenlik başlığı eksik: Strict-Transport-Security | Orta | HTTPS zorunluluğu tarayıcıya bildirilmiyor; ilk isteklerde SSL-stripping/MITM riski var. Taranan 8 benzersiz sayfanın TAMAMINDA eksik. |
+| Güvenlik başlığı eksik: Referrer-Policy | Orta | Dış bağlantılara tam URL (Referer) gönderilir; oturum/gizlilik bilgisi sızabilir. Taranan 8 benzersiz sayfanın TAMAMINDA eksik. |
+| Güvenlik başlığı eksik: Permissions-Policy | Orta | Kamera/mikrofon/konum gibi hassas API’ler kısıtlanmamış; üçüncü taraf içerik kötüye kullanabilir. Taranan 8 benzersiz sayfanın TAMAMINDA eksik. |
 
 ## POZİTİF GÜVENCE — KONTROL EDİLEN ALANLAR
 

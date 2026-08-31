@@ -41,8 +41,12 @@ This target does not respond over HTTPS; communication runs unencrypted (plainte
 | Finding | Severity | Description |
 |-------|--------|----------|
 | HTTPS not supported (unencrypted communication) | High | The site does not respond over HTTPS; all traffic to/from the page is carried unencrypted (plaintext) — an attacker on the same network can intercept the traffic, steal sessions/passwords or modify content. The scan was performed over http://. |
-| Critical security headers missing (Content-Security-Policy, X-Frame-Options) | Medium | There is no browser-level defence against XSS and/or clickjacking attacks. Missing on ALL 8 unique pages scanned. |
-| Additional security headers missing (X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy, Permissions-Policy) | Medium | Defence in depth is weak; individually low-impact, but together they widen the attack surface. Missing on ALL 8 unique pages scanned. |
+| Critical security header missing: Content-Security-Policy | Medium | The browser cannot restrict which resources are loaded; there is no basic defence against XSS and content injection. Missing on ALL 8 scanned unique pages. |
+| Critical security header missing: X-Frame-Options | Medium | The page can be embedded in another site’s iframe; users can be deceived via clickjacking. Missing on ALL 8 scanned unique pages. |
+| Security header missing: X-Content-Type-Options | Medium | The browser may guess the content type (MIME-sniffing); uploaded files could be executed as scripts. Missing on ALL 8 scanned unique pages. |
+| Security header missing: Strict-Transport-Security | Medium | HTTPS is not enforced to the browser; on first requests there is an SSL-stripping/MITM risk. Missing on ALL 8 scanned unique pages. |
+| Security header missing: Referrer-Policy | Medium | The full URL (Referer) is sent to external links; session/privacy information may leak. Missing on ALL 8 scanned unique pages. |
+| Security header missing: Permissions-Policy | Medium | Sensitive APIs such as camera/microphone/location are not restricted; third-party content could abuse them. Missing on ALL 8 scanned unique pages. |
 
 ## POSITIVE ASSURANCE — AREAS CHECKED
 

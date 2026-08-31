@@ -110,7 +110,8 @@ Common sensitive paths were checked with a single GET (content verified — HTTP
 | Sensitive file accessible (`/db.sql`) | High | Content verified; risk of configuration/source-code leakage. Access must be blocked immediately. |
 | Outdated / unsupported software version disclosed (PHP/7.1.26 — EOL) | High | The PHP 7.x series is officially end-of-life (security updates for 7.x ended in late 2022). Numerous known vulnerabilities remain unpatched. CWE-1104 · OWASP A06:2021 (Vulnerable & Outdated Components). Remediation: upgrade to a current, supported PHP version (8.2+) and hide the version signature (expose_php=Off). |
 | Out-of-date software version disclosed (Apache/2.4.25 — very old patch level) | Medium | The Apache 2.4 series is supported, but Apache/2.4.25 is a very old patch level; intervening security patches appear not to have been applied. CWE-1104 · OWASP A06:2021 (Vulnerable & Outdated Components). Remediation: upgrade to the current patch of the 2.4 series and hide the version signature (ServerTokens Prod). |
-| Critical security headers missing (Content-Security-Policy, X-Frame-Options) | Medium | Browser defence against XSS/clickjacking is weak. (missing on 2/2 pages) |
+| Critical security header missing: Content-Security-Policy | Medium | The browser cannot restrict which resources are loaded; there is no basic defence against XSS and content injection. Missing on ALL 2 scanned unique pages. |
+| Critical security header missing: X-Frame-Options | Medium | The page can be embedded in another site’s iframe; users can be deceived via clickjacking. Missing on ALL 2 scanned unique pages. |
 | Additional headers missing (Strict-Transport-Security, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection) | Medium | Defence in depth is weak. (missing on 2/2 pages) |
 
 ## DNS & Email Security
