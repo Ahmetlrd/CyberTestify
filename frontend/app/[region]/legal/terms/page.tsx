@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Terms &amp; Conditions — CyberTestify',
   description: 'Terms and conditions for the CyberTestify automated security pre-assessment service.',
   alternates: { canonical: '/en/legal/terms' },
-  robots: { index: false, follow: true },
+  robots: { index: true, follow: true },
 };
 
 // (United Kingdom) /en only — other regions do not have this slug.

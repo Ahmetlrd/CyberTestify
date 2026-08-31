@@ -397,23 +397,29 @@ export async function sendReportReady(orderId: string, accessSecret: string): Pr
       ? `<p>Ihr Bericht <strong>${esc(o.package.displayName)}</strong> für <strong>${esc(o.domain.hostname)}</strong> ist fertig.</p>
       <p style="color:#3a4a47">Der Bericht ist zu Ihrer Sicherheit verschlüsselt. Nach der Anmeldung im Panel müssen Sie beim Herunterladen den folgenden <strong>Zugangscode</strong> eingeben:</p>
       <p style="margin:14px 0;padding:14px 16px;background:#f2f7f5;border:1px dashed #1C6B60;border-radius:10px;text-align:center">
-        <span style="font-size:12px;color:#8a9794;display:block;margin-bottom:4px">Ihr Bericht-Zugangscode</span>
-        <span style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;font-weight:800;letter-spacing:1px;color:#123F3A">${esc(accessSecret)}</span>
+        <span style="font-size:12px;color:#8a9794;display:block;margin-bottom:8px">📋 Ihr Bericht-Zugangscode</span>
+        <span style="display:inline-block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;font-weight:800;letter-spacing:1px;color:#123F3A;background:#ffffff;border:1px solid #d7e3df;border-radius:8px;padding:10px 14px;user-select:all;-webkit-user-select:all;-moz-user-select:all">${esc(accessSecret)}</span>
+      
+        <span style="font-size:11px;color:#8a9794;display:block;margin-top:8px">Zum Kopieren auf den Code tippen und gedrückt halten.</span>
       </p>
       <p style="color:#8a9794;font-size:12px">Teilen Sie diesen Code mit niemandem. Er wird nur für den Zugriff auf diesen Bericht benötigt.</p>`
       : lang === 'en'
       ? `<p>Your <strong>${esc(o.package.displayName)}</strong> report for <strong>${esc(o.domain.hostname)}</strong> is ready.</p>
       <p style="color:#3a4a47">For your security, the report is encrypted. After signing in to your dashboard, you will need to enter the following <strong>access code</strong> when downloading the report:</p>
       <p style="margin:14px 0;padding:14px 16px;background:#f2f7f5;border:1px dashed #1C6B60;border-radius:10px;text-align:center">
-        <span style="font-size:12px;color:#8a9794;display:block;margin-bottom:4px">Your report access code</span>
-        <span style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;font-weight:800;letter-spacing:1px;color:#123F3A">${esc(accessSecret)}</span>
+        <span style="font-size:12px;color:#8a9794;display:block;margin-bottom:8px">📋 Your report access code</span>
+        <span style="display:inline-block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;font-weight:800;letter-spacing:1px;color:#123F3A;background:#ffffff;border:1px solid #d7e3df;border-radius:8px;padding:10px 14px;user-select:all;-webkit-user-select:all;-moz-user-select:all">${esc(accessSecret)}</span>
+      
+        <span style="font-size:11px;color:#8a9794;display:block;margin-top:8px">Tap and hold the code to copy it.</span>
       </p>
       <p style="color:#8a9794;font-size:12px">Do not share this code with anyone. It is only needed to access this report.</p>`
       : `<p><strong>${esc(o.domain.hostname)}</strong> için <strong>${esc(o.package.displayName)}</strong> raporunuz hazır.</p>
       <p style="color:#3a4a47">Rapor güvenliğiniz için şifrelidir. Panele giriş yaptıktan sonra raporu indirirken aşağıdaki <strong>erişim şifresini</strong> girmeniz gerekir:</p>
       <p style="margin:14px 0;padding:14px 16px;background:#f2f7f5;border:1px dashed #1C6B60;border-radius:10px;text-align:center">
-        <span style="font-size:12px;color:#8a9794;display:block;margin-bottom:4px">Rapor erişim şifreniz</span>
-        <span style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;font-weight:800;letter-spacing:1px;color:#123F3A">${esc(accessSecret)}</span>
+        <span style="font-size:12px;color:#8a9794;display:block;margin-bottom:8px">📋 Rapor erişim şifreniz</span>
+        <span style="display:inline-block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:20px;font-weight:800;letter-spacing:1px;color:#123F3A;background:#ffffff;border:1px solid #d7e3df;border-radius:8px;padding:10px 14px;user-select:all;-webkit-user-select:all;-moz-user-select:all">${esc(accessSecret)}</span>
+      
+        <span style="font-size:11px;color:#8a9794;display:block;margin-top:8px">Kopyalamak için kodun üzerine uzun basın.</span>
       </p>
       <p style="color:#8a9794;font-size:12px">Bu şifreyi kimseyle paylaşmayın. Yalnızca bu rapora erişim için gereklidir.</p>`;
     const html = layout({ lang, heading: lang === 'de' ? 'Ihr Bericht ist fertig' : lang === 'en' ? 'Your report is ready' : 'Raporunuz hazır', bodyHtml: body, cta: { label: lang === 'de' ? 'Bericht ansehen' : lang === 'en' ? 'View report' : 'Raporu görüntüle', url: `${config.frontendUrl}/dashboard/${o.id}` } });

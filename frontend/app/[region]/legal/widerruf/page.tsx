@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Widerrufsbelehrung — CyberTestify',
   description: 'Widerrufsbelehrung und Erstattungsregelungen von CyberTestify.',
   alternates: { canonical: '/de/legal/widerruf' },
-  robots: { index: false, follow: true },
+  robots: { index: true, follow: true },
 };
 
 // (Deutschland) nur /de — andere Regionen haben diesen Slug nicht.

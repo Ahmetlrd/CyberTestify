@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Business Information — CyberTestify',
   description: 'Provider and business information for CyberTestify (UK/EU customers).',
   alternates: { canonical: '/en/legal/business-info' },
-  robots: { index: false, follow: true },
+  robots: { index: true, follow: true },
 };
 
 // (United Kingdom) /en only — other regions do not have this slug.

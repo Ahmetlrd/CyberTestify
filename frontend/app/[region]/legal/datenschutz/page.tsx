@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Datenschutzerklärung — CyberTestify',
   description: 'Datenschutzerklärung von CyberTestify nach DSGVO.',
   alternates: { canonical: '/de/legal/datenschutz' },
-  robots: { index: false, follow: true },
+  robots: { index: true, follow: true },
 };
 
 // (Deutschland) nur /de — andere Regionen haben diesen Slug nicht.

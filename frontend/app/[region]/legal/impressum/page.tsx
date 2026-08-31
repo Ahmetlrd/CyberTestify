@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Impressum — CyberTestify',
   description: 'Angaben gemäß § 5 TMG für CyberTestify.',
   alternates: { canonical: '/de/legal/impressum' },
-  robots: { index: false, follow: true },
+  robots: { index: true, follow: true },
 };
 
 // (Deutschland) nur /de — andere Regionen haben diesen Slug nicht.

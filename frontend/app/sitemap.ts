@@ -52,12 +52,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
   );
 
-  // (SEO) Hukuki sayfalar — YALNIZ /tr indekslenebilir (kendi canonical'ıyla). /de ve /en hukuki
-  // sayfaları noindex olduğu için sitemap'e ALINMAZ. TR hukuki ≠ DE/EN hukuki (farklı belge) → hreflang yok.
-  const legalSlugs = ['kullanim-kosullari', 'gizlilik', 'kvkk-aydinlatma', 'cerez', 'mesafeli-satis', 'on-bilgilendirme', 'iptal-iade', 'sorumluluk-reddi'];
-  const legalRoutes: MetadataRoute.Sitemap = legalSlugs.map((slug) => ({
-    url: `${SITE}/tr/legal/${slug}`, lastModified: now, changeFrequency: 'yearly', priority: 0.3,
-  }));
+  // (SEO) Hukuki sayfalar — her bölge KENDİ belge setiyle. Eskiden /de ve /en taslak+noindex
+  // olduğu için sitemap'e alınmıyordu; artık yayında ve indekslenebilir → eklendiler.
+  // TR ≠ DE ≠ EN hukuki belgeler FARKLI dokümanlardır (farklı slug, farklı hukuk) → hreflang YOK.
+  const LEGAL_BY_REGION: Record<string, string[]> = {
+    tr: ['kullanim-kosullari', 'gizlilik', 'kvkk-aydinlatma', 'cerez', 'mesafeli-satis', 'on-bilgilendirme', 'iptal-iade', 'sorumluluk-reddi'],
+    de: ['impressum', 'datenschutz', 'agb', 'widerruf'],
+    en: ['business-info', 'privacy', 'terms', 'cancellation'],
+  };
+  const legalRoutes: MetadataRoute.Sitemap = Object.entries(LEGAL_BY_REGION).flatMap(([lang, slugs]) =>
+    slugs.map((slug) => ({
+      url: `${SITE}/${lang}/legal/${slug}`, lastModified: now, changeFrequency: 'yearly' as const, priority: 0.3,
+    })),
+  );
+
+  // (Otonom AI Red Team) /tr-only ürün sayfası — artık indekslenebilir, sitemap'e alındı.
+  const otonomRoutes: MetadataRoute.Sitemap = [
+    { url: `${SITE}/tr/otonom-red-team`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+  ];
 
   // Blog yazıları — her dil KENDİ slug'ıyla (çeviriler farklı slug taşıdığından yazı-bazlı hreflang
   // VERİLMEZ; kırık hreflang'dan kaçınmak için yazılar kendi diliyle, alternates'sız listelenir).
@@ -73,6 +85,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...structural,
     ...corporate,
     ...legalRoutes,
+    ...otonomRoutes,
     ...blogRoutes('tr', posts),
     ...blogRoutes('de', dePosts),
     ...blogRoutes('en', enPosts),

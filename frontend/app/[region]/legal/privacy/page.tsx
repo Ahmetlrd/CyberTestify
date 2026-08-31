@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Privacy Policy — CyberTestify',
   description: 'How CyberTestify collects, uses and protects personal data under UK GDPR and EU GDPR.',
   alternates: { canonical: '/en/legal/privacy' },
-  robots: { index: false, follow: true },
+  robots: { index: true, follow: true },
 };
 
 // (United Kingdom) /en only — other regions do not have this slug.

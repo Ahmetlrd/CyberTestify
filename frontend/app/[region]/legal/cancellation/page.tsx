@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Cancellation &amp; Refund Policy — CyberTestify',
   description: 'Cancellation and refund policy for CyberTestify under the Consumer Contracts Regulations 2013.',
   alternates: { canonical: '/en/legal/cancellation' },
-  robots: { index: false, follow: true },
+  robots: { index: true, follow: true },
 };
 
 // (United Kingdom) /en only — other regions do not have this slug.

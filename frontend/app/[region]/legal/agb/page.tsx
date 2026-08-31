@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Allgemeine Geschäftsbedingungen — CyberTestify',
   description: 'AGB von CyberTestify für den automatisierten Sicherheits-Pre-Assessment-Service.',
   alternates: { canonical: '/de/legal/agb' },
-  robots: { index: false, follow: true },
+  robots: { index: true, follow: true },
 };
 
 // (Deutschland) nur /de — andere Regionen haben diesen Slug nicht.

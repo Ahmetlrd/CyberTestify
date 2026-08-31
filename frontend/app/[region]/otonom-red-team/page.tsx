@@ -19,7 +19,7 @@ export function generateMetadata({ params }: { params: { region: string } }): Me
     title: d.metaTitle,
     description: d.metaDesc,
     alternates: { canonical: url },
-    robots: { index: false, follow: false },
+    robots: { index: true, follow: true },
   };
 }
 
