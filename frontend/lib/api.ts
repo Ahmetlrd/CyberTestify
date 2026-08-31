@@ -100,6 +100,9 @@ async function request<T>(path: string, options: RequestInit & { timeoutMs?: num
       signal: ctrl?.signal,
       headers: {
         'Content-Type': 'application/json',
+        // (ÇOK-DİLLİ) Backend hata mesajları doğru dilde dönsün. GET uçlarının gövdesi olmadığından
+        // sunucu dili gövdeden okuyamıyordu (hep 'tr'ye düşüyordu) → bölgeyi başlıkla gönderiyoruz.
+        'X-Region': apiLang(),
         ...authHeaders(),
         ...init.headers,
       },

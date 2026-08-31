@@ -13,7 +13,16 @@ import { verifyTurnstile } from '../services/turnstile.js';
 export const authRouter = Router();
 
 // (çok-bölge) kullanıcıya dönen hata metni bölgeye göre — tr/de/en.
-const aLoc = (req: { body?: any }): string => { const r = typeof req.body?.region === 'string' ? req.body.region : 'tr'; return r === 'de' ? 'de' : r === 'en' ? 'en' : 'tr'; };
+// (DUZELTME) Onceden YALNIZ req.body.region okunuyordu; GET uclarinin (ornek: /auth/me) govdesi
+// olmadigi icin dil HER ZAMAN 'tr'ye dusuyor, /de /en kullanicisina Turkce hata gidiyordu.
+// Sirasiyla: govde -> query -> X-Region basligi (istemci her istekte gonderir) -> Accept-Language.
+const aLoc = (req: { body?: any; query?: any; headers?: any }): string => {
+  const pick = (v: unknown) => (typeof v === 'string' && v ? v : '');
+  const hdr = req.headers ? pick(req.headers['x-region']) : '';
+  const al = req.headers ? pick(req.headers['accept-language']).slice(0, 2).toLowerCase() : '';
+  const r = pick(req.body?.region) || pick(req.query?.region) || hdr || al || 'tr';
+  return r === 'de' ? 'de' : r === 'en' ? 'en' : 'tr';
+};
 const M = (loc: string, tr: string, de: string, en: string): string => (loc === 'de' ? de : loc === 'en' ? en : tr);
 
 // E-posta dogrulama kodu uretir (6 hane), hash'ini + 15dk gecerlilik kaydeder ve mail atar.
@@ -153,7 +162,10 @@ authRouter.post('/reset-password', async (req, res) => {
 
 authRouter.get('/me', requireAuth, async (req, res) => {
   const c = await prisma.customer.findUnique({ where: { id: req.customerId! }, select: { email: true, emailVerified: true } });
-  if (!c) return res.status(404).json({ error: M(aLoc(req), 'Hesap bulunamadı.', 'Konto nicht gefunden.', 'Account not found.') });
+  // (DUZELTME) Token gecerli ama hesap silinmis/yok = OLU OTURUM. 404 dondurulunce istemci bunu
+  // "kimlik hatasi" saymiyor, olu token'i SILMIYOR ve kullanici /profile'da kilitli kaliyordu.
+  // 401 dogru semantik: api.ts token'i temizler, kullanici giris ekranina duser.
+  if (!c) return res.status(401).json({ sessionInvalid: true, error: M(aLoc(req), 'Oturumunuz artık geçerli değil. Lütfen tekrar giriş yapın.', 'Ihre Sitzung ist nicht mehr gültig. Bitte melden Sie sich erneut an.', 'Your session is no longer valid. Please sign in again.') });
   res.json(c);
 });
 
@@ -163,7 +175,10 @@ authRouter.post('/verify-email', requireAuth, async (req, res) => {
   const parsed = codeSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: M(aLoc(req), 'Kod 6 haneli olmalıdır.', 'Der Code muss 6-stellig sein.', 'The code must be 6 digits.') });
   const c = await prisma.customer.findUnique({ where: { id: req.customerId! } });
-  if (!c) return res.status(404).json({ error: M(aLoc(req), 'Hesap bulunamadı.', 'Konto nicht gefunden.', 'Account not found.') });
+  // (DUZELTME) Token gecerli ama hesap silinmis/yok = OLU OTURUM. 404 dondurulunce istemci bunu
+  // "kimlik hatasi" saymiyor, olu token'i SILMIYOR ve kullanici /profile'da kilitli kaliyordu.
+  // 401 dogru semantik: api.ts token'i temizler, kullanici giris ekranina duser.
+  if (!c) return res.status(401).json({ sessionInvalid: true, error: M(aLoc(req), 'Oturumunuz artık geçerli değil. Lütfen tekrar giriş yapın.', 'Ihre Sitzung ist nicht mehr gültig. Bitte melden Sie sich erneut an.', 'Your session is no longer valid. Please sign in again.') });
   if (c.emailVerified) return res.json({ ok: true, emailVerified: true }); // zaten dogrulanmis
   if (!c.emailVerifyCodeHash || !c.emailVerifyCodeExpiry || c.emailVerifyCodeExpiry < new Date()) {
     return res.status(400).json({ error: M(aLoc(req), 'Kodun süresi dolmuş. Lütfen yeni kod isteyin.', 'Der Code ist abgelaufen. Bitte fordern Sie einen neuen Code an.', 'The code has expired. Please request a new code.') });
@@ -180,7 +195,10 @@ authRouter.post('/verify-email', requireAuth, async (req, res) => {
 
 authRouter.post('/resend-verification', requireAuth, async (req, res) => {
   const c = await prisma.customer.findUnique({ where: { id: req.customerId! }, select: { id: true, email: true, emailVerified: true } });
-  if (!c) return res.status(404).json({ error: M(aLoc(req), 'Hesap bulunamadı.', 'Konto nicht gefunden.', 'Account not found.') });
+  // (DUZELTME) Token gecerli ama hesap silinmis/yok = OLU OTURUM. 404 dondurulunce istemci bunu
+  // "kimlik hatasi" saymiyor, olu token'i SILMIYOR ve kullanici /profile'da kilitli kaliyordu.
+  // 401 dogru semantik: api.ts token'i temizler, kullanici giris ekranina duser.
+  if (!c) return res.status(401).json({ sessionInvalid: true, error: M(aLoc(req), 'Oturumunuz artık geçerli değil. Lütfen tekrar giriş yapın.', 'Ihre Sitzung ist nicht mehr gültig. Bitte melden Sie sich erneut an.', 'Your session is no longer valid. Please sign in again.') });
   if (c.emailVerified) return res.json({ ok: true, emailVerified: true });
   await issueEmailVerification(c.id, c.email);
   res.json({ ok: true });
