@@ -9,9 +9,12 @@ import Link from 'next/link';
 export function EnLegalArticle({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <main className="container-page max-w-3xl py-12" style={{ lineHeight: 1.7 }}>
-      <p className="text-sm">
-        <Link href="/en" className="text-accent-600 hover:underline">← Home</Link>
-      </p>
+      {/* (UI) Geri butonu: eskiden minik düz metin bağlantısıydı; artık belirgin,
+          ok animasyonlu buton (site btn-outline sistemiyle tutarlı). */}
+      <Link href="/en" className="btn-outline group mb-7 shadow-sm hover:bg-brand-50">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="transition-transform group-hover:-translate-x-0.5"><path d="M19 12H5M11 18l-6-6 6-6" /></svg>
+        Home
+      </Link>
       <h1 className="text-2xl font-extrabold text-brand">{title}</h1>
       <div
         role="note"
