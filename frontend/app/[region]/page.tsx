@@ -203,19 +203,24 @@ function Hero({ d, region }: { d: Dict; region: RegionConfig }) {
           <p className="animate-fade-up mx-auto mt-6 max-w-xl text-lg leading-relaxed text-white/75">
             {d.hero.subtitle}
           </p>
-          <div className="animate-fade-up mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link href="/register" className="btn-primary w-full sm:w-auto">
-              {d.hero.ctaPrimary}
-            </Link>
-            <Link href="#nasil-calisir" className="btn w-full border border-white/25 text-white hover:bg-white/10 sm:w-auto">
-              {d.hero.ctaSecondary}
-            </Link>
-          </div>
         </div>
 
-        {/* ÜCRETSİZ ANLIK ÖN-TARAMA — landing'in birincil dönüşüm kancası (pasif, gerçek, üç-durum). */}
-        <div className="animate-fade-up mx-auto mt-12 max-w-2xl">
+        {/* ÜCRETSİZ ANLIK ÖN-TARAMA — landing'in BİRİNCİL dönüşüm kancası (pasif, gerçek, üç-durum).
+            Manşetin HEMEN ALTINDA: ziyaretçinin ilk gördüğü ve hemen yapabileceği şey bu (sürtünmesiz,
+            kayıt istemez). Eskiden CTA butonlarının ALTINDAydı ve katlamanın dışına düşüyordu. */}
+        <div className="animate-fade-up mx-auto mt-10 max-w-2xl">
           <InstantScan lang={scanLang} regionCode={region.code} />
+        </div>
+
+        {/* İKİNCİL aksiyonlar — tarama kutusuyla YARIŞMASIN diye dolgulu birincil buton kullanılmaz:
+            kayıt hafif çerçeveli, "nasıl çalışır" düz bağlantı. Böylece tek net birincil aksiyon kalır. */}
+        <div className="animate-fade-up mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-5">
+          <Link href="/register" className="btn w-full border border-white/30 text-white hover:bg-white/10 sm:w-auto">
+            {d.hero.ctaPrimary}
+          </Link>
+          <Link href="#nasil-calisir" className="text-sm font-semibold text-white/75 underline underline-offset-4 transition hover:text-white">
+            {d.hero.ctaSecondary}
+          </Link>
         </div>
 
         <div className="mx-auto mt-12 flex max-w-2xl flex-wrap items-center justify-center gap-3">
