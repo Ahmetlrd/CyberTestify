@@ -5,12 +5,13 @@ import { getDict, formatMoney } from '../../../config/i18n';
 import { JsonLd } from '../../../components/JsonLd';
 import { renderEmphasis, stripEmphasis } from '../../../lib/richText';
 import { PromoCodeChip } from '../../../components/PromoCodeChip';
+import { PackageCompare, type CompareCol } from '../../../components/packages/PackageCompare';
 
 type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean; bundleOnly?: boolean; bundleName?: string | null };
 type Bundle = {
   key: string; displayName: string; description: string; discountPct: number;
   members: Array<{ key: string; displayName: string }>;
-  selectable: boolean; selectableModules: Array<{ key: string; displayName: string }> | null;
+  selectable: boolean; selectableModules: Array<{ key: string; displayName: string }> | null; category?: string;
   originalMinorUnit: number; amountMinorUnit: number; currency: string; comingSoon?: boolean; popular?: boolean; flagship?: boolean; contactOnly?: boolean;
 };
 
@@ -91,6 +92,91 @@ export default async function PackagesPage({ params }: { params: { region: strin
   for (const b of bundles) if (!b.comingSoon) sampleItems.push({ key: b.key, displayName: b.displayName });
   // Faz 5b'ye kadar fiyatlar yalnızca TRY tabanlı; TR dışı bölgelerde gösterge niteliğinde.
   const indicative = region.currency !== 'TRY';
+
+  // ===== (KARŞILAŞTIRMA) Paketleri BİRBİRİYLE kıyaslayan tablo + sihirbaz verisi =====
+  // TÜM değerler GERÇEK tanımlardan: fiyat (API), üye kontrol sayısı, kategori, örnek rapor varlığı
+  // (sampleItems ile AYNI kural). Rakip ürün/şirket adı GEÇMEZ — yalnız kendi paketlerimiz kıyaslanır.
+  // Süre satırı BİLEREK YOK: paket tanımlarında paket-bazlı süre verisi bulunmuyor, uydurulmaz.
+  const kindLabel = (cat?: string) =>
+    cat === 'active-light' ? t3('Aktif-hafif doğrulama', 'Aktiv-leichte Verifikation', 'Active-light verification')
+      : cat === 'compliance' ? t3('Uyum ön-değerlendirmesi', 'Compliance-Vorabbewertung', 'Compliance pre-assessment')
+        : t3('Pasif gözlem', 'Passive Beobachtung', 'Passive observation');
+  // Kısa kapsam + "kime uygun": gerçek paket açıklamalarından YOĞUNLAŞTIRILDI (yeni iddia eklenmedi).
+  const META: Record<string, { scope: string; fit: string }> = {
+    basit_tarama: {
+      scope: t3('HTTP güvenlik başlıkları, SSL/TLS, sunucu & teknoloji ifşası', 'HTTP-Sicherheits-Header, SSL/TLS, Server- & Technologie-Offenlegung', 'HTTP security headers, SSL/TLS, server & technology exposure'),
+      fit: t3('İlk kez tarama yaptıracaklar', 'Für den ersten Scan', 'First-time scans'),
+    },
+    bundle_surface: {
+      scope: t3('SSL/TLS, güvenlik başlıkları, DNS/e-posta, CORS, CSP', 'SSL/TLS, Sicherheits-Header, DNS/E-Mail, CORS, CSP', 'SSL/TLS, security headers, DNS/email, CORS, CSP'),
+      fit: t3('Dış yüzey yapılandırmasını toplu görmek isteyenler', 'Wer die externe Konfiguration gesamthaft sehen will', 'Teams wanting the full external configuration picture'),
+    },
+    bundle_recon: {
+      scope: t3('Alt alan adı devralma, API keşfi, CMS/bilinen CVE', 'Subdomain-Übernahme, API-Discovery, CMS/bekannte CVE', 'Subdomain takeover, API discovery, CMS/known CVE'),
+      fit: t3('Saldırı yüzeyini haritalamak isteyenler', 'Wer die Angriffsfläche kartieren will', 'Teams mapping their attack surface'),
+    },
+    bundle_compliance: {
+      scope: t3('KVKK, PCI-DSS ve ISO 27001 ön-uyum kontrolleri', 'PCI-DSS- und ISO-27001-Bereitschaftsprüfungen', 'PCI-DSS and ISO 27001 readiness checks'),
+      fit: t3('Denetim öncesi hazırlık yapanlar', 'Vorbereitung vor dem Audit', 'Preparing ahead of an audit'),
+    },
+    bundle_active_verify: {
+      scope: t3('Enjeksiyon, IDOR, SSRF, dosya yükleme, iş mantığı, race, RCE (login’siz yüzey)', 'Injektion, IDOR, SSRF, Datei-Upload, Geschäftslogik, Race, RCE (ohne Login)', 'Injection, IDOR, SSRF, file upload, business logic, race, RCE (no-login surface)'),
+      fit: t3('Zafiyetin gerçekten var olduğunu kanıtlatmak isteyenler', 'Wer den Nachweis einer Schwachstelle braucht', 'Teams needing proof a weakness is real'),
+    },
+    bundle_full_pentest: {
+      scope: t3('Test hesabıyla login sonrası derin tarama + API (OWASP API Top 10)', 'Tiefer Scan nach Login mit Testkonto + API (OWASP API Top 10)', 'Deep post-login scan with a test account + API (OWASP API Top 10)'),
+      fit: t3('Kapsamlı kurumsal denetim isteyenler', 'Wer eine umfassende Unternehmensprüfung will', 'Teams wanting a comprehensive assessment'),
+    },
+  };
+  const badgeOf = (b: Bundle) =>
+    b.flagship ? t3('Amiral gemisi', 'Flaggschiff', 'Flagship') : b.popular ? t3('Popüler', 'Beliebt', 'Popular') : undefined;
+
+  const compareCols: CompareCol[] = [];
+  if (basit && !basit.comingSoon) {
+    compareCols.push({
+      key: basit.key, name: basit.displayName,
+      price: formatMoney(basit.priceMinorUnit, region),
+      kind: kindLabel('passive'),
+      checks: t3('Giriş seviyesi', 'Einstiegsniveau', 'Entry level'),
+      scope: META.basit_tarama.scope, sample: true, dnsRequired: false, experimental: false,
+      fit: META.basit_tarama.fit, href: `/order?package=${basit.key}`,
+    });
+  }
+  for (const b of bundles) {
+    if (b.comingSoon || b.contactOnly) continue;
+    const m = META[b.key];
+    compareCols.push({
+      key: b.key, name: b.displayName,
+      price: formatMoney(b.amountMinorUnit, region),
+      kind: kindLabel(b.category),
+      checks: t3(`${b.members.length} kontrol`, `${b.members.length} Prüfungen`, `${b.members.length} checks`),
+      scope: m?.scope ?? stripEmphasis(b.description).slice(0, 90),
+      sample: true,
+      // (GERÇEK KURAL) Aktif-hafif paketlerde DNS sahiplik doğrulaması ZORUNLU; pasif/uyumda değil.
+      dnsRequired: b.category === 'active-light',
+      experimental: false,
+      fit: m?.fit ?? '',
+      href: `/order?bundle=${b.key}`,
+      badge: badgeOf(b),
+    });
+  }
+  // (Otonom AI Red Team) YALNIZ /tr — sayfası /de ve /en'de 404 döndüğü için o bölgelerde sütun da yok.
+  // Değerler gerçek ürün tanımından: S1 fiyat aralığı ve tekniği (i18n otonom bölümüyle aynı).
+  const redTeamKey = tr ? 'redteam_s1' : null;
+  if (redTeamKey) {
+    compareCols.push({
+      key: redTeamKey,
+      name: 'Otonom AI Red Team · S1',
+      price: 'Karmaşıklığa göre ₺750–2.500',
+      kind: 'Otonom (deneysel)',
+      checks: 'S1 · Pasif + hafif aktif göstergeler',
+      scope: 'Otonom AI ajanı hedefi güvenli sınırlar içinde sınar; bulgular ham kanıta bağlanır.',
+      sample: false, dnsRequired: true, experimental: true,
+      fit: 'Deneysel otonom tekniği kabul edenler',
+      href: `/${region.code}/otonom-red-team`,
+      badge: 'Deneysel',
+    });
+  }
 
   // (JSON-LD) Hizmetler — Service ItemList. Fiyat "baslangic" olarak esnek ifade edilir
   // (Offer priceSpecification.minPrice + "baslangic fiyati" aciklamasi; kesin taahhut degil).
@@ -468,6 +554,59 @@ export default async function PackagesPage({ params }: { params: { region: strin
               {d.startAnyway}
             </Link>
           </p>
+        )}
+
+        {/* (KARŞILAŞTIRMA) Paket kartları KALDIRILMADI; bu bölüm EK olarak altlarına gelir. */}
+        {compareCols.length > 1 && (
+          <PackageCompare
+            cols={compareCols}
+            redTeamKey={redTeamKey}
+            labels={{
+              eyebrow: t3('Karşılaştırma', 'Vergleich', 'Comparison'),
+              title: t3('Paketleri yan yana karşılaştırın', 'Pakete nebeneinander vergleichen', 'Compare packages side by side'),
+              subtitle: t3(
+                'Hangi paketin neyi kapsadığını tek tabloda görün. Değerler paket tanımlarından gelir.',
+                'Sehen Sie in einer Tabelle, was jedes Paket abdeckt. Die Werte stammen aus den Paketdefinitionen.',
+                'See what each package covers in one table. Values come from the package definitions.'),
+              rowPrice: t3('Fiyat (KDV dahil)', 'Preis (inkl. MwSt.)', 'Price (VAT incl.)'),
+              rowKind: t3('Test türü', 'Testart', 'Test type'),
+              rowChecks: t3('Kontrol sayısı', 'Anzahl Prüfungen', 'Number of checks'),
+              rowScope: t3('Kapsam', 'Umfang', 'Scope'),
+              rowEvidence: t3('Kanıta dayalı bulgu', 'Nachweisbasierte Befunde', 'Evidence-based findings'),
+              rowSample: t3('Örnek rapor (PDF)', 'Musterbericht (PDF)', 'Sample report (PDF)'),
+              rowDns: t3('DNS sahiplik doğrulaması', 'DNS-Inhaberschaftsprüfung', 'DNS ownership verification'),
+              rowExperimental: t3('Yöntem', 'Methode', 'Method'),
+              rowFit: t3('Kime uygun', 'Für wen geeignet', 'Best suited for'),
+              yes: t3('Var', 'Ja', 'Yes'), no: t3('Yok', 'Nein', 'No'),
+              deterministic: t3('Deterministik', 'Deterministisch', 'Deterministic'),
+              experimentalTag: t3('Deneysel', 'Experimentell', 'Experimental'),
+              experimentalNote: t3(
+                'Deneysel, deterministik olmayan bir taramadır; sonuçlar koşudan koşuya değişebilir ve resmî pentest/denetim yerine geçmez.',
+                'Ein experimenteller, nicht deterministischer Scan; die Ergebnisse können von Lauf zu Lauf variieren und ersetzen keinen offiziellen Pentest bzw. kein Audit.',
+                'An experimental, non-deterministic scan; results can vary between runs and it does not replace a formal pentest or audit.'),
+              view: t3('İncele', 'Ansehen', 'View'),
+              scrollHint: t3('Tabloyu yandan kaydırabilirsiniz.', 'Sie können die Tabelle seitlich scrollen.', 'You can scroll the table sideways.'),
+              wizTitle: t3('Size uygun paketi bulun', 'Finden Sie das passende Paket', 'Find the right package'),
+              wizIntro: t3('Üç soru; yönlendirme amaçlıdır, kesin bir taahhüt değildir.', 'Drei Fragen; dient der Orientierung, keine verbindliche Zusage.', 'Three questions; guidance only, not a commitment.'),
+              wizQ1: t3('İlk kez tarama yaptırıyor musunuz?', 'Ist dies Ihr erster Scan?', 'Is this your first scan?'),
+              wizQ2: t3('Önceliğiniz nedir?', 'Was ist Ihre Priorität?', 'What is your priority?'),
+              wizQ3: t3('Deneysel/otonom teknikleri kabul eder misiniz?', 'Akzeptieren Sie experimentelle/autonome Techniken?', 'Do you accept experimental/autonomous techniques?'),
+              wizFirstYes: t3('Evet', 'Ja', 'Yes'), wizFirstNo: t3('Hayır', 'Nein', 'No'),
+              wizExpYes: t3('Evet', 'Ja', 'Yes'), wizExpNo: t3('Hayır', 'Nein', 'No'),
+              wizGoals: [
+                { id: 'quick', label: t3('Hızlı genel kontrol', 'Schnelle Grundprüfung', 'Quick general check') },
+                { id: 'surface', label: t3('Dış yüzey yapılandırması', 'Externe Konfiguration', 'External configuration') },
+                { id: 'discovery', label: t3('Saldırı yüzeyi keşfi', 'Angriffsflächen-Discovery', 'Attack surface discovery') },
+                { id: 'compliance', label: t3('Uyum/denetim hazırlığı', 'Compliance-/Audit-Vorbereitung', 'Compliance/audit readiness') },
+                { id: 'proof', label: t3('Zafiyet kanıtı', 'Schwachstellen-Nachweis', 'Proof of a weakness') },
+                { id: 'deep', label: t3('Login sonrası derin denetim', 'Tiefe Prüfung nach Login', 'Deep post-login assessment') },
+              ],
+              wizResult: t3('Önerilen paket', 'Empfohlenes Paket', 'Recommended package'),
+              wizAlso: t3('Ayrıca değerlendirebilirsiniz:', 'Ebenfalls möglich:', 'You may also consider:'),
+              wizReset: t3('Yeniden başla', 'Neu starten', 'Start over'),
+              wizPick: t3('Bu paketi seç', 'Dieses Paket wählen', 'Choose this package'),
+            }}
+          />
         )}
 
         {/* ORNEK RAPORLAR — PAKET/BUNDLE bazinda TEK ornek PDF (tek tek kontrol DEGIL). */}
