@@ -88,6 +88,21 @@ export function renderContentHtml(contentMd: string): string {
   return md.render(contentMd || '');
 }
 
+// --- (TR KALITE KAPISI) Eksik Turkce karakter uyarisi ------------------------
+// KOK NEDEN: slugify YALNIZ slug'a uygulanir; baslik/aciklama oldugu gibi kaydedilir.
+// Yani gecmiste bozulan makaleler KOD hatasi degil, KAYNAK METNIN ASCII yazilmasiydi
+// ("Guvenligi", "Basliklari", "Yapilandirma"...). Slug'in ASCII olmasi DOGRU ve korunur;
+// bozulmamasi gereken GORUNEN metindir. Bu kapi, yeni yuklemelerde ayni hatayi yakalar
+// (engellemez, admin'e UYARI dondurur) ki hatali baslik sessizce yayina girmesin.
+const TR_DEDIACRITIZED = /\b(Guvenli\w*|guvenli\w*|Basliklar\w*|basliklar\w*|Yapilandirma\w*|yapilandirma\w*|Uygulamalarinda|Sureclerinde|Edilmis|edilmis|Taramasi|taramasi|nasil|Nasil|yapilir|sizma|asiri|ifsasi|aciklar\w*|kayitlar\w*|gecirilir|loglari|yonlendirme|kapatilir|duzeltme|suren|pahali|calisir|unuttugu|Sirketler\w*|hazirlik|yuzey|degerlendirme\w*)\b/g;
+
+/** TR baslik/aciklamada diyakritigi dusmus kelimeleri dondurur (bos dizi = temiz). */
+export function findDediacritizedTr(title: string, description: string): string[] {
+  const hits = new Set<string>();
+  for (const v of [title, description]) for (const m of String(v || '').matchAll(TR_DEDIACRITIZED)) hits.add(m[0]);
+  return [...hits];
+}
+
 // --- Toplu taslak olusturma ---------------------------------------------------
 export async function createDraftsFromBulk(text: string, lang = 'tr'): Promise<{
   created: Array<{ title: string; slug: string }>;
@@ -95,6 +110,14 @@ export async function createDraftsFromBulk(text: string, lang = 'tr'): Promise<{
   errors: string[];
 }> {
   const { articles, errors } = parseArticles(text);
+  // (TR KALITE KAPISI) Eksik Turkce karakterli baslik/aciklama sessizce yayina girmesin.
+  // Engellemez; admin ekranina UYARI olarak duser (slug ASCII kalmaya devam eder).
+  if (lang === 'tr') {
+    for (const a of articles) {
+      const hits = findDediacritizedTr(a.title, a.description);
+      if (hits.length) errors.push(`UYARI — "${a.title}": eksik Türkçe karakter olabilir (${hits.slice(0, 6).join(', ')}). Başlık/açıklamayı düzeltin; slug ASCII kalmalı.`);
+    }
+  }
   const conflicts: string[] = [];
   const created: Array<{ title: string; slug: string }> = [];
   const seenInBatch = new Set<string>();
