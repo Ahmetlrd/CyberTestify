@@ -310,6 +310,16 @@ function normSev(s: string): Sev | null {
   if (/d[üu][şs][üu]k|low|niedrig/.test(x)) return 'low';
   return null;
 }
+// (TUTARLILIK) Taksonomi etiketi TÜR bazlıdır; aynı türden birden çok örnek (ör. 3 farklı çerez)
+// master tabloda BİREBİR aynı başlıkla görünüyordu. Ham satır adında `backtick` içinde SPESİFİK
+// tanımlayıcı (çerez adı, yol, politika) varsa onu döndürür → başlık ayırt edilebilir olur ve
+// de-dup anahtarı doğru ayrışır. YENİ VERİ TOPLANMAZ; mevcut satırdaki bilgi kullanılır.
+function rowDiscriminator(rawCell: string): string {
+  const m = rawCell.match(/`([^`]{1,48})`/);
+  const id = m?.[1]?.trim() ?? '';
+  return id;
+}
+
 function stripMd(s: string): string {
   // (BÖLÜM A) Altçizgi düzeltmesi: `_` YALNIZ gerçek markdown italik işareti (kelime-sınırlı `_söz_`)
   // iken temizlenir. Teknik terim/değişken içindeki intra-word `_` (ör. expose_php, X_Frame_Options,
@@ -414,7 +424,12 @@ export function parseFindings(md: string, locale: 'tr' | 'en' | 'de'): { rows: F
       // yabancı kelimeden (XSS) etkilenmez; yalnız hiç sınıflanamayan satırlar kanıta düşer.
       const fullRowText = c.filter((_, idx) => idx !== sevCol && idx !== confCol).map(stripMd).join(' ');
       const info = lookupFinding(classifyText, locale) ?? lookupFinding(curSection, locale) ?? lookupFinding(fullRowText, locale);
-      const title = info ? info.label : (cleanTitle(rawName) || cleanTitle(curSection) || rawName);
+      const discrim = rowDiscriminator(c[nameCol] ?? c[titleCol] ?? '');
+      const labelWithId =
+        info && discrim && !info.label.toLocaleLowerCase('tr').includes(discrim.toLocaleLowerCase('tr'))
+          ? `${info.label} — ${discrim}`
+          : info?.label;
+      const title = labelWithId ?? (cleanTitle(rawName) || cleanTitle(curSection) || rawName);
       // Uç nokta: entry kolonundan (nameCol'dan farklıysa). "GET /rest/..." gibi.
       let endpoint = endpointCol !== -1 && endpointCol !== nameCol ? stripMd(c[endpointCol] ?? '') : '';
       // (Faz 4 düzeltme — SALT ETİKET) Uç-nokta kolonu TEK anlamlı kolonsa (endpointCol===nameCol, ör.
@@ -436,7 +451,7 @@ export function parseFindings(md: string, locale: 'tr' | 'en' | 'de'): { rows: F
       // Açık çapraz-referanslar (API F1 BOLA/BFLA → IDOR) zaten Ciddiyet'siz not olarak render edilir,
       // BULGULAR tablosuna satır yazmaz → ikinci CT üretmez.
       const typeKey = (info ? info.type : title.toLocaleLowerCase('tr')).slice(0, 48);
-      const epKey = (endpoint || rawName || title).toLocaleLowerCase('tr').replace(/\s+/g, ' ').trim().slice(0, 60);
+      const epKey = (discrim || endpoint || '').toLocaleLowerCase('tr').replace(/\s+/g, ' ').trim().slice(0, 60);
       const key = `${typeKey}|${epKey}`;
       if (seen.has(key)) continue;
       seen.add(key);

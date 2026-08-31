@@ -357,13 +357,26 @@ export async function generateBasitReport(hostname: string, locale: string = 'tr
       ` Missing on ${n === pageCount ? `ALL ${pageCount}` : `${n} of ${pageCount}`} scanned unique pages.`,
     );
   };
-  const critList: string[] = missingSec.filter((h) => h === 'Content-Security-Policy' || h === 'X-Frame-Options');
-  if (critList.length) {
-    const spaNote = isSpa && critList.includes('Content-Security-Policy') ? t(' Site JavaScript ağırlıklı bir SPA olduğundan CSP eksikliği XSS etkisini büyütür; önceliklendirilmesi önerilir.', ' Da die Website eine JavaScript-lastige SPA ist, vergrößert das Fehlen einer CSP die XSS-Auswirkung; eine Priorisierung wird empfohlen.', ' As the site is a JavaScript-heavy SPA, the absence of a CSP amplifies the XSS impact; prioritisation is recommended.') : '';
-    risks.push({ bulgu: t(`Kritik güvenlik başlıkları eksik (${critList.join(', ')})`, `Kritische Sicherheits-Header fehlen (${critList.join(', ')})`, `Critical security headers missing (${critList.join(', ')})`), sev: 'Orta', aciklama: t(`XSS ve/veya clickjacking saldırılarına karşı tarayıcı seviyesinde savunma bulunmuyor.`, `Auf Browser-Ebene besteht keine Verteidigung gegen XSS- und/oder Clickjacking-Angriffe.`, `There is no browser-level defence against XSS and/or clickjacking attacks.`) + covFor(critList) + spaNote });
+  // (TUTARLILIK — TEK KAYNAK) Eksik başlıklar ESKİDEN iki GRUPLU satıra sıkıştırılıyordu
+  // (kritik / ek). Özet metni ise başlıkları TEK TEK sayıyordu → "3/6 eksik" derken Master
+  // Tablo'da 2 satır çıkıyor, Referrer-Policy CT-ID alamıyordu. Artık HER eksik başlık KENDİ
+  // satırını (dolayısıyla kendi CT-ID'sini) alır: özet sayısı = master satır sayısı, birebir.
+  // Açıklama, o başlığın HEADER_ROWS'taki MEVCUT absentNote metnidir (yeni metin üretilmedi).
+  for (const h of missingSec) {
+    const row = HEADER_ROWS.find((r) => r.header === h);
+    const isCrit = h === 'Content-Security-Policy' || h === 'X-Frame-Options';
+    const spaNote = isSpa && h === 'Content-Security-Policy'
+      ? t(' Site JavaScript ağırlıklı bir SPA olduğundan CSP eksikliği XSS etkisini büyütür; önceliklendirilmesi önerilir.', ' Da die Website eine JavaScript-lastige SPA ist, vergrößert das Fehlen einer CSP die XSS-Auswirkung; eine Priorisierung wird empfohlen.', ' As the site is a JavaScript-heavy SPA, the absence of a CSP amplifies the XSS impact; prioritisation is recommended.')
+      : '';
+    const detail = row ? t(row.absentNote, row.absentDe, row.absentEn) : '';
+    risks.push({
+      bulgu: t(`${isCrit ? 'Kritik güvenlik başlığı eksik' : 'Güvenlik başlığı eksik'}: ${h}`,
+               `${isCrit ? 'Kritischer Sicherheits-Header fehlt' : 'Sicherheits-Header fehlt'}: ${h}`,
+               `${isCrit ? 'Critical security header missing' : 'Security header missing'}: ${h}`),
+      sev: 'Orta',
+      aciklama: detail + covFor([h]) + spaNote,
+    });
   }
-  const otherMissing = missingSec.filter((h) => !critList.includes(h));
-  if (otherMissing.length) risks.push({ bulgu: t(`Ek güvenlik başlıkları eksik (${otherMissing.join(', ')})`, `Weitere Sicherheits-Header fehlen (${otherMissing.join(', ')})`, `Additional security headers missing (${otherMissing.join(', ')})`), sev: 'Orta', aciklama: t(`Savunma derinliği zayıf; tek tek düşük etkili olsa da birlikte saldırı yüzeyini genişletir.`, `Die Verteidigungstiefe ist schwach; einzeln geringfügig, vergrößern sie zusammen die Angriffsfläche.`, `Defence-in-depth is weak; individually low-impact, but together they widen the attack surface.`) + covFor(otherMissing) });
   // (BÖLÜM 1) SAYFAYA-ÖZGÜ tutarsızlık: ana sayfada MEVCUT bir kritik başlık bazı alt sayfalarda EKSİK.
   if (perPageMissing.length) risks.push({ bulgu: t('Sayfaya özgü güvenlik başlığı tutarsızlığı', 'Seitenspezifische Inkonsistenz der Sicherheits-Header', 'Page-specific security header inconsistency'), sev: 'Orta', aciklama: t(`Ana sayfada mevcut olan bir/birkaç kritik başlık bazı iç sayfalarda gönderilmiyor: ${perPageMissing.join(', ')}. Başlık politikası tüm yollarda tutarlı uygulanmalı (ör. sunucu bloğu genelinde, tek uç noktada değil).`, `Ein oder mehrere auf der Startseite vorhandene kritische Header werden auf einigen Unterseiten nicht gesendet: ${perPageMissing.join(', ')}. Die Header-Richtlinie sollte auf allen Pfaden konsistent angewendet werden (z. B. serverweit, nicht nur an einem Endpunkt).`, `One or more critical headers present on the home page are not sent on some inner pages: ${perPageMissing.join(', ')}. The header policy should be applied consistently across all paths (e.g. server-wide, not at a single endpoint).`) });
   if (disclosure.length) risks.push({ bulgu: t('Üçüncü taraf servis kimlikleri', 'Kennungen von Drittanbieterdiensten', 'Third-party service identifiers'), sev: 'Bilgilendirme', aciklama: t(`Ana sayfada ${disclosure.join('; ')} açıkça görülüyor. İstismar edilebilir açık değildir; yalnızca dış servis bağımlılıklarına dair farkındalık amacıyla listelenmiştir.`, `Auf der Startseite sind ${disclosure.join('; ')} offen sichtbar. Dies ist keine ausnutzbare Schwachstelle; sie wird nur zur Sensibilisierung für externe Dienstabhängigkeiten aufgeführt.`, `${disclosure.join('; ')} are openly visible on the home page. This is not an exploitable vulnerability; it is listed only to raise awareness of external service dependencies.`) });

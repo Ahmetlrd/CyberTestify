@@ -108,6 +108,38 @@ const TRACKER_DATA: Record<string, string> = {
   'TikTok Pixel': 'dönüşüm ve kimlik eşleme',
 };
 
+// (ÇAPRAZ KONTROL — HATA 3) Bazı izleyiciler ana sayfa HTML'inde imza BIRAKMAZ ama üçüncü-taraf
+// alan adı olarak görünür (ör. Akamai mPulse → s.go-mpulse.net). Rapor bu yüzden kendi "Üçüncü Taraf
+// Bağımlılıkları" listesiyle ÇELİŞİP "izleyici gözlemlenmedi" diyebiliyordu. Aşağıdaki eşleme, ZATEN
+// toplanmış alan adı listesini bilinen izleyici alan adlarıyla karşılaştırır — YENİ VERİ TOPLANMAZ.
+const TRACKER_DOMAINS: Array<[RegExp, string]> = [
+  [/(^|\.)go-mpulse\.net$/i, 'Akamai mPulse (RUM)'],
+  [/(^|\.)google-analytics\.com$/i, 'Google Analytics'],
+  [/(^|\.)googletagmanager\.com$/i, 'Google Tag Manager'],
+  [/(^|\.)doubleclick\.net$/i, 'Google Marketing (DoubleClick)'],
+  [/(^|\.)facebook\.net$/i, 'Facebook Pixel'],
+  [/(^|\.)clarity\.ms$/i, 'Microsoft Clarity'],
+  [/(^|\.)hotjar\.com$/i, 'Hotjar'],
+  [/(^|\.)licdn\.com$/i, 'LinkedIn Insight'],
+  [/(^|\.)tiktok\.com$/i, 'TikTok Pixel'],
+  [/(^|\.)segment\.(io|com)$/i, 'Segment'],
+  [/(^|\.)mixpanel\.com$/i, 'Mixpanel'],
+  [/(^|\.)amplitude\.com$/i, 'Amplitude'],
+  [/(^|\.)(newrelic\.com|nr-data\.net)$/i, 'New Relic (RUM)'],
+  [/(^|\.)dynatrace\.com$/i, 'Dynatrace (RUM)'],
+  [/(^|\.)hs-scripts\.com$/i, 'HubSpot'],
+  [/(^|\.)mc\.yandex\.(ru|com)$/i, 'Yandex Metrica'],
+  [/(^|\.)matomo\.cloud$/i, 'Matomo'],
+];
+function trackersFromDomains(domains: string[]): string[] {
+  const out = new Set<string>();
+  for (const raw of domains) {
+    const host = raw.replace(/^https?:\/\//i, '').split('/')[0].trim().toLowerCase();
+    for (const [re, name] of TRACKER_DOMAINS) if (re.test(host)) out.add(name);
+  }
+  return [...out];
+}
+
 // (BÖLÜM 1) Çerez rıza banner'ı + izleyici tespiti — sayfa-bazlı tekrar kullanılır (çok-sayfa kapsam).
 const COOKIE_BANNER_RE = /(cookieconsent|cookie-consent|cookie-banner|çerez.{0,25}(kabul|onay|tercih|ayar)|kabul et.{0,12}çerez|accept.{0,8}cookies|onetrust|cookiebot|iubenda|klaro|tarteaucitron)/i;
 function detectTrackers(html: string): string[] {
@@ -216,6 +248,9 @@ export async function collectComplianceEvidence(host: string): Promise<Complianc
     pg.setCookies.forEach((c) => allSetCookies.add(c));
     if (pg.setCookies.map(parseCookieFlags).some((c) => !c.secure || !c.httpOnly)) insecureCookiePages++;
   }
+  // (HATA 3) HTML imzasından gelenler + üçüncü-taraf alan adı eşleşmeleri BİRLİKTE. Böylece
+  // "izleyici gözlemlenmedi" cümlesi, raporun kendi bağımlılık listesiyle çelişemez.
+  trackersFromDomains(thirdPartyDomains(html, host)).forEach((t) => trackerSet.add(t));
   const trackers = [...trackerSet];
 
   let contactFound = CONTACT_RE.test(html);
