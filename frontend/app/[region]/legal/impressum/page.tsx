@@ -1,64 +1,40 @@
+// ENTWURF — kullanıcının sağladığı metin BİREBİR yerleştirildi (yeniden yazılmadı/genişletilmedi).
+// Vor der Veröffentlichung von einer Rechtsanwältin / einem Rechtsanwalt prüfen lassen.
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { DeLegalArticle } from '../../../../components/DeLegalArticle';
 
 export const metadata: Metadata = {
   title: 'Impressum — CyberTestify',
-  description: 'Impressum und Anbieterkennzeichnung gemäß § 5 DDG.',
+  description: 'Angaben gemäß § 5 TMG für CyberTestify.',
   alternates: { canonical: '/de/legal/impressum' },
   robots: { index: false, follow: true },
 };
 
-// (Almanya) Impressum — /de'ye özgü. /tr ve diğer bölgelerde bu slug YOK (notFound).
-export default function ImpressumPage({ params }: { params: { region: string } }) {
+// (Deutschland) nur /de — andere Regionen haben diesen Slug nicht.
+export default function Page({ params }: { params: { region: string } }) {
   if (params.region !== 'de') notFound();
   return (
     <DeLegalArticle title="Impressum">
-      <p>Angaben gemäß § 5 DDG (Digitale-Dienste-Gesetz).</p>
+      <p><strong>Angaben gemäß § 5 TMG:</strong></p>
 
-      <h2>Diensteanbieter</h2>
+      {/* PLATZHALTER — GERÇEK şirket unvanı, Registergericht/Registernummer, USt-IdNr. ve adres
+          OPERATÖR tarafından doldurulmalıdır. Uydurulmadı; kullanıcının verdiği metin aynen korundu. */}
       <p>
-        {/* PLATZHALTER — echte Unternehmensangaben werden vom Betreiber eingetragen (nicht erfunden). */}
-        [Unternehmensname / Rechtsform]<br />
-        [Straße und Hausnummer]<br />
-        [PLZ, Ort]<br />
-        [Land]
+        <strong>CyberTestify co</strong><br />
+        Registriert in der Türkei
       </p>
-
-      <h2>Vertreten durch</h2>
-      <p>[Name der vertretungsberechtigten Person]</p>
 
       <h2>Kontakt</h2>
-      <p>
-        E-Mail: support@cybertestify.com<br />
-        Telefon: [Telefonnummer]
-      </p>
+      <p>E-Mail: <a href="mailto:support@cybertestify.com">support@cybertestify.com</a></p>
 
-      <h2>Registereintrag</h2>
       <p>
-        Eintragung im [Handelsregister / entsprechendes Register]<br />
-        Registergericht: [Registergericht]<br />
-        Registernummer: [Registernummer]
+        CyberTestify ist ein automatisierter Sicherheits-Pre-Assessment-Service. Das Angebot richtet
+        sich auch an Kunden in Deutschland und der Europäischen Union.
       </p>
-
-      <h2>Umsatzsteuer-Identifikationsnummer</h2>
       <p>
-        Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:<br />
-        [USt-IdNr., sofern vorhanden]
-      </p>
-
-      <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
-      <p>
-        [Name]<br />
-        [Anschrift, sofern abweichend]
-      </p>
-
-      <h2>Streitschlichtung</h2>
-      <p>
-        Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit:{' '}
-        <a href="https://ec.europa.eu/consumers/odr/" target="_blank" rel="noopener noreferrer">https://ec.europa.eu/consumers/odr/</a>.
-        Wir sind nicht verpflichtet und grundsätzlich nicht bereit, an Streitbeilegungsverfahren vor
-        einer Verbraucherschlichtungsstelle teilzunehmen.
+        Bei Fragen zum Service, zur Abrechnung oder zum Datenschutz wenden Sie sich bitte an die oben
+        genannte E-Mail-Adresse.
       </p>
     </DeLegalArticle>
   );

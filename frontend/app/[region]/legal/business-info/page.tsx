@@ -1,71 +1,41 @@
-// DRAFT — must be reviewed by a qualified UK solicitor before publication. Business details are placeholders.
+// DRAFT — kullanıcının sağladığı metin BİREBİR yerleştirildi (yeniden yazılmadı/genişletilmedi).
+// Yayına çıkmadan önce nitelikli bir hukuk danışmanınca gözden geçirilmelidir.
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { EnLegalArticle } from '../../../../components/EnLegalArticle';
 
 export const metadata: Metadata = {
   title: 'Business Information — CyberTestify',
-  description: 'Provider and business information under the Companies Act 2006 and the E-Commerce (EC Directive) Regulations 2002.',
+  description: 'Provider and business information for CyberTestify (UK/EU customers).',
   alternates: { canonical: '/en/legal/business-info' },
   robots: { index: false, follow: true },
 };
 
-// (United Kingdom) Business Information — /en only. Other regions do not have this slug (notFound).
-export default function BusinessInfoPage({ params }: { params: { region: string } }) {
+// (United Kingdom) /en only — other regions do not have this slug.
+export default function Page({ params }: { params: { region: string } }) {
   if (params.region !== 'en') notFound();
   return (
     <EnLegalArticle title="Business Information">
-      <p>
-        The following information is provided in accordance with the Companies Act 2006 and the
-        Electronic Commerce (EC Directive) Regulations 2002, which require service providers to make
-        certain business details easily, directly and permanently accessible.
-      </p>
+      <p>CyberTestify is operated by:</p>
 
-      <h2>Service provider</h2>
+      {/* PLACEHOLDER — GERÇEK şirket unvanı, varsa vergi/şirket numarası ve adres OPERATÖR
+          tarafından doldurulmalıdır. Uydurulmadı; kullanıcının verdiği metin aynen korundu. */}
       <p>
-        {/* PLACEHOLDER — real business details are entered by the operator (not invented). */}
-        [Company name — to be provided]<br />
-        [Trading name, if different]<br />
-        [Legal form, e.g. private limited company]
-      </p>
-
-      <h2>Geographic address</h2>
-      <p>
-        [Registered office address]<br />
-        [Street and number]<br />
-        [Town/city, postcode]<br />
-        [Country]
+        <strong>CyberTestify co</strong><br />
+        Registered in Turkey
       </p>
 
       <h2>Contact</h2>
-      <p>
-        Email: support@cybertestify.com<br />
-        Telephone: [Telephone number, if applicable]
-      </p>
+      <p>Email: <a href="mailto:support@cybertestify.com">support@cybertestify.com</a></p>
 
-      <h2>Company registration</h2>
       <p>
-        Registered in [England and Wales / Scotland / Northern Ireland]<br />
-        Company registration number: [Company number]<br />
-        Registered office: [Registered office address, if different from above]
+        This website and the CyberTestify service are provided by the above operator. We sell
+        automated security pre-assessment services to customers in the United Kingdom and the
+        European Union.
       </p>
-
-      <h2>VAT</h2>
       <p>
-        VAT registration number: [VAT number, if applicable]
-      </p>
-
-      <h2>Regulatory information</h2>
-      <p>
-        [Details of any relevant trade register, supervisory authority or professional body, if
-        applicable — to be provided.]
-      </p>
-
-      <h2>Complaints and dispute resolution</h2>
-      <p>
-        If you have a complaint, please contact us at support@cybertestify.com in the first instance.
-        [Details of any applicable alternative dispute resolution (ADR) scheme, if used, to be
-        provided.]
+        For any questions regarding the service, billing or data protection, please contact us at
+        the email address above.
       </p>
     </EnLegalArticle>
   );

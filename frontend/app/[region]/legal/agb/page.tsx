@@ -1,90 +1,120 @@
+// ENTWURF — kullanıcının sağladığı metin BİREBİR yerleştirildi (yeniden yazılmadı/genişletilmedi).
+// Vor der Veröffentlichung von einer Rechtsanwältin / einem Rechtsanwalt prüfen lassen.
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { DeLegalArticle } from '../../../../components/DeLegalArticle';
 
 export const metadata: Metadata = {
-  title: 'AGB — CyberTestify',
-  description: 'Allgemeine Geschäftsbedingungen für die Nutzung von CyberTestify.',
+  title: 'Allgemeine Geschäftsbedingungen — CyberTestify',
+  description: 'AGB von CyberTestify für den automatisierten Sicherheits-Pre-Assessment-Service.',
   alternates: { canonical: '/de/legal/agb' },
   robots: { index: false, follow: true },
 };
 
-// (Almanya) AGB (Allgemeine Geschäftsbedingungen) — Alman tüketici hukukuna göre taslak. /de'ye özgü.
-export default function AgbPage({ params }: { params: { region: string } }) {
+// (Deutschland) nur /de — andere Regionen haben diesen Slug nicht.
+export default function Page({ params }: { params: { region: string } }) {
   if (params.region !== 'de') notFound();
   return (
-    <DeLegalArticle title="Allgemeine Geschäftsbedingungen (AGB)">
-      <h2>1. Geltungsbereich und Anbieter</h2>
+    <DeLegalArticle title="Allgemeine Geschäftsbedingungen">
+      <p><em>Stand: 31. August 2026</em></p>
+
+      <h2>1. Leistungsbeschreibung</h2>
       <p>
-        Diese Allgemeinen Geschäftsbedingungen gelten für alle über CyberTestify abgeschlossenen
-        Verträge über die Nutzung der Sicherheits-Vorabbewertung. Anbieter ist der im{' '}
-        <a href="/de/legal/impressum">Impressum</a> genannte Diensteanbieter.
+        CyberTestify bietet automatisierte Sicherheits-Pre-Assessments und Scans für Websites und
+        Webanwendungen an. Der Service dient der Identifizierung potenzieller Sicherheitsprobleme mit
+        automatisierten und weitgehend nicht-intrusiven Methoden.
+      </p>
+      <p>
+        <strong>Wichtig:</strong> CyberTestify ist kein formeller Penetrationstest, kein
+        Sicherheitsaudit und keine Zertifizierung (einschließlich ASV, QSA, ISO 27001 oder
+        vergleichbarer Prüfungen). Berichte werden mit KI-Unterstützung erstellt und sollten nicht
+        ohne unabhängige Überprüfung als alleinige Grundlage für Sicherheitsentscheidungen verwendet
+        werden.
       </p>
 
-      <h2>2. Leistungsbeschreibung</h2>
+      <h2>2. Vertragsschluss und Konto</h2>
       <p>
-        CyberTestify erbringt eine KI-gestützte, automatisierte Sicherheits-<em>Vorabbewertung</em> für
-        eine von Ihnen per DNS verifizierte Domain. Das Ergebnis ist ein technischer Bericht. Der
-        Dienst ist <strong>kein</strong> formeller Penetrationstest, kein Audit und keine
-        Zertifizierung und ersetzt diese nicht. Für die autonomen bzw. deterministischen Verfahren
-        wird keine bestimmte Trefferzahl oder Vollständigkeit garantiert.
+        Sie müssen mindestens 18 Jahre alt sein und geschäftsfähig sein. Sie sind für die
+        Geheimhaltung Ihrer Zugangsdaten verantwortlich.
       </p>
 
-      <h2>3. Vertragsschluss</h2>
+      <h2>3. Domaininhaberschaft und Autorisierung</h2>
       <p>
-        Die Darstellung der Pakete stellt kein rechtlich bindendes Angebot dar. Mit dem Absenden der
-        Bestellung geben Sie ein verbindliches Angebot ab; der Vertrag kommt mit unserer Bestätigung
-        bzw. mit Bereitstellung des Dienstes zustande.
+        Sie dürfen nur Domains oder Systeme einreichen, die Sie besitzen oder für die Sie
+        ausdrückliche Berechtigung zum Testen haben. Mit der Einreichung bestätigen Sie, dass Sie
+        dazu berechtigt sind. Wir behalten uns vor, Scans abzulehnen oder abzubrechen, wenn die
+        Berechtigung nicht nachgewiesen werden kann.
       </p>
 
-      <h2>4. Voraussetzung: Berechtigung am Ziel</h2>
+      <h2>4. Leistungsumfang</h2>
       <p>
-        Sie dürfen einen Scan nur für Domains/Systeme beauftragen, deren Inhaber Sie sind oder für die
-        Sie eine ausdrückliche schriftliche Berechtigung besitzen. Die Verifizierung der Domain-
-        Inhaberschaft ist Voraussetzung für die Durchführung.
+        Jedes Paket hat einen definierten Umfang (siehe Preisseite). Scans erfolgen nach bestem
+        Bemühen. Die Ergebnisse hängen von der Konfiguration, Technologie und Erreichbarkeit des
+        Ziels ab. Einige Prüfungen können als „außerhalb des Umfangs“ oder „nicht getestet“
+        ausgewiesen werden, wenn die Struktur des Ziels dies nicht zulässt. Dies ist normal und
+        stellt keinen Mangel dar.
+      </p>
+      <p>
+        Wir folgen dem Ansatz „Nachweisen, nicht ausnutzen“. Wir führen keine destruktiven Tests,
+        Datenänderungen oder echte Exploitation durch.
       </p>
 
-      <h2>5. Preise und Zahlung</h2>
+      <h2>5. Berichte</h2>
       <p>
-        Es gelten die zum Zeitpunkt der Bestellung angegebenen Preise in Euro (EUR), inklusive der
-        gesetzlichen Umsatzsteuer, soweit anwendbar. Die Zahlung erfolgt über den bereitgestellten
-        Zahlungsdienstleister. Eine Rechnung/Quittung wird elektronisch bereitgestellt.
+        Berichte werden verschlüsselt bereitgestellt und sind mit einem einzigartigen Code
+        zugänglich. Die Berichte sind vertraulich und nur für den bestellenden Kunden bestimmt.
       </p>
 
-      <h2>6. Bereitstellung des Berichts</h2>
+      <h2>6. Preise und Zahlung</h2>
       <p>
-        Der Bericht wird nach Abschluss des Scans elektronisch, Ende-zu-Ende-verschlüsselt und mit
-        einem Einmal-Zugangscode bereitgestellt. Es erfolgt keine Lieferung auf einem körperlichen
-        Datenträger.
+        Es gelten die zum Zeitpunkt der Bestellung angezeigten Preise (inkl. gesetzlicher Steuern).
+        Die Zahlung ist vor Beginn des Scans fällig. Nach Beginn des Scans sind die Gebühren
+        grundsätzlich nicht erstattungsfähig, es sei denn, zwingendes Recht schreibt etwas anderes
+        vor.
       </p>
 
-      <h2>7. Widerrufsrecht und Erlöschen des Widerrufsrechts</h2>
+      <h2>7. Zulässige Nutzung</h2>
       <p>
-        Verbrauchern steht grundsätzlich ein Widerrufsrecht zu (siehe{' '}
-        <a href="/de/legal/widerruf">Widerrufsbelehrung</a>). Bei Verträgen über die Bereitstellung
-        digitaler Inhalte/Dienstleistungen, die nicht auf einem körperlichen Datenträger geliefert
-        werden, <strong>erlischt das Widerrufsrecht</strong>, wenn wir mit der Ausführung begonnen
-        haben, nachdem Sie ausdrücklich zugestimmt haben, dass wir vor Ablauf der Widerrufsfrist mit
-        der Ausführung beginnen, und Sie Ihre Kenntnis davon bestätigt haben, dass Sie durch diese
-        Zustimmung Ihr Widerrufsrecht verlieren (§ 356 Abs. 5 BGB). Diese Zustimmung wird im
-        Bestellvorgang gesondert eingeholt.
+        Der Service darf nicht zum Scannen fremder Systeme ohne Berechtigung, zum Angriff auf Dritte
+        oder für rechtswidrige Zwecke verwendet werden. Bei Missbrauch können wir den Zugang sperren
+        oder beenden.
       </p>
 
       <h2>8. Haftung</h2>
+      <p>Soweit gesetzlich zulässig:</p>
+      <ul>
+        <li>Der Service wird „wie besehen“ bereitgestellt.</li>
+        <li>Wir garantieren nicht, dass jeder mögliche Sicherheitsfehler gefunden wird.</li>
+        <li>Wir haften nicht für indirekte, zufällige oder Folgeschäden, entgangenen Gewinn oder Datenverlust.</li>
+        <li>Unsere Gesamthaftung ist auf den Betrag beschränkt, den Sie für den konkreten Scan bezahlt haben, aus dem der Anspruch entsteht.</li>
+      </ul>
       <p>
-        Wir haften unbeschränkt bei Vorsatz und grober Fahrlässigkeit sowie nach dem
-        Produkthaftungsgesetz und bei Verletzung von Leben, Körper oder Gesundheit. Bei einfacher
-        Fahrlässigkeit haften wir nur bei Verletzung wesentlicher Vertragspflichten (Kardinalpflichten)
-        und begrenzt auf den vertragstypischen, vorhersehbaren Schaden. Im Übrigen ist die Haftung
-        ausgeschlossen. Der Dienst liefert eine Vorabbewertung; die Beseitigung etwaiger Schwachstellen
-        und die Absicherung Ihrer Systeme liegt in Ihrer Verantwortung.
+        Die Haftung für Vorsatz, grobe Fahrlässigkeit sowie für Schäden aus der Verletzung des
+        Lebens, des Körpers oder der Gesundheit bleibt unberührt. Ebenso unberührt bleibt die Haftung
+        nach dem Produkthaftungsgesetz.
       </p>
 
-      <h2>9. Anwendbares Recht</h2>
+      <h2>9. Geistiges Eigentum</h2>
       <p>
-        Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts. Zwingende
-        Verbraucherschutzvorschriften des Staates Ihres gewöhnlichen Aufenthalts bleiben unberührt.
+        Alle Rechte an der CyberTestify-Plattform, der Methodik und den Berichtsvorlagen verbleiben
+        bei uns. Sie erhalten ein beschränktes Recht zur Nutzung des Berichts für interne
+        Sicherheitszwecke.
       </p>
+
+      <h2>10. Anwendbares Recht</h2>
+      <p>
+        Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts.
+        Zwingende Verbraucherschutzvorschriften Ihres Wohnsitzlandes bleiben unberührt.
+      </p>
+
+      <h2>11. Änderungen</h2>
+      <p>
+        Wir können diese AGB von Zeit zu Zeit aktualisieren. Für eine Bestellung gilt die zum
+        Zeitpunkt des Vertragsschlusses veröffentlichte Fassung.
+      </p>
+
+      <h2>12. Kontakt</h2>
+      <p><a href="mailto:support@cybertestify.com">support@cybertestify.com</a></p>
     </DeLegalArticle>
   );
 }
