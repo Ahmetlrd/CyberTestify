@@ -90,8 +90,6 @@ export default async function PackagesPage({ params }: { params: { region: strin
   const sampleItems: Array<{ key: string; displayName: string }> = [];
   if (basit) sampleItems.push({ key: basit.key, displayName: basit.displayName });
   for (const b of bundles) if (!b.comingSoon) sampleItems.push({ key: b.key, displayName: b.displayName });
-  // Faz 5b'ye kadar fiyatlar yalnızca TRY tabanlı; TR dışı bölgelerde gösterge niteliğinde.
-  const indicative = region.currency !== 'TRY';
 
   // ===== (KARŞILAŞTIRMA) Paketleri BİRBİRİYLE kıyaslayan tablo + sihirbaz verisi =====
   // TÜM değerler GERÇEK tanımlardan: fiyat (API), üye kontrol sayısı, kategori, örnek rapor varlığı
@@ -224,14 +222,6 @@ export default async function PackagesPage({ params }: { params: { region: strin
       </section>
 
       <section className="container-page py-16">
-        {indicative && (
-          <p className="mb-8 rounded-card border border-accent/40 bg-accent-soft/40 px-4 py-3 text-center text-sm text-ink-soft">
-            {region.lang === 'de'
-              ? 'Die Preise sind Richtwerte und werden vor dem Start in dieser Region regional kalibriert.'
-              : 'Prices are indicative and will be regionally calibrated before launch in this region.'}
-          </p>
-        )}
-
         {bundles.length > 0 && (
           <div className="mb-14">
             <div className="mb-8 text-center">
