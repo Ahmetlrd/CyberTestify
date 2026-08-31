@@ -405,7 +405,10 @@ export function parseFindings(md: string, locale: 'tr' | 'en' | 'de'): { rows: F
     if (titleCol === -1) titleCol = 0;
     const nameCol = techCol !== -1 ? techCol : titleCol;
     // Kanıt/açıklama kolonu — kartın "Nasıl Tespit Edildi"/açıklama için GERÇEK veri.
-    const evidCol = header.findIndex((h) => /kan[ıi]t|evidence|k[ıi]sa a[çc][ıi]klama|a[çc][ıi]klama|not\b|nachweis|beschreibung|erl[äa]uterung/.test(h));
+    // (DÜZELTME) İngilizce 'Description' kolonu bu listede YOKTU → EN raporlarda açıklama metni
+    // sınıflandırmaya karışıyordu (ör. CSP bulgusunun açıklamasındaki "XSS" yüzünden satır
+    // "Reflected XSS indicator" olarak etiketleniyordu). TR 'açıklama' ve DE 'beschreibung' zaten vardı.
+    const evidCol = header.findIndex((h) => /kan[ıi]t|evidence|k[ıi]sa a[çc][ıi]klama|a[çc][ıi]klama|description|not\b|nachweis|beschreibung|erl[äa]uterung/.test(h));
     const confCol = header.findIndex((h) => /g[üu]ven\b|confidence/.test(h)); // güven kolonu (varsa)
     for (let r = 1; r < block.length; r++) {
       if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue; // ayraç satırı
