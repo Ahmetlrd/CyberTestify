@@ -333,6 +333,36 @@ export async function sendInvoiceRequestNotification(orderId: string): Promise<b
   }
 }
 
+// --- (ONAY KAPISI) Rapor uretildi, ADMIN ONAYI bekliyor -> Vedat'a bildirim -------------------
+// ADMIN_REPORT_GATE acikken musteri raporu ANCAK admin onayindan sonra alir. Onceden bu durumda
+// hicbir bildirim gitmiyordu; onay bekleyen rapor fark edilmezse musteri "hala taraniyor" ekraninda
+// bekliyordu. Reklam/hacim doneminde bu bir teslim gecikmesi riskidir — bildirim eklendi.
+export async function sendReportReviewPending(orderId: string): Promise<boolean> {
+  try {
+    const o = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { customer: { select: { email: true } }, package: { select: { displayName: true } }, domain: { select: { hostname: true } } },
+    });
+    if (!o) return false;
+    const rows: Array<[string, string]> = [
+      ['Sipariş no', o.id],
+      ['Paket', o.package.displayName],
+      ['Hedef', o.domain.hostname],
+      ['Bölge / dil', `${o.region ?? '-'} / ${o.locale ?? '-'}`],
+      ['Tutar', fmtMoney2(o.amountMinorUnit, o.currency)],
+      ['Müşteri e-posta', o.customer.email],
+    ];
+    const table = rows.map(([k, v]) => `<tr><td style="padding:6px 10px;color:#8a9794;font-size:13px">${esc(k)}</td><td style="padding:6px 10px;font-size:13px;font-weight:600">${esc(v)}</td></tr>`).join('');
+    const body = `<p>Bir tarama tamamlandı ve raporu <strong>onayınızı bekliyor</strong>. Müşteri şu an "tarama devam ediyor" görüyor; onaylayana kadar rapor ve erişim kodu <strong>gönderilmez</strong>.</p>
+      <table role="presentation" style="width:100%;margin:12px 0;border:1px solid #e3e8e6;border-radius:10px;border-collapse:collapse">${table}</table>`;
+    const html = layout({ heading: 'Rapor onayınızı bekliyor', bodyHtml: body, cta: config.adminUrl ? { label: 'Raporu incele ve onayla', url: `${config.adminUrl}/admin/orders?status=awaiting_admin_review` } : undefined });
+    return await sendMail(config.invoiceNotifyEmail, `Rapor onay bekliyor — ${o.domain.hostname} (${o.package.displayName})`, html);
+  } catch (err) {
+    console.error('[mail] sendReportReviewPending hata:', err);
+    return false;
+  }
+}
+
 // --- (İade talebi) Müşteri iade istedi -> Vedat'a bildirim (admin panelde de görünür) --------
 export async function sendRefundRequestNotification(orderId: string): Promise<boolean> {
   try {

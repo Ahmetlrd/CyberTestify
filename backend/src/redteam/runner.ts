@@ -20,7 +20,7 @@ import { pullOnce, maskSecrets } from './puller.js';
 import { renderTranscript } from './transcript.js';
 import { nodeResolver } from './targetGuard.js';
 import { storeRedTeamCustomerReport } from '../services/redteamOrderReport.js';
-import { sendReportReady } from '../services/mailer.js';
+import { sendReportReady, sendReportReviewPending } from '../services/mailer.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -359,6 +359,7 @@ export async function runJob(jobId: string, opts: { dryRun: boolean }): Promise<
         });
         // Kapı KAPALIYSA rapor hemen açık → "hazır" e-postası burada. AÇIKSA e-posta admin onayında gider.
         if (!gated) await sendReportReady(job.orderId, accessSecret).catch((e) => console.error('[redteam-s1] mail hata:', (e as Error).message));
+        else await sendReportReviewPending(job.orderId).catch((e) => console.error('[redteam-s1] onay-bildirimi hata:', (e as Error).message));
         console.log(`[redteam-s1] order ${job.orderId} raporu köprülendi → ${gated ? 'awaiting_admin_review (admin onayı bekliyor)' : 'scan_completed (kapı kapalı)'}`);
       } catch (e) {
         console.error('[redteam-s1] Order rapor köprüleme hatası:', (e as Error).message);

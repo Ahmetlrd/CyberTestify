@@ -5,7 +5,7 @@ import * as pentagi from './pentagi/client.js';
 import { getPackageDef, securityProfileFor } from './services/scanPackages.js';
 import { generateAndStoreReport } from './services/report.js';
 import { runWithScanLog, purgeOldScanLogs } from './services/scanLogger.js';
-import { sendReportReady } from './services/mailer.js';
+import { sendReportReady, sendReportReviewPending } from './services/mailer.js';
 import { publishDailyIfDue } from './services/blog.js';
 import { findOutOfScope, findForbiddenMethods, forbiddenMethodsForProfile, detectScriptDebugLoop, detectRepeatedFetch } from './services/scope.js';
 import { encryptSecret } from './services/crypto.js';
@@ -139,6 +139,8 @@ async function tick() {
         // 'awaiting_admin_review'da bekler; admin onaylayınca (admin route) e-posta gider.
         if (config.adminReportGate) {
           console.log(`[worker] ${flow.pentagiFlowId} — rapor üretildi, ADMIN ONAYI bekliyor (sipariş ${flow.orderId}). E-posta onayda gönderilecek.`);
+          // (BİLDİRİM) Onay bekleyen rapor fark edilmezse müşteri bekler → admin'e haber ver. Mail hatası akışı bozmaz.
+          await sendReportReviewPending(flow.orderId).catch((e) => console.error('[worker] onay-bildirimi hata:', (e as Error).message));
         } else {
           await sendReportReady(flow.orderId, accessSecret);
           console.log(`[worker] ${flow.pentagiFlowId} — PentAGI'siz deterministik rapor uretildi (siparis ${flow.orderId}).`);
@@ -381,6 +383,7 @@ async function tick() {
         // (İÇ KALİTE KAPISI) Kapı açıksa e-postayı ŞİMDİ GÖNDERME — admin onayına ertelenir.
         if (config.adminReportGate) {
           console.log(`[worker] Rapor hazir, siparis ${flow.orderId} — ADMIN ONAYI bekliyor (awaiting_admin_review). E-posta onayda gönderilecek.`);
+          await sendReportReviewPending(flow.orderId).catch((e) => console.error('[worker] onay-bildirimi hata:', (e as Error).message));
         } else {
           await sendReportReady(flow.orderId, accessSecret);
           console.log(`[worker] Rapor hazir, siparis ${flow.orderId}. Erisim sifresi e-posta ile gonderildi (panelde de gorunur).`);
