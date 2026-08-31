@@ -135,6 +135,17 @@ function LockIcon({ open }: { open: boolean }) {
   );
 }
 
+// (TASARIM: Report Ready v2) "Rapor hazır" ekranına özel metinler. Diğer 8 sipariş durumu
+// DEĞİŞMEDİ. Renkler site marka token'larıyla (Nav/Footer ile uyumlu kalsın diye).
+const RR = {
+  tr: { eyebrow: 'Sipariş Durumu · Tamamlandı', processTitle: 'Süreç',
+        steps: ['Sahiplik doğrulandı', 'Tarama çalıştı', 'Bulgular değerlendirildi', 'Rapor hazır'] },
+  de: { eyebrow: 'Bestellstatus · Abgeschlossen', processTitle: 'Ablauf',
+        steps: ['Inhaberschaft bestätigt', 'Scan ausgeführt', 'Befunde bewertet', 'Bericht fertig'] },
+  en: { eyebrow: 'Order status · Completed', processTitle: 'Process',
+        steps: ['Ownership verified', 'Scan completed', 'Findings assessed', 'Report ready'] },
+} as const;
+
 export default function OrderDashboard({ params }: { params: { orderId: string } }) {
   const router = useRouter();
   const [order, setOrder] = useState<any>(null);
@@ -272,6 +283,9 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const status = order?.status as string;
   const hostname = order?.domain?.hostname ?? t.targetFallback;
   const active = status === 'scan_running' || status === 'paid' || status === 'scan_queued';
+  // (TASARIM) Rapor hazır ekranı iki kolonlu → dar kap yerine geniş kap.
+  const wide = active || status === 'scan_completed';
+  const rr = RR[lang];
 
   let feed: Array<{ seq: number; text: string }> = [];
   try {
@@ -281,9 +295,9 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   }
 
   return (
-    <main className={`container-page py-16 ${active ? "max-w-5xl" : "max-w-xl"}`}>
+    <main className={`container-page py-16 ${wide ? "max-w-5xl" : "max-w-xl"}`}>
       <TwoFaNudge />
-      {!active && <>
+      {!active && status !== 'scan_completed' && <>
         <p className="eyebrow">{t.orderStatus}</p>
         <h1 className="mt-2 text-3xl font-extrabold text-brand">
           {status === 'scan_completed' && order?.report?.incomplete
@@ -296,7 +310,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       {/* İade/süre-doldu gibi terminal durumlarda adım göstergesi YANILTICI olur — gösterilmez.
           ÖDEME BEKLENİYOR'da da gösterilmez: tarama HENÜZ BAŞLAMADI; "Tarama çalışıyor" adımı
           müşteriyi yanıltır (ödeme yapmadan tarama sanıyor). Onun yerine ödeme kartı gösterilir. */}
-      {!active && !['refunded', 'report_purged', 'awaiting_payment', 'awaiting_domain_verification'].includes(status) && (
+      {!active && !['refunded', 'report_purged', 'awaiting_payment', 'awaiting_domain_verification', 'scan_completed'].includes(status) && (
         <div className="mt-8">
           <StatusTracker status={status} lang={lang} />
         </div>
@@ -387,9 +401,29 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       })()}
 
       {status === 'scan_completed' && (
-        <div className="mt-8 space-y-6">
+        <div className="mt-8">
+          {/* (TASARIM) Hero şeridi — sipariş durumu + hedef alan adı; düz başlık yerine geçer. */}
+          <div className="overflow-hidden rounded-card bg-gradient-to-br from-brand-deep to-brand-500 px-6 py-8 text-white sm:px-8">
+            <div className="flex flex-wrap items-center gap-5">
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/10">
+                <svg width="26" height="26" viewBox="0 0 16 16" fill="none" aria-hidden>
+                  <path d="M3 8.5L6.2 11.5L13 4" stroke="#7fe0b8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-emerald-300">{rr.eyebrow}</p>
+                <h1 className="mt-1.5 text-2xl font-extrabold sm:text-3xl">
+                  {order.report?.incomplete ? t.reportReadyIncomplete : t.headline.scan_completed}
+                </h1>
+              </div>
+              <p className="rounded-card bg-white/10 px-4 py-2.5 font-mono text-sm text-white/75">
+                {t.target}: <span className="font-semibold text-white">{hostname}</span>
+              </p>
+            </div>
+          </div>
+
           {order.report?.incomplete && (
-            <div className="rounded-card border border-amber-300 bg-amber-50 px-4 py-3.5 text-sm text-amber-900">
+            <div className="mt-6 rounded-card border border-amber-300 bg-amber-50 px-4 py-3.5 text-sm text-amber-900">
               <strong>{t.incompletePre}</strong>{' '}
               {order.report.incompleteReason ?? t.incompleteDefault}
               {t.incompleteMid}
@@ -400,8 +434,31 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
             </div>
           )}
 
-          <ScopeCertificate hostname={hostname} flow={order.flow} lang={lang} />
+          {/* (TASARIM) İki kolon: solda süreç + kapsam sertifikası (yapışkan), sağda aksiyonlar. */}
+          <div className="mt-6 grid items-start gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+            <aside className="space-y-5 lg:sticky lg:top-6">
+              <div className="rounded-card border border-line bg-white p-5">
+                <p className="mb-4 text-xs font-bold uppercase tracking-wide text-ink">{rr.processTitle}</p>
+                <ol>
+                  {rr.steps.map((stepLabel, i) => (
+                    <li key={stepLabel} className="relative flex gap-3 pb-4 last:pb-0">
+                      {i < rr.steps.length - 1 && (
+                        <span aria-hidden className="absolute bottom-0 left-[11px] top-6 w-0.5 bg-brand-100" />
+                      )}
+                      <span className="relative z-[1] flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500">
+                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden>
+                          <path d="M3 8.5L6.2 11.5L13 4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                      <span className="pt-0.5 text-sm font-semibold text-ink">{stepLabel}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+              <ScopeCertificate hostname={hostname} flow={order.flow} lang={lang} />
+            </aside>
 
+            <div className="min-w-0 space-y-6">
           {/* Rapor teslim — kilit mikro-etkilesimi */}
           <div className="card p-6">
             <div className="flex items-center gap-3">
@@ -521,6 +578,8 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               )}
             </div>
           )}
+            </div>{/* sağ kolon sonu */}
+          </div>{/* grid sonu */}
         </div>
       )}
 
