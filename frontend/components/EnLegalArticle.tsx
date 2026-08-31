@@ -16,13 +16,6 @@ export function EnLegalArticle({ title, children }: { title: string; children: R
         Home
       </Link>
       <h1 className="text-2xl font-extrabold text-brand">{title}</h1>
-      <div
-        role="note"
-        style={{ margin: '12px 0 20px', padding: '10px 14px', borderRadius: 10, background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.28)', fontSize: 13, color: 'var(--ink-soft, #4b5563)' }}
-      >
-        <strong>Note (draft):</strong> This text is a draft and should be reviewed by a qualified
-        solicitor before publication.
-      </div>
       <div className="legal-body">{children}</div>
     </main>
   );
