@@ -78,6 +78,12 @@ const authLimiter = rateLimit({
   max: 20, // IP basina 15 dk'da 20 deneme
   standardHeaders: true,
   legacyHeaders: false,
+  // (DUZELTME) GET /auth/me kaba-kuvvet hedefi DEGIL (requireAuth arkasinda, salt-okunur kimlik)
+  // ve HER sayfa yuklemesinde cagrilir. 20/15dk tavani normal gezinmede doluyor -> 429 ->
+  // /profile ile /login arasinda sonsuz yonlendirme dongusu tetikleniyordu. /me apiLimiter'a
+  // birakilir; kimlik/kod uclari (login, register, forgot/reset-password, verify-email,
+  // resend-verification) SIKI limitte KALIR.
+  skip: (req) => req.path === '/me',
   message: { error: 'Cok fazla deneme. Lutfen bir sure sonra tekrar deneyin.' },
 });
 // Genel API: siparis/domain/rapor gibi islemleri asiri kullanimdan koru. NOT:
@@ -101,7 +107,7 @@ const instantLimiter = rateLimit({
   message: { error: 'Çok fazla tarama isteği. Lütfen biraz bekleyip tekrar deneyin.' },
 });
 
-app.use('/auth', authLimiter, authRouter);
+app.use('/auth', apiLimiter, authLimiter, authRouter);
 // (2FA musteri) login-verify + ayarlar + nudge. apiLimiter (300/dk) — status/nudge sayfa yuklemede
 // cagirilir; kod brute-force'u zaten HESAP-BAZLI kilit korur (5 yanlis → 15 dk), IP-limit sekonder.
 app.use('/twofa', apiLimiter, twofaRouter);

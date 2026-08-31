@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../lib/api';
@@ -22,6 +22,8 @@ const PROF_T = {
     panel: 'Panelim (Alan adlarım ve taramalar)',
     logout: 'Çıkış Yap',
     support: 'Destek:',
+    loadFailed: 'Profil bilgileriniz yüklenemedi',
+    retry: 'Tekrar dene',
   },
   de: {
     eyebrow: 'Mein Konto',
@@ -35,6 +37,8 @@ const PROF_T = {
     panel: 'Mein Bereich (Meine Domains und Scans)',
     logout: 'Abmelden',
     support: 'Support:',
+    loadFailed: 'Ihre Profildaten konnten nicht geladen werden',
+    retry: 'Erneut versuchen',
   },
   en: {
     eyebrow: 'My account',
@@ -48,36 +52,51 @@ const PROF_T = {
     panel: 'My dashboard (My domains and scans)',
     logout: 'Sign out',
     support: 'Support:',
+    loadFailed: 'Your profile could not be loaded',
+    retry: 'Try again',
   },
 } as const;
 
 /**
  * Basit profil/hesap sayfası. Amaç: "giriş yapılmış mı" net görünsün + hesap bilgisi ve
- * hızlı eylemler (Panelim, Çıkış) TEK yerde toplu dursun. Token yoksa /login'e yönlenir;
- * token ölüyse api.me() 401 döner → api.ts token'ı siler → /login'e yönleniriz (döngü yok).
+ * hızlı eylemler (Panelim, Çıkış) TEK yerde toplu dursun. Token yoksa /login'e yönlenir.
+ *
+ * (DÖNGÜ DÜZELTMESİ) /login'e SADECE gerçek kimlik hatasında (401 → api.ts token'ı zaten siler)
+ * yönlenilir. Eskiden api.me() HERHANGİ bir hatada (429/ağ) /login'e atıyordu; token silinmediği
+ * için /login onu görüp /profile'a geri atıyor ve SONSUZ yönlendirme döngüsü oluşuyordu
+ * (her turda /auth/me çağrılıp 429'u besliyordu). Artık 401 dışı hatada yerinde hata + "tekrar dene".
  */
 export default function ProfilePage() {
   const router = useRouter();
   const [me, setMe] = useState<{ email: string; emailVerified: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
 
-  useEffect(() => {
-    const l = getRegion(readRegionCookie()).lang;
-    setLang(l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr');
+  const load = useCallback(() => {
     if (typeof window !== 'undefined' && !window.localStorage.getItem('token')) {
       router.replace('/login?next=/profile');
       return;
     }
+    setLoading(true);
+    setLoadError(null);
     api
       .me()
-      .then(setMe)
-      .catch(() => {
-        // 401 → api.ts token'ı sildi; giriş sayfasına dön.
-        router.replace('/login?next=/profile');
+      .then((m) => { setMe(m); setLoadError(null); })
+      .catch((e: any) => {
+        // YALNIZ 401 = oturum gerçekten geçersiz (api.ts token'ı sildi) → giriş sayfası.
+        if (e?.status === 401) { router.replace('/login?next=/profile'); return; }
+        // 429 / ağ / sunucu hatası: YÖNLENDİRME YOK (yoksa /login ile döngüye girerdi).
+        setLoadError(e?.message || null);
       })
       .finally(() => setLoading(false));
   }, [router]);
+
+  useEffect(() => {
+    const l = getRegion(readRegionCookie()).lang;
+    setLang(l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr');
+    load();
+  }, [load]);
 
   function logout() {
     if (typeof window !== 'undefined') window.localStorage.removeItem('token');
@@ -139,6 +158,13 @@ export default function ProfilePage() {
           <p className="text-center text-[11px] text-ink-muted">
             {t.support} <a href="mailto:support@cybertestify.com" className="text-accent-600 underline">support@cybertestify.com</a>
           </p>
+        </div>
+      ) : loadError ? (
+        /* 401 DEĞİL (429/ağ/sunucu): oturumu bozmadan hatayı göster + tekrar dene. */
+        <div className="mt-8 rounded-card border border-amber-300 bg-amber-50 px-4 py-4">
+          <p className="text-sm font-bold text-amber-900">{t.loadFailed}</p>
+          <p className="mt-1 text-sm leading-relaxed text-amber-900/90">{loadError}</p>
+          <button onClick={load} className="btn-outline mt-4 w-full justify-center">{t.retry}</button>
         </div>
       ) : null}
     </main>
