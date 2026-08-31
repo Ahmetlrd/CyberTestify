@@ -171,6 +171,9 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const [fixPromoSeen, setFixPromoSeen] = useState<boolean | null>(null);
   const [resendBusy, setResendBusy] = useState(false);
   const [resendMsg, setResendMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // (UX) Bu cihazda kayıtlı kod varsa kullanıcı raporu ZATEN bir kez açmış demektir → "kodu tekrar
+  // gönder" gereksiz (hep aynı kod geliyor). Sayfa yenilense de buton geri gelmesin diye ayrı state.
+  const [codeRemembered, setCodeRemembered] = useState(false);
   // (KAMPANYA SADELESTIRME) AI kampanya bloğu sipariş başına YALNIZ İLK görüntülemede tam blok;
   // sonrasında tek satırlık sessiz not. Fiyat/indirim ORANI değişmez, sadece görünürlük.
   useEffect(() => {
@@ -208,7 +211,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
     // kodu girer. Ama BİR KEZ başarıyla açtıysa, kolaylık olsun diye bu cihazda saklanır (localStorage).
     if (typeof window !== 'undefined') {
       const saved = window.localStorage.getItem(`ct_access_${params.orderId}`);
-      if (saved) setAccessSecret((prev) => prev || saved);
+      if (saved) { setAccessSecret((prev) => prev || saved); setCodeRemembered(true); }
     }
     async function load() {
       try {
@@ -263,6 +266,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
       // Başarıyla açıldı — kodu bu cihazda sakla (bir daha girmesin). Kilit kaldırmak isterse
       // tarayıcı verisini temizlemesi yeter (sunucuda kod müşteriye asla dönmez).
       if (typeof window !== 'undefined') window.localStorage.setItem(`ct_access_${params.orderId}`, accessSecret);
+      setCodeRemembered(true); // rapor açıldı → "kodu tekrar gönder" artık gösterilmez
       // Rapor artik PDF olarak uretiliyor (bkz backend reports.ts /download).
       downloadBlob(blob, `cybertestify-rapor-${params.orderId}.pdf`);
     } catch (err: any) {
@@ -452,6 +456,12 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
                 <h1 className="mt-1.5 text-2xl font-extrabold sm:text-3xl">
                   {order.report?.incomplete ? t.reportReadyIncomplete : t.headline.scan_completed}
                 </h1>
+                {/* (NETLİK) Hangi paket olduğu görünsün — "Basit Tarama" mı "Dış Yüzey" mi belli olsun. */}
+                {localizedPackageName(order?.packageKey, order?.packageName, lang) && (
+                  <p className="mt-1.5 text-sm text-white/70">
+                    {localizedPackageName(order?.packageKey, order?.packageName, lang)}
+                  </p>
+                )}
               </div>
               <p className="rounded-card bg-white/10 px-4 py-2.5 font-mono text-sm text-white/75">
                 {t.target}: <span className="font-semibold text-white">{hostname}</span>
@@ -527,7 +537,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
               <p className="mt-2 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{dlError}</p>
             )}
             {/* (UX) E-postayı bulamayanlar için: AYNI kod yeniden gönderilir (sunucuda dk/saat limiti var). */}
-            {!unlocked && (
+            {!unlocked && !codeRemembered && (
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <button
                   type="button"

@@ -29,6 +29,16 @@ type Order = {
 
 // (Savunma) awaiting_admin_review backend'de zaten 'scan_running'e maskelenir; yine de hiçbir koşulda
 // ham enum sızmasın diye burada da "Taranıyor"/"Wird gescannt" gösterilir.
+// (DURUM RENGI) Rozet rengi duruma gore — "hazır" yeşil, bekleyen amber, hata kırmızı, biten gri.
+// Yalniz ROZET renklenir; sayfanin geri kalan paleti degismez.
+function statusTone(status: string): string {
+  if (status === 'scan_completed' || status === 'report_delivered') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (status === 'scan_running' || status === 'scan_queued' || status === 'paid') return 'border-sky-200 bg-sky-50 text-sky-700';
+  if (status === 'awaiting_payment' || status === 'awaiting_domain_verification' || status === 'awaiting_admin_review') return 'border-amber-200 bg-amber-50 text-amber-800';
+  if (status === 'scan_failed' || status === 'scope_violation') return 'border-red-200 bg-red-50 text-red-700';
+  return 'border-line bg-brand-50 text-ink-muted'; // refunded / report_purged / bilinmeyen
+}
+
 const ORDER_STATUS_LABEL: Record<'tr' | 'de' | 'en', Record<string, string>> = {
   tr: {
     awaiting_payment: 'Ödeme bekleniyor',
@@ -652,10 +662,12 @@ export default function VerifyHub() {
     // Kilit ikonu + alan adı + "Raporu aç" ÜÇÜ DE aynı yere (rapor sayfası) gider.
     // MOBİL: dikey yığ; sm+ : yatay (bilgi solda, eylemler sağda). RENKLER DEĞİŞMEDİ.
     <div key={o.id} className="px-5 py-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* (DUZELTME) Once sag taraf sm:shrink-0 idi ve sol sutunu eziyordu (alan adi "g.." gibi
+          kirpiliyordu). Grid ile sol sutuna EN AZ 200px garanti edildi; sag taraf gerekirse sarar. */}
+      <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(200px,1fr)_auto] sm:items-center sm:gap-4">
         <button
           onClick={() => router.push(`/dashboard/${o.id}`)}
-          className="group flex min-w-0 items-center gap-3.5 text-left sm:flex-1"
+          className="group flex min-w-0 items-center gap-3.5 text-left"
         >
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 transition group-hover:bg-brand-100">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" className="text-brand" aria-hidden>
@@ -670,9 +682,9 @@ export default function VerifyHub() {
             </span>
           </span>
         </button>
-        <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:shrink-0">
-          <span className="badge gap-1.5">
-            <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-70" />
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:justify-end">
+          <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border px-2.5 py-1 text-xs font-semibold ${statusTone(o.status)}`}>
+            <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
             {ORDER_STATUS_LABEL[lang][o.status] ?? o.status}
           </span>
           {/* (UX) Rapor hazırsa: rozet TEK BAŞINA tıklanabilir görünmüyordu; net bir CTA butonu
@@ -687,20 +699,20 @@ export default function VerifyHub() {
           )}
           {/* (Fatura talebi) ödemesi tamamlanmış siparişte talep/durum — form dashboard'ta (#fatura). */}
           {o.paid && (
-            <button onClick={() => router.push(`/dashboard/${o.id}#fatura`)} className="btn-ghost text-xs text-accent-700">
+            <button onClick={() => router.push(`/dashboard/${o.id}#fatura`)} className="whitespace-nowrap px-2 py-1 text-xs font-medium text-ink-muted transition hover:text-brand">
               {o.invoiceStatus === 'sent' ? T.invoiceSent : o.invoiceStatus ? T.invoiceRequested : T.requestInvoice}
             </button>
           )}
           {isArchived ? (
-            <button onClick={() => archiveOrder(o.id, false)} className="btn-ghost text-xs">
+            <button onClick={() => archiveOrder(o.id, false)} className="whitespace-nowrap px-2 py-1 text-xs font-medium text-ink-muted transition hover:text-brand">
               {T.unarchive}
             </button>
           ) : (
             <>
-              <button onClick={() => archiveOrder(o.id, true)} className="btn-ghost text-xs">
+              <button onClick={() => archiveOrder(o.id, true)} className="whitespace-nowrap px-2 py-1 text-xs font-medium text-ink-muted transition hover:text-brand">
                 {T.archive}
               </button>
-              <button onClick={() => deleteOrder(o.id)} className="btn-ghost text-xs text-red-600">
+              <button onClick={() => deleteOrder(o.id)} className="whitespace-nowrap px-2 py-1 text-xs font-medium text-red-600 transition hover:text-red-700">
                 {T.delete}
               </button>
             </>
