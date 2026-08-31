@@ -165,9 +165,38 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const [fixPromo, setFixPromo] = useState(''); // AI Cozum Onerileri promosyon kodu
   const [error, setError] = useState<string | null>(null);
   const [dlError, setDlError] = useState<string | null>(null); // rapor indirme hatası — kutunun altında gösterilir
+  // (HOOK SIRASI) Bu üç state + effect ESKİDEN erken return'ün ALTINDAydı; sipariş yüklenince
+  // hook sayısı değişip React #310 ("rendered more hooks than during the previous render") ile
+  // sayfa çöküyordu. Hook'lar KOŞULSUZ olmalı → diğer state'lerin yanına alındı.
+  const [fixPromoSeen, setFixPromoSeen] = useState<boolean | null>(null);
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendMsg, setResendMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // (KAMPANYA SADELESTIRME) AI kampanya bloğu sipariş başına YALNIZ İLK görüntülemede tam blok;
+  // sonrasında tek satırlık sessiz not. Fiyat/indirim ORANI değişmez, sadece görünürlük.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const k = `ct_fixpromo_${params.orderId}`;
+    const seen = window.localStorage.getItem(k) === '1';
+    setFixPromoSeen(seen);
+    if (!seen) window.localStorage.setItem(k, '1');
+  }, [params.orderId]);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
   useEffect(() => { const l = getRegion(readRegionCookie()).lang; setLang(l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr'); }, []);
+  const rr = RR[lang];
+  // (UX) "Kodu tekrar gönder" — e-postayı bulamayan kullanıcı kilitli kalmasın.
+  async function handleResendCode() {
+    setResendBusy(true);
+    setResendMsg(null);
+    try {
+      await api.resendReportCode(params.orderId);
+      setResendMsg({ ok: true, text: rr.resendOk });
+    } catch (e: any) {
+      setResendMsg({ ok: false, text: e?.message || rr.resendFail });
+    } finally {
+      setResendBusy(false);
+    }
+  }
   const t = DASH[lang];
 
   useEffect(() => {
@@ -294,33 +323,6 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const active = status === 'scan_running' || status === 'paid' || status === 'scan_queued';
   // (TASARIM) Rapor hazır ekranı iki kolonlu → dar kap yerine geniş kap.
   const wide = active || status === 'scan_completed';
-  const rr = RR[lang];
-  // (KAMPANYA SADELESTIRME) AI kampanya bloğu HER ziyarette büyük/vurgulu çıkıyordu; üst üste binen
-  // "ücretsiz" mesajları fiyat güvenilirliğini zedeliyor. Artık sipariş başına YALNIZ İLK görüntülemede
-  // tam blok, sonrasında tek satırlık sessiz not. Fiyat/indirim ORANI değişmez, sadece görünürlük.
-  const [fixPromoSeen, setFixPromoSeen] = useState<boolean | null>(null);
-  // (UX) "Kodu tekrar gönder" — e-postayı bulamayan kullanıcı kilitli kalmasın.
-  const [resendBusy, setResendBusy] = useState(false);
-  const [resendMsg, setResendMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  async function handleResendCode() {
-    setResendBusy(true);
-    setResendMsg(null);
-    try {
-      await api.resendReportCode(params.orderId);
-      setResendMsg({ ok: true, text: rr.resendOk });
-    } catch (e: any) {
-      setResendMsg({ ok: false, text: e?.message || rr.resendFail });
-    } finally {
-      setResendBusy(false);
-    }
-  }
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const k = `ct_fixpromo_${params.orderId}`;
-    const seen = window.localStorage.getItem(k) === '1';
-    setFixPromoSeen(seen);
-    if (!seen) window.localStorage.setItem(k, '1');
-  }, [params.orderId]);
 
   let feed: Array<{ seq: number; text: string }> = [];
   try {
