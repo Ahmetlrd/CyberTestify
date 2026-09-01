@@ -606,7 +606,7 @@ export default function VerifyHub() {
             )}
           </div>
         ) : (
-          <form onSubmit={addDomain} className="card p-5">
+          <form onSubmit={addDomain} className="card max-w-2xl p-5">
             <label className="label">{T.newDomain}</label>
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
@@ -664,7 +664,7 @@ export default function VerifyHub() {
     <div key={o.id} className="px-5 py-4">
       {/* (DUZELTME) Once sag taraf sm:shrink-0 idi ve sol sutunu eziyordu (alan adi "g.." gibi
           kirpiliyordu). Grid ile sol sutuna EN AZ 200px garanti edildi; sag taraf gerekirse sarar. */}
-      <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(200px,1fr)_auto] sm:items-center sm:gap-4">
+      <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(300px,1fr)_auto] sm:items-center sm:gap-5">
         <button
           onClick={() => router.push(`/dashboard/${o.id}`)}
           className="group flex min-w-0 items-center gap-3.5 text-left"
@@ -682,7 +682,7 @@ export default function VerifyHub() {
             </span>
           </span>
         </button>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:justify-end">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:flex-nowrap sm:justify-end">
           <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border px-2.5 py-1 text-xs font-semibold ${statusTone(o.status)}`}>
             <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
             {ORDER_STATUS_LABEL[lang][o.status] ?? o.status}
@@ -726,7 +726,7 @@ export default function VerifyHub() {
   );
 
   return (
-    <main className="container-page max-w-2xl py-14">
+    <main className="container-page max-w-5xl py-14">
       <div>
         <p className="eyebrow">{T.myPanel}</p>
         <h1 className="mt-1 text-2xl font-extrabold text-brand">
