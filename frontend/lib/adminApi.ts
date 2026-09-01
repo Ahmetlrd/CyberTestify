@@ -99,6 +99,15 @@ export const adminApi = {
     }
     return res.blob();
   },
+  // (LINKEDIN OTOMATİK PAYLAŞIM — Buffer GraphQL API) Yalnız admin; API anahtarı BACKEND'de kalır.
+  linkedinStatus: () =>
+    areq<{ enabled: boolean; error?: string; channelId?: string; channelName?: string; organizationId?: string }>('/admin/linkedin/status'),
+  linkedinPosts: (status = '') =>
+    areq<{ items: any[]; pendingCount: number }>(`/admin/linkedin/posts${status ? `?status=${status}` : ''}`),
+  linkedinCreate: (body: { content: string; mediaUrl?: string; mode: 'addToQueue' | 'customScheduled'; scheduledFor?: string }) =>
+    areq<{ ok: boolean; post: any }>('/admin/linkedin/posts', { method: 'POST', body: JSON.stringify(body) }),
+  linkedinDelete: (id: string) => areq<{ ok: boolean }>(`/admin/linkedin/posts/${id}`, { method: 'DELETE' }),
+  linkedinSync: () => areq<{ ok: boolean; checked: number; updated: number }>('/admin/linkedin/sync', { method: 'POST' }),
   scopeViolations: (page = 1) => areq<Page<any>>(`/admin/scope-violations?page=${page}`),
   // (Fatura talebi — MANUEL) Vedat fatura bilgilerini + fiyatı görür, durumu işaretler.
   invoiceRequests: (status = '') =>

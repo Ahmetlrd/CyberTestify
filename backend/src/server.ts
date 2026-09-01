@@ -20,6 +20,7 @@ import { internalRouter } from './routes/internal.js';
 import { schedulesRouter } from './routes/schedules.js';
 import { adminAuthRouter } from './routes/adminAuth.js';
 import { adminRouter } from './routes/admin.js';
+import { adminLinkedinRouter } from './routes/adminLinkedin.js';
 import { betaRouter } from './routes/beta.js';
 import { requireAdmin, adminIpAllowlist } from './middleware/adminAuth.js';
 import cors from 'cors';
@@ -135,6 +136,8 @@ app.use('/beta', apiLimiter, betaRouter);
 // (register YOK) + siki authLimiter; veri endpoint'leri requireAdmin arkasinda.
 // '/admin/auth' once mount edilir ki '/admin' requireAdmin login'i engellemesin.
 app.use('/admin/auth', adminIpAllowlist, authLimiter, adminAuthRouter);
+// (LINKEDIN OTOMATIK PAYLASIM) '/admin' catch-all'undan ONCE mount edilir; ayni korumalar gecerli.
+app.use('/admin/linkedin', adminIpAllowlist, apiLimiter, requireAdmin, adminLinkedinRouter);
 app.use('/admin', adminIpAllowlist, apiLimiter, requireAdmin, adminRouter);
 
 // Ic ag endpoint'leri (egress proxy icin) — CORS/rate-limit yok, secret korumali.

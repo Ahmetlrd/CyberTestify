@@ -55,6 +55,14 @@ export const config = {
   // Admin paneli IP kisitlamasi (opsiyonel). Bos ise kisitlama YOK. Virgulle IP.
   adminIpAllowlist: (process.env.ADMIN_IP_ALLOWLIST ?? '')
     .split(',').map((s) => s.trim()).filter(Boolean),
+  // (LINKEDIN OTOMATIK PAYLASIM — Buffer GraphQL API) Anahtar YALNIZ burada; asla loglanmaz,
+  // asla istemciye donmez. Bos ise ozellik KAPALI (admin panelinde net uyari gosterilir).
+  // organizationId/linkedinChannelId opsiyoneldir: verilmezse ilk cagride API'den cozulup cache'lenir.
+  buffer: {
+    apiKey: process.env.BUFFER_API_KEY ?? '',
+    organizationId: process.env.BUFFER_ORGANIZATION_ID ?? '',
+    linkedinChannelId: process.env.BUFFER_LINKEDIN_CHANNEL_ID ?? '',
+  },
   reportEncryptionPepper: required('REPORT_ENCRYPTION_PEPPER'),
   // Veri minimizasyonu: rapor icerigi bu sure sonunda silinir (siparis/odeme
   // kaydi KORUNUR — muhasebe/fatura mevzuati). Ham PentAGI verisi zaten rapor

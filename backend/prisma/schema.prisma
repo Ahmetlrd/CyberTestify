@@ -704,3 +704,24 @@ model UsomAdvisory {
 
   @@index([matchKind])
 }
+
+/// (LINKEDIN OTOMATIK PAYLASIM) Admin panelinden olusturulan LinkedIn gonderileri.
+/// Buffer GraphQL API'sine gonderilir; Buffer'in dondurdugu post id burada saklanir
+/// (iptal/durum takibi icin). Musteri/tarama verisiyle ILGISI YOKTUR.
+model LinkedinPost {
+  id           String    @id @default(uuid())
+  content      String
+  mediaUrl     String? // opsiyonel gorsel (PUBLIC erisilebilir URL) -> Buffer assets[].image.url
+  /// DRAFT | QUEUED | SCHEDULED | PUBLISHED | FAILED
+  status       String    @default("DRAFT")
+  /// customScheduled modunda hedef tarih/saat (UTC). addToQueue'da null.
+  scheduledFor DateTime?
+  /// Buffer'dan donen post.id — iptal ve durum senkronu icin.
+  bufferPostId String?
+  /// FAILED durumunda Buffer'in dondurdugu MutationError.message
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status, createdAt])
+}
