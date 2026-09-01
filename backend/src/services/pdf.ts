@@ -499,8 +499,88 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en' | 'd
   <p>${intro}</p>`;
 }
 
+// ============================================================================
+// (A/B TESTİ — YALNIZ KEŞİF PAKETİ / bundle_recon) Okunabilirlik/görsel hiyerarşi.
+// Bu blok SADECE meta.packageKey === 'bundle_recon' iken devreye girer; diğer 5 paketin
+// çıktısı byte-byte AYNIDIR. Veri/bulgu/metodoloji DEĞİŞMEZ — yalnız sunum.
+// ============================================================================
+const RECON_PKG = 'bundle_recon';
+
+/** POZİTİF GÜVENCE tablosunun satırlarını ayrıştırır (uydurma YOK — markdown'da ne varsa o). */
+function parseReconAssurance(md: string): Array<{ area: string; result: string; ok: boolean }> {
+  // Bölüm başlığı 3 dilde; tablo başlığı "| Keşif Alanı | Sonuç |" / "| Reconnaissance Area | Result |" / "| Erkundungsbereich | Ergebnis |"
+  const sec = md.match(/##\s*(?:POZİTİF GÜVENCE|POSITIVE ASSURANCE|POSITIVE ZUSICHERUNG)[^\n]*\n([\s\S]*?)(?=\n##\s|$)/);
+  if (!sec) return [];
+  const out: Array<{ area: string; result: string; ok: boolean }> = [];
+  for (const line of sec[1].split('\n')) {
+    const m = line.match(/^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*$/);
+    if (!m) continue;
+    const area = m[1].trim();
+    const result = m[2].trim();
+    if (/^-+$/.test(area) || !result || /^(Sonuç|Result|Ergebnis)$/i.test(result)) continue; // baslik/ayrac satiri
+    out.push({ area, result, ok: result.startsWith('✅') });
+  }
+  return out;
+}
+
+/** Master tablodaki çıplak "Temiz" yerine geçen KISA özet cümlesi (gerçek sayılardan). */
+function reconEmptySummary(rows: Array<{ ok: boolean }>, locale: 'tr' | 'en' | 'de'): string {
+  if (!rows.length) return '';
+  const clean = rows.filter((r) => r.ok).length;
+  return p3(locale,
+    ` <strong>${clean}/${rows.length} keşif yöntemi çalıştırıldı; hiçbirinde gösterge bulunamadı</strong> (yöntem yöntem özet aşağıdadır).`,
+    ` <strong>${clean}/${rows.length} reconnaissance methods were executed; no indicator emerged in any of them</strong> (method-by-method summary below).`,
+    ` <strong>${clean}/${rows.length} Erkundungsmethoden wurden ausgeführt; in keiner ergab sich ein Indikator</strong> (Zusammenfassung je Methode unten).`);
+}
+
+/**
+ * Master Bulgu Tablosu'nun HEMEN ALTINA gelen "Ne test edildi / ne çıktı" özeti.
+ * İçerik §POZİTİF GÜVENCE tablosundan AYNEN alınır (o bölüm yerinde KALIR) — kullanıcı
+ * bilgiyi görmek için raporun sonuna kadar beklemek zorunda kalmasın.
+ */
+function buildReconAssuranceSummary(md: string, locale: 'tr' | 'en' | 'de'): string {
+  const rows = parseReconAssurance(md);
+  if (!rows.length) return '';
+  const okRows = rows.filter((r) => r.ok);
+  const warnRows = rows.filter((r) => !r.ok);
+  const strip = (s: string) => s.replace(/^[✅⚠️\s]+/, '').trim();
+  const title = p3(locale, 'Ne test edildi, ne çıktı?', 'What was tested, and what came out?', 'Was wurde geprüft, und was kam heraus?');
+  const okHead = p3(locale, 'Test edildi — gösterge bulunamadı', 'Checked — no indicator found', 'Geprüft — kein Indikator gefunden');
+  const warnHead = p3(locale, 'Gösterge bulundu — ayrıntısı aşağıdaki bölümlerde', 'Indicator found — detailed in the sections below', 'Indikator gefunden — Details in den Abschnitten unten');
+  const li = (r: { area: string; result: string }) => `<li><span class="rc-area">${escapeHtml(r.area)}</span> ${escapeHtml(strip(r.result))}</li>`;
+  return `<div class="rc-summary">
+    <div class="rc-summary-title">${escapeHtml(title)}</div>
+    ${okRows.length ? `<div class="rc-ok-box"><div class="rc-box-head">✅ ${escapeHtml(okHead)}</div><ul>${okRows.map(li).join('')}</ul></div>` : ''}
+    ${warnRows.length ? `<div class="rc-warn-box"><div class="rc-box-head">⚠️ ${escapeHtml(warnHead)}</div><ul>${warnRows.map(li).join('')}</ul></div>` : ''}
+  </div>`;
+}
+
+/**
+ * Rendere edilmiş HTML üzerinde YALNIZ SINIF EKLER (metin/işaret/cümle DEĞİŞMEZ):
+ *  - ✅ ile başlayan hücre/madde  -> .rc-ok   (açık yeşil "test + sonuç")
+ *  - ⚠️ ile başlayan hücre/madde  -> .rc-warn (amber gösterge)
+ *  - DEĞERLENDİRİR / DEĞERLENDİRMEZ paragrafları -> iki ayrı bilgi kutusu
+ */
+function reconStyleBlocks(html: string): string {
+  let out = html
+    .replace(/<td>(\s*✅)/g, '<td class="rc-ok">$1')
+    .replace(/<td>(\s*⚠️)/g, '<td class="rc-warn">$1')
+    .replace(/<li>(\s*✅)/g, '<li class="rc-ok">$1')
+    .replace(/<li>(\s*⚠️)/g, '<li class="rc-warn">$1');
+  // "NE değerlendirir / NE değerlendirmez" — ikisi de BİLGİdir; kırmızı KULLANILMAZ.
+  out = out.replace(
+    /<p><strong>(DEĞERLENDİRİR|ASSESSES|BEWERTET)\b([\s\S]*?)<\/p>/g,
+    '<div class="rc-does"><p><strong>$1$2</p></div>',
+  );
+  out = out.replace(
+    /<p><strong>(DEĞERLENDİRMEZ|DOES NOT ASSESS|BEWERTET NICHT)\b([\s\S]*?)<\/p>/g,
+    '<div class="rc-does-not"><p><strong>$1$2</p></div>',
+  );
+  return out;
+}
+
 // 2.2 Master Bulgu Tablosu — ID (CT-N) + Başlık + Durum + Şiddet. Boşsa dürüst "temiz" satırı.
-function buildMasterTable(rows: Finding[], locale: 'tr' | 'en' | 'de', unscannable = false): string {
+function buildMasterTable(rows: Finding[], locale: 'tr' | 'en' | 'de', unscannable = false, emptyExtra = ''): string {
   const rank: Record<Sev, number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const sorted = [...rows].sort((a, b) => rank[a.sev] - rank[b.sev]);
   const head = locale === 'de' ? ['ID', 'Titel', 'Status', 'Schweregrad'] : locale === 'tr' ? ['ID', 'Başlık', 'Durum', 'Şiddet'] : ['ID', 'Title', 'State', 'Severity'];
@@ -510,7 +590,8 @@ function buildMasterTable(rows: Finding[], locale: 'tr' | 'en' | 'de', unscannab
     // (DÜRÜSTLÜK) Hedefe ulaşılamadı -> "Temiz" satırı YERİNE açık uyarı; nötr gri "İncelenemedi" (risk rengi YOK).
     body = `<tr><td>—</td><td colspan="2">${p3(locale, 'Kontroller anlamlı şekilde çalıştırılamadı (hedefe ulaşılamadı veya test edilebilir bir yüzey/giriş noktası bulunamadı) — sonuç değerlendirilemez (“güvenli/temiz” anlamına gelmez).', 'Checks could not run meaningfully (target unreachable, or no testable surface/entry point found) — result cannot be assessed (does not mean "safe/clean").', 'Die Prüfungen konnten nicht sinnvoll ausgeführt werden (Ziel nicht erreichbar oder keine testbare Oberfläche/kein Einstiegspunkt gefunden) — das Ergebnis lässt sich nicht bewerten (bedeutet nicht „sicher/sauber“).')}</td><td><span class="sev-badge" style="background:#6B7280">${p3(locale, 'İncelenemedi', 'Not scanned', 'Nicht geprüft')}</span></td></tr>`;
   } else if (sorted.length === 0) {
-    body = `<tr><td>—</td><td colspan="2">${p3(locale, 'Bu taramada açık zafiyet göstergesi tespit edilmedi.', 'No open vulnerability indicator detected in this scan.', 'In diesem Scan wurde kein offener Schwachstellen-Indikator festgestellt.')}</td><td><span class="sev-badge" style="background:#1C6B60">${p3(locale, 'Temiz', 'Clean', 'Sauber')}</span></td></tr>`;
+    // (KEŞİF A/B) emptyExtra YALNIZ bundle_recon'da dolu gelir -> çıplak "Temiz" yerine kısa özet.
+    body = `<tr><td>—</td><td colspan="2">${p3(locale, 'Bu taramada açık zafiyet göstergesi tespit edilmedi.', 'No open vulnerability indicator detected in this scan.', 'In diesem Scan wurde kein offener Schwachstellen-Indikator festgestellt.')}${emptyExtra}</td><td><span class="sev-badge" style="background:#1C6B60">${p3(locale, 'Temiz', 'Clean', 'Sauber')}</span></td></tr>`;
   } else {
     body = sorted.map((f, idx) => {
       const sm = SEV_META[f.sev];
@@ -903,7 +984,15 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   // (DÜRÜSTLÜK) Hedefe ulaşılamadı/tarama yürütülemedi -> master "Temiz" DEĞİL "İncelenemedi",
   // dağılımdaki 0'lar "temiz" değil "incelenemedi" olarak işaretlenir. (assessBasit rozeti zaten nötr yapıyor.)
   const unscannable = /risk\s*seviyesi\s*[:：]\s*\*{0,2}\s*incelenemedi|risikostufe\s*[:：]\s*\*{0,2}\s*nicht\s*pr[üu]fbar|tarama\s*(yap[ıi]lamad|y[uü]r[uü]t[uü]lemed)|ula[şs][ıi]lamad[ıi][ğg][ıi] i[çc]in kontrol/.test(effectiveMd.slice(0, 2000).toLocaleLowerCase('tr'));
-  const distMasterHtml = parsed ? buildDistribution(parsed.counts, loc, unscannable) + buildMasterTable(parsed.rows, loc, unscannable) : '';
+  // (KEŞİF A/B — YALNIZ bundle_recon) Master tabloda çıplak "Temiz" yerine kısa özet + tablonun
+  // hemen altında "ne test edildi / ne çıktı" kutusu. Diğer paketlerde isRecon=false -> hiçbir fark yok.
+  const isRecon = meta.packageKey === RECON_PKG;
+  const reconRows = isRecon ? parseReconAssurance(effectiveMd) : [];
+  const reconEmpty = isRecon && !unscannable ? reconEmptySummary(reconRows, loc) : '';
+  const reconSummaryHtml = isRecon && !unscannable ? buildReconAssuranceSummary(effectiveMd, loc) : '';
+  const distMasterHtml = parsed
+    ? buildDistribution(parsed.counts, loc, unscannable) + buildMasterTable(parsed.rows, loc, unscannable, reconEmpty) + reconSummaryHtml
+    : '';
   // 2.3 Detaylı Bulgular (İş Etkisi + CWE) yalnız GERÇEK raporlarda; örneklerde (assessOverride) kendi var.
   const detailedHtml = parsed && !opts.assessOverride ? buildDetailedFindings(parsed.rows, loc) : '';
   // (PREMIUM) Pozitif Güvence — KONTROL ÖZETİ'ndeki TEMİZ (✓) kontrollerden türetilir (uydurma yok).
@@ -984,7 +1073,8 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
       }).join('\n');
     }
     const summaryBody = dedupeBlockquotes(md.render(execMd)) + (hasVuln ? buildPriorities(parsed!.rows, loc) : '');
-    const detailBody = scopeNote + dedupeBlockquotes(md.render(keptDetail.join('\n\n')));
+    const detailBody0 = scopeNote + dedupeBlockquotes(md.render(keptDetail.join('\n\n')));
+    const detailBody = isRecon ? reconStyleBlocks(detailBody0) : detailBody0;
     const hasFindings = !!(distMasterHtml || detailedHtml);
     const findingsSection = hasFindings ? H2('s-findings', '2. Bulgular', '2. Findings', '2. Befunde') + distMasterHtml + detailedHtml + assuranceHtml : '';
     const cn = hasFindings ? 3 : 2; // bulgu bölümü yoksa (uyum) numara boşluğu olmasın
@@ -1001,7 +1091,8 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
       extrasSub + fixNum + glossNum;
   } else {
     // Yapısız gövde / örnek PDF: mevcut akış (assessBox + dağılım/master + gövde + AI + sözlük).
-    const bodyHtml = dedupeBlockquotes(md.render(effectiveMd) + extrasHtml + fixHtml);
+    const bodyHtml0 = dedupeBlockquotes(md.render(effectiveMd) + extrasHtml + fixHtml);
+    const bodyHtml = isRecon ? reconStyleBlocks(bodyHtml0) : bodyHtml0;
     contentInner0 = `${sampleNoticeHtml}${assessBox}${distMasterHtml}${detailedHtml}${bodyHtml}${glossaryHtml}`;
   }
   const { html: contentInner, entries: tocEntries } = injectTocIds(contentInner0);
@@ -1132,6 +1223,50 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .assurance { margin: 14px 0 6px; padding: 12px 16px; background: #EEF7F1; border: 1px solid #CFE5DB; border-left: 4px solid #1C6B60; border-radius: 8px; }
   .assurance h3 { margin: 0 0 5px; color: #14514A; font-size: 13px; }
   .assurance p { margin: 0; font-size: 11.5px; color: #274b41; }
+  /* ======================================================================
+     (A/B TESTİ — YALNIZ KEŞİF PAKETİ) 4 blok tipi görsel olarak ayrışır.
+     Kapsam: .recon-report — diğer 5 paketin PDF'i bu kuralların HİÇBİRİNİ almaz.
+     Palet marka ile uyumlu: koyu yeşil #123F3A (başlık) + yeşilin açık tonu (test+sonuç)
+     + AMBER'in açık tonu (kapsam/dürüstlük notu). Marka turuncusu (#F5A623) ciddi
+     bulgu/AI bölümüne ait olduğu için rutin notlarda KULLANILMAZ — karışmasın.
+     ====================================================================== */
+  /* (1) BAŞLIK — kalın, marka rengi, arka plan YOK */
+  .recon-report h2, .recon-report h3, .recon-report h4 { color: #123F3A; background: none; }
+  .recon-report h3 { border-left: 3px solid #1C6B60; padding-left: 9px; }
+  /* (2) TEST + SONUÇ — açık yeşil, ✅ */
+  .recon-report td.rc-ok { background: #EFF8F4; color: #12564C; font-weight: 600; }
+  .recon-report li.rc-ok { background: #EFF8F4; color: #12564C; padding: 3px 8px; border-radius: 4px; list-style: none; margin-left: -18px; }
+  .rc-summary { margin: 10px 0 18px; }
+  .rc-summary-title { font-size: 12.5px; font-weight: 700; color: #123F3A; margin-bottom: 6px; }
+  .rc-ok-box { border: 1px solid #BFE3D5; border-left: 4px solid #1C6B60; background: #F1F9F5; border-radius: 0 6px 6px 0; padding: 10px 14px; margin-bottom: 8px; }
+  .rc-warn-box { border: 1px solid #F0D9A8; border-left: 4px solid #C98A16; background: #FEF9EE; border-radius: 0 6px 6px 0; padding: 10px 14px; }
+  .rc-box-head { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px; }
+  .rc-ok-box .rc-box-head { color: #12564C; }
+  .rc-warn-box .rc-box-head { color: #8A5B08; }
+  .rc-summary ul { margin: 0; padding-left: 16px; }
+  .rc-summary li { font-size: 11.5px; line-height: 1.55; margin: 2px 0; }
+  .rc-ok-box li { color: #1b3a34; }
+  .rc-warn-box li { color: #5C3D08; }
+  .rc-area { font-weight: 700; color: #123F3A; }
+  .rc-warn-box .rc-area { color: #7A4B12; }
+  /* (3) AÇIKLAMA / METODOLOJİ — nötr, arka plan YOK (varsayılan paragraf) */
+  .recon-report p { background: none; color: #1b2b28; }
+  /* (4) UYARI / KAPSAM NOTU — amber kutu; CİDDİ BULGU rengiyle (kırmızı/turuncu) KARIŞMAZ */
+  .recon-report blockquote { background: #FEF9EE; border-left: 4px solid #C98A16; color: #5C3D08; border-radius: 0 4px 4px 0; }
+  .recon-report td.rc-warn { background: #FEF9EE; color: #7A4B12; font-weight: 600; }
+  .recon-report li.rc-warn { background: #FEF9EE; color: #7A4B12; padding: 3px 8px; border-radius: 4px; list-style: none; margin-left: -18px; }
+  /* Ciddi bulgu göstergeleri (şiddet rozetleri / master tablo) DOKUNULMAZ: kendi kırmızı/turuncu
+     renklerini korur -> rutin kapsam notu (amber) ile ASLA aynı görünmez. */
+  /* (3.b) "NE değerlendirir / NE değerlendirmez" — ikisi de BİLGİ; kırmızı yok */
+  .rc-does, .rc-does-not { border-radius: 6px; padding: 10px 14px; margin: 8px 0; }
+  .rc-does { background: #F1F9F5; border: 1px solid #BFE3D5; border-left: 4px solid #1C6B60; }
+  .rc-does-not { background: #F4F6F5; border: 1px solid #D9E0DD; border-left: 4px solid #8A9A95; }
+  .rc-does p, .rc-does-not p { margin: 0; }
+  .rc-does strong { color: #12564C; }
+  .rc-does-not strong { color: #4A5A55; }
+  /* (4.b) AI ÇÖZÜM ÖNERİLERİ kod blokları — açıklama metninden ayrı görsel kimlik */
+  .recon-report .fix-section pre { background: #10221F; color: #DCEFE9; border: 1px solid #23433D; border-radius: 6px; padding: 10px 12px; }
+  .recon-report .fix-section pre code { background: none; color: inherit; }
   .scope-note { margin: 10px 0 14px; padding: 10px 14px; background: #F3F7FA; border: 1px solid #C9DCE8;
     border-left: 4px solid #2B6C9B; border-radius: 6px; font-size: 11.5px; color: #274b63; }
   .mt-ep { color: #5b6b67; font-weight: 400; font-size: 10.5px; }
@@ -1202,7 +1337,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     ${opts.hideDate ? '' : `<div><div class="k">${escapeHtml(t.date)}</div><div class="v">${escapeHtml(dateStr)}</div></div>`}
     <div><div class="k">${p3(meta.locale, 'Rapor No', 'Report No', 'Bericht-Nr.')}</div><div class="v">${reportNo}</div></div>
   </div>
-  <div class="content">${contentInner}</div>
+  <div class="content${isRecon ? ' recon-report' : ''}">${contentInner}</div>
   <script>
     // Siddet kelimelerine gore tablo hucrelerini renklendir (TR+EN, buyuk/kucuk duyarsiz).
     (function () {
