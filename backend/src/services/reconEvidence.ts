@@ -230,6 +230,15 @@ export async function collectSubdomains(host: string): Promise<SubEvidence> {
 // ======================================================================================
 const API_PATHS = ['/openapi.json', '/swagger.json', '/v2/api-docs', '/v3/api-docs', '/api-docs', '/api/docs', '/api/v1/docs', '/swagger-ui.html', '/swagger/index.html', '/redoc', '/.well-known/openapi.json', '/graphql'];
 const SENSITIVE_RE = /(admin|internal|debug|token|secret|password|passwd|credential|export|dump|backup|user|account|payment|invoice|upload|delete|drop|config|env|key)/i;
+// (STATIK VARLIK FILTRESI — Kesif) SENSITIVE_RE icindeki "upload/user/key..." gibi kelimeler
+// klasor adlarinda da gectigi icin (/uploads/theme/entry_slider_image_3.jpg) SIRADAN tema
+// gorselleri "idari-gorunumlu" olarak isaretleniyordu — yaniltici. Bir yol acikca statik medya
+// dosyasiysa (uzanti) idari/hassas OLAMAZ: sensitive=false yapilir. API-benzeri bir yol altindaysa
+// (/api/... ) yine API yolu olarak listelenir; yalnizca "idari-gorunumlu" ETIKETI kalkar.
+// HTML/uzantisiz/endpoint gorunumlu yollar (/admin, /user-manuals, /business/search) ETKILENMEZ.
+const STATIC_ASSET_RE = /\.(png|jpe?g|svg|gif|webp|ico|bmp|avif|css|woff2?|ttf|eot|otf|mp4|webm|mp3|pdf)(?:$|\?)/i;
+export function isStaticAsset(path: string): boolean { return STATIC_ASSET_RE.test(path); }
+
 // (Grok B2) admin/debug/internal isimli uc noktalar AYRI isaretlenir (genel "hassas"tan daha yuksek dikkat).
 const ADMIN_RE = /(admin|debug|internal|sysadmin|superuser|root|manage|console|actuator)/i;
 
@@ -257,7 +266,8 @@ export function minePathCandidatesFromPages(pages: PageEvidence[], host: string)
     try { const u = new URL(raw, `http://${host}/`); if (u.hostname.replace(/^www\./, '') !== hostBare) return; p = u.pathname; } catch { return; }
     if (!p.startsWith('/') || p.length < 2 || p.length > 80 || /[{}<>*\s]|\.\.|:[a-z]/i.test(p)) return;
     const api = API_LIKE_RE.test(p);
-    const sensitive = SENSITIVE_RE.test(p);
+    // Statik medya dosyasi ASLA "idari-gorunumlu" degildir (bkz STATIC_ASSET_RE).
+    const sensitive = !isStaticAsset(p) && SENSITIVE_RE.test(p);
     if (!api && !sensitive) return; // yalnız API veya idari-görünümlü yollar (gürültü değil)
     const key = p.replace(/\/+$/, '');
     if (!out.has(key)) out.set(key, { path: p, source: sourcePath, sensitive, api });
@@ -284,7 +294,7 @@ export async function mineRobotsDisallow(host: string): Promise<Array<{ path: st
     p = p.replace(/\*.*$/, '').replace(/\$$/, ''); // basit desen sadeleştirme
     if (p.length < 2 || out.size >= 12) continue;
     const key = p.replace(/\/+$/, '');
-    if (!out.has(key)) out.set(key, { path: p, source: 'robots.txt', sensitive: SENSITIVE_RE.test(p), api: API_LIKE_RE.test(p) });
+    if (!out.has(key)) out.set(key, { path: p, source: 'robots.txt', sensitive: !isStaticAsset(p) && SENSITIVE_RE.test(p), api: API_LIKE_RE.test(p) });
   }
   return [...out.values()];
 }

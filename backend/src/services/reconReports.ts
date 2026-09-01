@@ -12,7 +12,7 @@
  * rapor gövdesi (Sie-form, „…" tırnak). 'en' → İngilizce (UK) rapor gövdesi. Kod bloğu (``` fence) içi
  * TR/DE'de AYNIDIR; 'en' branch'inde kod-içi yorumlar İngilizce'ye çevrilir (kod/komut aynı kalır).
  */
-import { collectReconEvidence, type ReconEvidence, type SubEvidence, type ApiEvidence, type CmsEvidence, type BannerCve } from './reconEvidence.js';
+import { collectReconEvidence, isStaticAsset, type ReconEvidence, type SubEvidence, type ApiEvidence, type CmsEvidence, type BannerCve } from './reconEvidence.js';
 import { matchUsom, USOM_CATALOG, observableCount, type UsomHit, type UsomAdvisory } from './usomCatalog.js';
 import { loadUsomCatalog, usomLastSyncAt } from './usomSync.js';
 import { resolveOrigin } from './surfaceEvidence.js';
@@ -318,7 +318,8 @@ function buildApiArea(ev: ApiEvidence, locale: string = 'tr'): Area {
     lines.push(t('| Aday Yol | Kaynak sayfa | HTTP | Not |', '| Kandidatenpfad | Quellseite | HTTP | Hinweis |', '| Candidate Path | Source page | HTTP | Note |'));
     lines.push('|----------|--------------|------|-----|');
     for (const m of ev.minedTried.slice(0, 15)) {
-      const not = m.status === 200 ? (m.sensitive ? t('⚠️ mevcut (idari-görünümlü)', '⚠️ vorhanden (administrativ wirkend)', '⚠️ present (administrative-looking)') : t('mevcut', 'vorhanden', 'present')) : (m.status === 401 || m.status === 403) ? t('korumalı (kimlik doğrulama istiyor)', 'geschützt (erfordert Authentifizierung)', 'protected (requires authentication)') : m.status === 0 ? t('yanıt yok', 'keine Antwort', 'no response') : t('yok/404', 'nicht vorhanden/404', 'not present/404');
+      // Statik medya dosyalari "idari-gorunumlu" DEGILDIR; ayri, dusuk-onem bilgi etiketi alir.
+      const not = m.status === 200 ? (m.sensitive ? t('⚠️ mevcut (idari-görünümlü)', '⚠️ vorhanden (administrativ wirkend)', '⚠️ present (administrative-looking)') : isStaticAsset(m.path) ? t('mevcut (statik varlık — bilgi amaçlı)', 'vorhanden (statisches Asset — nur zur Information)', 'present (static asset — informational)') : t('mevcut', 'vorhanden', 'present')) : (m.status === 401 || m.status === 403) ? t('korumalı (kimlik doğrulama istiyor)', 'geschützt (erfordert Authentifizierung)', 'protected (requires authentication)') : m.status === 0 ? t('yanıt yok', 'keine Antwort', 'no response') : t('yok/404', 'nicht vorhanden/404', 'not present/404');
       lines.push(`| ${m.path} | ${m.source} | ${m.status || '—'} | ${not} |`);
     }
     lines.push('');
