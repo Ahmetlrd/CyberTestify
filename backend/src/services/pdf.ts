@@ -556,9 +556,9 @@ function buildReconAssuranceSummary(md: string, locale: 'tr' | 'en' | 'de', pkg:
   // gosterge bulundu". Kesif'in mevcut basligi DEGISMEZ (o paket zaten dogrulanmis durumda).
   const title = pkg === 'basit_tarama'
     ? p3(locale,
-        `${rows.length} kontrol alanı çalıştırıldı — ${okRows.length}’inde sorun bulunmadı, ${warnRows.length}’inde gösterge var`,
-        `${rows.length} control areas were run — ${okRows.length} came back clean, ${warnRows.length} produced an indicator`,
-        `${rows.length} Kontrollbereiche wurden ausgeführt — ${okRows.length} ohne Befund, ${warnRows.length} mit Indikator`)
+        `${rows.length} kontrol alanı çalıştırıldı — ${okRows.length} alanda sorun bulunmadı, ${warnRows.length} alanda bulgu var`,
+        `${rows.length} control areas were run — ${okRows.length} came back clean, ${warnRows.length} produced a finding`,
+        `${rows.length} Kontrollbereiche wurden ausgeführt — ${okRows.length} ohne Befund, ${warnRows.length} mit Befund`)
     : p3(locale, 'Ne test edildi, ne çıktı?', 'What was tested, and what came out?', 'Was wurde geprüft, und was kam heraus?');
   const okHead = pkg === 'basit_tarama'
     ? p3(locale, 'Kontrol edildi — sorun bulunmadı', 'Checked — no issue found', 'Geprüft — kein Problem gefunden')
