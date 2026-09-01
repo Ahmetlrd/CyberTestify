@@ -74,7 +74,7 @@ Keiner der geprüften Pfade lieferte ein öffentlich zugängliches API-Schema/-I
 
 ### Untersuchte Fingerabdruck-Quellen
 
-Zur CMS-/Framework- und Versionserkennung wurden in der Startseiten-Antwort die folgenden passiven Signale betrachtet:
+Zur CMS-/Framework- und Versionserkennung wurden in der Startseiten-Antwort die folgenden **6 passiven Signalkategorien** betrachtet (die Angabe „6+ passive CMS-/Technologiesignale" in der Managementzusammenfassung meint genau diese Liste; das „+" steht für die mehreren Untersignale je Kategorie):
 
 - HTTP-Antwort-Header (`Server`, `X-Powered-By`, `X-Generator`, `X-Drupal-Cache`, `X-Magento-Cache-Debug`)
 - `<meta name="generator">`-Tag
@@ -100,21 +100,21 @@ Die aus dem Banner ermittelte(n) Version(en) wurden mit der NVD abgeglichen (KEI
 
 ## POSITIVE ZUSICHERUNG — GEPRÜFTE ERKUNDUNGSMETHODEN
 
-Die Erkundung fällt bei den meisten gesunden Zielen sauber aus; dieser Abschnitt macht auch das Ergebnis „nichts gefunden" TRANSPARENT — er zeigt, was TATSÄCHLICH geprüft wurde (inklusive **2 Seiten** Sitemap, Startseite eingeschlossen):
+Die Erkundung fällt bei den meisten gesunden Zielen sauber aus; dieser Abschnitt macht auch das Ergebnis „nichts gefunden" TRANSPARENT — er zeigt, was TATSÄCHLICH geprüft wurde. Die unten genannten **2 Seiten** sind die Startseite plus die aus Sitemap und robots.txt abgeleiteten Seiten (keine Seite außerhalb Ihrer eigenen Website wurde abgerufen):
 
 | Erkundungsbereich | Ergebnis |
 |-------------|-------|
-| Subdomain-Takeover-Prüfung | ✅ 0 Subdomain-Einträge geprüft; kein Übernahme-Indikator gefunden |
-| API- & Swagger-Erkundung | ✅ 12 Pfade geprüft (12 fest + 0 Sitemap-Kandidaten, aus 2 Seiten); kein öffentlich zugängliches API-Schema gefunden |
-| CMS-/Framework-CVE-Abgleich | ✅ Kein bekannter CMS-/Framework-Fingerabdruck festgestellt |
+| Subdomain-Takeover-Prüfung | ✅ 0 Subdomain-Einträge geprüft (mit der Site verbundene Subadressen — Liste mit Namen: Abschnitt „Subdomain-Takeover-Prüfung"); kein Übernahme-Indikator gefunden (kein verwaister Eintrag, den Dritte übernehmen könnten) |
+| API- & Swagger-Erkundung | ✅ 12 Pfade geprüft (12 fest + 0 Sitemap-Kandidaten, aus 2 Seiten — VOLLSTÄNDIGE Pfadliste: Abschnitt „API- & Swagger-Erkundung"); kein öffentlich zugängliches API-Schema gefunden (kein von außen lesbares API-Dokument) |
+| CMS-/Framework-CVE-Abgleich | ✅ 6 passive Signalkategorien untersucht (Header, Meta-Generator, HTML-Spuren, Versionsdateien, bekannte CMS-Pfade, Bibliothekshinweise — vollständige Liste: Abschnitt „CMS & bekannte CVE"); kein bekannter CMS-/Framework-Fingerabdruck festgestellt |
 | Server-/Software-Banner → Bekannte CVE | ⚠️ 21 bekannte CVE in Banner-Version (PHP 7.1.26) |
-| Sitemap- + robots.txt-Pfaderkundung | ✅ 0 aus Sitemap + robots.txt-Disallow abgeleitete Pfade geprüft (nur Existenz); kein sensibler/administrativer Endpunkt gefunden |
+| Sitemap- + robots.txt-Pfaderkundung | ✅ 0 aus Sitemap + robots.txt-Disallow abgeleitete Pfade geprüft (nur Vorhanden/Nicht-Vorhanden — Kandidatenliste: Abschnitt „API- & Swagger-Erkundung"); kein sensibler/administrativer Endpunkt gefunden |
 
 > **Drei-Zustands-Unterscheidung (Ehrlichkeit):** ✅ *Kein Indikator gefunden* = Methode lief, sauber · ⚠️ *Indikator vorhanden* = oben im Detail · ⚠️ *Nicht prüfbar* = keine Daten erhebbar (bedeutet NICHT sicher).
 
 ### Was dieses Paket bewertet — und was NICHT
 
-**BEWERTET (passive Erkundung — nur GET, externe Quellen):** Subdomain-Inventar + Übernahme (dangling CNAME), öffentlich zugängliches API-/Swagger-/OpenAPI-Dokument, CMS-/Framework- und Server-/Software-Banner-Fingerabdruck (Apache/nginx/PHP) + bekannte CVE-Übereinstimmung (NVD), EXISTENZ-Feststellung aus Sitemap + robots.txt-Disallow abgeleiteter API-/administrativ wirkender Pfade — über 2 Seiten.
+**BEWERTET (passive Erkundung — nur GET, externe Quellen):** Subdomain-Inventar + Übernahme (dangling CNAME), öffentlich zugängliches API-/Swagger-/OpenAPI-Dokument, CMS-/Framework- und Server-/Software-Banner-Fingerabdruck (Apache/nginx/PHP) + bekannte CVE-Übereinstimmung (NVD), EXISTENZ-Feststellung aus Sitemap + robots.txt-Disallow abgeleiteter API-/administrativ wirkender Pfade — über die oben definierten 2 Seiten (Startseite + Sitemap-/robots.txt-Ableitungen).
 
 **BEWERTET NICHT:** aktive Injektions-/IDOR-/XSS-Verifikation und Berechtigungsprüfung entdeckter Endpunkte (Umfang **Aktive Verifikation / Umfassender Pentest**), HTTP-Sicherheits-Header-/CORS-/Cookie-/CSP-Details (Umfang **Basis-Scan / Externe Angriffsfläche**), DSGVO/PCI/ISO-Rahmenzuordnung (Umfang **Compliance**). Die Aussage „kein Indikator gefunden" in einem Bereich **BEWEIST NICHT**, dass Sie sicher sind — sie zeigt nur, dass mit den geprüften passiven Methoden kein Indikator auftrat.
 

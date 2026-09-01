@@ -74,7 +74,7 @@ None of the paths checked returned a publicly accessible API schema/interface. T
 
 ### Fingerprint sources examined
 
-For CMS/framework and version detection, the following passive signals in the home page response were examined:
+For CMS/framework and version detection, the following **6 passive signal categories** in the home page response were examined (the phrase “6+ passive CMS/technology signals” in the Executive Summary refers to exactly this list; the “+” denotes the multiple sub-signals within each category):
 
 - HTTP response headers (`Server`, `X-Powered-By`, `X-Generator`, `X-Drupal-Cache`, `X-Magento-Cache-Debug`)
 - `<meta name="generator">` tag
@@ -100,21 +100,21 @@ The version(s) derived from the banner were matched against the NVD (NO exploita
 
 ## POSITIVE ASSURANCE — RECONNAISSANCE METHODS CHECKED
 
-Reconnaissance comes out clean on most healthy targets; this section also makes the “nothing found” result TRANSPARENT — it shows what was ACTUALLY checked (including a **2-page** sitemap, home page included):
+Reconnaissance comes out clean on most healthy targets; this section also makes the “nothing found” result TRANSPARENT — it shows what was ACTUALLY checked. The **2 pages** below are the home page plus the pages derived from the sitemap and robots.txt (no page outside your own site was fetched):
 
 | Reconnaissance Area | Result |
 |-------------|-------|
-| Subdomain Takeover Scan | ✅ 0 subdomain records checked; no takeover indicator found |
-| API & Swagger Reconnaissance | ✅ 12 paths checked (12 fixed + 0 sitemap candidates, from 2 pages); no publicly accessible API schema found |
-| CMS / Framework CVE Match | ✅ No known CMS/framework fingerprint detected |
+| Subdomain Takeover Scan | ✅ 0 subdomain records checked (sub-addresses attached to your site — itemised list: “Subdomain Takeover Scan” section); no takeover indicator found (no dangling record a third party could claim) |
+| API & Swagger Reconnaissance | ✅ 12 paths checked (12 fixed + 0 sitemap candidates, from 2 pages — FULL path list: “API & Swagger Reconnaissance” section); no publicly accessible API schema found (no externally readable API document) |
+| CMS / Framework CVE Match | ✅ 6 passive signal categories examined (headers, meta generator, HTML traces, version files, known CMS paths, library hints — full list: “CMS & known CVE” section); no known CMS/framework fingerprint detected |
 | Server/Software Banner → Known CVE | ⚠️ 21 known CVEs in banner version (PHP 7.1.26) |
-| Sitemap + robots.txt path reconnaissance | ✅ 0 paths derived from the sitemap + robots.txt Disallow tried (existence only); no sensitive/administrative endpoint found |
+| Sitemap + robots.txt path reconnaissance | ✅ 0 paths derived from the sitemap + robots.txt Disallow tried (existence check only — candidate list: “API & Swagger Reconnaissance” section); no sensitive/administrative endpoint found |
 
 > **Three-state distinction (honesty):** ✅ *No indicator found* = method ran, clean · ⚠️ *Indicator present* = detailed above · ⚠️ *Not assessable* = no data collectable (does NOT mean secure).
 
 ### What this package assesses — and what it does NOT
 
-**ASSESSES (passive reconnaissance — GET only, external sources):** subdomain inventory + takeover (dangling CNAME), publicly accessible API/Swagger/OpenAPI document, CMS/framework and server/software banner (Apache/nginx/PHP) fingerprint + known CVE match (NVD), EXISTENCE determination of API/administrative-looking paths derived from the sitemap + robots.txt Disallow entries — across 2 pages.
+**ASSESSES (passive reconnaissance — GET only, external sources):** subdomain inventory + takeover (dangling CNAME), publicly accessible API/Swagger/OpenAPI document, CMS/framework and server/software banner (Apache/nginx/PHP) fingerprint + known CVE match (NVD), EXISTENCE determination of API/administrative-looking paths derived from the sitemap + robots.txt Disallow entries — across the 2 pages defined above (home page + sitemap/robots.txt derivations).
 
 **DOES NOT ASSESS:** active injection/IDOR/XSS verification and authorisation testing of discovered endpoints (**Active Verification / Full Pentest** scope), HTTP security header/CORS/cookie/CSP details (**Basic Scan / External Attack Surface** scope), GDPR/PCI/ISO framework mapping (**Compliance** scope). The statement “no indicator found” in an area **DOES NOT PROVE** you are secure — it only shows that no indicator emerged with the passive methods checked.
 

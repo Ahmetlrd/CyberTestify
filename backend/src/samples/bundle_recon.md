@@ -74,7 +74,7 @@ Denenen yolların hiçbiri herkese açık bir API şeması/arayüzü döndürmed
 
 ### İncelenen parmak izi kaynakları
 
-CMS/çatı ve sürüm tespiti için ana sayfa yanıtı üzerinde aşağıdaki pasif sinyallere bakıldı:
+CMS/çatı ve sürüm tespiti için ana sayfa yanıtı üzerinde aşağıdaki **6 pasif sinyal kategorisine** bakıldı (Yönetici Özeti'ndeki “6+ pasif CMS/teknoloji sinyali” ifadesi tam olarak bu listeyi kasteder; “+” her kategorinin içindeki birden çok alt sinyali belirtir):
 
 - HTTP yanıt başlıkları (`Server`, `X-Powered-By`, `X-Generator`, `X-Drupal-Cache`, `X-Magento-Cache-Debug`)
 - `<meta name="generator">` etiketi
@@ -104,9 +104,34 @@ Bu bölüm, T.C. Siber Güvenlik Başkanlığı'nın (USOM/SGB) **KAMUYA AÇIK**
 
 > **Bağımsız eşleme — resmî statü değildir:** Bu, bağımsız bir eşleme hizmetidir; SGB/USOM ile **resmî bir bağı, onayı veya yetkilendirmesi YOKTUR**. "SGB onaylı", "resmî/ulusal tarama" veya "zorunlu kontrol" DEĞİLDİR; resmî denetim/sertifikasyon yerine geçmez. Yalnız kamuya açık bildirimlerle eşleme yapar.
 
-**Kapsam (dürüstlük):** Katalogda **70** gerçek bildirim var; bunların **yalnız 10 tanesi dışarıdan gözlemlenebilir** ürüne (ör. Apache/nginx/PHP sunucu banner'ı, WordPress/Joomla/Drupal CMS) aittir ve eşlenebilir. Bir ürünün sürümü dışarıdan görülemiyorsa (ör. bir güvenlik cihazı/uç-nokta ürünü) eşleme YAPILMAZ — bu bölüm katalogun tamamının değil, yalnız dış-yüzeyden görülebilen alt kümenin durumunu gösterir. Sürüm banner'dan gizlenebildiği ve backport yamalar sürüm dizesini değiştirmediği için **"kesin etkileniyorsunuz" ASLA denmez** — çıktı yalnız bir GÖSTERGEDİR.
+**Kapsam (dürüstlük):** Katalogda **129** gerçek bildirim var; bunların **yalnız 16 tanesi dışarıdan gözlemlenebilir** ürüne (ör. Apache/nginx/PHP sunucu banner'ı, WordPress/Joomla/Drupal CMS) aittir ve eşlenebilir. Bir ürünün sürümü dışarıdan görülemiyorsa (ör. bir güvenlik cihazı/uç-nokta ürünü) eşleme YAPILMAZ — bu bölüm katalogun tamamının değil, yalnız dış-yüzeyden görülebilen alt kümenin durumunu gösterir. Sürüm banner'dan gizlenebildiği ve backport yamalar sürüm dizesini değiştirmediği için **"kesin etkileniyorsunuz" ASLA denmez** — çıktı yalnız bir GÖSTERGEDİR.
 
-_Katalog son güncelleme: 2026-08-25 (kamuya açık USOM/SGB akışından otomatik senkron)._
+_Katalog son güncelleme: 2026-09-01 (kamuya açık USOM/SGB akışından otomatik senkron)._
+
+_Kalan **113** bildirim, sürümü dış yüzeyden görülemeyen ürünlere (ör. güvenlik cihazı, uç-nokta/istemci yazılımı, iç sistem) ait olduğu için bu bölümde listelenmez — bu ürünler dışarıdan eşlenemediğinden haklarında bir sonuç üretilemez._
+
+### Taranan dış-gözlemlenebilir bildirimler (tam liste)
+
+Yukarıdaki **16** sayısı soyut değildir; hedefin dış yüzeyiyle karşılaştırılan bildirimlerin tamamı aşağıdadır:
+
+| TR No | Eşleme imzası (ürün/teknoloji) | Bildirim başlığı | Kaynak |
+|-----|-----|-----|-----|
+| TR-24-1843 | Apache httpd | Apache Çoklu Ürün Güvenlik Bildirimi | [bildirim](https://www.usom.gov.tr/bildirim/tr-24-1843) |
+| TR-23-0072 | Apache httpd | Apache Zafiyeti | [bildirim](https://www.usom.gov.tr/bildirim/tr-23-0072) |
+| TR-25-0035 | WordPress | WordPress Eklenti Güvenlik Bildirimi | [bildirim](https://www.usom.gov.tr/bildirim/tr-25-0035) |
+| TR-25-0127 | WordPress | WordPress Eklenti Güvenlik Bildirimi | [bildirim](https://www.usom.gov.tr/bildirim/tr-25-0127) |
+| TR-25-0130 | WordPress | WordPress Eklenti Güvenlik Bildirimi | [bildirim](https://www.usom.gov.tr/bildirim/tr-25-0130) |
+| TR-26-0894 | WordPress | TR-26-0894 (WordPress Eklenti Güvenlik Bildirimi) | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0894) |
+| TR-26-0865 | Apache httpd | TR-26-0865 (Apache Çoklu Ürün Güvenlik Bildirimi) | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0865) |
+| TR-26-0884 | WordPress | TR-26-0884 (WordPress Eklenti Güvenlik Bildirimi) | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0884) |
+| TR-26-0861 | WordPress | TR-26-0861 (WordPress Eklenti Güvenlik Bildirimi) | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0861) |
+| TR-26-0890 | Apache httpd | TR-26-0890 (Apache Çoklu Ürün Güvenlik Bildirimi) | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0890) |
+| TR-26-0914 | Drupal | TR-26-0914 (Drupal Güvenlik Bildirimi ) | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0914) |
+| TR-26-0900 | WordPress | TR-26-0900 (WordPress Eklenti Güvenlik Bildirimi) | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0900) |
+| TR-26-0927 | Apache httpd | TR-26-0927 (Apache APISIX Güvenlik Bildirimi) | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0927) |
+| TR-26-0926 | WordPress | TR-26-0926 (WordPress Eklenti Güvenlik Bildirimi) | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0926) |
+| TR-26-0946 | WordPress | TR-26-0946 (WordPress Eklenti Güvenlik Bildirimi) | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0946) |
+| TR-26-0958 | WordPress | TR-26-0958 (WordPress Eklenti Güvenlik Bildirimi) | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0958) |
 
 > **Üç-durum (dürüstlük):** ✅ *Sinyal yok* = bu bildirimin imzası hedefte görülmedi · ⚠️ *Sinyal var — sürüm doğrulanamadı* = ürün/teknoloji görüldü ama etkilenen sürümde olup olmadığı dışarıdan doğrulanamıyor · ⚠️ *Etkilenen aralıkta olabilir* = yalnız güvenilir sürüm sinyali etkilenen aralığa düşerse.
 
@@ -116,29 +141,30 @@ Aşağıdaki kamuya açık bildirimlerin imzası dış-yüzeyde **gözlemlendi**
 |-----|-----|-----|-----|-----|
 | TR-24-1843 | Apache Çoklu Ürün Güvenlik Bildirimi | ⚠️ Sinyal var — sürüm doğrulanamadı (görülen sürüm 2.4.25) | — | [bildirim](https://www.usom.gov.tr/bildirim/tr-24-1843) |
 | TR-23-0072 | Apache Zafiyeti | ⚠️ Sinyal var — sürüm doğrulanamadı (görülen sürüm 2.4.25) | — | [bildirim](https://www.usom.gov.tr/bildirim/tr-23-0072) |
-| TR-26-0890 | TR-26-0890 (Apache Çoklu Ürün Güvenlik Bildirimi) | ⚠️ Sinyal var — sürüm doğrulanamadı (görülen sürüm 2.4.25) | CVE-2026-63016, CVE-2026-63015, CVE-2026-47359 | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0890) |
 | TR-26-0865 | TR-26-0865 (Apache Çoklu Ürün Güvenlik Bildirimi) | ⚠️ Sinyal var — sürüm doğrulanamadı (görülen sürüm 2.4.25) | CVE-2026-34884, CVE-2026-73632, CVE-2026-73631 | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0865) |
+| TR-26-0890 | TR-26-0890 (Apache Çoklu Ürün Güvenlik Bildirimi) | ⚠️ Sinyal var — sürüm doğrulanamadı (görülen sürüm 2.4.25) | CVE-2026-63016, CVE-2026-63015, CVE-2026-47359 | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0890) |
+| TR-26-0927 | TR-26-0927 (Apache APISIX Güvenlik Bildirimi) | ⚠️ Sinyal var — sürüm doğrulanamadı (görülen sürüm 2.4.25) | CVE-2026-75005, CVE-2026-63041, CVE-2026-74848 | [bildirim](https://www.usom.gov.tr/bildirim/tr-26-0927) |
 
 > **Önerilen resmî çözüm (özet):** İlgili ürünü, kaynak bildirimde belirtilen güncel/yamalı sürüme yükseltin ve sürüm/teknoloji ifşasını azaltın. Kesin durum için bağlı bildirimi inceleyin ve sürümünüzü içeriden doğrulayın.
 
 ## POZİTİF GÜVENCE — DENENEN KEŞİF YÖNTEMLERİ
 
-Keşif çoğu sağlıklı hedefte temiz çıkar; bu bölüm "bir şey bulunamadı" sonucunu da ŞEFFAF kılar — GERÇEKTEN ne denendiğini gösterir (ana sayfa dâhil **2 sayfa** site haritası dahil):
+Keşif çoğu sağlıklı hedefte temiz çıkar; bu bölüm "bir şey bulunamadı" sonucunu da ŞEFFAF kılar — GERÇEKTEN ne denendiğini gösterir. Aşağıda geçen **2 sayfa**, ana sayfanız ile site haritası ve robots.txt’ten türetilen sayfalardır (kendi sitenizin dışında hiçbir sayfa çekilmemiştir):
 
 | Keşif Alanı | Sonuç |
 |-------------|-------|
-| Subdomain-Takeover Taraması | ✅ 0 alt domain kaydı denendi; devralma göstergesi bulunamadı |
-| API & Swagger Keşfi | ✅ 12 yol denendi (12 sabit + 0 site-haritası adayı, 2 sayfadan); herkese açık API şeması bulunamadı |
-| CMS / Framework CVE Eşleşmesi | ✅ Bilinen bir CMS/çatı parmak izi tespit edilmedi |
-| Sunucu/Yazılım Banner → Bilinen CVE | ⚠️ Banner sürümünde 21 bilinen CVE (PHP 7.1.26) |
-| Site haritası + robots.txt yol keşfi | ✅ Site haritası + robots.txt Disallow’dan türetilen 0 yol denendi (yalnız varlık); hassas/idari uç bulunamadı |
-| USOM/SGB Bildirim Eşlemesi | ⚠️ 4 kamuya açık bildirim imzası gözlemlendi (sürüm doğrulanamadı — gösterge) |
+| Subdomain-Takeover Taraması | ✅ 0 alt domain kaydı denendi (siteye bağlı alt adresler — isim isim liste: “Subdomain Takeover Taraması” bölümü); devralma göstergesi bulunamadı (başkasının ele geçirebileceği boşta kayıt yok) |
+| API & Swagger Keşfi | ✅ 12 yol denendi (12 sabit + 0 site-haritası adayı, 2 sayfadan — denenen yolların TAM listesi: “API & Swagger Keşfi” bölümü); herkese açık API şeması bulunamadı (dışarıdan okunabilen API dokümanı yok) |
+| CMS / Framework CVE Eşleşmesi | ✅ 6 pasif sinyal kategorisi incelendi (başlıklar, meta generator, HTML izleri, sürüm dosyaları, bilinen CMS yolları, kütüphane ipuçları — tam liste: “CMS & Bilinen CVE Taraması” bölümü); bilinen bir CMS/çatı parmak izi tespit edilmedi |
+| Sunucu/Yazılım Banner → Bilinen CVE | ⚠️ Banner sürümünde 21 bilinen CVE (PHP 7.1.26 — CVE numaraları: “Sunucu/Yazılım Banner Sürümü” bölümü) |
+| Site haritası + robots.txt yol keşfi | ✅ Site haritası + robots.txt Disallow’dan türetilen 0 yol denendi (yalnız var/yok kontrolü — aday yolların listesi: “API & Swagger Keşfi” bölümü); hassas/idari uç bulunamadı |
+| USOM/SGB Bildirim Eşlemesi | ⚠️ 5 kamuya açık bildirim imzası gözlemlendi (sürüm doğrulanamadı — gösterge; hangi bildirimler: “USOM/SGB Bildirim Eşlemesi” bölümündeki eşleşme tablosu) |
 
 > **Üç-durum ayrımı (dürüstlük):** ✅ *Gösterge bulunamadı* = yöntem çalıştı, temiz · ⚠️ *Gösterge var* = yukarıda ayrıntılı · ⚠️ *İncelenemedi* = veri toplanamadı (güvenli anlamına GELMEZ).
 
 ### Bu paket NE değerlendirir, NE değerlendirmez
 
-**DEĞERLENDİRİR (pasif keşif — yalnız GET, dış kaynak):** alt domain envanteri + devralma (dangling CNAME), herkese açık API/Swagger/OpenAPI dokümanı, CMS/çatı ve sunucu/yazılım banner (Apache/nginx/PHP) parmak izi + bilinen CVE eşleşmesi (NVD), site haritası + robots.txt Disallow'dan türeyen API/idari-görünümlü yolların VARLIK tespiti, USOM/SGB kamuya açık bildirim kataloğuyla dış-yüzey eşlemesi (yalnız dış-gözlemlenebilir alt küme — bağımsız, resmî onay değildir) — 2 sayfa üzerinden.
+**DEĞERLENDİRİR (pasif keşif — yalnız GET, dış kaynak):** alt domain envanteri + devralma (dangling CNAME), herkese açık API/Swagger/OpenAPI dokümanı, CMS/çatı ve sunucu/yazılım banner (Apache/nginx/PHP) parmak izi + bilinen CVE eşleşmesi (NVD), site haritası + robots.txt Disallow'dan türeyen API/idari-görünümlü yolların VARLIK tespiti, USOM/SGB kamuya açık bildirim kataloğuyla dış-yüzey eşlemesi (yalnız dış-gözlemlenebilir alt küme — bağımsız, resmî onay değildir) — yukarıda tanımlanan 2 sayfa üzerinden (ana sayfa + site haritası/robots.txt türevleri).
 
 **DEĞERLENDİRMEZ:** aktif enjeksiyon/IDOR/XSS doğrulaması ve keşfedilen uçlara yetki testi (**Aktif Doğrulama / Tam Pentest** kapsamı), HTTP güvenlik başlığı/CORS/çerez/CSP detayı (**Basit Tarama / Dış Yüzey** kapsamı), KVKK/PCI/ISO çerçeve-eşleme (**Uyum** kapsamı). USOM/SGB eşlemesi bir **resmî onay/sertifika DEĞİLDİR**, canlı istismar yapmaz ve dışarıdan görülemeyen ürünlerin (ör. güvenlik cihazı/uç-nokta ürünü) sürümünü doğrulamaz. Bir alanda "gösterge bulunamadı" ifadesi **güvenli olduğunuzu KANITLAMAZ** — yalnız denenen pasif yöntemlerle bir gösterge çıkmadığını gösterir.
 
