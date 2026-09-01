@@ -323,19 +323,24 @@ export async function generateBasitReport(hostname: string, locale: string = 'tr
     tlsSection = l.join('\n');
   }
 
-  // Teknoloji — de: etiket önekleri çevrilir (detectTech Türkçe önek üretir)
+  // Teknoloji + bilgi ifşası — detectTech TÜRKÇE önek üretir; de/en'de önekler çevrilir.
+  // (Not: "Google Tag Manager ID" / "Google Analytics ID" / "Facebook Pixel ID" özel adlardır,
+  //  üç dilde de aynı yazılır — çevrilmez. "Firebase proje kimliği" ise ÇEVRİLİR.)
   const deTechLabel = (s: string) => s
     .replace(/^Sunucu: /, 'Server: ')
     .replace(/^Barındırma: /, 'Hosting: ')
     .replace(/^HTTP\/3 desteği \(Alt-Svc\)$/, 'HTTP/3-Unterstützung (Alt-Svc)')
-    .replace(/ tabanlı SPA$/, '-basierte SPA');
+    .replace(/ tabanlı SPA$/, '-basierte SPA')
+    .replace(/^Firebase proje kimliği: /, 'Firebase-Projekt-ID: ');
   const enTechLabel = (s: string) => s
     .replace(/^Sunucu: /, 'Server: ')
     .replace(/^Barındırma: /, 'Hosting: ')
     .replace(/^HTTP\/3 desteği \(Alt-Svc\)$/, 'HTTP/3 support (Alt-Svc)')
-    .replace(/ tabanlı SPA$/, '-based SPA');
+    .replace(/ tabanlı SPA$/, '-based SPA')
+    .replace(/^Firebase proje kimliği: /, 'Firebase project ID: ');
+  const locLabel = (x: string) => (de ? deTechLabel(x) : en ? enTechLabel(x) : x);
   const techSection = tech.length
-    ? tech.map((x) => `- ${de ? deTechLabel(x) : en ? enTechLabel(x) : x}`).join('\n')
+    ? tech.map((x) => `- ${locLabel(x)}`).join('\n')
     : t('- Yanıt başlıkları ve ana sayfa HTML’inde belirgin bir teknoloji imzası pasif olarak gözlemlenmedi.', '- In den Antwort-Headern und im HTML der Startseite wurde passiv keine eindeutige Technologiesignatur beobachtet.', '- No distinct technology signature was passively observed in the response headers or the home page HTML.');
 
   // Riskler — MASTER TABLO + ZAFİYET DAĞILIMINA girmesi için ŞİDDET KOLONLU tablo (bullet değil).
@@ -379,7 +384,8 @@ export async function generateBasitReport(hostname: string, locale: string = 'tr
   }
   // (BÖLÜM 1) SAYFAYA-ÖZGÜ tutarsızlık: ana sayfada MEVCUT bir kritik başlık bazı alt sayfalarda EKSİK.
   if (perPageMissing.length) risks.push({ bulgu: t('Sayfaya özgü güvenlik başlığı tutarsızlığı', 'Seitenspezifische Inkonsistenz der Sicherheits-Header', 'Page-specific security header inconsistency'), sev: 'Orta', aciklama: t(`Ana sayfada mevcut olan bir/birkaç kritik başlık bazı iç sayfalarda gönderilmiyor: ${perPageMissing.join(', ')}. Başlık politikası tüm yollarda tutarlı uygulanmalı (ör. sunucu bloğu genelinde, tek uç noktada değil).`, `Ein oder mehrere auf der Startseite vorhandene kritische Header werden auf einigen Unterseiten nicht gesendet: ${perPageMissing.join(', ')}. Die Header-Richtlinie sollte auf allen Pfaden konsistent angewendet werden (z. B. serverweit, nicht nur an einem Endpunkt).`, `One or more critical headers present on the home page are not sent on some inner pages: ${perPageMissing.join(', ')}. The header policy should be applied consistently across all paths (e.g. server-wide, not at a single endpoint).`) });
-  if (disclosure.length) risks.push({ bulgu: t('Üçüncü taraf servis kimlikleri', 'Kennungen von Drittanbieterdiensten', 'Third-party service identifiers'), sev: 'Bilgilendirme', aciklama: t(`Ana sayfada ${disclosure.join('; ')} açıkça görülüyor. İstismar edilebilir açık değildir; yalnızca dış servis bağımlılıklarına dair farkındalık amacıyla listelenmiştir.`, `Auf der Startseite sind ${disclosure.join('; ')} offen sichtbar. Dies ist keine ausnutzbare Schwachstelle; sie wird nur zur Sensibilisierung für externe Dienstabhängigkeiten aufgeführt.`, `${disclosure.join('; ')} are openly visible on the home page. This is not an exploitable vulnerability; it is listed only to raise awareness of external service dependencies.`) });
+  const disclosureLoc = disclosure.map(locLabel).join('; ');
+  if (disclosure.length) risks.push({ bulgu: t('Üçüncü taraf servis kimlikleri', 'Kennungen von Drittanbieterdiensten', 'Third-party service identifiers'), sev: 'Bilgilendirme', aciklama: t(`Ana sayfada ${disclosureLoc} açıkça görülüyor. İstismar edilebilir açık değildir; yalnızca dış servis bağımlılıklarına dair farkındalık amacıyla listelenmiştir.`, `Auf der Startseite sind ${disclosureLoc} offen sichtbar. Dies ist keine ausnutzbare Schwachstelle; sie wird nur zur Sensibilisierung für externe Dienstabhängigkeiten aufgeführt.`, `${disclosureLoc} are openly visible on the home page. This is not an exploitable vulnerability; it is listed only to raise awareness of external service dependencies.`) });
 
   const riskSection = risks.length
     ? `| ${t('Bulgu', 'Befund', 'Finding')} | ${t('Şiddet', 'Schweregrad', 'Severity')} | ${t('Açıklama', 'Beschreibung', 'Description')} |\n|-------|--------|----------|\n${risks.map((r) => `| ${r.bulgu} | ${en ? (SEV_EN[r.sev] ?? r.sev) : de ? (SEV_DE[r.sev] ?? r.sev) : r.sev} | ${r.aciklama.replace(/\|/g, '\\|')} |`).join('\n')}`
