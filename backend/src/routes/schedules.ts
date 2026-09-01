@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zodError } from '../httpErrors.js';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { getPackageDef, securityProfileFor } from '../services/scanPackages.js';
+import { getPackageDef, securityProfileFor, isActivePackage } from '../services/scanPackages.js';
 import { isVerificationStillValid } from '../services/verification.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -96,7 +96,10 @@ schedulesRouter.post('/', requireAuth, async (req, res) => {
   }
 
   const domain = await prisma.domain.findFirstOrThrow({ where: { id: domainId, customerId: req.customerId! } });
-  if (!isVerificationStillValid(domain)) {
+  // (DNS CELIK KAPISI — YALNIZ AKTIF PAKETLER) Pasif paketler (basit_tarama, ssl_tls, header_leak,
+  // dns_email ...) hedefe MUDAHALE etmez; sipariste oldugu gibi burada da DNS dogrulamasi ISTENMEZ.
+  // Kapi yalniz isActivePackage=true olanlarda uygulanir (orchestrator ile AYNI kural).
+  if (isActivePackage(packageKey) && !isVerificationStillValid(domain)) {
     return res.status(403).json({ error: 'Domain dogrulanmamis veya suresi dolmus. Once dogrulayin.' });
   }
 

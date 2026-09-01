@@ -123,15 +123,11 @@ export function InvoiceRequestForm({ orderId, defaultEmail, existing, lang = 'tr
         )}
       </div>
 
-      {status && (
-        <p className="mt-3 rounded-card border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm text-emerald-800">
-          {v.status[status]}
-        </p>
-      )}
-
-      {done && (
-        <p className="mt-3 rounded-card border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm font-semibold text-emerald-800">
-          {done === 'updated' ? v.updated : v.created}
+      {/* (TEK BILDIRIM) Onceden 'status' ve 'done' kutulari AYNI ANDA cikip ayni seyi iki kez
+          soyluyordu. Artik TEK kutu: gonderim yeni yapildiysa onun mesaji, aksi halde durum mesaji. */}
+      {(done || status) && (
+        <p className={`mt-3 rounded-card border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm text-emerald-800 ${done ? 'font-semibold' : ''}`}>
+          {done ? (done === 'updated' ? v.updated : v.created) : v.status[status as string]}
         </p>
       )}
 

@@ -449,7 +449,12 @@ export async function sendReportReady(orderId: string, accessSecret: string): Pr
       
       </p>
       <p style="color:#8a9794;font-size:12px">Bu şifreyi kimseyle paylaşmayın. Yalnızca bu rapora erişim için gereklidir.</p>`;
-    const html = layout({ lang, heading: lang === 'de' ? 'Ihr Bericht ist fertig' : lang === 'en' ? 'Your report is ready' : 'Raporunuz hazır', bodyHtml: body, cta: { label: lang === 'de' ? 'Bericht ansehen' : lang === 'en' ? 'View report' : 'Raporu görüntüle', url: `${config.frontendUrl}/dashboard/${o.id}` } });
+    const html = layout({ lang, heading: lang === 'de' ? 'Ihr Bericht ist fertig' : lang === 'en' ? 'Your report is ready' : 'Raporunuz hazır', bodyHtml: body, cta: { label: lang === 'de' ? 'Bericht ansehen' : lang === 'en' ? 'View report' : 'Raporu görüntüle',
+      // (KOLAYLIK) Buradan gelen musteri kodu ELLE kopyalamak zorunda kalmasin: kod URL'in
+      // FRAGMENT'inde (#) tasinir. Fragment tarayicidan SUNUCUYA GONDERILMEZ (erisim loglarina,
+      // Referer basligina ve proxy'lere DUSMEZ); sayfa okur okumaz adres cubugundan da silinir.
+      // Kod zaten bu e-postanin icinde acikca yaziyor -> ek bir ifsa YARATMAZ.
+      url: `${config.frontendUrl}/dashboard/${o.id}#k=${encodeURIComponent(accessSecret)}` } });
     return await sendMail(o.customer.email, lang === 'de' ? 'Ihr Bericht ist fertig — CyberTestify' : lang === 'en' ? 'Your report is ready — CyberTestify' : 'Raporunuz hazır — CyberTestify', html);
   } catch (err) {
     console.error('[mail] sendReportReady hata:', err);

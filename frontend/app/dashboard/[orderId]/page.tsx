@@ -210,6 +210,21 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
     // (ŞİFRE OTOMATİK DOLDURMA KAPALI) Erişim kodu artık sunucudan gelmez; herkes e-postasındaki
     // kodu girer. Ama BİR KEZ başarıyla açtıysa, kolaylık olsun diye bu cihazda saklanır (localStorage).
     if (typeof window !== 'undefined') {
+      // (E-POSTA LINKI) "Raporu görüntüle" bagi kodu #k=... fragment'inde tasir -> alan otomatik
+      // dolar. Fragment sunucuya gitmez; okur okumaz adres cubugundan TEMIZLENIR ki link
+      // paylasilinca/geri tusunda kod ortalikta kalmasin.
+      const m = /(?:^|[#&])k=([^&]+)/.exec(window.location.hash || '');
+      if (m) {
+        try {
+          const fromLink = decodeURIComponent(m[1]);
+          if (fromLink) {
+            setAccessSecret(fromLink);
+            window.localStorage.setItem(`ct_access_${params.orderId}`, fromLink);
+            setCodeRemembered(true);
+          }
+        } catch { /* bozuk fragment -> sessizce yok say, musteri kodu elle girer */ }
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
       const saved = window.localStorage.getItem(`ct_access_${params.orderId}`);
       if (saved) { setAccessSecret((prev) => prev || saved); setCodeRemembered(true); }
     }

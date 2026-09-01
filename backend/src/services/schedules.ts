@@ -1,6 +1,6 @@
 import { prisma } from '../db.js';
 import { config } from '../config.js';
-import { getPackageDef, localeFor } from './scanPackages.js';
+import { getPackageDef, localeFor, isActivePackage } from './scanPackages.js';
 import { getPricing } from './pricing.js';
 import { isVerificationStillValid } from './verification.js';
 import { enqueueOrStartScan } from './orchestrator.js';
@@ -69,7 +69,8 @@ export async function runDueSchedules() {
     }
 
     // Dogrulama TTL'i (30 gun) doldu mu? Sessizce atlama — kapat + bildir.
-    if (!isVerificationStillValid(s.domain)) {
+    // YALNIZ AKTIF paketler icin: pasif taramalar DNS dogrulamasi GEREKTIRMEZ (bkz routes/schedules.ts).
+    if (isActivePackage(s.packageKey) && !isVerificationStillValid(s.domain)) {
       await prisma.scheduledScan.update({ where: { id: s.id }, data: { active: false } });
       // TODO(email): musteriye "domain dogrulamaniz suresi doldu, yeniden dogrulayin"
       console.warn(
