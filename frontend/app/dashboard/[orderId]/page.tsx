@@ -138,17 +138,17 @@ function LockIcon({ open }: { open: boolean }) {
 // (TASARIM: Report Ready v2) "Rapor hazır" ekranına özel metinler. Diğer 8 sipariş durumu
 // DEĞİŞMEDİ. Renkler site marka token'larıyla (Nav/Footer ile uyumlu kalsın diye).
 const RR = {
-  tr: { eyebrow: 'Sipariş Durumu · Tamamlandı', processTitle: 'Süreç',
+  tr: { eyebrow: 'Sipariş Durumu · Tamamlandı', processTitle: 'Süreç', orderedOn: 'Sipariş tarihi',
         steps: ['Sahiplik doğrulandı', 'Tarama çalıştı', 'Bulgular değerlendirildi', 'Rapor hazır'],
         resend: 'Kodu tekrar gönder', resendBusy: 'Gönderiliyor…',
         resendOk: 'Erişim kodu e-posta adresinize yeniden gönderildi.',
         resendFail: 'Kod gönderilemedi. Lütfen tekrar deneyin.' },
-  de: { eyebrow: 'Bestellstatus · Abgeschlossen', processTitle: 'Ablauf',
+  de: { eyebrow: 'Bestellstatus · Abgeschlossen', processTitle: 'Ablauf', orderedOn: 'Bestelldatum',
         steps: ['Inhaberschaft bestätigt', 'Scan ausgeführt', 'Befunde bewertet', 'Bericht fertig'],
         resend: 'Code erneut senden', resendBusy: 'Wird gesendet…',
         resendOk: 'Der Zugangscode wurde erneut an Ihre E-Mail-Adresse gesendet.',
         resendFail: 'Der Code konnte nicht gesendet werden. Bitte erneut versuchen.' },
-  en: { eyebrow: 'Order status · Completed', processTitle: 'Process',
+  en: { eyebrow: 'Order status · Completed', processTitle: 'Process', orderedOn: 'Order date',
         steps: ['Ownership verified', 'Scan completed', 'Findings assessed', 'Report ready'],
         resend: 'Resend code', resendBusy: 'Sending…',
         resendOk: 'The access code has been re-sent to your email address.',
@@ -456,12 +456,16 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
                 <h1 className="mt-1.5 text-2xl font-extrabold sm:text-3xl">
                   {order.report?.incomplete ? t.reportReadyIncomplete : t.headline.scan_completed}
                 </h1>
-                {/* (NETLİK) Hangi paket olduğu görünsün — "Basit Tarama" mı "Dış Yüzey" mi belli olsun. */}
-                {localizedPackageName(order?.packageKey, order?.packageName, lang) && (
-                  <p className="mt-1.5 text-sm text-white/70">
-                    {localizedPackageName(order?.packageKey, order?.packageName, lang)}
-                  </p>
-                )}
+                {/* (NETLİK) Hangi paket olduğu + siparişin TARİHİ görünsün — "hangi tarama, ne zaman". */}
+                <p className="mt-1.5 text-sm text-white/70">
+                  {localizedPackageName(order?.packageKey, order?.packageName, lang)}
+                  {order?.createdAt && (
+                    <>
+                      {localizedPackageName(order?.packageKey, order?.packageName, lang) ? ' · ' : ''}
+                      {rr.orderedOn}: {new Date(order.createdAt).toLocaleDateString(lang === 'de' ? 'de-DE' : lang === 'en' ? 'en-GB' : 'tr-TR')}
+                    </>
+                  )}
+                </p>
               </div>
               <p className="rounded-card bg-white/10 px-4 py-2.5 font-mono text-sm text-white/75">
                 {t.target}: <span className="font-semibold text-white">{hostname}</span>

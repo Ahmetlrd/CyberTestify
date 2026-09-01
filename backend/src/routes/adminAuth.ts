@@ -19,6 +19,9 @@ import {
 export const adminAuthRouter = Router();
 
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(8) });
+// Admin oturum omru — kayan yenileme ile birlikte kullanilir (requireAdmin).
+export const ADMIN_SESSION_TTL = '7d';
+
 const STAGE_TTL = '10m';
 
 type StagePayload = { sub: string; typ: 'admin-2fa'; stage: 'verify' | 'enroll' };
@@ -26,7 +29,10 @@ function signStage(sub: string, stage: 'verify' | 'enroll'): string {
   return jwt.sign({ sub, typ: 'admin-2fa', stage } satisfies StagePayload, config.adminJwtSecret, { expiresIn: STAGE_TTL });
 }
 function signFull(sub: string): string {
-  return jwt.sign({ sub, typ: 'admin' }, config.adminJwtSecret, { expiresIn: '12h' });
+  // (OTURUM OMRU) 12h cok kisaydi: admin gun icinde defalarca 2FA ile yeniden giriyordu.
+  // 7 gun + KAYAN yenileme (bkz requireAdmin): surekli kullanimda oturum dusmez, GERCEK
+  // hareketsizlik 7 gunu asarsa yeniden giris + 2FA istenir. IP allowlist + 2FA korunur.
+  return jwt.sign({ sub, typ: 'admin' }, config.adminJwtSecret, { expiresIn: ADMIN_SESSION_TTL });
 }
 // Enrollment endpoint'leri: enroll-stage token VEYA tam admin token kabul eder.
 function adminIdFromHeader(req: Request, allowStages: Array<'verify' | 'enroll'>): { id: string; viaStage: boolean } | null {

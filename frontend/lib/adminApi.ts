@@ -27,6 +27,9 @@ async function areq<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...options,
     headers: { 'Content-Type': 'application/json', ...adminHeaders(), ...options.headers },
   });
+  // (KAYAN OTURUM) Sunucu token'i yenilediyse sakla → panel aktif kullanildikca oturum düşmez.
+  const refreshed = res.headers.get('X-Admin-Token-Refresh');
+  if (refreshed && typeof window !== 'undefined') window.localStorage.setItem(ADMIN_TOKEN_KEY, refreshed);
   if (res.status === 401 && typeof window !== 'undefined' && !path.endsWith('/login')) {
     window.localStorage.removeItem(ADMIN_TOKEN_KEY);
     window.location.href = '/admin/login';

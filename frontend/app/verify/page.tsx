@@ -677,7 +677,8 @@ export default function VerifyHub() {
           </span>
           <span className="min-w-0">
             <span className="block truncate font-mono text-[15px] font-semibold text-ink group-hover:text-brand">{o.hostname}</span>
-            <span className="mt-0.5 block truncate text-xs text-ink-muted">
+            {/* (MOBIL) truncate mobilde tarihi kesiyordu; dar ekranda SARSIN, genis ekranda kirpilsin. */}
+            <span className="mt-0.5 block text-xs text-ink-muted sm:truncate">
               {o.packageName} · {new Date(o.createdAt).toLocaleDateString(dateLocale)}
             </span>
           </span>

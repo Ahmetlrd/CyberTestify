@@ -55,6 +55,9 @@ app.use(
       return cb(null, false);
     },
     credentials: true,
+    // (KAYAN ADMIN OTURUMU) Yenilenen admin token'i bu baslikla doner; cross-origin
+    // (admin.cybertestify.com -> api.cybertestify.com) okunabilmesi icin ACIKCA expose edilir.
+    exposedHeaders: ['X-Admin-Token-Refresh'],
   }),
 );
 
