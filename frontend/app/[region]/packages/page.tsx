@@ -127,7 +127,8 @@ export default async function PackagesPage({ params }: { params: { region: strin
     },
   };
   const badgeOf = (b: Bundle) =>
-    b.flagship ? t3('Amiral gemisi', 'Flaggschiff', 'Flagship') : b.popular ? t3('Popüler', 'Beliebt', 'Popular') : undefined;
+    // (METIN) "Amiral gemisi" alakasiz duruyordu — kartin rozetiyle AYNI ifade kullanilir.
+    b.flagship ? t3('En Kapsamlı Paket', 'Umfangreichstes Paket', 'Most Complete') : b.popular ? t3('Popüler', 'Beliebt', 'Popular') : undefined;
 
   const compareCols: CompareCol[] = [];
   if (basit && !basit.comingSoon) {
