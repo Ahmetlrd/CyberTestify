@@ -504,7 +504,9 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en' | 'd
 // Bu blok SADECE meta.packageKey === 'bundle_recon' iken devreye girer; diğer 5 paketin
 // çıktısı byte-byte AYNIDIR. Veri/bulgu/metodoloji DEĞİŞMEZ — yalnız sunum.
 // ============================================================================
-const RECON_PKG = 'bundle_recon';
+// Zengin (gorsel-hiyerarsili) sablonu KULLANAN paketler. Bu kumede OLMAYAN paketlerin ciktisi
+// byte-byte aynidir. A/B: once bundle_recon, simdi basit_tarama da ayni marka dilini kullanir.
+const RICH_TEMPLATE_PKGS = new Set(['bundle_recon', 'basit_tarama']);
 
 /** POZİTİF GÜVENCE tablosunun satırlarını ayrıştırır (uydurma YOK — markdown'da ne varsa o). */
 function parseReconAssurance(md: string): Array<{ area: string; result: string; ok: boolean }> {
@@ -524,9 +526,15 @@ function parseReconAssurance(md: string): Array<{ area: string; result: string; 
 }
 
 /** Master tablodaki çıplak "Temiz" yerine geçen KISA özet cümlesi (gerçek sayılardan). */
-function reconEmptySummary(rows: Array<{ ok: boolean }>, locale: 'tr' | 'en' | 'de'): string {
+function reconEmptySummary(rows: Array<{ ok: boolean }>, locale: 'tr' | 'en' | 'de', pkg: string): string {
   if (!rows.length) return '';
   const clean = rows.filter((r) => r.ok).length;
+  if (pkg === 'basit_tarama') {
+    return p3(locale,
+      ` <strong>${clean}/${rows.length} kontrol alanı çalıştırıldı; hiçbirinde sorun bulunmadı</strong> (alan alan özet aşağıdadır).`,
+      ` <strong>${clean}/${rows.length} control areas were run; no issue was found in any of them</strong> (area-by-area summary below).`,
+      ` <strong>${clean}/${rows.length} Kontrollbereiche wurden ausgeführt; in keinem wurde ein Problem gefunden</strong> (Zusammenfassung je Bereich unten).`);
+  }
   return p3(locale,
     ` <strong>${clean}/${rows.length} keşif yöntemi çalıştırıldı; hiçbirinde gösterge bulunamadı</strong> (yöntem yöntem özet aşağıdadır).`,
     ` <strong>${clean}/${rows.length} reconnaissance methods were executed; no indicator emerged in any of them</strong> (method-by-method summary below).`,
@@ -538,15 +546,26 @@ function reconEmptySummary(rows: Array<{ ok: boolean }>, locale: 'tr' | 'en' | '
  * İçerik §POZİTİF GÜVENCE tablosundan AYNEN alınır (o bölüm yerinde KALIR) — kullanıcı
  * bilgiyi görmek için raporun sonuna kadar beklemek zorunda kalmasın.
  */
-function buildReconAssuranceSummary(md: string, locale: 'tr' | 'en' | 'de'): string {
+function buildReconAssuranceSummary(md: string, locale: 'tr' | 'en' | 'de', pkg: string): string {
   const rows = parseReconAssurance(md);
   if (!rows.length) return '';
   const okRows = rows.filter((r) => r.ok);
   const warnRows = rows.filter((r) => !r.ok);
   const strip = (s: string) => s.replace(/^[✅⚠️\s]+/, '').trim();
-  const title = p3(locale, 'Ne test edildi, ne çıktı?', 'What was tested, and what came out?', 'Was wurde geprüft, und was kam heraus?');
-  const okHead = p3(locale, 'Test edildi — gösterge bulunamadı', 'Checked — no indicator found', 'Geprüft — kein Indikator gefunden');
-  const warnHead = p3(locale, 'Gösterge bulundu — ayrıntısı aşağıdaki bölümlerde', 'Indicator found — detailed in the sections below', 'Indikator gefunden — Details in den Abschnitten unten');
+  // (BASIT TARAMA) Baslik AYNI ZAMANDA ozet cumlesidir: "N/M kontrol alani calistirildi; X'inde
+  // gosterge bulundu". Kesif'in mevcut basligi DEGISMEZ (o paket zaten dogrulanmis durumda).
+  const title = pkg === 'basit_tarama'
+    ? p3(locale,
+        `${rows.length} kontrol alanı çalıştırıldı — ${okRows.length}’inde sorun bulunmadı, ${warnRows.length}’inde gösterge var`,
+        `${rows.length} control areas were run — ${okRows.length} came back clean, ${warnRows.length} produced an indicator`,
+        `${rows.length} Kontrollbereiche wurden ausgeführt — ${okRows.length} ohne Befund, ${warnRows.length} mit Indikator`)
+    : p3(locale, 'Ne test edildi, ne çıktı?', 'What was tested, and what came out?', 'Was wurde geprüft, und was kam heraus?');
+  const okHead = pkg === 'basit_tarama'
+    ? p3(locale, 'Kontrol edildi — sorun bulunmadı', 'Checked — no issue found', 'Geprüft — kein Problem gefunden')
+    : p3(locale, 'Test edildi — gösterge bulunamadı', 'Checked — no indicator found', 'Geprüft — kein Indikator gefunden');
+  const warnHead = pkg === 'basit_tarama'
+    ? p3(locale, 'Bulgu var — ayrıntısı aşağıdaki bölümlerde', 'Finding present — detailed in the sections below', 'Befund vorhanden — Details in den Abschnitten unten')
+    : p3(locale, 'Gösterge bulundu — ayrıntısı aşağıdaki bölümlerde', 'Indicator found — detailed in the sections below', 'Indikator gefunden — Details in den Abschnitten unten');
   const li = (r: { area: string; result: string }) => `<li><span class="rc-area">${escapeHtml(r.area)}</span> ${escapeHtml(strip(r.result))}</li>`;
   return `<div class="rc-summary">
     <div class="rc-summary-title">${escapeHtml(title)}</div>
@@ -567,14 +586,17 @@ function reconStyleBlocks(html: string): string {
     .replace(/<td>(\s*⚠️)/g, '<td class="rc-warn">$1')
     .replace(/<li>(\s*✅)/g, '<li class="rc-ok">$1')
     .replace(/<li>(\s*⚠️)/g, '<li class="rc-warn">$1');
-  // "NE değerlendirir / NE değerlendirmez" — ikisi de BİLGİdir; kırmızı KULLANILMAZ.
+  // "NE değerlendirir/EDER — NE değerlendirmez/ETMEZ" — ikisi de BİLGİdir; kırmızı KULLANILMAZ.
+  // ÖNEMLİ: OLUMSUZ kalıplar ÖNCE değiştirilir; aksi halde "BEWERTET NICHT"/"DOES NOT" satırı
+  // "BEWERTET"/"DOES" ile eşleşip YANLIŞ kutuya (yeşil) düşer. Olumlu kalıplarda ayrıca
+  // negatif-ileri-bakış (?!\s+NICHT|\s+NOT) guard'ı var.
   out = out.replace(
-    /<p><strong>(DEĞERLENDİRİR|ASSESSES|BEWERTET)\b([\s\S]*?)<\/p>/g,
-    '<div class="rc-does"><p><strong>$1$2</p></div>',
+    /<p><strong>(DEĞERLENDİRMEZ|DOES NOT ASSESS|DOES NOT|BEWERTET NICHT|PRÜFT NICHT|ETMEZ)\b([\s\S]*?)<\/p>/g,
+    '<div class="rc-does-not"><p><strong>$1$2</p></div>',
   );
   out = out.replace(
-    /<p><strong>(DEĞERLENDİRMEZ|DOES NOT ASSESS|BEWERTET NICHT)\b([\s\S]*?)<\/p>/g,
-    '<div class="rc-does-not"><p><strong>$1$2</p></div>',
+    /<p><strong>(DEĞERLENDİRİR|ASSESSES|BEWERTET(?!\s+NICHT)|PRÜFT(?!\s+NICHT)|DOES(?!\s+NOT)|EDER)\b([\s\S]*?)<\/p>/g,
+    '<div class="rc-does"><p><strong>$1$2</p></div>',
   );
   return out;
 }
@@ -986,10 +1008,11 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   const unscannable = /risk\s*seviyesi\s*[:：]\s*\*{0,2}\s*incelenemedi|risikostufe\s*[:：]\s*\*{0,2}\s*nicht\s*pr[üu]fbar|tarama\s*(yap[ıi]lamad|y[uü]r[uü]t[uü]lemed)|ula[şs][ıi]lamad[ıi][ğg][ıi] i[çc]in kontrol/.test(effectiveMd.slice(0, 2000).toLocaleLowerCase('tr'));
   // (KEŞİF A/B — YALNIZ bundle_recon) Master tabloda çıplak "Temiz" yerine kısa özet + tablonun
   // hemen altında "ne test edildi / ne çıktı" kutusu. Diğer paketlerde isRecon=false -> hiçbir fark yok.
-  const isRecon = meta.packageKey === RECON_PKG;
+  const pkgKey = meta.packageKey ?? '';
+  const isRecon = RICH_TEMPLATE_PKGS.has(pkgKey);
   const reconRows = isRecon ? parseReconAssurance(effectiveMd) : [];
-  const reconEmpty = isRecon && !unscannable ? reconEmptySummary(reconRows, loc) : '';
-  const reconSummaryHtml = isRecon && !unscannable ? buildReconAssuranceSummary(effectiveMd, loc) : '';
+  const reconEmpty = isRecon && !unscannable ? reconEmptySummary(reconRows, loc, pkgKey) : '';
+  const reconSummaryHtml = isRecon && !unscannable ? buildReconAssuranceSummary(effectiveMd, loc, pkgKey) : '';
   const distMasterHtml = parsed
     ? buildDistribution(parsed.counts, loc, unscannable) + buildMasterTable(parsed.rows, loc, unscannable, reconEmpty) + reconSummaryHtml
     : '';
@@ -1224,8 +1247,9 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .assurance h3 { margin: 0 0 5px; color: #14514A; font-size: 13px; }
   .assurance p { margin: 0; font-size: 11.5px; color: #274b41; }
   /* ======================================================================
-     (A/B TESTİ — YALNIZ KEŞİF PAKETİ) 4 blok tipi görsel olarak ayrışır.
-     Kapsam: .recon-report — diğer 5 paketin PDF'i bu kuralların HİÇBİRİNİ almaz.
+     (A/B TESTİ — ZENGİN ŞABLON: Keşif + Basit Tarama) 4 blok tipi görsel olarak ayrışır.
+     Kapsam: .recon-report sınıfı YALNIZ RICH_TEMPLATE_PKGS paketlerine basılır; kalan 4 paketin
+     (Dış Yüzey / Uyum / Aktif Doğrulama / Tam Pentest) PDF'i bu kuralların HİÇBİRİNİ almaz.
      Palet marka ile uyumlu: koyu yeşil #123F3A (başlık) + yeşilin açık tonu (test+sonuç)
      + AMBER'in açık tonu (kapsam/dürüstlük notu). Marka turuncusu (#F5A623) ciddi
      bulgu/AI bölümüne ait olduğu için rutin notlarda KULLANILMAZ — karışmasın.
