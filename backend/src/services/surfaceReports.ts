@@ -656,6 +656,48 @@ const BUNDLE_AREAS: Array<{ title: string; titleDe: string; titleEn: string; gen
   { title: 'CORS & Çerez Güvenliği', titleDe: 'CORS- & Cookie-Sicherheit', titleEn: 'CORS & Cookie Security', gen: generateCorsCookieReport },
   { title: 'CSP (İçerik Güvenlik Politikası) Analizi', titleDe: 'CSP-Analyse (Content Security Policy)', titleEn: 'CSP (Content Security Policy) Analysis', gen: generateCspReport },
 ];
+
+// (TUTARLILIK — "özet ≠ tablo" hatası) Pozitif Güvence satırı ESKİDEN alanın kendi risk SEVİYESİNDEN
+// (extractLevel) türetiliyordu. Alan seviyesi 'low' olsa bile o alanın "TESPİT EDİLEN RİSKLER"
+// tablosunda ŞİDDET'li satır bulunabiliyor (ör. yalnız Referrer/Permissions eksik ya da sayfaya-özel
+// CSP tutarsızlığı) — bu satırlar Master Bulgu Tablosu'na DÜŞÜYOR ama güvence tablosu "Sorun
+// bulunmadı" diyordu. Artık güvence, master'ın SAYDIĞI satırların AYNISINDAN türetilir.
+//
+// Şiddet sözlüğü pdf.ts:normSev ile BİREBİR aynıdır ("Bilgilendirme/Informational" SAYILMAZ —
+// master da saymaz). Eşdeğerlik testi: scripts yok; bkz. commit mesajındaki doğrulama.
+type CountedSev = 'critical' | 'high' | 'medium' | 'low';
+function normSevLocal(x: string): CountedSev | null {
+  const v = x.toLocaleLowerCase('tr').replace(/i̇/g, 'i');
+  if (/krit[iı]k|critical|kritisch/.test(v)) return 'critical';
+  if (/y[üu]ksek|high|hoch/.test(v)) return 'high';
+  if (/orta|medium|mittel/.test(v)) return 'medium';
+  if (/d[üu][şs][üu]k|low|niedrig/.test(v)) return 'low';
+  return null;
+}
+/** Alanın markdown'ındaki ŞİDDET-kolonlu tablolarda sayılan en yüksek şiddet (yoksa null). */
+export function worstCountedSeverity(md: string): CountedSev | null {
+  const rank: Record<CountedSev, number> = { critical: 3, high: 2, medium: 1, low: 0 };
+  let best: CountedSev | null = null;
+  const lines = md.split('\n');
+  let i = 0;
+  while (i < lines.length) {
+    if (!/^\s*\|.*\|\s*$/.test(lines[i])) { i++; continue; }
+    const block: string[] = [];
+    while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { block.push(lines[i]); i++; }
+    if (block.length < 2) continue;
+    const cells = (r: string) => r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+    const header = cells(block[0]).map((h) => h.toLocaleLowerCase('tr'));
+    const sevCol = header.findIndex((h) => /[şs]iddet|severity|ciddiyet|schweregrad/.test(h));
+    if (sevCol === -1) continue; // şiddet kolonu yoksa bulgu tablosu değil (pdf.ts ile aynı kural)
+    for (let r = 1; r < block.length; r++) {
+      if (/^\s*\|[\s:|-]+\|\s*$/.test(block[r])) continue;
+      const sev = normSevLocal(cells(block[r])[sevCol] ?? '');
+      if (sev && (best === null || rank[sev] > rank[best])) best = sev;
+    }
+  }
+  return best;
+}
+
 function areaTitle(i: number, locale: string): string { return locale === 'en' ? BUNDLE_AREAS[i].titleEn : locale === 'de' ? BUNDLE_AREAS[i].titleDe : BUNDLE_AREAS[i].title; }
 
 function levelRank(l: Level): number { return l === 'high' ? 3 : l === 'medium-high' ? 2 : l === 'medium' ? 1 : 0; }
@@ -802,11 +844,14 @@ export function combineSurfaceAreas(
   const assuranceRows = BUNDLE_AREAS.map((a, i) => {
     const r = results[i]; const lv = levels[i];
     const title = areaTitle(i, locale);
+    // Master tabloya DÜŞEN satırlar burada da esas alınır (özet ↔ tablo çelişkisi imkânsız).
+    const counted = r ? worstCountedSeverity(r.findings) : null;
+    const sevWord = counted ? RW[counted === 'critical' ? 'high' : counted] : '';
     const state = !r || !lv
       ? t('⚠️ İncelenemedi (veri toplanamadı — “temiz” DEĞİL)', '⚠️ Nicht prüfbar (keine Daten erhebbar — NICHT „sauber")', '⚠️ Not assessable (no data collected — NOT "clean")')
-      : lv === 'low'
-        ? t('✅ Sorun bulunmadı', '✅ Kein Problem gefunden', '✅ No issue found')
-        : t(`⚠️ Bulgu var (${RW[lv]} — yukarıda ayrıntılı)`, `⚠️ Befund vorhanden (${RW[lv]} — oben im Detail)`, `⚠️ Finding present (${RW[lv]} — detailed above)`);
+      : counted
+        ? t(`⚠️ Bulgu var (${sevWord} — yukarıda ayrıntılı)`, `⚠️ Befund vorhanden (${sevWord} — oben im Detail)`, `⚠️ Finding present (${sevWord} — detailed above)`)
+        : t('✅ Sorun bulunmadı', '✅ Kein Problem gefunden', '✅ No issue found');
     return `| ${title} | ${state} |`;
   }).join('\n');
   // (Faz 4 — DÜRÜSTLÜK) Ek pasif alt-kontroller (dizin listeleme/hata ifşası/autocomplete, CWE-548/209/522)
