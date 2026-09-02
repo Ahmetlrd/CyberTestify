@@ -506,7 +506,7 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en' | 'd
 // ============================================================================
 // Zengin (gorsel-hiyerarsili) sablonu KULLANAN paketler. Bu kumede OLMAYAN paketlerin ciktisi
 // byte-byte aynidir. A/B: once bundle_recon, simdi basit_tarama da ayni marka dilini kullanir.
-const RICH_TEMPLATE_PKGS = new Set(['bundle_recon', 'basit_tarama', 'bundle_surface', 'bundle_active_verify']);
+const RICH_TEMPLATE_PKGS = new Set(['bundle_recon', 'basit_tarama', 'bundle_surface', 'bundle_active_verify', 'bundle_full_pentest']);
 // "Kontrol alanı" dili kullanan paketler (Keşif "keşif yöntemi" der). Pozitif Güvence tablosu
 // aynı 2 kolonlu yapıdadır; satır metinlerinde sayı olması/olmaması fark etmez (metin AYNEN taşınır).
 const CONTROL_AREA_PKGS = new Set(['basit_tarama', 'bundle_surface']);
@@ -514,6 +514,12 @@ const CONTROL_AREA_PKGS = new Set(['basit_tarama', 'bundle_surface']);
 // "temiz — denendi, kanıt bulunamadı". Tablosu 4 kolonlu ve ÜÇÜNCÜ durum ("İncelenemedi") o pakette
 // NORMAL/BEKLENEN bir sonuçtur (kendi metni böyle diyor), bulgu sayılmaz.
 const ACTIVE_VERIFY_PKG = 'bundle_active_verify';
+// (TAM KAPSAMLI PENTEST) Bu pakette "POZİTİF GÜVENCE" bölümü, "EDER/ETMEZ" ve üç-durum notu YOKTUR
+// (kendi metnini okudum). Onun yerine 3 kolonlu "KONTROL ÖZETİ" tablosu var:
+//   | Kontrol | Sonuç | Güven |   ← sonuç ORTA kolonda; son kolon GÜVEN (Yüksek/Orta/Kapsam dışı)
+// İşaretleri de farklı: ✅/⚠️ emoji DEĞİL, tek karakterli ✓ / ⚠. Ayrıca 20 kontrol alanı olduğu için
+// özet kutuları madde-madde değil VİRGÜLLÜ kısa liste olarak yazılır (tam tablo §3'te zaten duruyor).
+const FULL_PENTEST_PKG = 'bundle_full_pentest';
 
 /** Güvence satırının üç durumu: temiz / bulgu / incelenemedi (paketlerin kendi metni esas alınır). */
 type AssuranceState = 'ok' | 'finding' | 'na';
@@ -525,17 +531,29 @@ function parseReconAssurance(md: string): Array<{ area: string; result: string; 
   //   4 kolon → "| Kontrol | Giriş noktası | İstek | Sonuç |"      (Aktif Doğrulama)
   // Bu yüzden İLK kolon = alan adı, SON kolon = sonuç olarak okunur; ara kolonlar (sayaçlar) yok sayılır
   // — onlar zaten bölümdeki tam tabloda AYNEN duruyor.
-  const sec = md.match(/##\s*(?:POZİTİF GÜVENCE|POSITIVE ASSURANCE|POSITIVE ZUSICHERUNG)[^\n]*\n([\s\S]*?)(?=\n##\s|$)/);
+  const sec =
+    md.match(/##\s*(?:POZİTİF GÜVENCE|POSITIVE ASSURANCE|POSITIVE ZUSICHERUNG)[^\n]*\n([\s\S]*?)(?=\n##\s|$)/) ??
+    // (TAM KAPSAMLI PENTEST) O pakette Pozitif Güvence bölümü YOK; eşdeğeri "KONTROL ÖZETİ" tablosudur.
+    // Yalnız Pozitif Güvence BULUNAMAZSA devreye girer -> diğer paketlerde davranış AYNEN korunur.
+    md.match(/##\s*(?:KONTROL ÖZETİ|CONTROLS SUMMARY|KONTROLLÜBERSICHT)[^\n]*\n([\s\S]*?)(?=\n##\s|$)/);
   if (!sec) return [];
   const out: Array<{ area: string; result: string; ok: boolean; state: AssuranceState }> = [];
+  let resultCol = -1; // başlık satırından öğrenilir (bkz aşağıda); -1 ise son kolon kullanılır
   for (const line of sec[1].split('\n')) {
     if (!/^\s*\|.*\|\s*$/.test(line)) continue;
     const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
     if (cells.length < 2) continue;
     const area = cells[0];
-    const result = cells[cells.length - 1];
-    if (/^[-:\s]+$/.test(area) || !result || /^(Sonuç|Result|Ergebnis)$/i.test(result)) continue; // baslik/ayrac satiri
-    const ok = result.startsWith('✅');
+    // (KOLON SEÇİMİ) Sonuç HER ZAMAN son kolon DEĞİL: Tam Pentest tablosunda son kolon "Güven"dir.
+    // Başlık satırından "Sonuç/Result/Ergebnis" kolonunun indeksi öğrenilir; yoksa son kolona düşülür.
+    if (/^(Sonuç|Result|Ergebnis)$/i.test(cells[cells.length - 1]) || cells.some((c) => /^(Sonuç|Result|Ergebnis)$/i.test(c))) {
+      const idx = cells.findIndex((c) => /^(Sonuç|Result|Ergebnis)$/i.test(c));
+      if (idx > 0) resultCol = idx;
+      continue; // başlık satırı
+    }
+    const result = cells[resultCol >= 0 && resultCol < cells.length ? resultCol : cells.length - 1];
+    if (/^[-:\s]+$/.test(area) || !result) continue; // ayrac satiri
+    const ok = result.startsWith('✅') || result.startsWith('✓');
     // (ÜÇÜNCÜ DURUM) "İncelenemedi / Nicht prüfbar / Not assessable" bir BULGU DEĞİLDİR; paketlerin
     // kendi üç-durum notu bunu açıkça ayırır. Bulgu kutusuna koymak yanıltıcı olurdu.
     // (TR-I TUZAĞI) "İncelenemedi" büyük İ (U+0130) ile başlar; JS'in /i/ bayrağı bunu ASCII 'i' ile
@@ -546,7 +564,13 @@ function parseReconAssurance(md: string): Array<{ area: string; result: string; 
     // untersuchbar" der; Dış Yüzey/Basit ayrıca "Nicht ermittelbar"/"Nicht abfragbar" kullanır.
     // AÇIK LİSTE tutulur — "Nicht \w+bar" gibi genel kalıp "Nicht vorhersehbar" (yan-etki riski,
     // BAMBAŞKA bir anlam) satırını da yanlışlıkla yakalardı.
-    const na = !ok && /incelenemedi|not assessable|not scanned|nicht (pr[üu]fbar|pruefbar|untersuchbar|ermittelbar|abfragbar)/.test(norm);
+    // (TAM KAPSAMLI PENTEST) O paket "kapsam dışı" der: "Uygulanabilir giriş noktası yok (Kapsam dışı)" /
+    // "Kein anwendbarer Eingabepunkt (Außerhalb des Umfangs)" / "No applicable input point (out of scope)".
+    // Bunlar da BULGU DEĞİL, üçüncü durumdur.
+    const na = !ok && (
+      /incelenemedi|not assessable|not scanned|nicht (pr[üu]fbar|pruefbar|untersuchbar|ermittelbar|abfragbar)/.test(norm) ||
+      /kapsam d[iı][şs][iı]|au[şs]erhalb des umfangs|ausserhalb des umfangs|out of scope|kein anwendbarer|no applicable/.test(norm)
+    );
     out.push({ area, result, ok, state: ok ? 'ok' : na ? 'na' : 'finding' });
   }
   return out;
@@ -579,7 +603,7 @@ function reconEmptySummary(rows: Array<{ ok: boolean }>, locale: 'tr' | 'en' | '
  * İçerik §POZİTİF GÜVENCE tablosundan AYNEN alınır (o bölüm yerinde KALIR) — kullanıcı
  * bilgiyi görmek için raporun sonuna kadar beklemek zorunda kalmasın.
  */
-function buildReconAssuranceSummary(md: string, locale: 'tr' | 'en' | 'de', pkg: string): string {
+function buildReconAssuranceSummary(md: string, locale: 'tr' | 'en' | 'de', pkg: string, counts?: Record<Sev, number>): string {
   const rows = parseReconAssurance(md);
   if (!rows.length) return '';
   const okRows = rows.filter((r) => r.state === 'ok');
@@ -589,7 +613,26 @@ function buildReconAssuranceSummary(md: string, locale: 'tr' | 'en' | 'de', pkg:
   // (BASIT TARAMA) Baslik AYNI ZAMANDA ozet cumlesidir: "N/M kontrol alani calistirildi; X'inde
   // gosterge bulundu". Kesif'in mevcut basligi DEGISMEZ (o paket zaten dogrulanmis durumda).
   const naPart = (tr: string, en: string, de: string) => (naRows.length ? p3(locale, tr, en, de) : '');
-  const title = pkg === ACTIVE_VERIFY_PKG
+  const sevSummary = (): string => {
+    const c = counts ?? { critical: 0, high: 0, medium: 0, low: 0 };
+    const parts: string[] = [];
+    const add = (n: number, tr: string, en: string, de: string) => { if (n > 0) parts.push(p3(locale, `${n} ${tr}`, `${n} ${en}`, `${n} ${de}`)); };
+    add(c.critical, 'kritik', 'critical', 'kritisch');
+    add(c.high, 'yüksek', 'high', 'hoch');
+    add(c.medium, 'orta', 'medium', 'mittel');
+    add(c.low, 'düşük', 'low', 'niedrig');
+    return parts.length
+      ? p3(locale, `bulgular: ${parts.join(', ')}`, `findings: ${parts.join(', ')}`, `Befunde: ${parts.join(', ')}`)
+      : p3(locale, 'doğrulanmış bulgu yok', 'no confirmed finding', 'kein bestätigter Befund');
+  };
+  // (TAM KAPSAMLI PENTEST) 20 kontrol alanı + Kritik/Yüksek bulgu ihtimali en yüksek paket:
+  // özet ŞİDDET-GRUPLU yazılır (uzun liste yerine tek okunur cümle).
+  const title = pkg === FULL_PENTEST_PKG
+    ? p3(locale,
+        `${rows.length} kontrol alanı çalıştırıldı — ${sevSummary()}`,
+        `${rows.length} control areas were run — ${sevSummary()}`,
+        `${rows.length} Kontrollbereiche wurden ausgeführt — ${sevSummary()}`)
+    : pkg === ACTIVE_VERIFY_PKG
     ? p3(locale,
         `${rows.length} doğrulama kategorisi çalıştırıldı — ${okRows.length} temiz, ${warnRows.length} kategoride bulgu var`,
         `${rows.length} verification categories were run — ${okRows.length} clean, ${warnRows.length} produced a finding`,
@@ -601,25 +644,36 @@ function buildReconAssuranceSummary(md: string, locale: 'tr' | 'en' | 'de', pkg:
         `${rows.length} control areas were run — ${okRows.length} came back clean, ${warnRows.length} produced a finding`,
         `${rows.length} Kontrollbereiche wurden ausgeführt — ${okRows.length} ohne Befund, ${warnRows.length} mit Befund`)
     : p3(locale, 'Ne test edildi, ne çıktı?', 'What was tested, and what came out?', 'Was wurde geprüft, und was kam heraus?');
-  const okHead = pkg === ACTIVE_VERIFY_PKG
+  const okHead = pkg === FULL_PENTEST_PKG
+    ? p3(locale, 'Çalıştırıldı — zafiyet kanıtı yok', 'Executed — no vulnerability evidence', 'Ausgeführt — kein Schwachstellennachweis')
+    : pkg === ACTIVE_VERIFY_PKG
     ? p3(locale, 'Denendi — zafiyet kanıtı bulunamadı', 'Attempted — no evidence of a vulnerability found', 'Versucht — kein Schwachstellennachweis gefunden')
     : CONTROL_AREA_PKGS.has(pkg)
     ? p3(locale, 'Kontrol edildi — sorun bulunmadı', 'Checked — no issue found', 'Geprüft — kein Problem gefunden')
     : p3(locale, 'Test edildi — gösterge bulunamadı', 'Checked — no indicator found', 'Geprüft — kein Indikator gefunden');
-  const warnHead = CONTROL_AREA_PKGS.has(pkg) || pkg === ACTIVE_VERIFY_PKG
+  const warnHead = CONTROL_AREA_PKGS.has(pkg) || pkg === ACTIVE_VERIFY_PKG || pkg === FULL_PENTEST_PKG
     ? p3(locale, 'Bulgu var — ayrıntısı aşağıdaki bölümlerde', 'Finding present — detailed in the sections below', 'Befund vorhanden — Details in den Abschnitten unten')
     : p3(locale, 'Gösterge bulundu — ayrıntısı aşağıdaki bölümlerde', 'Indicator found — detailed in the sections below', 'Indikator gefunden — Details in den Abschnitten unten');
   // (ÜÇÜNCÜ DURUM) "İncelenemedi" ne temiz ne bulgudur — nötr gri kutu; "güvenli" ANLAMINA GELMEZ.
-  const naHead = p3(locale,
+  const naHead = pkg === FULL_PENTEST_PKG
+    ? p3(locale,
+        'Uygulanamadı / kapsam dışı — “güvenli” anlamına GELMEZ',
+        'Not applicable / out of scope — does NOT mean “secure”',
+        'Nicht anwendbar / außerhalb des Umfangs — bedeutet NICHT „sicher“')
+    : p3(locale,
     'İncelenemedi — “güvenli” anlamına GELMEZ',
     'Not assessable — does NOT mean “secure”',
     'Nicht prüfbar — bedeutet NICHT „sicher“');
   const li = (r: { area: string; result: string }) => `<li><span class="rc-area">${escapeHtml(r.area)}</span> ${escapeHtml(strip(r.result))}</li>`;
+  // 20 kontrol alanında madde-madde liste yarım sayfa eder; alan adları VİRGÜLLE yazılır
+  // (her satırın sonucu zaten §3 KONTROL ÖZETİ tablosunda AYNEN duruyor).
+  const compact = (rs: Array<{ area: string }>) => `<li><span class="rc-area">${escapeHtml(rs.map((r) => r.area).join(' · '))}</span></li>`;
+  const body = (rs: Array<{ area: string; result: string }>) => (pkg === FULL_PENTEST_PKG ? compact(rs) : rs.map(li).join(''));
   return `<div class="rc-summary">
     <div class="rc-summary-title">${escapeHtml(title)}</div>
-    ${okRows.length ? `<div class="rc-ok-box"><div class="rc-box-head">✅ ${escapeHtml(okHead)}</div><ul>${okRows.map(li).join('')}</ul></div>` : ''}
-    ${warnRows.length ? `<div class="rc-warn-box"><div class="rc-box-head">⚠️ ${escapeHtml(warnHead)}</div><ul>${warnRows.map(li).join('')}</ul></div>` : ''}
-    ${naRows.length ? `<div class="rc-na-box"><div class="rc-box-head">⚠️ ${escapeHtml(naHead)}</div><ul>${naRows.map(li).join('')}</ul></div>` : ''}
+    ${okRows.length ? `<div class="rc-ok-box"><div class="rc-box-head">✅ ${escapeHtml(okHead)}</div><ul>${body(okRows)}</ul></div>` : ''}
+    ${warnRows.length ? `<div class="rc-warn-box"><div class="rc-box-head">⚠️ ${escapeHtml(warnHead)}</div><ul>${body(warnRows)}</ul></div>` : ''}
+    ${naRows.length ? `<div class="rc-na-box"><div class="rc-box-head">⚠️ ${escapeHtml(naHead)}</div><ul>${body(naRows)}</ul></div>` : ''}
   </div>`;
 }
 
@@ -1061,7 +1115,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   const isRecon = RICH_TEMPLATE_PKGS.has(pkgKey);
   const reconRows = isRecon ? parseReconAssurance(effectiveMd) : [];
   const reconEmpty = isRecon && !unscannable ? reconEmptySummary(reconRows, loc, pkgKey) : '';
-  const reconSummaryHtml = isRecon && !unscannable ? buildReconAssuranceSummary(effectiveMd, loc, pkgKey) : '';
+  const reconSummaryHtml = isRecon && !unscannable ? buildReconAssuranceSummary(effectiveMd, loc, pkgKey, parsed?.counts) : '';
   const distMasterHtml = parsed
     ? buildDistribution(parsed.counts, loc, unscannable) + buildMasterTable(parsed.rows, loc, unscannable, reconEmpty) + reconSummaryHtml
     : '';
