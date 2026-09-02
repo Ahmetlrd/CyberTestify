@@ -506,7 +506,10 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en' | 'd
 // ============================================================================
 // Zengin (gorsel-hiyerarsili) sablonu KULLANAN paketler. Bu kumede OLMAYAN paketlerin ciktisi
 // byte-byte aynidir. A/B: once bundle_recon, simdi basit_tarama da ayni marka dilini kullanir.
-const RICH_TEMPLATE_PKGS = new Set(['bundle_recon', 'basit_tarama']);
+const RICH_TEMPLATE_PKGS = new Set(['bundle_recon', 'basit_tarama', 'bundle_surface']);
+// "Kontrol alanı" dili kullanan paketler (Keşif "keşif yöntemi" der). Pozitif Güvence tablosu
+// aynı 2 kolonlu yapıdadır; satır metinlerinde sayı olması/olmaması fark etmez (metin AYNEN taşınır).
+const CONTROL_AREA_PKGS = new Set(['basit_tarama', 'bundle_surface']);
 
 /** POZİTİF GÜVENCE tablosunun satırlarını ayrıştırır (uydurma YOK — markdown'da ne varsa o). */
 function parseReconAssurance(md: string): Array<{ area: string; result: string; ok: boolean }> {
@@ -529,7 +532,7 @@ function parseReconAssurance(md: string): Array<{ area: string; result: string; 
 function reconEmptySummary(rows: Array<{ ok: boolean }>, locale: 'tr' | 'en' | 'de', pkg: string): string {
   if (!rows.length) return '';
   const clean = rows.filter((r) => r.ok).length;
-  if (pkg === 'basit_tarama') {
+  if (CONTROL_AREA_PKGS.has(pkg)) {
     return p3(locale,
       ` <strong>${clean}/${rows.length} kontrol alanı çalıştırıldı; hiçbirinde sorun bulunmadı</strong> (alan alan özet aşağıdadır).`,
       ` <strong>${clean}/${rows.length} control areas were run; no issue was found in any of them</strong> (area-by-area summary below).`,
@@ -554,16 +557,16 @@ function buildReconAssuranceSummary(md: string, locale: 'tr' | 'en' | 'de', pkg:
   const strip = (s: string) => s.replace(/^[✅⚠️\s]+/, '').trim();
   // (BASIT TARAMA) Baslik AYNI ZAMANDA ozet cumlesidir: "N/M kontrol alani calistirildi; X'inde
   // gosterge bulundu". Kesif'in mevcut basligi DEGISMEZ (o paket zaten dogrulanmis durumda).
-  const title = pkg === 'basit_tarama'
+  const title = CONTROL_AREA_PKGS.has(pkg)
     ? p3(locale,
         `${rows.length} kontrol alanı çalıştırıldı — ${okRows.length} alanda sorun bulunmadı, ${warnRows.length} alanda bulgu var`,
         `${rows.length} control areas were run — ${okRows.length} came back clean, ${warnRows.length} produced a finding`,
         `${rows.length} Kontrollbereiche wurden ausgeführt — ${okRows.length} ohne Befund, ${warnRows.length} mit Befund`)
     : p3(locale, 'Ne test edildi, ne çıktı?', 'What was tested, and what came out?', 'Was wurde geprüft, und was kam heraus?');
-  const okHead = pkg === 'basit_tarama'
+  const okHead = CONTROL_AREA_PKGS.has(pkg)
     ? p3(locale, 'Kontrol edildi — sorun bulunmadı', 'Checked — no issue found', 'Geprüft — kein Problem gefunden')
     : p3(locale, 'Test edildi — gösterge bulunamadı', 'Checked — no indicator found', 'Geprüft — kein Indikator gefunden');
-  const warnHead = pkg === 'basit_tarama'
+  const warnHead = CONTROL_AREA_PKGS.has(pkg)
     ? p3(locale, 'Bulgu var — ayrıntısı aşağıdaki bölümlerde', 'Finding present — detailed in the sections below', 'Befund vorhanden — Details in den Abschnitten unten')
     : p3(locale, 'Gösterge bulundu — ayrıntısı aşağıdaki bölümlerde', 'Indicator found — detailed in the sections below', 'Indikator gefunden — Details in den Abschnitten unten');
   const li = (r: { area: string; result: string }) => `<li><span class="rc-area">${escapeHtml(r.area)}</span> ${escapeHtml(strip(r.result))}</li>`;
@@ -1248,8 +1251,8 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .assurance p { margin: 0; font-size: 11.5px; color: #274b41; }
   /* ======================================================================
      (A/B TESTİ — ZENGİN ŞABLON: Keşif + Basit Tarama) 4 blok tipi görsel olarak ayrışır.
-     Kapsam: .recon-report sınıfı YALNIZ RICH_TEMPLATE_PKGS paketlerine basılır; kalan 4 paketin
-     (Dış Yüzey / Uyum / Aktif Doğrulama / Tam Pentest) PDF'i bu kuralların HİÇBİRİNİ almaz.
+     Kapsam: .recon-report sınıfı YALNIZ RICH_TEMPLATE_PKGS paketlerine basılır; kalan 3 paketin
+     (Uyum / Aktif Doğrulama / Tam Pentest) PDF'i bu kuralların HİÇBİRİNİ almaz.
      Palet marka ile uyumlu: koyu yeşil #123F3A (başlık) + yeşilin açık tonu (test+sonuç)
      + AMBER'in açık tonu (kapsam/dürüstlük notu). Marka turuncusu (#F5A623) ciddi
      bulgu/AI bölümüne ait olduğu için rutin notlarda KULLANILMAZ — karışmasın.
