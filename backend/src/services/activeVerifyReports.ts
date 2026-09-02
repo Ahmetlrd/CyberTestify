@@ -408,17 +408,21 @@ const ACTIVE_BUNDLE_MEMBERS: ActiveMember[] = [
 ];
 
 export function extractLevel(findings: string): Level {
-  // (Çok-bölge) TR "Risk Seviyesi:" + DE "Risikostufe:"; risk kelimeleri iki dilde de tanınır.
-  const m = findings.match(/(?:Risk Seviyesi|Risikostufe):\s*(Orta[-\s]?Y[uü]ksek|Y[uü]ksek|Orta|D[uü][sş][uü]k|Mittel[-\s]?Hoch|Hoch|Mittel|Niedrig)/i);
+  // (BUGFIX — ÜÇ BÖLGE) Buraya İNGİLİZCE hiç eklenmemişti: EN gövde "Risk Level: High" yazar ama
+  // kalıp yalnız TR/DE tanıyordu -> her EN koşusunda eşleşme YOK -> 'low'. Sonuç: İngilizce raporda
+  // master tabloda 2 Yüksek bulgu varken üstteki rozet "Low Risk" diyordu ve tüm kontroller
+  // "limited indicator" olarak etiketleniyordu. (surfaceReports:extractLevel ile AYNI sözlük.)
+  const m = findings.match(/(?:Risk Seviyesi|Risikostufe|Risk Level):\s*(Orta[-\s]?Y[uü]ksek|Y[uü]ksek|Orta|D[uü][sş][uü]k|Mittel[-\s]?Hoch|Hoch|Mittel|Niedrig|Medium[-\s]?High|High|Medium|Low)/i);
   if (!m) return 'low';
   const w = m[1].toLocaleLowerCase('tr');
-  if (/orta[-\s]?y[uü]ksek|mittel[-\s]?hoch/.test(w)) return 'medium-high';
-  if (/y[uü]ksek|hoch/.test(w)) return 'high';
-  if (/orta|mittel/.test(w)) return 'medium';
+  if (/orta[-\s]?y[uü]ksek|mittel[-\s]?hoch|medium[-\s]?high/.test(w)) return 'medium-high';
+  if (/y[uü]ksek|hoch|high/.test(w)) return 'high';
+  if (/orta|mittel|medium/.test(w)) return 'medium';
   return 'low';
 }
 export function headlineOf(findings: string): string {
-  const m = findings.match(/(?:Genel risk seviyesi|Gesamtrisikostufe):\s*[^\n]+?\s[—–-]\s([^\n]+)/i);
+  // (AYNI BUGFIX) EN gövde "Overall risk level:" yazar; kalıba eklenmezse EN'de başlık cümlesi boş kalır.
+  const m = findings.match(/(?:Genel risk seviyesi|Gesamtrisikostufe|Overall risk level):\s*[^\n]+?\s[—–-]\s([^\n]+)/i);
   return m ? m[1].trim().replace(/\*\*/g, '') : '';
 }
 // YÖNETİCİ ÖZETİ + GENEL DEĞERLENDİRME'yi cikar, detay bolumlerini dondur (## -> ### indir).
