@@ -541,7 +541,12 @@ function parseReconAssurance(md: string): Array<{ area: string; result: string; 
     // (TR-I TUZAĞI) "İncelenemedi" büyük İ (U+0130) ile başlar; JS'in /i/ bayrağı bunu ASCII 'i' ile
     // EŞLEŞTİRMEZ -> satır yanlışlıkla "bulgu" sayılıyordu. Önce İ/I normalize edilir.
     const norm = result.replace(/[İI]/g, 'i').replace(/\u0307/g, '').toLowerCase();
-    const na = !ok && /incelenemedi|nicht pr[üu]fbar|not assessable/.test(norm);
+    // Paketlerin GERÇEKTEN kullandığı tüm "incelenemedi" ifadeleri (kod + örnek fixture'lardan
+    // tarandı). DE'de tek bir kalıp YOK: motor "Nicht prüfbar" üretir, örnek fixture "Nicht
+    // untersuchbar" der; Dış Yüzey/Basit ayrıca "Nicht ermittelbar"/"Nicht abfragbar" kullanır.
+    // AÇIK LİSTE tutulur — "Nicht \w+bar" gibi genel kalıp "Nicht vorhersehbar" (yan-etki riski,
+    // BAMBAŞKA bir anlam) satırını da yanlışlıkla yakalardı.
+    const na = !ok && /incelenemedi|not assessable|not scanned|nicht (pr[üu]fbar|pruefbar|untersuchbar|ermittelbar|abfragbar)/.test(norm);
     out.push({ area, result, ok, state: ok ? 'ok' : na ? 'na' : 'finding' });
   }
   return out;
