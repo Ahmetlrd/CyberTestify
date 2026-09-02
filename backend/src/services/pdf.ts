@@ -506,7 +506,10 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en' | 'd
 // ============================================================================
 // Zengin (gorsel-hiyerarsili) sablonu KULLANAN paketler. Bu kumede OLMAYAN paketlerin ciktisi
 // byte-byte aynidir. A/B: once bundle_recon, simdi basit_tarama da ayni marka dilini kullanir.
-const RICH_TEMPLATE_PKGS = new Set(['bundle_recon', 'basit_tarama', 'bundle_surface', 'bundle_active_verify', 'bundle_full_pentest']);
+const RICH_TEMPLATE_PKGS = new Set(['bundle_recon', 'basit_tarama', 'bundle_surface', 'bundle_active_verify', 'bundle_full_pentest', 'bundle_compliance']);
+// (UYUM) Bu pakette Master Bulgu Tablosu YOKTUR (parsed=null -> distMasterHtml boş), dolayısıyla
+// master-altı özet kutusu HİÇ basılmaz; özet Yönetici Özeti'ne metin olarak eklendi
+// (complianceReports.ts "Çerçeve özeti"). Buradaki üyelik yalnız CSS/blok stilini açar.
 // "Kontrol alanı" dili kullanan paketler (Keşif "keşif yöntemi" der). Pozitif Güvence tablosu
 // aynı 2 kolonlu yapıdadır; satır metinlerinde sayı olması/olmaması fark etmez (metin AYNEN taşınır).
 const CONTROL_AREA_PKGS = new Set(['basit_tarama', 'bundle_surface']);
@@ -1385,6 +1388,9 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .recon-report p { background: none; color: #1b2b28; }
   /* (4) UYARI / KAPSAM NOTU — amber kutu; CİDDİ BULGU rengiyle (kırmızı/turuncu) KARIŞMAZ */
   .recon-report blockquote { background: #FEF9EE; border-left: 4px solid #C98A16; color: #5C3D08; border-radius: 0 4px 4px 0; }
+  /* (UYUM) "⚠️ Önemli — resmî uyum beyanı DEĞİLDİR" kutusu bir blockquote İÇİNDE başlık taşır;
+     başlığın marka-yeşili sol çizgisi amber kutunun içinde yabancı duruyordu -> kutuyla aynı dile alındı. */
+  .recon-report blockquote h3, .recon-report blockquote h4 { border-left: none; padding-left: 0; margin-top: 0; color: #8A5B08; }
   .recon-report td.rc-warn { background: #FEF9EE; color: #7A4B12; font-weight: 600; }
   .recon-report li.rc-warn { background: #FEF9EE; color: #7A4B12; padding: 3px 8px; border-radius: 4px; list-style: none; margin-left: -18px; }
   /* Ciddi bulgu göstergeleri (şiddet rozetleri / master tablo) DOKUNULMAZ: kendi kırmızı/turuncu

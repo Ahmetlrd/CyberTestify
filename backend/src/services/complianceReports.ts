@@ -540,6 +540,20 @@ export function combineComplianceAreas(results: Array<{ findings: string; fixTex
       ? `- **Genel risk seviyesi: Düşük** — uyum hazırlığınız 3 çerçevede (KVKK/PCI-DSS/ISO 27001) dışarıdan incelendi; belirgin bir eksik öne çıkmadı.`
       : `- **Genel risk seviyesi: ${RISK_WORD[worst]}** — 3 çerçeve incelendi; en yüksek hazırlık eksiği **${worstTitle}** alanında${worstHl ? ` (${worstHl})` : ''}.`,
   );
+  // (ÖZET CÜMLESİ) Diğer paketlerdeki "N kontrol alanı çalıştırıldı — X temiz, Y bulgu" özetinin bu
+  // pakete uyarlanmışı. Master Bulgu Tablosu bu pakette YOK; sayılar levels[] dizisinden GERÇEK
+  // olarak türetilir (uydurma yok). Türkçe ek uyumu için "N çerçevede" kalıbı kullanılır.
+  const gapCount = levels.filter((lv) => lv !== null && lv !== 'low').length;
+  const cleanCount = levels.filter((lv) => lv === 'low').length;
+  const naCount = levels.filter((lv) => lv === null).length;
+  summary.push(
+    `- **Çerçeve özeti:** ${AREA_TITLES.length} çerçeve incelendi — ` +
+      [
+        gapCount ? `${gapCount} çerçevede hazırlık eksiği var` : '',
+        cleanCount ? `${cleanCount} çerçevede gözlemlenen boşluk yok` : '',
+        naCount ? `${naCount} çerçeve incelenemedi (“uygun” anlamına GELMEZ)` : '',
+      ].filter(Boolean).join(', ') + '.',
+  );
   AREA_TITLES.forEach((t, i) => {
     const lv = levels[i];
     summary.push(results[i] && lv ? `- **${t}:** ${RISK_WORD[lv]}` : `- **${t}:** veri toplanamadı.`);
