@@ -284,6 +284,44 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
     .replace(/\s{2,}/g, ' ').trim();
 
   const CONFIG_CATS = new Set(['cookie_config', 'security_header', 'info_disclosure']);
+  // ============================================================================
+  // (ŞEFFAFLIK) "Ne denendi, ne çıktı?" — 6 paketteki dilin S1'e uyarlanmışı.
+  // VERİ KAYNAĞI: yalnız binder çıktısı. `tried.families` ALANI VARDIR ama binder çoğu
+  // koşuda BOŞ döner; o yüzden iki yol veriye göre seçilir, UYDURMA YAPILMAZ:
+  //   (A) families doluysa  -> aileler isim isim listelenir ("denendi" olarak; binder aileyi
+  //       tek tek bulguya BAĞLAMAZ, o yüzden aile bazında "temiz" İDDİA EDİLMEZ).
+  //   (B) families boşsa    -> dürüst not + yalnız ham kanıta bağlanan bulgu KATEGORİLERİ.
+  // Kategoriler REMEDIATION etiketinden gelir (bulgu kartındakinin AYNISI) — yeni taksonomi yok.
+  const catLabels = (list: BinderFinding[]): string[] => {
+    const seen = new Map<string, number>();
+    for (const f of list) {
+      const label = (REMEDIATION[f.category] ?? REMEDIATION.bilinmeyen).label;
+      seen.set(label, (seen.get(label) ?? 0) + 1);
+    }
+    return [...seen.entries()].map(([label, n]) => (n > 1 ? `${label} (${n})` : label));
+  };
+  const provenCats = catLabels(r.proven);
+  const reviewCats = catLabels(r.needsReview);
+  const famList = t.families ?? [];
+  // Özet cümlesi — sayılar TEK KAYNAK (r.counts / r.eliminated / t); kapak ve özetle çelişemez.
+  const assurLine =
+    `<b>${t.httpRequests ?? 0}</b> HTTP isteği ile <b>${t.endpointCount ?? (t.endpoints?.length ?? 0)}</b> uç-nokta denendi — ` +
+    `${r.proven.length ? `<b>${provenCats.length}</b> kategoride kanıtlı bulgu` : 'kanıtlı bulgu üretilmedi'}` +
+    `${r.needsReview.length ? `, <b>${reviewCats.length}</b> kategoride inceleme gerektiren gözlem` : ''}` +
+    `${r.eliminated ? `; <b>${r.eliminated}</b> iddia ham kanıtı olmadığı için elendi` : ''}.`;
+  const grp = (cls: string, icon: string, head: string, items: string[]) =>
+    items.length ? `<div class="${cls}"><div class="gbhead">${icon} ${esc(head)}</div><div class="chips">${items.map((x) => `<code>${esc(x)}</code>`).join('')}</div></div>` : '';
+  const assuranceBreakdown =
+    `<div class="assur-sum">${assurLine}</div>` +
+    grp('gbox gb-warn', '⚠️', 'Kanıt üreten kategoriler — ayrıntısı "Kanıtlı Bulgular" bölümünde', provenCats) +
+    grp('gbox gb-warn', '⚠️', 'İnceleme gerektiren kategoriler — insan doğrulaması önerilir', reviewCats) +
+    (famList.length
+      ? grp('gbox gb-neutral', '·', 'Bu koşuda denenen teknik aileleri (binder envanteri)', famList)
+      : `<div class="gbox gb-neutral"><div class="gbhead">· Teknik-aile envanteri</div><div class="gbnote">Bu koşuda teknik-aile bazlı tam envanter üretilmedi (binder aile listesi döndürmedi). Yukarıda yalnız <b>ham kanıta bağlanan bulgu kategorileri</b> ile ölçülen istek/uç-nokta sayıları yer alır; "şu aile denendi, temizdi" şeklinde bir iddia bilinçli olarak YAZILMAZ.</div></div>`) +
+    (r.proven.length === 0
+      ? `<div class="gbox gb-ok"><div class="gbhead">✅ Bu koşuda kanıtlı bulgu üretilmedi</div><div class="gbnote">Denenen etkileşimlerin hiçbiri deterministik bir zafiyet imzasına bağlanmadı. Bu, hedefin güvenli olduğunu KANITLAMAZ (bkz. Sınırlılıklar).</div></div>`
+      : '');
+
   const card = (f: BinderFinding, needsHuman: boolean) => {
     const rem = REMEDIATION[f.category] ?? REMEDIATION.bilinmeyen;
     const sc = FIND_SEVC[f.severity] ?? '#334155';
@@ -321,8 +359,14 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
 
   return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Otonom AI Red Team — Bulgu Raporu</title>
 <style>
-  *{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;margin:0;padding:26px 30px;line-height:1.5;font-size:13px}
-  h1{font-size:22px;margin:0 0 2px} h2{font-size:15px;margin:24px 0 10px;color:#123f3a;border-bottom:2px solid #123f3a;padding-bottom:5px}
+  /* (EK — GÖRSEL KATMAN) Marka token'ları. Yeni renk İCAT EDİLMEDİ: teal #123F3A ve amber
+     #E8912B zaten S1 kapağında/uyarılarında vardı; sayfa zemini için tek yeni token sıcak
+     nötr #FAFAF8. Gradient/gölge yığını YOK (print güvenliği). */
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1a1a1a;margin:0;padding:26px 30px;line-height:1.58;font-size:13px;background:#FAFAF8;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  h1{font-size:22px;margin:0 0 2px}
+  /* H2: alt çizgi yerine sol marka aksanı + üstte nefes payı (bölüm ayrımı netleşsin). */
+  h2{font-size:16px;margin:30px 0 12px;color:#123f3a;font-weight:800;letter-spacing:.1px;border-bottom:1px solid #E1ECE8;border-left:4px solid #123f3a;padding:2px 0 7px 10px}
   .meta{font-size:12px;color:#475569;margin-bottom:12px}
   /* (GÖRSEL AYRIM) Rutin kapsam/uyarı şeridi AMBER ailededir; bulgu şiddet rozetleri KIRMIZI
      ailededir. Eskiden ikisi de turuncu-kırmızı tondaydı ve "deneysel" uyarısı ciddi bir bulgu
@@ -330,11 +374,11 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
      kendi kırmızı/amber rengini yazmaya devam eder — onlar rutin not değil.) */
   .disc{background:#FDF5E6;border:1px solid #F5C77A;border-left:5px solid #E8912B;border-radius:8px;padding:12px 14px;font-size:12px;color:#7A4B12;margin:0 0 16px;font-weight:500}
   .risk{display:inline-block;padding:4px 14px;border-radius:999px;color:#fff;font-weight:700;background:${rc}}
-  .exec{background:#f0f7f5;border:1px solid #cfe3dd;border-radius:8px;padding:14px 16px;margin:0 0 6px}
+  .exec{background:#fff;border:1px solid #DCEAE6;border-top:3px solid #123f3a;border-radius:10px;padding:16px 18px;margin:0 0 6px}
   .sum{display:flex;gap:22px;flex-wrap:wrap;font-size:13px;margin:10px 0}
   .sum div{text-align:center} .sum b{font-size:20px;display:block}
-  .fcard{border:1px solid #e2e8f0;border-radius:10px;padding:0;margin:0 0 16px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-  .fhead{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
+  .fcard{background:#fff;border:1px solid #E3E8E6;border-radius:10px;padding:0;margin:0 0 18px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+  .fhead{display:flex;align-items:center;gap:10px;padding:11px 14px;background:#F5F8F7;border-bottom:1px solid #E3E8E6}
   .sev{color:#fff;font-weight:800;font-size:11px;padding:3px 9px;border-radius:5px;letter-spacing:.4px}
   .ftitle{font-weight:700;font-size:14px;color:#0f172a;flex:1}
   .human{background:#fef3c7;color:#92400e;font-weight:700;font-size:10px;padding:3px 8px;border-radius:5px;border:1px solid #fcd34d}
@@ -349,15 +393,27 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
   pre.raw .elide{color:#64748b;font-style:italic}
   .mk{color:#fde68a;font-size:10px;font-weight:700;margin-left:6px}
   .assur{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:8px 0 4px}
-  .assur .ac{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;text-align:center}
+  .assur .ac{background:#fff;border:1px solid #DCEAE6;border-radius:8px;padding:12px;text-align:center}
+  /* (ŞEFFAFLIK KUTULARI) 6 paketteki yeşil/amber/nötr dilin S1 karşılığı — MEVCUT token'lar. */
+  .assur-sum{background:#fff;border:1px solid #DCEAE6;border-left:4px solid #123f3a;border-radius:8px;padding:10px 14px;margin:10px 0 8px;font-size:12.5px;color:#1a1a1a}
+  .gbox{border-radius:8px;padding:9px 13px;margin:0 0 8px;font-size:12px}
+  .gbox .gbhead{font-weight:800;font-size:11px;letter-spacing:.3px;margin-bottom:5px;text-transform:uppercase}
+  .gbox .gbnote{color:#475569;line-height:1.55}
+  .gb-ok{background:#F1F9F5;border:1px solid #BFE3D5;border-left:4px solid #1C6B60} .gb-ok .gbhead{color:#12564C}
+  .gb-warn{background:#FDF5E6;border:1px solid #F5C77A;border-left:4px solid #E8912B} .gb-warn .gbhead{color:#8A5B08}
+  .gb-neutral{background:#F4F6F5;border:1px solid #D9E0DD;border-left:4px solid #8A9A95} .gb-neutral .gbhead{color:#4A5A55}
   .assur .ac b{display:block;font-size:20px;color:#123f3a} .assur .ac span{font-size:11px;color:#64748b}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0} .chips code{background:#eef2f7;padding:2px 7px;border-radius:5px;font-size:11px}
-  ul.lim{margin:6px 0 0;padding-left:18px;font-size:12px;color:#475569} ul.lim li{margin:3px 0}
+  ul.lim{margin:0;padding:12px 16px 12px 32px;font-size:12px;color:#475569;background:#fff;border:1px solid #E3E8E6;border-radius:8px} ul.lim li{margin:5px 0}
   .fix{margin:0 14px 12px;background:#ecfdf5;border:1px solid #a7f3d0;border-left:5px solid #059669;border-radius:6px;padding:9px 12px;font-size:12px;color:#065f46}
   .empty{color:#64748b;font-style:italic;padding:8px 0}
-  table.scope{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px} .scope th,.scope td{border:1px solid #e2e8f0;padding:6px 10px;text-align:left} .scope th{background:#f1f5f9;color:#475569;width:180px}
+  table.scope{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;background:#fff;border-radius:8px;overflow:hidden} .scope th,.scope td{border:1px solid #E3E8E6;padding:8px 11px;text-align:left} .scope th{background:#F5F8F7;color:#475569;width:180px;font-weight:700}
   /* (P0-C) TAM SAYFA KAPAK — teal #123F3A + amber #F5A623; içerik dikey ortalı, uyarı en altta. */
-  .cover{page-break-after:always;min-height:960px;display:flex;flex-direction:column;padding:0}
+  .cover{page-break-after:always;min-height:960px;display:flex;flex-direction:column;padding:0;background:#fff}
+  .toc-page{background:#fff}
+  /* (PRINT GÜVENLİĞİ) Kutular sayfa ortasından BÖLÜNMESİN; koyu ham-kanıt kutusunun kontrastı
+     düşürülmedi (metin #cbd5e1 / zemin #0b1120 — yüksek kontrast korunur). */
+  @media print { .fcard, .gbox, .assur-sum, .exec, .notbox, .disc { break-inside: avoid; page-break-inside: avoid; } }
   .cover-band{background:linear-gradient(135deg,#123F3A 0%,#0A2E2A 100%);color:#EEF5F3;padding:34px;display:flex;align-items:center;gap:16px}
   .cover-band .logo{width:48px;height:48px;flex:0 0 48px}
   .cover-band .brand{font-size:26px;font-weight:800;letter-spacing:.3px;color:#fff;line-height:1.1}
@@ -373,7 +429,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
   .cover-info .k{display:block;color:#5FA396;text-transform:uppercase;letter-spacing:.5px;font-size:9px;font-weight:700}
   .cover-info .v{display:block;color:#123F3A;font-weight:700;font-size:15px;margin-top:3px;font-variant-numeric:tabular-nums}
   .cover-counts{display:flex;gap:14px;flex-wrap:wrap}
-  .cover-counts .cc{flex:1;min-width:96px;border:1px solid #DCEAE6;border-radius:8px;padding:14px;text-align:center;background:#F6FAF8}
+  .cover-counts .cc{flex:1;min-width:96px;border:1px solid #DCEAE6;border-radius:10px;padding:15px 14px;text-align:center;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.04)}
   .cover-counts .cc b{display:block;font-size:26px;color:#123F3A} .cover-counts .cc span{font-size:10.5px;color:#5FA396;text-transform:uppercase;letter-spacing:.4px}
   .cover-warn{margin:0 44px 30px;background:#FDF5E6;border:1px solid #F5C77A;border-left:4px solid #E8912B;border-radius:8px;padding:10px 14px;font-size:10.5px;color:#7A4B12}
   /* (P0-D) "Bu rapor ne değildir?" kutusu — yönetici özetinde beklenti yönetimi. */
@@ -479,6 +535,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
 
   <h2 id="s-poz">Pozitif Güvence — Denenen ve Kanıt Üretmeyen Kontroller</h2>
   <p style="font-size:12px;color:#64748b;margin:0 0 8px">Aşağıdaki sayılar, ajanın hedefe karşı gerçekten yürüttüğü ve saklanan ham artefaktlarla ölçülen etkileşimlerdir (uydurma değil). Bir uç-noktanın burada yer alması, denendiği ama <b>bu koşuda</b> kanıtlı bir zafiyet imzası üretmediği anlamına gelir.</p>
+  ${assuranceBreakdown}
   <div class="assur">
     <div class="ac"><b>${t.httpRequests ?? 0}</b><span>HTTP isteği</span></div>
     <div class="ac"><b>${t.endpointCount ?? (t.endpoints?.length ?? 0)}</b><span>Denenen uç-nokta</span></div>
