@@ -1388,9 +1388,11 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .recon-report p { background: none; color: #1b2b28; }
   /* (4) UYARI / KAPSAM NOTU — amber kutu; CİDDİ BULGU rengiyle (kırmızı/turuncu) KARIŞMAZ */
   .recon-report blockquote { background: #FEF9EE; border-left: 4px solid #C98A16; color: #5C3D08; border-radius: 0 4px 4px 0; }
-  /* (UYUM) "⚠️ Önemli — resmî uyum beyanı DEĞİLDİR" kutusu bir blockquote İÇİNDE başlık taşır;
-     başlığın marka-yeşili sol çizgisi amber kutunun içinde yabancı duruyordu -> kutuyla aynı dile alındı. */
-  .recon-report blockquote h3, .recon-report blockquote h4 { border-left: none; padding-left: 0; margin-top: 0; color: #8A5B08; }
+  /* (UYUM — YALNIZ .cmp-report) "⚠️ Önemli — resmî uyum beyanı DEĞİLDİR" kutusu bir blockquote
+     İÇİNDE başlık taşır; başlığın marka-yeşili sol çizgisi amber kutunun içinde yabancı duruyordu.
+     KAPSAM: yalnız Uyum. Genel (.recon-report) yazılınca Aktif Doğrulama'da satır yükseklikleri
+     değişip SAYFA AKIŞI kayıyordu — o paketin çıktısı değişmemeli. */
+  .cmp-report blockquote h3, .cmp-report blockquote h4 { border-left: none; padding-left: 0; margin-top: 0; color: #8A5B08; }
   .recon-report td.rc-warn { background: #FEF9EE; color: #7A4B12; font-weight: 600; }
   .recon-report li.rc-warn { background: #FEF9EE; color: #7A4B12; padding: 3px 8px; border-radius: 4px; list-style: none; margin-left: -18px; }
   /* Ciddi bulgu göstergeleri (şiddet rozetleri / master tablo) DOKUNULMAZ: kendi kırmızı/turuncu
@@ -1475,7 +1477,7 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
     ${opts.hideDate ? '' : `<div><div class="k">${escapeHtml(t.date)}</div><div class="v">${escapeHtml(dateStr)}</div></div>`}
     <div><div class="k">${p3(meta.locale, 'Rapor No', 'Report No', 'Bericht-Nr.')}</div><div class="v">${reportNo}</div></div>
   </div>
-  <div class="content${isRecon ? ' recon-report' : ''}">${contentInner}</div>
+  <div class="content${isRecon ? ' recon-report' : ''}${pkgKey === 'bundle_compliance' ? ' cmp-report' : ''}">${contentInner}</div>
   <script>
     // Siddet kelimelerine gore tablo hucrelerini renklendir (TR+EN, buyuk/kucuk duyarsiz).
     (function () {
