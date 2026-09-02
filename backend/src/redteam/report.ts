@@ -543,7 +543,8 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
     <div class="ac"><b>${t.families?.length ?? 0}</b><span>Teknik ailesi</span></div>
   </div>
   ${t.endpoints?.length ? `<div style="font-size:12px;color:#475569;margin-top:6px"><b>Denenen uç-noktalar:</b></div><div class="chips">${t.endpoints.map((e) => `<code>${esc(e)}</code>`).join('')}</div>` : ''}
-  ${t.families?.length ? `<div style="font-size:12px;color:#475569;margin-top:2px"><b>Denenen teknik aileleri:</b></div><div class="chips">${t.families.map((f) => `<code>${esc(f)}</code>`).join('')}</div>` : ''}
+  <!-- (TEKİLLEŞTİRME) Teknik aileleri artık yukarıdaki şeffaflık kutusunda listeleniyor;
+       aynı listeyi ikinci kez chip olarak basmıyoruz. Sayaç kartı ("Teknik ailesi: N") kalır. -->
 
   <h2 id="s-sinir">Sınırlılıklar</h2>
   <ul class="lim">
