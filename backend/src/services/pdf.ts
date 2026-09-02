@@ -538,7 +538,10 @@ function parseReconAssurance(md: string): Array<{ area: string; result: string; 
     const ok = result.startsWith('✅');
     // (ÜÇÜNCÜ DURUM) "İncelenemedi / Nicht prüfbar / Not assessable" bir BULGU DEĞİLDİR; paketlerin
     // kendi üç-durum notu bunu açıkça ayırır. Bulgu kutusuna koymak yanıltıcı olurdu.
-    const na = !ok && /i̇?ncelenemedi|nicht pr[üu]fbar|not assessable/i.test(result);
+    // (TR-I TUZAĞI) "İncelenemedi" büyük İ (U+0130) ile başlar; JS'in /i/ bayrağı bunu ASCII 'i' ile
+    // EŞLEŞTİRMEZ -> satır yanlışlıkla "bulgu" sayılıyordu. Önce İ/I normalize edilir.
+    const norm = result.replace(/[İI]/g, 'i').replace(/\u0307/g, '').toLowerCase();
+    const na = !ok && /incelenemedi|nicht pr[üu]fbar|not assessable/.test(norm);
     out.push({ area, result, ok, state: ok ? 'ok' : na ? 'na' : 'finding' });
   }
   return out;
