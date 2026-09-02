@@ -215,7 +215,14 @@ export type RedTeamReportMode = 'customer' | 'admin';
 export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode = 'customer'): string {
   const admin = mode === 'admin';
   const esc = (s: string) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
+  // SEVC = GENEL RİSK rozeti (kapak + özet). Semantiği farklıdır: "düşük/temiz duruş" İYİdir -> yeşil.
+  // DEĞİŞTİRİLMEDİ.
   const SEVC: Record<string, string> = { kritik: '#b91c1c', yüksek: '#c2410c', orta: '#a16207', düşük: '#15803d', temiz: '#15803d' };
+  // (GÖRSEL TUTARLILIK) BULGU KARTI şiddet rozeti — diğer 6 paketin paletiyle AYNI (pdf.ts sev-*).
+  // Neden ayrı map: eski palette "düşük" bulgu YEŞİL basılıyordu; müşteri bunu "temiz" sanıyordu ve
+  // "orta" tonu (#a16207) amber kapsam-uyarı kutularıyla neredeyse aynı renkti -> rutin not ile
+  // gerçek bulgu ayrışmıyordu. Genel-risk rozeti bu değişiklikten ETKİLENMEZ.
+  const FIND_SEVC: Record<string, string> = { kritik: '#B3261E', yüksek: '#D64545', orta: '#E0940E', düşük: '#9AA0A6', temiz: '#5FA396' };
   const rc = SEVC[r.overallRisk] ?? '#334155';
   const t = r.tried ?? {};
   const reportNo = redteamReportNo(r.meta);
@@ -279,7 +286,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
   const CONFIG_CATS = new Set(['cookie_config', 'security_header', 'info_disclosure']);
   const card = (f: BinderFinding, needsHuman: boolean) => {
     const rem = REMEDIATION[f.category] ?? REMEDIATION.bilinmeyen;
-    const sc = SEVC[f.severity] ?? '#334155';
+    const sc = FIND_SEVC[f.severity] ?? '#334155';
     const ev = f.evidence;
     // (P0-2b) Config bulgularında Açıklama = HAM KANIT'ten okunan SPESİFİK gözlem (hangi bayrak/başlık
     // gerçekten eksik), jenerik "biri/birkaçı eksik" şablonu DEĞİL. Diğer bulgularda kategori açıklaması.
@@ -289,7 +296,7 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
     const impact = (f.category === 'cookie_config' && ev?.missing?.length)
       ? ev.missing.map((m) => COOKIE_FLAG_IMPACT[m]).filter(Boolean).join('; ') || rem.impact
       : rem.impact;
-    return `<div class="fcard">
+    return `<div class="fcard" style="border-left:4px solid ${sc}">
       <div class="fhead">
         <span class="sev" style="background:${sc}">${esc((RISK_LABEL[f.severity] ?? f.severity)).toUpperCase()}</span>
         <span class="ftitle">${esc(f.title)}</span>
@@ -317,7 +324,11 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
   *{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;margin:0;padding:26px 30px;line-height:1.5;font-size:13px}
   h1{font-size:22px;margin:0 0 2px} h2{font-size:15px;margin:24px 0 10px;color:#123f3a;border-bottom:2px solid #123f3a;padding-bottom:5px}
   .meta{font-size:12px;color:#475569;margin-bottom:12px}
-  .disc{background:#fff7ed;border:1px solid #fb923c;border-left:5px solid #ea580c;border-radius:8px;padding:12px 14px;font-size:12px;color:#7c2d12;margin:0 0 16px;font-weight:500}
+  /* (GÖRSEL AYRIM) Rutin kapsam/uyarı şeridi AMBER ailededir; bulgu şiddet rozetleri KIRMIZI
+     ailededir. Eskiden ikisi de turuncu-kırmızı tondaydı ve "deneysel" uyarısı ciddi bir bulgu
+     gibi okunuyordu. (Koşu durduruldu / hedef yanıt vermedi gibi GERÇEK alarmlar satır-içi
+     kendi kırmızı/amber rengini yazmaya devam eder — onlar rutin not değil.) */
+  .disc{background:#FDF5E6;border:1px solid #F5C77A;border-left:5px solid #E8912B;border-radius:8px;padding:12px 14px;font-size:12px;color:#7A4B12;margin:0 0 16px;font-weight:500}
   .risk{display:inline-block;padding:4px 14px;border-radius:999px;color:#fff;font-weight:700;background:${rc}}
   .exec{background:#f0f7f5;border:1px solid #cfe3dd;border-radius:8px;padding:14px 16px;margin:0 0 6px}
   .sum{display:flex;gap:22px;flex-wrap:wrap;font-size:13px;margin:10px 0}
@@ -366,8 +377,8 @@ export function renderRedTeamFullHtml(r: RedTeamReport, mode: RedTeamReportMode 
   .cover-counts .cc b{display:block;font-size:26px;color:#123F3A} .cover-counts .cc span{font-size:10.5px;color:#5FA396;text-transform:uppercase;letter-spacing:.4px}
   .cover-warn{margin:0 44px 30px;background:#FDF5E6;border:1px solid #F5C77A;border-left:4px solid #E8912B;border-radius:8px;padding:10px 14px;font-size:10.5px;color:#7A4B12}
   /* (P0-D) "Bu rapor ne değildir?" kutusu — yönetici özetinde beklenti yönetimi. */
-  .notbox{background:#FEF6F2;border:1px solid #F3C6B4;border-left:4px solid #D9663A;border-radius:8px;padding:12px 16px;margin:12px 0 4px}
-  .notbox b{color:#9A3B18;font-size:12.5px} .notbox ul{margin:6px 0 0;padding-left:18px;font-size:11.5px;color:#7A3418} .notbox li{margin:3px 0}
+  .notbox{background:#FDF5E6;border:1px solid #F5C77A;border-left:4px solid #E8912B;border-radius:8px;padding:12px 16px;margin:12px 0 4px}
+  .notbox b{color:#8A5B08;font-size:12.5px} .notbox ul{margin:6px 0 0;padding-left:18px;font-size:11.5px;color:#7A4B12} .notbox li{margin:3px 0}
   .toc-page{page-break-after:always;padding:8px 34px 20px}
   .toc-page h2{color:#123F3A;border-bottom:2px solid #F5A623;font-size:18px}
   .toc-row{margin:9px 0;font-size:13px;border-bottom:1px dotted #E1ECE8;padding-bottom:6px;display:flex;justify-content:space-between}
