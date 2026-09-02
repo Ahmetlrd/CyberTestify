@@ -506,24 +506,40 @@ function buildDistribution(counts: Record<Sev, number>, locale: 'tr' | 'en' | 'd
 // ============================================================================
 // Zengin (gorsel-hiyerarsili) sablonu KULLANAN paketler. Bu kumede OLMAYAN paketlerin ciktisi
 // byte-byte aynidir. A/B: once bundle_recon, simdi basit_tarama da ayni marka dilini kullanir.
-const RICH_TEMPLATE_PKGS = new Set(['bundle_recon', 'basit_tarama', 'bundle_surface']);
+const RICH_TEMPLATE_PKGS = new Set(['bundle_recon', 'basit_tarama', 'bundle_surface', 'bundle_active_verify']);
 // "Kontrol alanı" dili kullanan paketler (Keşif "keşif yöntemi" der). Pozitif Güvence tablosu
 // aynı 2 kolonlu yapıdadır; satır metinlerinde sayı olması/olmaması fark etmez (metin AYNEN taşınır).
 const CONTROL_AREA_PKGS = new Set(['basit_tarama', 'bundle_surface']);
+// (AKTİF DOĞRULAMA) Kendi dili: "kontrol alanı" değil DOĞRULAMA KATEGORİSİ; "sorun bulunmadı" değil
+// "temiz — denendi, kanıt bulunamadı". Tablosu 4 kolonlu ve ÜÇÜNCÜ durum ("İncelenemedi") o pakette
+// NORMAL/BEKLENEN bir sonuçtur (kendi metni böyle diyor), bulgu sayılmaz.
+const ACTIVE_VERIFY_PKG = 'bundle_active_verify';
+
+/** Güvence satırının üç durumu: temiz / bulgu / incelenemedi (paketlerin kendi metni esas alınır). */
+type AssuranceState = 'ok' | 'finding' | 'na';
 
 /** POZİTİF GÜVENCE tablosunun satırlarını ayrıştırır (uydurma YOK — markdown'da ne varsa o). */
-function parseReconAssurance(md: string): Array<{ area: string; result: string; ok: boolean }> {
-  // Bölüm başlığı 3 dilde; tablo başlığı "| Keşif Alanı | Sonuç |" / "| Reconnaissance Area | Result |" / "| Erkundungsbereich | Ergebnis |"
+function parseReconAssurance(md: string): Array<{ area: string; result: string; ok: boolean; state: AssuranceState }> {
+  // Bölüm başlığı 3 dilde. Tablo GENİŞLİĞİ pakete göre DEĞİŞİR:
+  //   2 kolon → "| Kontrol Alanı | Sonuç |"                       (Basit Tarama / Dış Yüzey / Keşif)
+  //   4 kolon → "| Kontrol | Giriş noktası | İstek | Sonuç |"      (Aktif Doğrulama)
+  // Bu yüzden İLK kolon = alan adı, SON kolon = sonuç olarak okunur; ara kolonlar (sayaçlar) yok sayılır
+  // — onlar zaten bölümdeki tam tabloda AYNEN duruyor.
   const sec = md.match(/##\s*(?:POZİTİF GÜVENCE|POSITIVE ASSURANCE|POSITIVE ZUSICHERUNG)[^\n]*\n([\s\S]*?)(?=\n##\s|$)/);
   if (!sec) return [];
-  const out: Array<{ area: string; result: string; ok: boolean }> = [];
+  const out: Array<{ area: string; result: string; ok: boolean; state: AssuranceState }> = [];
   for (const line of sec[1].split('\n')) {
-    const m = line.match(/^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*$/);
-    if (!m) continue;
-    const area = m[1].trim();
-    const result = m[2].trim();
-    if (/^-+$/.test(area) || !result || /^(Sonuç|Result|Ergebnis)$/i.test(result)) continue; // baslik/ayrac satiri
-    out.push({ area, result, ok: result.startsWith('✅') });
+    if (!/^\s*\|.*\|\s*$/.test(line)) continue;
+    const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+    if (cells.length < 2) continue;
+    const area = cells[0];
+    const result = cells[cells.length - 1];
+    if (/^[-:\s]+$/.test(area) || !result || /^(Sonuç|Result|Ergebnis)$/i.test(result)) continue; // baslik/ayrac satiri
+    const ok = result.startsWith('✅');
+    // (ÜÇÜNCÜ DURUM) "İncelenemedi / Nicht prüfbar / Not assessable" bir BULGU DEĞİLDİR; paketlerin
+    // kendi üç-durum notu bunu açıkça ayırır. Bulgu kutusuna koymak yanıltıcı olurdu.
+    const na = !ok && /i̇?ncelenemedi|nicht pr[üu]fbar|not assessable/i.test(result);
+    out.push({ area, result, ok, state: ok ? 'ok' : na ? 'na' : 'finding' });
   }
   return out;
 }
@@ -532,6 +548,12 @@ function parseReconAssurance(md: string): Array<{ area: string; result: string; 
 function reconEmptySummary(rows: Array<{ ok: boolean }>, locale: 'tr' | 'en' | 'de', pkg: string): string {
   if (!rows.length) return '';
   const clean = rows.filter((r) => r.ok).length;
+  if (pkg === ACTIVE_VERIFY_PKG) {
+    return p3(locale,
+      ` <strong>${clean}/${rows.length} aktif doğrulama kategorisi çalıştırıldı; hiçbirinde zafiyet kanıtı bulunamadı</strong> (kategori kategori özet aşağıdadır).`,
+      ` <strong>${clean}/${rows.length} active verification categories were run; no evidence of a vulnerability was found in any of them</strong> (category-by-category summary below).`,
+      ` <strong>${clean}/${rows.length} aktive Verifizierungskategorien wurden ausgeführt; in keiner wurde ein Schwachstellennachweis gefunden</strong> (Zusammenfassung je Kategorie unten).`);
+  }
   if (CONTROL_AREA_PKGS.has(pkg)) {
     return p3(locale,
       ` <strong>${clean}/${rows.length} kontrol alanı çalıştırıldı; hiçbirinde sorun bulunmadı</strong> (alan alan özet aşağıdadır).`,
@@ -552,28 +574,44 @@ function reconEmptySummary(rows: Array<{ ok: boolean }>, locale: 'tr' | 'en' | '
 function buildReconAssuranceSummary(md: string, locale: 'tr' | 'en' | 'de', pkg: string): string {
   const rows = parseReconAssurance(md);
   if (!rows.length) return '';
-  const okRows = rows.filter((r) => r.ok);
-  const warnRows = rows.filter((r) => !r.ok);
+  const okRows = rows.filter((r) => r.state === 'ok');
+  const warnRows = rows.filter((r) => r.state === 'finding');
+  const naRows = rows.filter((r) => r.state === 'na');
   const strip = (s: string) => s.replace(/^[✅⚠️\s]+/, '').trim();
   // (BASIT TARAMA) Baslik AYNI ZAMANDA ozet cumlesidir: "N/M kontrol alani calistirildi; X'inde
   // gosterge bulundu". Kesif'in mevcut basligi DEGISMEZ (o paket zaten dogrulanmis durumda).
-  const title = CONTROL_AREA_PKGS.has(pkg)
+  const naPart = (tr: string, en: string, de: string) => (naRows.length ? p3(locale, tr, en, de) : '');
+  const title = pkg === ACTIVE_VERIFY_PKG
+    ? p3(locale,
+        `${rows.length} doğrulama kategorisi çalıştırıldı — ${okRows.length} temiz, ${warnRows.length} kategoride bulgu var`,
+        `${rows.length} verification categories were run — ${okRows.length} clean, ${warnRows.length} produced a finding`,
+        `${rows.length} Verifizierungskategorien wurden ausgeführt — ${okRows.length} sauber, ${warnRows.length} mit Befund`)
+      + naPart(`, ${naRows.length} incelenemedi`, `, ${naRows.length} not assessable`, `, ${naRows.length} nicht prüfbar`)
+    : CONTROL_AREA_PKGS.has(pkg)
     ? p3(locale,
         `${rows.length} kontrol alanı çalıştırıldı — ${okRows.length} alanda sorun bulunmadı, ${warnRows.length} alanda bulgu var`,
         `${rows.length} control areas were run — ${okRows.length} came back clean, ${warnRows.length} produced a finding`,
         `${rows.length} Kontrollbereiche wurden ausgeführt — ${okRows.length} ohne Befund, ${warnRows.length} mit Befund`)
     : p3(locale, 'Ne test edildi, ne çıktı?', 'What was tested, and what came out?', 'Was wurde geprüft, und was kam heraus?');
-  const okHead = CONTROL_AREA_PKGS.has(pkg)
+  const okHead = pkg === ACTIVE_VERIFY_PKG
+    ? p3(locale, 'Denendi — zafiyet kanıtı bulunamadı', 'Attempted — no evidence of a vulnerability found', 'Versucht — kein Schwachstellennachweis gefunden')
+    : CONTROL_AREA_PKGS.has(pkg)
     ? p3(locale, 'Kontrol edildi — sorun bulunmadı', 'Checked — no issue found', 'Geprüft — kein Problem gefunden')
     : p3(locale, 'Test edildi — gösterge bulunamadı', 'Checked — no indicator found', 'Geprüft — kein Indikator gefunden');
-  const warnHead = CONTROL_AREA_PKGS.has(pkg)
+  const warnHead = CONTROL_AREA_PKGS.has(pkg) || pkg === ACTIVE_VERIFY_PKG
     ? p3(locale, 'Bulgu var — ayrıntısı aşağıdaki bölümlerde', 'Finding present — detailed in the sections below', 'Befund vorhanden — Details in den Abschnitten unten')
     : p3(locale, 'Gösterge bulundu — ayrıntısı aşağıdaki bölümlerde', 'Indicator found — detailed in the sections below', 'Indikator gefunden — Details in den Abschnitten unten');
+  // (ÜÇÜNCÜ DURUM) "İncelenemedi" ne temiz ne bulgudur — nötr gri kutu; "güvenli" ANLAMINA GELMEZ.
+  const naHead = p3(locale,
+    'İncelenemedi — “güvenli” anlamına GELMEZ',
+    'Not assessable — does NOT mean “secure”',
+    'Nicht prüfbar — bedeutet NICHT „sicher“');
   const li = (r: { area: string; result: string }) => `<li><span class="rc-area">${escapeHtml(r.area)}</span> ${escapeHtml(strip(r.result))}</li>`;
   return `<div class="rc-summary">
     <div class="rc-summary-title">${escapeHtml(title)}</div>
     ${okRows.length ? `<div class="rc-ok-box"><div class="rc-box-head">✅ ${escapeHtml(okHead)}</div><ul>${okRows.map(li).join('')}</ul></div>` : ''}
     ${warnRows.length ? `<div class="rc-warn-box"><div class="rc-box-head">⚠️ ${escapeHtml(warnHead)}</div><ul>${warnRows.map(li).join('')}</ul></div>` : ''}
+    ${naRows.length ? `<div class="rc-na-box"><div class="rc-box-head">⚠️ ${escapeHtml(naHead)}</div><ul>${naRows.map(li).join('')}</ul></div>` : ''}
   </div>`;
 }
 
@@ -1267,6 +1305,11 @@ export function buildHtml(bodyMd: string, meta: ReportPdfMeta, opts: ReportPdfOp
   .rc-summary-title { font-size: 12.5px; font-weight: 700; color: #123F3A; margin-bottom: 6px; }
   .rc-ok-box { border: 1px solid #BFE3D5; border-left: 4px solid #1C6B60; background: #F1F9F5; border-radius: 0 6px 6px 0; padding: 10px 14px; margin-bottom: 8px; }
   .rc-warn-box { border: 1px solid #F0D9A8; border-left: 4px solid #C98A16; background: #FEF9EE; border-radius: 0 6px 6px 0; padding: 10px 14px; }
+  /* (ÜÇÜNCÜ DURUM) "İncelenemedi" — bulgu DEĞİL; nötr gri (rc-does-not ile aynı ton, yeni renk yok) */
+  .rc-na-box { border: 1px solid #D9E0DD; border-left: 4px solid #8A9A95; background: #F4F6F5; border-radius: 0 6px 6px 0; padding: 10px 14px; margin-top: 8px; }
+  .rc-na-box .rc-box-head { color: #4A5A55; }
+  .rc-na-box li { color: #3d4a46; }
+  .rc-na-box .rc-area { color: #4A5A55; }
   .rc-box-head { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px; }
   .rc-ok-box .rc-box-head { color: #12564C; }
   .rc-warn-box .rc-box-head { color: #8A5B08; }
