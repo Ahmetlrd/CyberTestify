@@ -69,13 +69,13 @@ function documentHtml(slides: Slide[]): string {
   .page{font-size:22px;font-weight:700;color:#8FA8A2}
   .mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:26px}
   .kicker{font-size:21px;font-weight:800;letter-spacing:2.4px;text-transform:uppercase;color:#F5A623}
-  h1{font-size:60px;line-height:1.12;font-weight:800;letter-spacing:-.6px;max-width:19ch}
-  h1.big{font-size:78px;line-height:1.06;max-width:16ch}
+  h1{font-size:60px;line-height:1.12;font-weight:800;letter-spacing:-.6px;max-width:23ch}
+  h1.big{font-size:76px;line-height:1.08;max-width:18ch}
   .content h1{color:#0E2E2A}
-  .body{font-size:33px;line-height:1.46;max-width:26ch}
-  .content .body{color:#3A4A47} .cover .body,.cta .body{color:#BFD8D2;max-width:24ch}
+  .body{font-size:33px;line-height:1.46;max-width:31ch}
+  .content .body{color:#3A4A47} .cover .body,.cta .body{color:#BFD8D2;max-width:29ch}
   ul{list-style:none;display:flex;flex-direction:column;gap:19px}
-  li{font-size:31px;line-height:1.38;padding-left:44px;position:relative;max-width:25ch}
+  li{font-size:31px;line-height:1.38;padding-left:44px;position:relative;max-width:30ch}
   .content li{color:#243A36} .cover li,.cta li{color:#D6E7E2}
   li::before{content:"";position:absolute;left:0;top:14px;width:22px;height:5px;border-radius:3px;background:#F5A623}
   .bot{font-size:23px;font-weight:700;color:#F5A623;min-height:30px}
