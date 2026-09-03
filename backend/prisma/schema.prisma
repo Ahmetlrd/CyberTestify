@@ -725,3 +725,19 @@ model LinkedinPost {
 
   @@index([status, createdAt])
 }
+
+/// (LINKEDIN MEDYA) Paylasimlarda kullanilan PDF carousel / gorsel dosyalari. Buffer -> LinkedIn
+/// akisi medyayi PUBLIC bir URL'den ceker; bu yuzden bayt DB'de tutulur ve /linkedin-assets/:id
+/// ucundan kimlik dogrulamasiz servis edilir (yayinlanacak icerik zaten herkese acik olacaktir).
+model LinkedinAsset {
+  id        String   @id @default(uuid())
+  kind      String // 'pdf' (dokuman carousel) | 'image'
+  mime      String
+  title     String // LinkedIn dokuman basligi (carousel ust etiketi)
+  data      Bytes
+  bytes     Int
+  pages     Int? // carousel sayfa sayisi (pdf)
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
+}

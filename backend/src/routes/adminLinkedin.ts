@@ -8,6 +8,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
+import { renderCarouselPdf, renderSlidePng, type Slide } from '../services/linkedinCarousel.js';
+import { config } from '../config.js';
 import {
   bufferEnabled,
   resolveLinkedInTarget,
@@ -53,6 +55,64 @@ adminLinkedinRouter.get('/status', async (_req, res) => {
   }
 });
 
+// --- MEDYA (PDF carousel / gorsel) -------------------------------------------------------------
+// Slaytlar SUNUCUDA render edilir (puppeteer-core, zaten kurulu) -> bayt DB'ye yazilir -> PUBLIC
+// /linkedin-assets/:id URL'i Buffer'a verilir. Musterinin elle dosya uretmesi/yuklemesi GEREKMEZ.
+const slideSchema = z.object({
+  kicker: z.string().trim().max(40).optional(),
+  title: z.string().trim().min(1).max(160),
+  body: z.string().trim().max(600).optional(),
+  bullets: z.array(z.string().trim().min(1).max(220)).max(7).optional(),
+  variant: z.enum(['cover', 'content', 'cta']).optional(),
+});
+const carouselSchema = z.object({
+  title: z.string().trim().min(1).max(120), // LinkedIn dokuman basligi (carousel ustunde gorunur)
+  slides: z.array(slideSchema).min(2).max(14),
+});
+
+/** Public URL — Buffer/LinkedIn bu adresten ceker. */
+function assetUrl(id: string): string {
+  return `${config.publicApiUrl.replace(/\/+$/, '')}/linkedin-assets/${id}`;
+}
+
+adminLinkedinRouter.post('/assets/carousel', async (req, res) => {
+  const parsed = carouselSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const pdf = await renderCarouselPdf(parsed.data.slides as Slide[]);
+    const a = await prisma.linkedinAsset.create({
+      data: { kind: 'pdf', mime: 'application/pdf', title: parsed.data.title, data: pdf, bytes: pdf.length, pages: parsed.data.slides.length },
+      select: { id: true, bytes: true, pages: true },
+    });
+    res.status(201).json({ ok: true, id: a.id, url: assetUrl(a.id), bytes: a.bytes, pages: a.pages });
+  } catch (e) {
+    res.status(500).json({ error: `PDF üretilemedi: ${(e as Error).message}` });
+  }
+});
+
+adminLinkedinRouter.post('/assets/image', async (req, res) => {
+  const parsed = z.object({ title: z.string().trim().min(1).max(120), slide: slideSchema }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  try {
+    const png = await renderSlidePng(parsed.data.slide as Slide);
+    const a = await prisma.linkedinAsset.create({
+      data: { kind: 'image', mime: 'image/png', title: parsed.data.title, data: png, bytes: png.length },
+      select: { id: true, bytes: true },
+    });
+    res.status(201).json({ ok: true, id: a.id, url: assetUrl(a.id), bytes: a.bytes });
+  } catch (e) {
+    res.status(500).json({ error: `Görsel üretilemedi: ${(e as Error).message}` });
+  }
+});
+
+adminLinkedinRouter.get('/assets', async (_req, res) => {
+  const items = await prisma.linkedinAsset.findMany({
+    orderBy: { createdAt: 'desc' }, take: 100,
+    select: { id: true, kind: true, title: true, bytes: true, pages: true, createdAt: true },
+  });
+  res.json({ items: items.map((a) => ({ ...a, url: assetUrl(a.id) })) });
+});
+
 // --- Liste: zamanlanmislar + arsiv -------------------------------------------------------------
 adminLinkedinRouter.get('/posts', async (req, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : '';
@@ -66,6 +126,10 @@ adminLinkedinRouter.get('/posts', async (req, res) => {
 const createSchema = z.object({
   content: z.string().trim().min(1, 'Metin boş olamaz.').max(MAX_LEN),
   mediaUrl: z.string().trim().url('Görsel URL geçersiz.').optional().or(z.literal('')),
+  /** (NATIF CAROUSEL) /assets/carousel'den dönen PDF asset id'si — LinkedIn kaydırılabilir gösterir. */
+  documentAssetId: z.string().uuid().optional().or(z.literal('')),
+  /** (GÖRSEL) /assets/image'dan dönen PNG asset id'si — mediaUrl yerine kullanılabilir. */
+  imageAssetId: z.string().uuid().optional().or(z.literal('')),
   mode: z.enum(['addToQueue', 'customScheduled']),
   scheduledFor: z.string().datetime({ offset: true }).optional().or(z.literal('')),
 });
@@ -74,7 +138,20 @@ adminLinkedinRouter.post('/posts', async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { content, mode } = parsed.data;
-  const mediaUrl = parsed.data.mediaUrl || null;
+  // Asset id verildiyse PUBLIC url'e çevrilir; doğrudan mediaUrl da desteklenir (geri uyumluluk).
+  let docUrl: string | null = null;
+  let docTitle: string | null = null;
+  if (parsed.data.documentAssetId) {
+    const a = await prisma.linkedinAsset.findUnique({ where: { id: parsed.data.documentAssetId }, select: { id: true, kind: true, title: true } });
+    if (!a || a.kind !== 'pdf') return res.status(400).json({ error: 'PDF medyası bulunamadı.' });
+    docUrl = assetUrl(a.id); docTitle = a.title;
+  }
+  let mediaUrl = parsed.data.mediaUrl || null;
+  if (!mediaUrl && parsed.data.imageAssetId) {
+    const a = await prisma.linkedinAsset.findUnique({ where: { id: parsed.data.imageAssetId }, select: { id: true, kind: true } });
+    if (!a || a.kind !== 'image') return res.status(400).json({ error: 'Görsel medyası bulunamadı.' });
+    mediaUrl = assetUrl(a.id);
+  }
   const scheduledFor = parsed.data.scheduledFor ? new Date(parsed.data.scheduledFor) : null;
 
   if (mode === 'customScheduled') {
@@ -86,7 +163,7 @@ adminLinkedinRouter.post('/posts', async (req, res) => {
 
   // Once DB'ye yaz (DRAFT) -> Buffer cagrisi ne olursa olsun kayit KAYBOLMAZ; hata da gorunur olur.
   const row = await prisma.linkedinPost.create({
-    data: { content, mediaUrl, status: 'DRAFT', scheduledFor },
+    data: { content, mediaUrl: docUrl ?? mediaUrl, status: 'DRAFT', scheduledFor },
   });
 
   try {
@@ -95,6 +172,8 @@ adminLinkedinRouter.post('/posts', async (req, res) => {
       mode,
       dueAt: scheduledFor ? scheduledFor.toISOString() : null,
       imageUrl: mediaUrl,
+      documentUrl: docUrl,
+      documentTitle: docTitle,
     });
     const updated = await prisma.linkedinPost.update({
       where: { id: row.id },

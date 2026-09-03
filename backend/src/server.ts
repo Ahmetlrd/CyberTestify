@@ -15,6 +15,7 @@ import { paymentsRouter } from './routes/payments.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { reportsRouter } from './routes/reports.js';
 import { blogRouter } from './routes/blog.js';
+import { linkedinAssetsRouter } from './routes/linkedinAssets.js';
 import { activeBasitPromoCode } from './services/promo.js';
 import { internalRouter } from './routes/internal.js';
 import { schedulesRouter } from './routes/schedules.js';
@@ -121,6 +122,8 @@ app.use('/orders', apiLimiter, ordersRouter);
 app.use('/payments', paymentsRouter);
 app.use('/reports', apiLimiter, reportsRouter);
 app.use('/blog', apiLimiter, blogRouter); // PUBLIC blog (yalniz published; auth yok)
+// (LINKEDIN MEDYA) PUBLIC — Buffer/LinkedIn medyayi bu URL'den ceker; auth OLAMAZ (bkz. route dosyasi).
+app.use('/linkedin-assets', apiLimiter, linkedinAssetsRouter);
 // (PROMOSYON ŞERİDİ) PUBLIC: ana sayfa "KAMPANYAYA ÖZEL" şeridi aktif basit_tarama promo kodunu buradan
 // okur (auth yok). Kod pasifleştirilince null döner → şerit gizlenir.
 app.get('/promo/active-basit', apiLimiter, async (_req, res) => {

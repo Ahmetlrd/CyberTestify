@@ -119,6 +119,10 @@ export async function scheduleLinkedInPost(opts: {
   mode: BufferShareMode;
   dueAt?: string | null;
   imageUrl?: string | null;
+  /** (NATIF CAROUSEL) PUBLIC PDF URL'i — LinkedIn bunu kaydirilabilir dokuman olarak gosterir. */
+  documentUrl?: string | null;
+  /** Dokuman basligi: LinkedIn carousel'in ustunde gorunur, TIKLAMAYI belirgin etkiler. */
+  documentTitle?: string | null;
   channelId?: string;
 }): Promise<BufferCreatedPost> {
   const target = opts.channelId ? { channelId: opts.channelId } : await resolveLinkedInTarget();
@@ -131,7 +135,14 @@ export async function scheduleLinkedInPost(opts: {
     schedulingType: 'automatic',
     mode: opts.mode,
     needsApproval: false, // sema'da NON_NULL — acikca gonderilmeli
-    assets: opts.imageUrl ? [{ image: { url: opts.imageUrl } }] : [], // assets NON_NULL: gorsel yoksa bos liste
+    // assets NON_NULL. Sema (introspection ile dogrulandi): AssetInput { document | image | video },
+    // DocumentAssetInput { url, title, thumbnailUrl }. Dokuman ve gorsel AYNI ANDA gonderilmez —
+    // LinkedIn dokuman gonderisinde ayrica gorsel tasimaz; dokuman onceliklidir.
+    assets: opts.documentUrl
+      ? [{ document: { url: opts.documentUrl, title: opts.documentTitle || 'CyberTestify' } }]
+      : opts.imageUrl
+        ? [{ image: { url: opts.imageUrl } }]
+        : [],
   };
   if (opts.mode === 'customScheduled') input.dueAt = new Date(opts.dueAt as string).toISOString();
 
