@@ -79,7 +79,7 @@ const IS = {
     scanAnother: '↺ Eine andere Website scannen',
     findingFix: 'Paket ansehen, das dies behebt',
     hint: <>Kostenlose <strong>Vorschau</strong> · nur <strong>passive externe Beobachtung</strong> (kein offizielles Audit/kein Penetrationstest).</>,
-    priceBasit: '19 €', priceActive: '678,75 €',
+    priceBasit: '55 €', priceActive: '279 €',
   },
   en: {
     heading: 'Scan your website for free, instantly',
@@ -115,7 +115,7 @@ const IS = {
     scanAnother: '↺ Scan another site',
     findingFix: 'See the package that fixes this',
     hint: <>Free <strong>preview</strong> · <strong>passive external observation</strong> only (not an official audit/penetration test).</>,
-    priceBasit: '£16', priceActive: '£583.50',
+    priceBasit: '£49', priceActive: '£249',
   },
 } as const;
 
