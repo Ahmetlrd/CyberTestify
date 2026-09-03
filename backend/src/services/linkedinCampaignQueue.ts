@@ -54,8 +54,8 @@ export async function topUpLinkedinCampaign(): Promise<{ queued: number; remaini
         imageUrl: imgUrl, documentUrl: docUrl, documentTitle: p.mediaTitle ?? null, documentThumbnailUrl: docThumb,
       });
 
-      // Onceki FAILED kaydi varsa onu guncelle; yoksa yeni satir.
-      const prev = await prisma.linkedinPost.findFirst({ where: { content: { startsWith: marker }, status: 'FAILED' }, select: { id: true } });
+      // Onceki bekleyen kayit (DRAFT/FAILED) varsa onu guncelle; yoksa yeni satir.
+      const prev = await prisma.linkedinPost.findFirst({ where: { content: { startsWith: marker }, status: { in: ['DRAFT', 'FAILED'] } }, select: { id: true } });
       const data = { content: p.text, mediaUrl: docUrl ?? imgUrl, status: 'SCHEDULED', bufferPostId: created.id, scheduledFor: created.dueAt ? new Date(created.dueAt) : new Date(p.dueAtUtc), errorMessage: null };
       if (prev) await prisma.linkedinPost.update({ where: { id: prev.id }, data });
       else await prisma.linkedinPost.create({ data });
@@ -65,7 +65,15 @@ export async function topUpLinkedinCampaign(): Promise<{ queued: number; remaini
     } catch (e) {
       const msg = (e as Error).message;
       // Plan siniri: HATA DEGIL, beklenen durum — bir sonraki turda slot acilinca devam eder.
-      if (/scheduled posts limit/i.test(msg)) { capped = true; continue; }
+      // Bekleyen gonderi DRAFT olarak TEK satirda tutulur; panelde kirmizi "Basarisiz" kutusuna DUSMEZ.
+      if (/scheduled posts limit/i.test(msg)) {
+        capped = true;
+        const waiting = await prisma.linkedinPost.findFirst({ where: { content: { startsWith: marker }, status: { in: ['DRAFT', 'FAILED'] } }, select: { id: true } });
+        const note = 'Buffer plan sınırı (10 zamanlanmış gönderi) dolu — slot açılınca otomatik kuyruğa alınacak.';
+        if (waiting) await prisma.linkedinPost.update({ where: { id: waiting.id }, data: { status: 'DRAFT', errorMessage: note, scheduledFor: new Date(p.dueAtUtc) } });
+        else await prisma.linkedinPost.create({ data: { content: p.text, status: 'DRAFT', errorMessage: note, scheduledFor: new Date(p.dueAtUtc) } });
+        continue;
+      }
       console.error(`[linkedin] kampanya kuyruklama hatası (${p.id}): ${msg}`);
     }
   }
