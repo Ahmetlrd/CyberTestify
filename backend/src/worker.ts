@@ -53,8 +53,8 @@ async function teardownFlowContainer(pentagiFlowId: string) {
 // Sipariş henüz terminal DEĞİLSE net biçimde başarısız işaretle (kimlik bilgisi tüketilmiş olabilir).
 const TERMINAL_ORDER = new Set(['scan_failed', 'scan_completed', 'report_delivered', 'report_purged', 'scope_violation', 'refunded']);
 let lastLogRetentionAt = 0; // (gözlemlenebilirlik) log retention'ı günde bir kez çalıştırmak için guard
-let lastLinkedinTopUpAt = 0; // (LINKEDIN) Buffer plan siniri 10 zamanlanmis gonderi -> slot acildikca sirayi doldurur
 let lastUsomSyncAt = 0;      // (USOM/SGB) katalog senkronunu USOM_SYNC_INTERVAL_MS'de bir çalıştırmak için guard (restart-güvenli: idempotent upsert)
+let lastLinkedinTopUpAt = 0; // (LINKEDIN) kampanya Buffer kuyruğunu CAMPAIGN_TOPUP_INTERVAL_MS'de bir doldur (Buffer 10-slot sınırı açıldıkça); idempotent/marker-güvenli
 async function failOrderIfPending(orderId: string, reason: string): Promise<void> {
   const o = await prisma.order.findUnique({ where: { id: orderId }, select: { status: true } });
   if (!o || TERMINAL_ORDER.has(o.status)) return;
@@ -475,12 +475,14 @@ async function main() {
       console.error('[worker] USOM katalog senkronu sirasinda hata (yine de devam):', err);
     }
     try {
-      // (LINKEDIN KAMPANYA) Buffer ucretsiz plani ayni anda 10 zamanlanmis gonderiye izin verir;
-      // 14 gonderilik kampanya tek seferde girmez. Slot acildikca siradaki gonderi otomatik
-      // kuyruga alinir — elle mudahale gerekmez. Hata kritik yolu ETKILEMEZ.
+      // (LINKEDIN OTONOM PAYLASIM) Buffer ücretsiz plani en fazla 10 zamanlanmis gonderiye izin verir.
+      // Bu is kampanyadaki gonderileri, slot acildikca (bir gonderi yayinlaninca) Buffer'a zamanlar.
+      // CAMPAIGN_TOPUP_INTERVAL_MS'de bir; idempotent (marker) — restart/cift-calisma guvenli. Buffer
+      // kapaliysa (anahtar yok) sessizce 0 doner. Kritik yol DISINDA; hata worker'i ASLA durdurmaz.
       if (Date.now() - lastLinkedinTopUpAt > CAMPAIGN_TOPUP_INTERVAL_MS) {
         lastLinkedinTopUpAt = Date.now();
-        await topUpLinkedinCampaign();
+        const r = await topUpLinkedinCampaign();
+        if (r.queued) console.log(`[worker] LinkedIn kampanya: ${r.queued} gonderi kuyruklandi, ${r.remaining} sirada${r.capped ? ' (Buffer plan siniri dolu)' : ''}.`);
       }
     } catch (err) {
       console.error('[worker] LinkedIn kampanya kuyruklama sirasinda hata (yine de devam):', err);

@@ -15,13 +15,13 @@ import { paymentsRouter } from './routes/payments.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { reportsRouter } from './routes/reports.js';
 import { blogRouter } from './routes/blog.js';
-import { linkedinAssetsRouter } from './routes/linkedinAssets.js';
 import { activeBasitPromoCode } from './services/promo.js';
 import { internalRouter } from './routes/internal.js';
 import { schedulesRouter } from './routes/schedules.js';
 import { adminAuthRouter } from './routes/adminAuth.js';
 import { adminRouter } from './routes/admin.js';
 import { adminLinkedinRouter } from './routes/adminLinkedin.js';
+import { linkedinAssetsRouter } from './routes/linkedinAssets.js';
 import { betaRouter } from './routes/beta.js';
 import { requireAdmin, adminIpAllowlist } from './middleware/adminAuth.js';
 import cors from 'cors';
@@ -122,7 +122,8 @@ app.use('/orders', apiLimiter, ordersRouter);
 app.use('/payments', paymentsRouter);
 app.use('/reports', apiLimiter, reportsRouter);
 app.use('/blog', apiLimiter, blogRouter); // PUBLIC blog (yalniz published; auth yok)
-// (LINKEDIN MEDYA) PUBLIC — Buffer/LinkedIn medyayi bu URL'den ceker; auth OLAMAZ (bkz. route dosyasi).
+// (LINKEDIN MEDYA) Buffer/LinkedIn carousel PDF + görselleri PUBLIC URL'den çeker → auth YOK (yalnız
+// pazarlama materyali; müşteri/tarama verisi değil, listeleme ucu yok, id=UUID). CORP=cross-origin route içinde.
 app.use('/linkedin-assets', apiLimiter, linkedinAssetsRouter);
 // (PROMOSYON ŞERİDİ) PUBLIC: ana sayfa "KAMPANYAYA ÖZEL" şeridi aktif basit_tarama promo kodunu buradan
 // okur (auth yok). Kod pasifleştirilince null döner → şerit gizlenir.

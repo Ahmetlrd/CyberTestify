@@ -106,14 +106,12 @@ export const adminApi = {
     areq<{ items: any[]; pendingCount: number }>(`/admin/linkedin/posts${status ? `?status=${status}` : ''}`),
   linkedinCreate: (body: { content: string; mediaUrl?: string; mode: 'addToQueue' | 'customScheduled'; scheduledFor?: string }) =>
     areq<{ ok: boolean; post: any }>('/admin/linkedin/posts', { method: 'POST', body: JSON.stringify(body) }),
-  // (MEDYA) Carousel PDF / gorsel sunucuda uretilir; elle dosya hazirlamak GEREKMEZ.
-  linkedinAssets: () => areq<{ items: Array<{ id: string; kind: string; title: string; bytes: number; pages: number | null; url: string; createdAt: string }> }>('/admin/linkedin/assets'),
-  linkedinMakeCarousel: (body: { title: string; slides: Array<{ kicker?: string; title: string; body?: string; bullets?: string[]; variant?: 'cover' | 'content' | 'cta' }> }) =>
-    areq<{ ok: boolean; id: string; url: string; pages: number }>('/admin/linkedin/assets/carousel', { method: 'POST', body: JSON.stringify(body) }),
-  linkedinMakeImage: (body: { title: string; slide: { kicker?: string; title: string; body?: string; bullets?: string[]; variant?: 'cover' | 'content' | 'cta' } }) =>
-    areq<{ ok: boolean; id: string; url: string }>('/admin/linkedin/assets/image', { method: 'POST', body: JSON.stringify(body) }),
   linkedinDelete: (id: string) => areq<{ ok: boolean }>(`/admin/linkedin/posts/${id}`, { method: 'DELETE' }),
   linkedinSync: () => areq<{ ok: boolean; checked: number; updated: number }>('/admin/linkedin/sync', { method: 'POST' }),
+  linkedinAssets: () =>
+    areq<{ items: Array<{ id: string; kind: string; title: string; bytes: number; pages: number | null; createdAt: string; url: string }> }>('/admin/linkedin/assets'),
+  linkedinMakeCarousel: (body: { title: string; slides: Array<Record<string, unknown>> }) =>
+    areq<{ ok: boolean; id: string; url: string; thumbnailUrl: string; bytes: number; pages: number }>('/admin/linkedin/assets/carousel', { method: 'POST', body: JSON.stringify(body) }),
   scopeViolations: (page = 1) => areq<Page<any>>(`/admin/scope-violations?page=${page}`),
   // (Fatura talebi — MANUEL) Vedat fatura bilgilerini + fiyatı görür, durumu işaretler.
   invoiceRequests: (status = '') =>
