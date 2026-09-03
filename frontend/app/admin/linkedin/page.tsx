@@ -37,6 +37,9 @@ export default function AdminLinkedin() {
   const [content, setContent] = useState('');
   const [mediaUrl, setMediaUrl] = useState('');
   const [when, setWhen] = useState(''); // <input type="datetime-local"> → yerel saat
+  const [assets, setAssets] = useState<any[]>([]);
+  const [slidesRaw, setSlidesRaw] = useState('');
+  const [carTitle, setCarTitle] = useState('');
 
   const load = useCallback(() => {
     adminApi.linkedinPosts().then(setData).catch((e) => setError(e.message));
@@ -44,6 +47,7 @@ export default function AdminLinkedin() {
 
   useEffect(() => {
     adminApi.linkedinStatus().then(setStatus).catch((e) => setStatus({ enabled: false, error: e.message }));
+    adminApi.linkedinAssets().then((d) => setAssets(d.items)).catch(() => {});
     load();
   }, [load]);
 
@@ -65,6 +69,40 @@ export default function AdminLinkedin() {
       setError(e.message);
       load(); // FAILED kaydı listede görünsün — sessiz hata YOK
     } finally { setBusy(false); }
+  }
+
+  // Slayt formati (satir bazli, ogrenmesi kolay):
+  //   ---            -> yeni slayt
+  //   # Baslik       -> slayt basligi
+  //   > Kicker       -> ust etiket
+  //   - Madde        -> madde
+  //   duz satir      -> paragraf
+  function parseSlides(raw: string) {
+    return raw.split(/^---$/m).map((blk) => {
+      const s: any = { bullets: [] as string[] };
+      for (const line of blk.split('\n').map((l) => l.trim()).filter(Boolean)) {
+        if (line.startsWith('# ')) s.title = line.slice(2);
+        else if (line.startsWith('> ')) s.kicker = line.slice(2);
+        else if (line.startsWith('- ')) s.bullets.push(line.slice(2));
+        else s.body = s.body ? `${s.body} ${line}` : line;
+      }
+      if (!s.bullets.length) delete s.bullets;
+      return s;
+    }).filter((s) => s.title);
+  }
+
+  async function makeCarousel() {
+    const slides = parseSlides(slidesRaw);
+    if (!carTitle.trim() || slides.length < 2) { setError('Başlık ve en az 2 slayt gerekir.'); return; }
+    setBusy(true); setError(null); setOk(null);
+    try {
+      slides[0].variant = slides[0].variant ?? 'cover';
+      slides[slides.length - 1].variant = slides[slides.length - 1].variant ?? 'cta';
+      const r = await adminApi.linkedinMakeCarousel({ title: carTitle.trim(), slides });
+      setOk(`PDF carousel üretildi (${r.pages} sayfa). Aşağıdaki listeden gönderiye ekleyebilirsiniz.`);
+      setMediaUrl(r.url); setSlidesRaw(''); setCarTitle('');
+      adminApi.linkedinAssets().then((d) => setAssets(d.items)).catch(() => {});
+    } catch (e: any) { setError(e.message); } finally { setBusy(false); }
   }
 
   async function cancel(id: string) {
@@ -149,7 +187,38 @@ export default function AdminLinkedin() {
         </div>
 
         <label style={{ fontSize: 13, color: '#94a3b8' }}>Görsel URL (opsiyonel — herkese açık olmalı)</label>
-        <input value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} placeholder="https://…" style={{ ...input, marginTop: 6, marginBottom: 12 }} />
+        <input value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} placeholder="https://… (veya aşağıdan üretin)" style={{ ...input, marginTop: 6, marginBottom: 12 }} />
+
+        {/* (NATİF CAROUSEL) PDF sunucuda üretilir — elle dosya hazırlamak/yüklemek GEREKMEZ.
+            LinkedIn dokümanı 1:1 gösterdiği için sayfalar 1080x1080 karedir. */}
+        <details style={{ border: '1px solid #334155', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 13, color: '#38bdf8', fontWeight: 600 }}>PDF carousel üret (natif doküman gönderisi)</summary>
+          <p style={{ fontSize: 12, color: '#94a3b8', margin: '8px 0' }}>
+            Slaytları <code>---</code> ile ayırın. <code># Başlık</code>, <code>&gt; Üst etiket</code>, <code>- Madde</code>, düz satır = paragraf.
+            İlk slayt kapak, son slayt CTA olarak biçimlenir. <b>6–12 sayfa</b> idealdir.
+          </p>
+          <input value={carTitle} onChange={(e) => setCarTitle(e.target.value)} placeholder="Doküman başlığı (carousel üstünde görünür)" style={{ ...input, marginBottom: 8 }} />
+          <textarea value={slidesRaw} onChange={(e) => setSlidesRaw(e.target.value)} rows={8}
+            placeholder={'> BOARD REPORTING\n# The one-page security report\nFour questions. Real numbers.\n---\n# Activity is not exposure\n- Patch counts are workload\n- Boards fund risk reduction'}
+            style={{ ...input, resize: 'vertical', fontFamily: 'ui-monospace, Menlo, monospace', lineHeight: 1.5 }} />
+          <button onClick={makeCarousel} disabled={busy} style={{ ...btn, marginTop: 8 }}>PDF üret</button>
+        </details>
+
+        {assets.length > 0 && (
+          <details style={{ border: '1px solid #334155', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 13, color: '#38bdf8', fontWeight: 600 }}>Üretilmiş medya ({assets.length})</summary>
+            <div style={{ maxHeight: 220, overflow: 'auto', marginTop: 8 }}>
+              {assets.map((a) => (
+                <div key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '5px 0', borderBottom: '1px solid #263449', fontSize: 12 }}>
+                  <span style={{ background: a.kind === 'pdf' ? '#a78bfa' : '#38bdf8', color: '#0f172a', borderRadius: 4, padding: '1px 6px', fontWeight: 800, fontSize: 10 }}>{a.kind.toUpperCase()}</span>
+                  <span style={{ flex: 1, minWidth: 0, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}{a.pages ? ` · ${a.pages} sayfa` : ''}</span>
+                  <a href={a.url} target="_blank" rel="noreferrer" style={{ color: '#94a3b8' }}>önizle</a>
+                  <button onClick={() => setMediaUrl(a.url)} style={{ ...btn, padding: '3px 9px', fontSize: 11 }}>seç</button>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <button
