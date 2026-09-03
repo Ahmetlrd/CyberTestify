@@ -177,6 +177,10 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { la
   const [website, setWebsite] = useState(''); // HONEYPOT
   const [token, setToken] = useState<string | null>(null);
   const [state, setState] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
+  // (İŞ 2) Login DEĞİLSE post-tarama satın-alma CTA'ları soğuk ziyaretçiyi doğrudan ödeme/register'a
+  // itmesin → /paketler'e yönlendir; login İSE akış eskisi gibi (verify) devam eder. SSR uyumu için mount'ta okunur.
+  const [loggedIn, setLoggedIn] = useState(false);
+  useEffect(() => { try { setLoggedIn(!!window.localStorage.getItem('token')); } catch { setLoggedIn(false); } }, []);
   const [phase, setPhase] = useState(-1); // -1: sadece "bağlanılıyor"; 0+: erişildikten SONRA fazlar
   const [reachFail, setReachFail] = useState(false);
   const [result, setResult] = useState<InstantScanResult | null>(null);
@@ -231,6 +235,9 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { la
   const passiveBuyHref = `/register?next=${encodeURIComponent(passiveNext)}`;
   const activeNext = ok?.host ? `/verify?bundle=bundle_active_verify&hostname=${buyHostname}` : '/verify';
   const activeBuyHref = `/register?next=${encodeURIComponent(activeNext)}`;
+  // Login değilse → paketler; login ise → mevcut satın-alma akışı (eskisi gibi).
+  const effActiveHref = loggedIn ? activeBuyHref : packagesHref;
+  const effPassiveHref = loggedIn ? passiveBuyHref : packagesHref;
 
   return (
     <div className="rounded-[20px] border border-line bg-white/95 p-5 shadow-xl backdrop-blur sm:p-7">
@@ -334,7 +341,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { la
                   </p>
                   <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{L.cleanBody}</p>
                   <div className="mt-3 flex flex-col items-stretch gap-2">
-                    <Link href={activeBuyHref} className="btn-primary justify-center">{L.ctaDeepen(L.priceActive)}</Link>
+                    <Link href={effActiveHref} className="btn-primary justify-center">{L.ctaDeepen(L.priceActive)}</Link>
                     <Link href={packagesHref} className="text-center text-xs font-semibold text-accent-600 hover:underline">{L.allPackages}</Link>
                   </div>
                 </div>
@@ -357,9 +364,9 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { la
                     <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{L.lockedBody}</p>
                     <div className="mt-3 flex flex-col items-stretch gap-2">
                       {highScore ? (
-                        <Link href={activeBuyHref} className="btn-primary justify-center">{L.ctaDeepen(L.priceActive)}</Link>
+                        <Link href={effActiveHref} className="btn-primary justify-center">{L.ctaDeepen(L.priceActive)}</Link>
                       ) : (
-                        <Link href={passiveBuyHref} className="btn-primary justify-center">{L.ctaReport(L.priceBasit)}</Link>
+                        <Link href={effPassiveHref} className="btn-primary justify-center">{L.ctaReport(L.priceBasit)}</Link>
                       )}
                       <Link href={packagesHref} className="text-center text-xs font-semibold text-accent-600 hover:underline">{L.allPackages}</Link>
                     </div>

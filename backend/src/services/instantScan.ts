@@ -27,16 +27,18 @@ export type InstantResult =
 
 // Yalnız VARLIK kontrolü yapılan güvenlik başlıkları (pasif). Etiket = "ne eksik" farkındalığı;
 // NASIL düzeltilir (kod/adım) BURADA verilmez.
-const SEC_HEADERS: Array<{ hdr: string; label: string; critical: boolean }> = [
-  { hdr: 'content-security-policy', label: 'Content-Security-Policy (CSP) eksik', critical: true },
-  { hdr: 'x-frame-options', label: 'X-Frame-Options eksik (clickjacking koruması)', critical: true },
-  { hdr: 'strict-transport-security', label: 'HSTS (Strict-Transport-Security) eksik', critical: false },
-  { hdr: 'x-content-type-options', label: 'X-Content-Type-Options eksik (MIME-sniffing)', critical: false },
-  { hdr: 'referrer-policy', label: 'Referrer-Policy eksik', critical: false },
-  { hdr: 'permissions-policy', label: 'Permissions-Policy eksik', critical: false },
+type L3 = { tr: string; de: string; en: string };
+const SEC_HEADERS: Array<{ hdr: string; label: L3; critical: boolean }> = [
+  { hdr: 'content-security-policy', label: { tr: 'Content-Security-Policy (CSP) eksik', de: 'Content-Security-Policy (CSP) fehlt', en: 'Content-Security-Policy (CSP) missing' }, critical: true },
+  { hdr: 'x-frame-options', label: { tr: 'X-Frame-Options eksik (clickjacking koruması)', de: 'X-Frame-Options fehlt (Clickjacking-Schutz)', en: 'X-Frame-Options missing (clickjacking protection)' }, critical: true },
+  { hdr: 'strict-transport-security', label: { tr: 'HSTS (Strict-Transport-Security) eksik', de: 'HSTS (Strict-Transport-Security) fehlt', en: 'HSTS (Strict-Transport-Security) missing' }, critical: false },
+  { hdr: 'x-content-type-options', label: { tr: 'X-Content-Type-Options eksik (MIME-sniffing)', de: 'X-Content-Type-Options fehlt (MIME-Sniffing)', en: 'X-Content-Type-Options missing (MIME sniffing)' }, critical: false },
+  { hdr: 'referrer-policy', label: { tr: 'Referrer-Policy eksik', de: 'Referrer-Policy fehlt', en: 'Referrer-Policy missing' }, critical: false },
+  { hdr: 'permissions-policy', label: { tr: 'Permissions-Policy eksik', de: 'Permissions-Policy fehlt', en: 'Permissions-Policy missing' }, critical: false },
 ];
 
-export async function runInstantScan(host: string): Promise<InstantResult> {
+export async function runInstantScan(host: string, lang: 'tr' | 'de' | 'en' = 'tr'): Promise<InstantResult> {
+  const t = (tr: string, de: string, en: string) => (lang === 'de' ? de : lang === 'en' ? en : tr);
   const ev = await collectEvidence(host);
 
   // (ÜÇ-DURUM) Ne https(443) ne http ne TLS yanıt verdi → İncelenemedi. ASLA "temiz" deme, sahte sonuç yok.
@@ -54,20 +56,20 @@ export async function runInstantScan(host: string): Promise<InstantResult> {
 
   // HTTPS yok (şifresiz iletişim) — tek başına ciddi, gerçek bulgu.
   if (ev.reachable && !ev.httpsWorks) {
-    findings.push({ title: 'HTTPS desteklenmiyor (şifresiz iletişim)', severity: 'high' });
+    findings.push({ title: t('HTTPS desteklenmiyor (şifresiz iletişim)', 'HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation)', 'HTTPS not supported (unencrypted communication)'), severity: 'high' });
     score -= 40;
   }
 
   // TLS geçerliliği (yalnız https çalışıyorsa anlamlı).
   if (ev.httpsWorks && ev.tls.found) {
     if (ev.tls.hostnameMatch === false) {
-      findings.push({ title: 'TLS sertifikası alan adıyla uyuşmuyor', severity: 'high' });
+      findings.push({ title: t('TLS sertifikası alan adıyla uyuşmuyor', 'TLS-Zertifikat stimmt nicht mit der Domain überein', 'TLS certificate does not match the domain'), severity: 'high' });
       score -= 30;
     } else if (ev.tls.daysLeft != null && ev.tls.daysLeft < 0) {
-      findings.push({ title: 'TLS sertifikasının süresi dolmuş', severity: 'high' });
+      findings.push({ title: t('TLS sertifikasının süresi dolmuş', 'TLS-Zertifikat ist abgelaufen', 'TLS certificate has expired'), severity: 'high' });
       score -= 30;
     } else if (ev.tls.daysLeft != null && ev.tls.daysLeft < 15) {
-      findings.push({ title: `TLS sertifikası ${ev.tls.daysLeft} gün içinde doluyor`, severity: 'medium' });
+      findings.push({ title: t(`TLS sertifikası ${ev.tls.daysLeft} gün içinde doluyor`, `TLS-Zertifikat läuft in ${ev.tls.daysLeft} Tagen ab`, `TLS certificate expires in ${ev.tls.daysLeft} days`), severity: 'medium' });
       score -= 10;
     }
   }
@@ -76,7 +78,7 @@ export async function runInstantScan(host: string): Promise<InstantResult> {
   if (ev.ok && ev.reachable) {
     for (const h of SEC_HEADERS) {
       if (!ev.headers.has(h.hdr)) {
-        findings.push({ title: h.label, severity: h.critical ? 'medium' : 'low' });
+        findings.push({ title: t(h.label.tr, h.label.de, h.label.en), severity: h.critical ? 'medium' : 'low' });
         score -= h.critical ? 12 : 6;
       }
     }

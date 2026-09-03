@@ -927,7 +927,12 @@ async function renderHomepageHeadless(host: string): Promise<string | null> {
 
 export async function quickScopeSignal(host: string): Promise<ScopeSignal> {
   const home = await collectHttp(host);
-  if (!home.ok) return { reachable: false, jsRendered: false, inputCount: 0, pagesScanned: 0, lowSignal: false, method: 'static' };
+  // (İŞ 3 — ÖDEME ÖN-KONTROL) Bağlantı kurulmamış (!ok) VEYA hedef 4xx/5xx döndürmüş (403/401 engel, 5xx hata)
+  // → tarama gerçek veri toplayamaz. reachable=false dön ki ödeme sayfası "ulaşılamadı" uyarısını + "yine de
+  // devam et" onay kutusunu göstersin (müşteri 403 veren siteyi bilerek onaylamadan satın alamasın).
+  if (!home.ok || (typeof home.status === 'number' && home.status >= 400)) {
+    return { reachable: false, jsRendered: false, inputCount: 0, pagesScanned: 0, lowSignal: false, method: 'static' };
+  }
   // SPA sinyali (crawlSurface ile AYNI heuristik) — bilgi amacli.
   const anchors = (home.html.match(/<a\s[^>]*href\s*=/gi) ?? []).length;
   const formCount = (home.html.match(/<form\b/gi) ?? []).length;

@@ -73,7 +73,8 @@ instantRouter.post('/', async (req, res) => {
   if (inFlight.has(ip)) return res.status(429).json({ error: im(region, 'Zaten bir tarama çalışıyor. Lütfen bitmesini bekleyin.', 'Es läuft bereits ein Scan. Bitte warten Sie, bis er abgeschlossen ist.', 'A scan is already running. Please wait for it to finish.') });
   inFlight.add(ip);
   try {
-    const result = await runInstantScan(host);
+    const lang: 'tr' | 'de' | 'en' = region === 'de' ? 'de' : region === 'en' ? 'en' : 'tr';
+    const result = await runInstantScan(host, lang);
     return res.json({ host, ...result });
   } catch {
     return res.status(500).json({ error: im(region, 'Tarama şu an tamamlanamadı. Lütfen tekrar deneyin.', 'Der Scan konnte derzeit nicht abgeschlossen werden. Bitte versuchen Sie es erneut.', 'The scan could not be completed right now. Please try again.') });
