@@ -15,6 +15,7 @@ import { promoteQueued } from './services/orchestrator.js';
 import { checkEgressProxyHealth } from './services/egressHealth.js';
 import { runDueSchedules, recordScheduleOutcome } from './services/schedules.js';
 import { syncUsomCatalog, USOM_SYNC_INTERVAL_MS } from './services/usomSync.js';
+import { topUpLinkedinCampaign, CAMPAIGN_TOPUP_INTERVAL_MS } from './services/linkedinCampaignQueue.js';
 import { reapStuckFlows } from './services/watchdog.js';
 
 // Fail-fast: kapsam kilidi konfigurasyonu eksik/gecersizse hemen dur.
@@ -52,6 +53,7 @@ async function teardownFlowContainer(pentagiFlowId: string) {
 // Sipariş henüz terminal DEĞİLSE net biçimde başarısız işaretle (kimlik bilgisi tüketilmiş olabilir).
 const TERMINAL_ORDER = new Set(['scan_failed', 'scan_completed', 'report_delivered', 'report_purged', 'scope_violation', 'refunded']);
 let lastLogRetentionAt = 0; // (gözlemlenebilirlik) log retention'ı günde bir kez çalıştırmak için guard
+let lastLinkedinTopUpAt = 0; // (LINKEDIN) Buffer plan siniri 10 zamanlanmis gonderi -> slot acildikca sirayi doldurur
 let lastUsomSyncAt = 0;      // (USOM/SGB) katalog senkronunu USOM_SYNC_INTERVAL_MS'de bir çalıştırmak için guard (restart-güvenli: idempotent upsert)
 async function failOrderIfPending(orderId: string, reason: string): Promise<void> {
   const o = await prisma.order.findUnique({ where: { id: orderId }, select: { status: true } });
@@ -471,6 +473,17 @@ async function main() {
       }
     } catch (err) {
       console.error('[worker] USOM katalog senkronu sirasinda hata (yine de devam):', err);
+    }
+    try {
+      // (LINKEDIN KAMPANYA) Buffer ucretsiz plani ayni anda 10 zamanlanmis gonderiye izin verir;
+      // 14 gonderilik kampanya tek seferde girmez. Slot acildikca siradaki gonderi otomatik
+      // kuyruga alinir — elle mudahale gerekmez. Hata kritik yolu ETKILEMEZ.
+      if (Date.now() - lastLinkedinTopUpAt > CAMPAIGN_TOPUP_INTERVAL_MS) {
+        lastLinkedinTopUpAt = Date.now();
+        await topUpLinkedinCampaign();
+      }
+    } catch (err) {
+      console.error('[worker] LinkedIn kampanya kuyruklama sirasinda hata (yine de devam):', err);
     }
     try {
       // Zamani gelen periyodik taramalari tetikle (normal siparis akisi, concurrency=1).
