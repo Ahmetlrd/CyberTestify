@@ -123,6 +123,8 @@ export async function scheduleLinkedInPost(opts: {
   documentUrl?: string | null;
   /** Dokuman basligi: LinkedIn carousel'in ustunde gorunur, TIKLAMAYI belirgin etkiler. */
   documentTitle?: string | null;
+  /** (ZORUNLU) Buffer semasinda DocumentAssetInput.thumbnailUrl String! — PUBLIC kapak PNG URL'i. */
+  documentThumbnailUrl?: string | null;
   channelId?: string;
 }): Promise<BufferCreatedPost> {
   const target = opts.channelId ? { channelId: opts.channelId } : await resolveLinkedInTarget();
@@ -139,7 +141,7 @@ export async function scheduleLinkedInPost(opts: {
     // DocumentAssetInput { url, title, thumbnailUrl }. Dokuman ve gorsel AYNI ANDA gonderilmez —
     // LinkedIn dokuman gonderisinde ayrica gorsel tasimaz; dokuman onceliklidir.
     assets: opts.documentUrl
-      ? [{ document: { url: opts.documentUrl, title: opts.documentTitle || 'CyberTestify' } }]
+      ? [{ document: { url: opts.documentUrl, title: opts.documentTitle || 'CyberTestify', thumbnailUrl: opts.documentThumbnailUrl || opts.documentUrl } }]
       : opts.imageUrl
         ? [{ image: { url: opts.imageUrl } }]
         : [],

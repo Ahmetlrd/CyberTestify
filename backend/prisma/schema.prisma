@@ -737,6 +737,9 @@ model LinkedinAsset {
   data      Bytes
   bytes     Int
   pages     Int? // carousel sayfa sayisi (pdf)
+  /// (ZORUNLU) Buffer DocumentAssetInput.thumbnailUrl alani String! — her PDF'in kapak PNG'si
+  /// ayri bir asset olarak uretilir ve id'si burada tutulur.
+  thumbnailId String?
   createdAt DateTime @default(now())
 
   @@index([kind, createdAt])

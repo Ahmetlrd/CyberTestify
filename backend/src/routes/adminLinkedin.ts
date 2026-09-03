@@ -79,12 +79,19 @@ adminLinkedinRouter.post('/assets/carousel', async (req, res) => {
   const parsed = carouselSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
-    const pdf = await renderCarouselPdf(parsed.data.slides as Slide[]);
+    const slides = parsed.data.slides as Slide[];
+    const pdf = await renderCarouselPdf(slides);
+    // Buffer DocumentAssetInput.thumbnailUrl ZORUNLU -> kapak slaytindan PNG uretilip ayri asset olur.
+    const thumb = await renderSlidePng(slides[0]);
+    const th = await prisma.linkedinAsset.create({
+      data: { kind: 'image', mime: 'image/png', title: `${parsed.data.title} (kapak)`, data: thumb, bytes: thumb.length },
+      select: { id: true },
+    });
     const a = await prisma.linkedinAsset.create({
-      data: { kind: 'pdf', mime: 'application/pdf', title: parsed.data.title, data: pdf, bytes: pdf.length, pages: parsed.data.slides.length },
+      data: { kind: 'pdf', mime: 'application/pdf', title: parsed.data.title, data: pdf, bytes: pdf.length, pages: slides.length, thumbnailId: th.id },
       select: { id: true, bytes: true, pages: true },
     });
-    res.status(201).json({ ok: true, id: a.id, url: assetUrl(a.id), bytes: a.bytes, pages: a.pages });
+    res.status(201).json({ ok: true, id: a.id, url: assetUrl(a.id), thumbnailUrl: assetUrl(th.id), bytes: a.bytes, pages: a.pages });
   } catch (e) {
     res.status(500).json({ error: `PDF üretilemedi: ${(e as Error).message}` });
   }
@@ -141,10 +148,12 @@ adminLinkedinRouter.post('/posts', async (req, res) => {
   // Asset id verildiyse PUBLIC url'e çevrilir; doğrudan mediaUrl da desteklenir (geri uyumluluk).
   let docUrl: string | null = null;
   let docTitle: string | null = null;
+  let docThumb: string | null = null;
   if (parsed.data.documentAssetId) {
-    const a = await prisma.linkedinAsset.findUnique({ where: { id: parsed.data.documentAssetId }, select: { id: true, kind: true, title: true } });
+    const a = await prisma.linkedinAsset.findUnique({ where: { id: parsed.data.documentAssetId }, select: { id: true, kind: true, title: true, thumbnailId: true } });
     if (!a || a.kind !== 'pdf') return res.status(400).json({ error: 'PDF medyası bulunamadı.' });
-    docUrl = assetUrl(a.id); docTitle = a.title;
+    if (!a.thumbnailId) return res.status(400).json({ error: 'PDF kapak görseli eksik (yeniden üretin).' });
+    docUrl = assetUrl(a.id); docTitle = a.title; docThumb = assetUrl(a.thumbnailId);
   }
   let mediaUrl = parsed.data.mediaUrl || null;
   if (!mediaUrl && parsed.data.imageAssetId) {
@@ -174,6 +183,7 @@ adminLinkedinRouter.post('/posts', async (req, res) => {
       imageUrl: mediaUrl,
       documentUrl: docUrl,
       documentTitle: docTitle,
+      documentThumbnailUrl: docThumb,
     });
     const updated = await prisma.linkedinPost.update({
       where: { id: row.id },
