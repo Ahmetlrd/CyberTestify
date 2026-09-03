@@ -6,6 +6,7 @@ import { JsonLd } from '../../../components/JsonLd';
 import { renderEmphasis, stripEmphasis } from '../../../lib/richText';
 import { PromoCodeChip } from '../../../components/PromoCodeChip';
 import { PackageCompare, type CompareCol } from '../../../components/packages/PackageCompare';
+import { PackageFocus } from '../../../components/packages/PackageFocus';
 
 type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean; bundleOnly?: boolean; bundleName?: string | null };
 type Bundle = {
@@ -237,10 +238,11 @@ export default async function PackagesPage({ params }: { params: { region: strin
                   'Each package bundles its checks together at a discount. Start with the Basic Scan for a quick preview.')}
               </p>
             </div>
+            <PackageFocus />
             <div className="grid items-stretch gap-6 md:grid-cols-2 lg:grid-cols-3">
               {/* Basit Tarama — giris seviyesi PAKET (grid'in ilk karti; ayriksi degil). */}
               {basit && !basit.comingSoon && (
-                <div className="card relative flex flex-col border-2 border-line p-6">
+                <div id="pkg-basit_tarama" className="card relative flex flex-col border-2 border-line p-6 scroll-mt-24">
                   <span className="absolute -top-3 left-6 rounded-pill bg-ink-soft px-3 py-1 text-xs font-bold text-white">
                     {t3('Giriş', 'Einstieg', 'Entry')}
                   </span>
@@ -311,7 +313,8 @@ export default async function PackagesPage({ params }: { params: { region: strin
                 return (
                   <div
                     key={b.key}
-                    className={`card relative flex flex-col p-6 ${
+                    id={`pkg-${b.key}`}
+                    className={`card relative flex flex-col p-6 scroll-mt-24 ${
                       flagship ? 'border-2 border-brand shadow-lg ring-2 ring-brand/25 bg-brand-50/20'
                         : popular ? 'border-2 border-accent shadow-md ring-2 ring-accent/25'
                         : 'border-2 border-accent/40'

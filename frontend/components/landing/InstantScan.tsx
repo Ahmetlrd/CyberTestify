@@ -41,6 +41,7 @@ const IS = {
     lockedBody: <>Her bulgunun <strong>tam detayı</strong>, <strong>platformunuza özel hazır düzeltme kodları</strong> ve<strong> indirilebilir PDF raporu</strong> kilitli.</>,
     ctaReport: (p: string) => `Detaylı Raporu Aç (${p})`,
     scanAnother: '↺ Başka bir site tara',
+    findingFix: 'Bunu düzelten paketi gör',
     hint: <>Ücretsiz <strong>ön izleme</strong> · yalnızca <strong>pasif dış gözlem</strong> (resmî denetim/sızma testi değildir).</>,
     priceBasit: '₺699', priceActive: '₺9.999',
   },
@@ -76,6 +77,7 @@ const IS = {
     lockedBody: <>Die <strong>vollständigen Details</strong> jedes Befunds, <strong>auf Ihre Plattform zugeschnittene fertige Behebungscodes</strong> und der<strong> herunterladbare PDF-Bericht</strong> sind gesperrt.</>,
     ctaReport: (p: string) => `Detaillierten Bericht freischalten (${p})`,
     scanAnother: '↺ Eine andere Website scannen',
+    findingFix: 'Paket ansehen, das dies behebt',
     hint: <>Kostenlose <strong>Vorschau</strong> · nur <strong>passive externe Beobachtung</strong> (kein offizielles Audit/kein Penetrationstest).</>,
     priceBasit: '19 €', priceActive: '678,75 €',
   },
@@ -111,6 +113,7 @@ const IS = {
     lockedBody: <>The <strong>full detail</strong> of each finding, <strong>ready-made fix code tailored to your platform</strong> and the<strong> downloadable PDF report</strong> are locked.</>,
     ctaReport: (p: string) => `Open the detailed report (${p})`,
     scanAnother: '↺ Scan another site',
+    findingFix: 'See the package that fixes this',
     hint: <>Free <strong>preview</strong> · <strong>passive external observation</strong> only (not an official audit/penetration test).</>,
     priceBasit: '£16', priceActive: '£583.50',
   },
@@ -236,8 +239,8 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { la
   const activeNext = ok?.host ? `/verify?bundle=bundle_active_verify&hostname=${buyHostname}` : '/verify';
   const activeBuyHref = `/register?next=${encodeURIComponent(activeNext)}`;
   // Login değilse → paketler; login ise → mevcut satın-alma akışı (eskisi gibi).
-  const effActiveHref = loggedIn ? activeBuyHref : packagesHref;
-  const effPassiveHref = loggedIn ? passiveBuyHref : packagesHref;
+  const effActiveHref = loggedIn ? activeBuyHref : `${packagesHref}?focus=bundle_active_verify`;
+  const effPassiveHref = loggedIn ? passiveBuyHref : `${packagesHref}?focus=basit_tarama`;
 
   return (
     <div className="rounded-[20px] border border-line bg-white/95 p-5 shadow-xl backdrop-blur sm:p-7">
@@ -326,7 +329,10 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { la
                   {ok.shown.map((f, i) => (
                     <li key={f.title} className={`animate-fade-up flex items-center gap-2.5 rounded-card border px-3 py-2.5 text-sm font-medium ${SEV_STYLE[f.severity].box}`} style={{ animationDelay: `${i * 110}ms` }}>
                       <span className={`inline-flex shrink-0 items-center rounded-pill px-2 py-0.5 text-[10px] font-bold uppercase leading-none ${SEV_STYLE[f.severity].chip}`}>{L.sev[f.severity]}</span>
-                      <span className="leading-snug">{f.title}</span>
+                      <span className="flex-1 leading-snug">{f.title}</span>
+                      <Link href={`${packagesHref}?focus=basit_tarama`} aria-label={L.findingFix} title={L.findingFix} className="ml-1 inline-flex shrink-0 items-center justify-center rounded-full p-1 opacity-60 transition hover:bg-black/5 hover:opacity-100">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                      </Link>
                     </li>
                   ))}
                 </ul>
