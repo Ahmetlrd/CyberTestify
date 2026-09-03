@@ -175,7 +175,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // (TÜRKÇE-LEAK FIX) Bölge-önekli sayfada (/de, /en) InstantScan dili URL'den GELMELİ; aksi halde
 // cookie'ye/tr-default'a düşüp SSR'da Türkçe metin basıyordu (ör. "Doğrulama bekleniyor…" → /de leak).
 // langProp verilirse (ana sayfa URL bölgesinden) kesin kullanılır; verilmezse cookie'ye düşülür.
-export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { lang?: 'tr' | 'de' | 'en'; regionCode?: string } = {}) {
+export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceBasit: priceBasitProp, priceActive: priceActiveProp }: { lang?: 'tr' | 'de' | 'en'; regionCode?: string; priceBasit?: string | null; priceActive?: string | null } = {}) {
   const [url, setUrl] = useState('');
   const [website, setWebsite] = useState(''); // HONEYPOT
   const [token, setToken] = useState<string | null>(null);
@@ -241,6 +241,9 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { la
   // Login değilse → paketler; login ise → mevcut satın-alma akışı (eskisi gibi).
   const effActiveHref = loggedIn ? activeBuyHref : `${packagesHref}?focus=bundle_active_verify`;
   const effPassiveHref = loggedIn ? passiveBuyHref : `${packagesHref}?focus=basit_tarama`;
+  // (İŞ 1) Fiyatlar CANLI API'den (server sayfası prop geçer) → de/en/tr her zaman doğru, hardcoded drift YOK.
+  const pxBasit = priceBasitProp ?? L.priceBasit;
+  const pxActive = priceActiveProp ?? L.priceActive;
 
   return (
     <div className="rounded-[20px] border border-line bg-white/95 p-5 shadow-xl backdrop-blur sm:p-7">
@@ -327,11 +330,13 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { la
               {ok.shown.length > 0 && (
                 <ul className="mt-4 space-y-2">
                   {ok.shown.map((f, i) => (
-                    <li key={f.title} className={`animate-fade-up flex items-center gap-2.5 rounded-card border px-3 py-2.5 text-sm font-medium ${SEV_STYLE[f.severity].box}`} style={{ animationDelay: `${i * 110}ms` }}>
-                      <span className={`inline-flex shrink-0 items-center rounded-pill px-2 py-0.5 text-[10px] font-bold uppercase leading-none ${SEV_STYLE[f.severity].chip}`}>{L.sev[f.severity]}</span>
-                      <span className="flex-1 leading-snug">{f.title}</span>
-                      <Link href={`${packagesHref}?focus=basit_tarama`} aria-label={L.findingFix} title={L.findingFix} className="ml-1 inline-flex shrink-0 items-center justify-center rounded-full p-1 opacity-60 transition hover:bg-black/5 hover:opacity-100">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                    <li key={f.title} className="animate-fade-up" style={{ animationDelay: `${i * 110}ms` }}>
+                      <Link href={`${packagesHref}?focus=basit_tarama`} aria-label={`${f.title} — ${L.findingFix}`} title={L.findingFix} className={`flex items-center gap-2.5 rounded-card border px-3 py-2.5 text-sm font-medium transition hover:brightness-[0.97] ${SEV_STYLE[f.severity].box}`}>
+                        <span className={`inline-flex shrink-0 items-center rounded-pill px-2 py-0.5 text-[10px] font-bold uppercase leading-none ${SEV_STYLE[f.severity].chip}`}>{L.sev[f.severity]}</span>
+                        <span className="flex-1 leading-snug">{f.title}</span>
+                        <span className="ml-1 shrink-0 opacity-60 transition group-hover:opacity-100" aria-hidden>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                        </span>
                       </Link>
                     </li>
                   ))}
@@ -347,7 +352,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { la
                   </p>
                   <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{L.cleanBody}</p>
                   <div className="mt-3 flex flex-col items-stretch gap-2">
-                    <Link href={effActiveHref} className="btn-primary justify-center">{L.ctaDeepen(L.priceActive)}</Link>
+                    <Link href={effActiveHref} className="btn-primary justify-center">{L.ctaDeepen(pxActive)}</Link>
                     <Link href={packagesHref} className="text-center text-xs font-semibold text-accent-600 hover:underline">{L.allPackages}</Link>
                   </div>
                 </div>
@@ -370,9 +375,9 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { la
                     <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{L.lockedBody}</p>
                     <div className="mt-3 flex flex-col items-stretch gap-2">
                       {highScore ? (
-                        <Link href={effActiveHref} className="btn-primary justify-center">{L.ctaDeepen(L.priceActive)}</Link>
+                        <Link href={effActiveHref} className="btn-primary justify-center">{L.ctaDeepen(pxActive)}</Link>
                       ) : (
-                        <Link href={effPassiveHref} className="btn-primary justify-center">{L.ctaReport(L.priceBasit)}</Link>
+                        <Link href={effPassiveHref} className="btn-primary justify-center">{L.ctaReport(pxBasit)}</Link>
                       )}
                       <Link href={packagesHref} className="text-center text-xs font-semibold text-accent-600 hover:underline">{L.allPackages}</Link>
                     </div>

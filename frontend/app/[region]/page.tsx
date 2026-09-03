@@ -6,7 +6,7 @@ import { InstantScan } from '../../components/landing/InstantScan';
 import { TrustSection } from '../../components/landing/TrustSection';
 import { JsonLd } from '../../components/JsonLd';
 import { VISIBLE_REGION_CODES, isRegionCode, getRegion, type RegionConfig } from '../../config/regions';
-import { getDict, type Dict } from '../../config/i18n';
+import { getDict, formatMoney, type Dict } from '../../config/i18n';
 
 const SITE = 'https://cybertestify.com';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -182,9 +182,29 @@ const DOT_BG = {
 
 const TRUST_ICONS = ['M9 12l2 2 4-4', 'M12 2l7 4v6c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6l7-4z', 'M4 12l6 6L20 6'];
 
-function Hero({ d, region }: { d: Dict; region: RegionConfig }) {
+// (İŞ 1) Ücretsiz-tarama teaser fiyatları CANLI API'den (tek doğruluk kaynağı) — hardcoded drift YOK.
+// Basit Tarama = /orders/packages, Aktif Doğrulama bundle = /orders/bundles. Hata olursa null → InstantScan L varsayılanına düşer.
+async function fetchTeaserPrices(region: RegionConfig): Promise<{ basit: string | null; active: string | null }> {
+  try {
+    const [pkgs, bundles] = await Promise.all([
+      fetch(`${API_BASE}/orders/packages?region=${region.code}`, { next: { revalidate: 300 } }).then((r) => (r.ok ? r.json() : [])),
+      fetch(`${API_BASE}/orders/bundles?region=${region.code}`, { next: { revalidate: 300 } }).then((r) => (r.ok ? r.json() : [])),
+    ]);
+    const basit = Array.isArray(pkgs) ? pkgs.find((x: { key?: string }) => x.key === 'basit_tarama') : null;
+    const active = Array.isArray(bundles) ? bundles.find((x: { key?: string }) => x.key === 'bundle_active_verify') : null;
+    return {
+      basit: basit && typeof basit.priceMinorUnit === 'number' ? formatMoney(basit.priceMinorUnit, region) : null,
+      active: active && typeof active.amountMinorUnit === 'number' ? formatMoney(active.amountMinorUnit, region) : null,
+    };
+  } catch {
+    return { basit: null, active: null };
+  }
+}
+
+async function Hero({ d, region }: { d: Dict; region: RegionConfig }) {
   // (TÜRKÇE-LEAK FIX) InstantScan dilini URL bölgesinden geç (cookie'ye düşüp /de'de Türkçe basmasın).
   const scanLang = region.code === 'de' ? 'de' : region.code === 'en' ? 'en' : 'tr';
+  const teaser = await fetchTeaserPrices(region);
   return (
     <section className="relative overflow-hidden bg-brand-deep text-white">
       <div className="pointer-events-none absolute inset-0" style={DOT_BG} />
@@ -202,7 +222,7 @@ function Hero({ d, region }: { d: Dict; region: RegionConfig }) {
         {/* ÜCRETSİZ ANLIK ÖN-TARAMA — sayfanın EN ÜSTÜNDE, manşet metninin ÜSTÜNDE (kullanıcı isteği):
             ziyaretçinin ilk gördüğü ve kayıt istemeden hemen yapabileceği şey bu. */}
         <div className="animate-fade-up mx-auto mt-8 max-w-2xl">
-          <InstantScan lang={scanLang} regionCode={region.code} />
+          <InstantScan lang={scanLang} regionCode={region.code} priceBasit={teaser.basit} priceActive={teaser.active} />
         </div>
 
         <div className="mx-auto mt-14 max-w-3xl text-center">

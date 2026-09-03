@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { REGIONS, REGION_CODES, VISIBLE_REGION_CODES, type RegionCode } from '../config/regions';
+import { Flag } from './Flag';
 
 export function RegionSelector({ current }: { current: RegionCode }) {
   const router = useRouter();
@@ -47,7 +48,7 @@ export function RegionSelector({ current }: { current: RegionCode }) {
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        {cur.flag} {cur.code.toUpperCase()}
+        <Flag code={active} /> {cur.code.toUpperCase()}
         <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M6 9l6 6 6-6" />
         </svg>
@@ -68,7 +69,7 @@ export function RegionSelector({ current }: { current: RegionCode }) {
                     role="option"
                     aria-selected={code === active}
                   >
-                    <span>{r.flag}</span>
+                    <Flag code={code} />
                     <span>{r.label}</span>
                     <span className="ml-auto text-xs text-ink-muted">{r.currency}</span>
                   </button>
