@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { z } from 'zod';
+import { z, type ZodError } from 'zod';
 import { zodError } from '../httpErrors.js';
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
@@ -24,6 +24,17 @@ const aLoc = (req: { body?: any; query?: any; headers?: any }): string => {
   return r === 'de' ? 'de' : r === 'en' ? 'en' : 'tr';
 };
 const M = (loc: string, tr: string, de: string, en: string): string => (loc === 'de' ? de : loc === 'en' ? en : tr);
+
+// (ÇOK-DİLLİ VALIDASYON) Zod şemalarındaki mesajlar Türkçe sabittir; login/register 400 yanıtı locale'e
+// göre çevrilir (aksi halde /de-/en kullanıcı Türkçe "Şifre en az 8 karakter..." görüyordu). İlk hatalı
+// alana göre M() ile çevrilir.
+function authValidationError(err: ZodError, loc: string): string {
+  const field = String(err.issues[0]?.path?.[0] ?? '');
+  if (field === 'email') return M(loc, 'Geçerli bir e-posta adresi girin.', 'Bitte geben Sie eine gültige E-Mail-Adresse ein.', 'Enter a valid e-mail address.');
+  if (field === 'password') return M(loc, 'Şifre en az 8 karakter olmalıdır.', 'Das Passwort muss mindestens 8 Zeichen lang sein.', 'The password must be at least 8 characters.');
+  if (field === 'termsAccepted') return M(loc, 'Kullanım Koşulları ve KVKK Aydınlatma Metni onaylanmalıdır.', 'Die Nutzungsbedingungen und die Datenschutzerklärung müssen akzeptiert werden.', 'You must accept the Terms of Use and the Privacy Notice.');
+  return M(loc, 'Girdiğiniz bilgiler geçersiz. Lütfen kontrol edip tekrar deneyin.', 'Die eingegebenen Daten sind ungültig. Bitte überprüfen Sie sie und versuchen Sie es erneut.', 'The information you entered is invalid. Please check it and try again.');
+}
 
 // E-posta dogrulama kodu uretir (6 hane), hash'ini + 15dk gecerlilik kaydeder ve mail atar.
 const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
@@ -51,7 +62,7 @@ const registerSchema = credsSchema.extend({
 
 authRouter.post('/register', async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
+  if (!parsed.success) return res.status(400).json({ error: authValidationError(parsed.error, aLoc(req)) });
 
   // (BOT KORUMASI) fake/otomatik hesap acilmasina karsi insan dogrulamasi (authLimiter'a EK).
   if (!(await verifyTurnstile(parsed.data.turnstileToken, (req.ip || '').toString()))) {
@@ -95,7 +106,7 @@ authRouter.post('/register', async (req, res) => {
 
 authRouter.post('/login', async (req, res) => {
   const parsed = credsSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
+  if (!parsed.success) return res.status(400).json({ error: authValidationError(parsed.error, aLoc(req)) });
 
   const customer = await prisma.customer.findUnique({ where: { email: parsed.data.email } });
   if (!customer || !(await bcrypt.compare(parsed.data.password, customer.passwordHash))) {
