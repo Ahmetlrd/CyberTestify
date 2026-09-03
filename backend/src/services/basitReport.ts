@@ -237,6 +237,33 @@ export async function generateBasitReport(hostname: string, locale: string = 'tr
     return { findings, fixText: '' };
   }
 
+  // (DÜRÜSTLÜK — erişim-hatası) Bağlantı KURULDU ama hedef 2xx/3xx yerine 4xx/5xx döndü (401/403: engelleme/
+  // erişim kısıtı; 5xx: sunucu hatası). Çıplak hata sayfası (ör. Apache 403 ErrorDocument) HİÇBİR güvenlik
+  // başlığı taşımaz → onu skorlamak SAHTE bulgu üretir (ücretsiz taramadaki 403→52/100 hatasının paket
+  // karşılığı). "İncelenemedi" dön (assessBasit nötr amber rozet basar; sahte skor YOK).
+  if (ev.reachable && ev.ok && typeof ev.status === 'number' && ev.status >= 400) {
+    const code = ev.status;
+    const rmap: Record<number, string> = { 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 429: 'Too Many Requests', 451: 'Unavailable For Legal Reasons', 500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable', 504: 'Gateway Timeout' };
+    const reason = rmap[code] ? ` — ${rmap[code]}` : '';
+    const findings =
+      `## ${t('YÖNETİCİ ÖZETİ', 'MANAGEMENTZUSAMMENFASSUNG', 'EXECUTIVE SUMMARY')}\n\n` +
+      `- **${t('Genel risk seviyesi: İncelenemedi', 'Gesamtrisikostufe: Nicht prüfbar', 'Overall risk level: Not assessable')}** — ` +
+      t(`hedef (${hostname}) isteğimize HTTP ${code}${reason} döndürdü; geçerli bir sayfa yanıtı alınamadığı için kontroller yürütülemedi.`,
+        `das Ziel (${hostname}) antwortete auf unsere Anfrage mit HTTP ${code}${reason}; da keine gültige Seitenantwort vorlag, konnten die Kontrollen nicht ausgeführt werden.`,
+        `the target (${hostname}) returned HTTP ${code}${reason} to our request; since no valid page response was obtained, the checks could not be run.`) + `\n` +
+      `- ${t('Bu sonuç sitenin GÜVENLİ olduğu anlamına GELMEZ; yalnızca kontrollerin çalıştırılamadığını gösterir.', 'Dieses Ergebnis bedeutet NICHT, dass die Website SICHER ist; es zeigt lediglich, dass die Kontrollen nicht ausgeführt werden konnten.', 'This result does NOT mean the website is SECURE; it only shows that the checks could not be run.')}\n` +
+      `- **${t('Önerilen ilk adım', 'Empfohlener erster Schritt', 'Recommended first step')}:** ${t('Hedefin genel erişime açık olduğunu (WAF/erişim kısıtı/IP engeli olmadığını) doğrulayıp taramayı tekrarlayın.', 'Stellen Sie sicher, dass das Ziel öffentlich zugänglich ist (keine WAF-/Zugriffs-/IP-Sperre), und wiederholen Sie die Prüfung.', 'Confirm the target is publicly accessible (no WAF/access/IP restriction) and repeat the scan.')}\n\n` +
+      `## ${t('GENEL DEĞERLENDİRME', 'GESAMTBEWERTUNG', 'OVERALL ASSESSMENT')}\n\n**${t('Risk Seviyesi: İncelenemedi', 'Risikostufe: Nicht prüfbar', 'Risk Level: Not assessable')}**\n\n` +
+      t(`Hedefin ana sayfasına bağlantı kuruldu ancak sunucu HTTP ${code}${reason} döndürdü. Güvenlik başlıkları/TLS gibi pasif kontroller yalnızca geçerli bir sayfa yanıtı (2xx/3xx) üzerinde anlamlıdır; hata/engelleme sayfası hiçbir güvenlik başlığı taşımadığından skorlanması yanıltıcı olur.`,
+        `Zur Startseite des Ziels wurde eine Verbindung hergestellt, der Server antwortete jedoch mit HTTP ${code}${reason}. Passive Kontrollen wie Sicherheits-Header/TLS sind nur bei einer gültigen Seitenantwort (2xx/3xx) aussagekräftig; eine Fehler-/Sperrseite trägt keine Sicherheits-Header, ihre Bewertung wäre irreführend.`,
+        `A connection to the target's home page was established, but the server responded with HTTP ${code}${reason}. Passive checks such as security headers/TLS are only meaningful on a valid page response (2xx/3xx); an error/block page carries no security headers, so scoring it would be misleading.`) + `\n\n` +
+      `## ${t('TARAMA DURUMU', 'PRÜFSTATUS', 'SCAN STATUS')}\n\n` +
+      t(`Bu tarama **tamamlanamadı**: hedef HTTP ${code}${reason} ile geçerli yanıt vermedi. Bu rapor bir "temiz/güvenli" sonucu **DEĞİLDİR**; erişim açıldığında yeniden taranmalıdır.`,
+        `Diese Prüfung wurde **nicht abgeschlossen**: Das Ziel lieferte mit HTTP ${code}${reason} keine gültige Antwort. Dieser Bericht ist **KEIN** „sauberes/sicheres" Ergebnis; sobald der Zugriff möglich ist, sollte erneut geprüft werden.`,
+        `This scan was **not completed**: the target did not return a valid response (HTTP ${code}${reason}). This report is **NOT** a "clean/secure" result; it should be re-scanned once access is possible.`) + `\n`;
+    return { findings, fixText: '' };
+  }
+
   const { tech, disclosure } = detectTech(ev.headers, ev.html);
   const isSpa = tech.some((t) => /Vite|React|SPA/i.test(t));
   const httpOnly = ev.reachable && !ev.httpsWorks; // https yok, http var -> https_missing bulgusu

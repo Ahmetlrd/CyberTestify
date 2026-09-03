@@ -24,6 +24,8 @@ const IS = {
     unreachInline: 'Ulaşılamadı — kontroller çalıştırılamadı',
     unreachTitle: '🚫 Hedefe ulaşılamadı — incelenemedi',
     unreachIntro: 'Bu “güvenli” anlamına gelmez; kontroller çalıştırılamadı. Genellikle şu iki nedenden olur:',
+    accessTitle: '🚫 Hedefe erişilemedi — incelenemedi',
+    accessMsg: (host: string, code: number, reason: string) => `${host} adresine erişilemedi (HTTP ${code}${reason ? ` — ${reason}` : ''}). Bu, hedefin bizim isteğimizi engellediği veya siteye genel erişimin kapalı olduğu anlamına gelebilir. Güvenilir bir değerlendirme yapılamadı — bu "güvenli" demek DEĞİLDİR.`,
     guide1: <>Alan adını doğru yazdınız mı? Yalnızca alan adını girin (ör. <code className="rounded bg-amber-100 px-1">example.com</code>).</>,
     guide2: <>Siteniz yayında mı? <strong>DNS / Cloudflare</strong> ayarlarınızı ve sitenin açık olduğunu kontrol edin.</>,
     fixRetry: '← Düzelt ve tekrar dene',
@@ -57,6 +59,8 @@ const IS = {
     unreachInline: 'Nicht erreichbar — Prüfungen konnten nicht ausgeführt werden',
     unreachTitle: '🚫 Ziel nicht erreichbar — nicht prüfbar',
     unreachIntro: 'Das bedeutet NICHT „sicher“; die Prüfungen konnten nicht ausgeführt werden. Meist liegt es an einem dieser zwei Gründe:',
+    accessTitle: '🚫 Ziel nicht erreichbar — nicht prüfbar',
+    accessMsg: (host: string, code: number, reason: string) => `${host} war nicht erreichbar (HTTP ${code}${reason ? ` — ${reason}` : ''}). Das Ziel blockiert möglicherweise unsere Anfrage oder der öffentliche Zugriff ist gesperrt. Eine verlässliche Bewertung war nicht möglich — das bedeutet NICHT „sicher“.`,
     guide1: <>Haben Sie die Domain korrekt eingegeben? Geben Sie nur die Domain ein (z. B. <code className="rounded bg-amber-100 px-1">example.com</code>).</>,
     guide2: <>Ist Ihre Website online? Prüfen Sie Ihre <strong>DNS-/Cloudflare</strong>-Einstellungen und ob die Website erreichbar ist.</>,
     fixRetry: '← Korrigieren und erneut versuchen',
@@ -90,6 +94,8 @@ const IS = {
     unreachInline: 'Unreachable — checks could not be run',
     unreachTitle: '🚫 Target unreachable — not assessable',
     unreachIntro: 'This does NOT mean “secure”; the checks could not be run. It is usually one of these two reasons:',
+    accessTitle: '🚫 Target unreachable — not assessable',
+    accessMsg: (host: string, code: number, reason: string) => `${host} could not be accessed (HTTP ${code}${reason ? ` — ${reason}` : ''}). The target may be blocking our request or public access is disabled. A reliable assessment was not possible — this does NOT mean "secure".`,
     guide1: <>Did you type the domain correctly? Enter the domain only (e.g. <code className="rounded bg-amber-100 px-1">example.com</code>).</>,
     guide2: <>Is your site live? Check your <strong>DNS / Cloudflare</strong> settings and that the site is up.</>,
     fixRetry: '← Fix and try again',
@@ -109,6 +115,15 @@ const IS = {
     priceBasit: '£16', priceActive: '£583.50',
   },
 } as const;
+
+// HTTP durum kodu → standart İngilizce reason-phrase (erişim-hatası mesajında; standart olduğu için lokalize edilmez).
+const HTTP_REASON: Record<number, string> = {
+  400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 405: 'Method Not Allowed',
+  406: 'Not Acceptable', 408: 'Request Timeout', 409: 'Conflict', 410: 'Gone', 421: 'Misdirected Request',
+  429: 'Too Many Requests', 451: 'Unavailable For Legal Reasons',
+  500: 'Internal Server Error', 501: 'Not Implemented', 502: 'Bad Gateway', 503: 'Service Unavailable', 504: 'Gateway Timeout',
+};
+const httpReason = (code: number): string => HTTP_REASON[code] ?? '';
 
 const SEV_STYLE: Record<'high' | 'medium' | 'low', { box: string; chip: string }> = {
   high: { box: 'border-red-300 bg-red-50 text-red-900', chip: 'bg-red-600 text-white' },
@@ -188,7 +203,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { la
     try {
       const r = await api.instantScan(url.trim(), token, website, regionCode);
       // (DÜRÜSTLÜK) Ulaşılamadıysa: SADECE "bağlanılıyor" gösterildi; sahte faz ilerlemesi YOK.
-      if (r.status === 'unreachable') {
+      if (r.status === 'unreachable' || r.status === 'access_error') {
         setReachFail(true);
         await sleep(650);
       } else {
@@ -276,6 +291,13 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp }: { la
                 <li className="flex gap-2"><span className="font-bold">2.</span><span>{L.guide2}</span></li>
               </ul>
               <button onClick={again} className="btn-primary mt-4 w-full justify-center sm:w-auto">{L.fixRetry}</button>
+            </div>
+          ) : result.status === 'access_error' ? (
+            /* ERİŞİM-HATASI (403/401/5xx) — bağlantı kuruldu ama geçerli yanıt alınamadı; SAHTE skor YOK. */
+            <div className="rounded-card border-2 border-amber-300 bg-amber-50 p-5 text-sm">
+              <p className="font-bold text-amber-900">{L.accessTitle}</p>
+              <p className="mt-1 text-amber-900/90">{L.accessMsg(result.host, result.httpStatus, httpReason(result.httpStatus))}</p>
+              <button onClick={again} className="mt-4 inline-flex w-full items-center justify-center rounded-pill border border-amber-400 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 sm:w-auto">{L.scanAnother}</button>
             </div>
           ) : ok ? (
             <div className="rounded-card border border-line bg-white p-5">

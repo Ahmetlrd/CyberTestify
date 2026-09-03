@@ -13,6 +13,7 @@ export type InstantSeverity = 'high' | 'medium' | 'low';
 export type InstantFinding = { title: string; severity: InstantSeverity };
 export type InstantResult =
   | { status: 'unreachable' }
+  | { status: 'access_error'; httpStatus: number }  // bağlantı kuruldu ama 4xx/5xx (engel/erişim kısıtı) → skorlanamaz
   | {
       status: 'ok';
       score: number;               // 0-100 (gerçek pasif bulgulara dayalı)
@@ -40,6 +41,13 @@ export async function runInstantScan(host: string): Promise<InstantResult> {
 
   // (ÜÇ-DURUM) Ne https(443) ne http ne TLS yanıt verdi → İncelenemedi. ASLA "temiz" deme, sahte sonuç yok.
   if (!ev.reachable && !ev.tls.found) return { status: 'unreachable' };
+
+  // (ERİŞİM-HATASI) Bağlantı KURULDU ama ana sayfa 2xx/3xx yerine 4xx/5xx döndü (401/403: engelleme/erişim
+  // kısıtı; 5xx: sunucu hatası). Çıplak hata sayfası (ör. Apache 403 ErrorDocument) HİÇBİR güvenlik başlığı
+  // taşımaz → onu skorlamak SAHTE "52/100 · 6 bulgu" üretir. Skor/bulgu ÜRETME; dürüst durum dön.
+  if (ev.reachable && ev.ok && typeof ev.status === 'number' && ev.status >= 400) {
+    return { status: 'access_error', httpStatus: ev.status };
+  }
 
   const findings: InstantFinding[] = [];
   let score = 100;

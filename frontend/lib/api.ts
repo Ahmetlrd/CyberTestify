@@ -41,6 +41,7 @@ const MSG = {
 export type InstantFinding = { title: string; severity: 'high' | 'medium' | 'low' };
 export type InstantScanResult =
   | { host: string; status: 'unreachable' }
+  | { host: string; status: 'access_error'; httpStatus: number }
   | {
       host: string;
       status: 'ok';
