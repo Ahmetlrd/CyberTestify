@@ -1,5 +1,5 @@
 /**
- * (LINKEDIN KAMPANYASI — 30 GUN / 2026-09-08 → 2026-10-01)
+ * (LINKEDIN KAMPANYASI — 30 GONDERI / 2026-09-08 → 2026-11-10)
  *
  * 14 gonderi, haftada 3-4. Format karisimi: 6 natif PDF carousel (%43), 5 gorsel, 3 metin.
  * Gun/saat: tercihen Sali/Carsamba/Persembe (iki hafta 4'e cikarmak icin birer Pazartesi),
@@ -9,6 +9,7 @@
  * Yeniden calistirmak icin: scripts/queueLinkedinCampaign.ts
  */
 import type { Slide } from '../services/linkedinCarousel.js';
+import { CAMPAIGN_EXTRA } from './linkedin2026_extra.js'; // EK 16 gonderi (Eki-Kas) — toplam 30
 
 export type CampaignPost = {
   id: string;
@@ -430,4 +431,6 @@ The output of a test is not a list of vulnerabilities. It is a set of decisions 
 #PenetrationTesting #CISO #CyberSecurity #SecurityTesting #InfoSec #Procurement #RiskManagement`,
     slides: [{ variant: 'cover', kicker: 'Before you sign', title: '7 questions to ask before your next pentest', bullets: ['How is scope actually determined?', 'Validated findings, or tool output?', 'What evidence comes with each finding?', '"Clean" vs "could not be tested"?', 'Escalation path for a critical find', 'Will you list what you could not test?', '**Can I see a redacted sample report?**'] }],
   },
+  // ── EK KAMPANYA (Eki 6 – Kas 10) — 16 gonderi, ayni kalite/ton ──
+  ...CAMPAIGN_EXTRA,
 ];
