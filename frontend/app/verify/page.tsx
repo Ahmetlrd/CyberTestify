@@ -294,6 +294,14 @@ function previewHostname(input: string): string {
     .replace(/\.+$/, '');
 }
 
+// (IDN) Türkçe/uluslararası karakterli alan adı girildiyse punycode'a çevir — backend'le AYNI sonuç
+// gösterilsin (ör. şirket.com.tr → xn--...). ASCII girdi değişmez.
+function toBareHost(input: string): string {
+  const h = previewHostname(input);
+  if (/[^\x00-\x7f]/.test(h)) { try { return new URL('http://' + h).hostname; } catch { return h; } }
+  return h;
+}
+
 export default function VerifyHub() {
   const router = useRouter();
   // Satın-alma akışı: paketler sayfasından "Satın Al" ile gelindiyse paket/bundle taşınır.
@@ -622,7 +630,7 @@ export default function VerifyHub() {
             </div>
             {(() => {
               const raw = newHostname.trim();
-              const host = previewHostname(newHostname);
+              const host = toBareHost(newHostname);
               // "https://", "www.", sondaki "/" vb. yazıldıysa hangi çıplak alan adının
               // ekleneceğini göster (kafa karışıklığını önler).
               if (host && raw.toLowerCase() !== host) {

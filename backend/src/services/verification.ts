@@ -49,6 +49,12 @@ export function normalizeHostname(input: string): string {
   h = h.replace(/:\d+$/, '');                   // :port
   h = h.replace(/^www\./, '');                  // baştaki www.
   h = h.replace(/\.+$/, '');                    // sondaki nokta(lar) (FQDN)
+  // (IDN) Türkçe/uluslararası karakterli alan adlarını (ör. şirket.com.tr, öztürk.com) punycode'a çevir
+  // → HOSTNAME_RE yalnız ASCII kabul ettiği için aksi halde "geçerli değil" diye reddediliyordu. Ücretsiz
+  // taramanın new URL() ile zaten yaptığı şeyin AYNISI; ASCII girdiler AYNEN kalır (davranış değişmez).
+  if (/[^\x00-\x7f]/.test(h)) {
+    try { h = new URL('http://' + h).hostname; } catch { /* çevrilemezse olduğu gibi bırak → regex reddeder */ }
+  }
   return h;
 }
 
