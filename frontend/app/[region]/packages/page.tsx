@@ -123,7 +123,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
   if (basit && !basit.comingSoon) {
     compareCols.push({
       key: basit.key, name: basit.displayName,
-      price: formatMoney(basit.priceMinorUnit, region),
+      price: t3('Ücretsiz', 'Kostenlos', 'Free'),
       kind: kindLabel('passive'),
       checks: t3('Giriş seviyesi', 'Einstiegsniveau', 'Entry level'),
       scope: META.basit_tarama.scope, sample: true, dnsRequired: false, experimental: false,
@@ -184,7 +184,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
     },
   });
   const serviceItems = [
-    ...(basit && !basit.comingSoon ? [svc(basit.displayName, stripEmphasis(basit.description), basit.priceMinorUnit)] : []),
+    ...(basit && !basit.comingSoon ? [svc(basit.displayName, stripEmphasis(basit.description), 0)] : []),
     ...bundles.filter((b: any) => !b.comingSoon).map((b: any) => svc(b.displayName, stripEmphasis(b.description), b.amountMinorUnit)),
   ];
   const servicesLd = {
@@ -250,8 +250,8 @@ export default async function PackagesPage({ params }: { params: { region: strin
                   </div>
                   <div className="mt-4 flex-1">
                     <div>
-                      <span className="text-3xl font-extrabold text-ink">{formatMoney(basit.priceMinorUnit, region)}</span>
-                      <span className="ml-1 text-xs text-ink-muted">{t3('KDV Dahil', 'inkl. MwSt.', 'incl. tax')}</span>
+                      <span className="text-3xl font-extrabold text-accent-600">{t3('Ücretsiz', 'Kostenlos', 'Free')}</span>
+                      <span className="ml-1 text-xs text-ink-muted">{t3('anlık ön-tarama', 'Sofort-Vorabscan', 'instant pre-scan')}</span>
                     </div>
                     <div className="mt-1.5 text-[11px] text-ink-soft">
                       {t3(

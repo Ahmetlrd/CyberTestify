@@ -1,12 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { REGIONS, REGION_CODES, VISIBLE_REGION_CODES, type RegionCode } from '../config/regions';
 import { Flag } from './Flag';
 
 export function RegionSelector({ current }: { current: RegionCode }) {
-  const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -32,7 +31,10 @@ export function RegionSelector({ current }: { current: RegionCode }) {
     const seg = (pathname ?? '/').split('/')[1] ?? '';
     if ((REGION_CODES as readonly string[]).includes(seg)) {
       const rest = (pathname ?? '').slice(seg.length + 1); // '/tr/paketler' → '/paketler'
-      router.push(`/${code}${rest}`);
+      // (BUG FIX) TAM navigasyon — router.push SOFT geçişte KÖK layout'u (Nav/Footer; region-önekli
+      // linkler cookie'den okunur) YENİDEN RENDER ETMEZ → linkler ESKİ bölgede kalır ve sonraki tıklamada
+      // bölge geri döner. window.location ile kabuk da yeni bölgeyle tazelenir (dil/link tutarlı).
+      window.location.assign(`/${code}${rest}`);
     } else {
       // Cookie-tabanlı sayfa (çoğu client component dili mount'ta cookie'den okur): YERİNDE tam
       // yenile → dil güncellenir, token localStorage'da KALIR (logout YOK, homepage'e atma YOK).
