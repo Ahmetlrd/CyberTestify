@@ -448,7 +448,7 @@ export default function OrderPage() {
       setPackages(pk);
       // "Satin Al" ile gelen tekil paketi ON-SEC (kullanici tekrar secmesin). "Yakında" ise ETME.
       const pre = pk.find((p) => p.key === preselectPackage);
-      if (pre && !pre.comingSoon) {
+      if (pre && !pre.comingSoon && pre.key !== 'basit_tarama') {
         setSelected(preselectPackage);
         setSelectedBundle(null);
       }
@@ -1032,24 +1032,7 @@ export default function OrderPage() {
       {/* Paket seçimi — SADECE paketler: Basit Tarama (giriş) + kombine paketler. Tekil kontrol satışı YOK. */}
       <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">{L.step1}</h2>
       <div className="mt-3 grid items-stretch gap-3 sm:grid-cols-2">
-        {/* Basit Tarama — giriş seviyesi paket (tek "tekil" paket) */}
-        {basitPkg && !basitPkg.comingSoon && (
-          <button
-            type="button"
-            onClick={() => { setSelected(basitPkg.key); setSelectedBundle(null); setBundleModules([]); setPromo(null); }}
-            className={`card relative flex flex-col p-4 text-left transition ${selected === basitPkg.key ? 'ring-2 ring-accent' : 'hover:border-brand-300'}`}
-          >
-            <span className="absolute -top-3 left-6 rounded-pill bg-ink-soft px-3 py-0.5 text-[10px] font-bold text-white">{L.entryBadge}</span>
-            <span className="font-bold text-brand">{basitPkg.displayName}</span>
-            <p className="mt-1 flex-1 text-xs leading-relaxed text-ink-soft">
-              {L.basitDesc}
-            </p>
-            <p className="mt-2 font-bold text-ink">
-              {formatMoney(basitPkg.priceMinorUnit, getRegion(region))}{' '}
-              <span className="text-xs font-normal text-ink-muted">· {L.kdv}</span>
-            </p>
-          </button>
-        )}
+        {/* Basit Tarama artik satin alinmaz — anasayfada ücretsiz "Hemen Dene" anlik taramasina yonlendirilir. */}
         {activeBundles.map((b) => bundleCard(b))}
       </div>
       {/* "Yakında" paketler — devre disi, gri, SONA alindi (secilemez). */}
