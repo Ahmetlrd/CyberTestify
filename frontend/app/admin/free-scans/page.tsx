@@ -57,10 +57,11 @@ export default function AdminFreeScans() {
       {!data ? <p style={{ color: '#94a3b8' }}>Yükleniyor…</p> : (
         <>
           <Table
-            columns={['Zaman', 'Alan adı', 'Sonuç', 'Bölge', 'IP']}
+            columns={['Zaman', 'Alan adı', 'E-posta (lead)', 'Sonuç', 'Bölge', 'IP']}
             rows={data.items.map((r: any) => [
               fmtDate(r.createdAt),
               <span key="h" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{r.host}</span>,
+              r.email ? <span key="e" style={{ color: '#4ade80', wordBreak: 'break-all' }}>{r.email}</span> : <span key="e" style={{ color: '#475569' }}>—</span>,
               resultCell(r),
               <span key="rg" style={{ textTransform: 'uppercase', fontSize: 11, color: '#93c5fd' }}>{r.region}</span>,
               <span key="ip" style={{ color: '#64748b', fontSize: 12 }}>{r.ip ?? '—'}</span>,

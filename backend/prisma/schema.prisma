@@ -739,6 +739,7 @@ model InstantScanLog {
   httpStatus Int? // status=access_error ise (403/401/5xx)
   region     String   @default("tr") // tr | de | en
   ip         String? // kötüye kullanım/tekrar-tarama tespiti (admin-only)
+  email      String? // (LEAD) "tam raporu gör" adımında girilen e-posta — admin'de domain yanında görünür
   createdAt  DateTime @default(now())
 
   @@index([createdAt])

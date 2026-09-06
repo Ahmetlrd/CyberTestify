@@ -19,7 +19,7 @@ const IS = {
     aria: 'Taranacak alan adı',
     sev: { high: 'Yüksek', medium: 'Orta', low: 'Düşük' },
     grade: { A: 'Güçlü', B: 'İyi', C: 'Orta', D: 'Zayıf', E: 'Riskli', F: 'Kritik' } as Record<string, string>,
-    phases: ['HTTPS / TLS sertifikası kontrol ediliyor…', 'HTTP güvenlik başlıkları taranıyor…', 'Sunucu / teknoloji imzası inceleniyor…', 'Bulgular derleniyor…'],
+    phases: ['HTTPS / TLS sertifikası doğrulanıyor…', 'HTTP güvenlik başlıkları taranıyor…', 'Sunucu ve teknoloji imzası çıkarılıyor…', 'Güvenlik başlığı politikaları karşılaştırılıyor…', 'Çerez ve yönlendirme yapılandırması inceleniyor…', 'Dış yüzey göstergeleri değerlendiriliyor…', 'Bulgular derleniyor ve puanlanıyor…'],
     connecting: 'Hedefe bağlanılıyor…',
     unreachInline: 'Ulaşılamadı — kontroller çalıştırılamadı',
     unreachTitle: '🚫 Hedefe ulaşılamadı — incelenemedi',
@@ -40,9 +40,20 @@ const IS = {
     lockedNoMore: 'Detaylar & hazır düzeltmeler kilitli',
     lockedBody: <>Her bulgunun <strong>tam detayı</strong>, <strong>platformunuza özel hazır düzeltme kodları</strong> ve<strong> indirilebilir PDF raporu</strong> kilitli.</>,
     ctaReport: (p: string) => `Detaylı Raporu Aç (${p})`,
+    deeperTitle: 'Daha derine inin',
+    deeperBody: <>Bu tarama yalnızca <strong>pasif dış katmanı</strong> görür. Gerçek risk çoğu zaman <strong>login-sonrası, aktif zafiyetler ve iş mantığında</strong> saklıdır — bunları <strong>aktif/kimlik-doğrulamalı</strong> testler ortaya çıkarır.</>,
     scanAnother: '↺ Başka bir site tara',
     findingFix: 'Bunu düzelten paketi gör',
     hint: <>Ücretsiz <strong>ön izleme</strong> · yalnızca <strong>pasif dış gözlem</strong> (resmî denetim/sızma testi değildir).</>,
+    emailTitle: 'Tam raporu görün — e-postanızı yazın',
+    emailSub: 'Gerçek zamanlı Basit Tarama raporunuzu PDF olarak hemen indirin. Kart gerekmez.',
+    emailPh: 'ornek@sirket.com',
+    emailBtn: 'Raporu Hazırla',
+    emailBusy: 'Raporunuz hazırlanıyor…',
+    emailInvalid: 'Geçerli bir e-posta adresi girin.',
+    reportReady: 'Raporunuz hazır 👇',
+    reportDownload: '⬇ Basit Tarama Raporunu İndir (PDF)',
+    reportErrMsg: 'Rapor şu an oluşturulamadı. Lütfen tekrar deneyin.',
     priceBasit: '₺699', priceActive: '₺9.999',
   },
   de: {
@@ -55,7 +66,7 @@ const IS = {
     aria: 'Zu scannende Domain',
     sev: { high: 'Hoch', medium: 'Mittel', low: 'Niedrig' },
     grade: { A: 'Stark', B: 'Gut', C: 'Mittel', D: 'Schwach', E: 'Riskant', F: 'Kritisch' } as Record<string, string>,
-    phases: ['HTTPS / TLS-Zertifikat wird geprüft…', 'HTTP-Sicherheitsheader werden gescannt…', 'Server-/Technologie-Signatur wird untersucht…', 'Befunde werden zusammengestellt…'],
+    phases: ['HTTPS / TLS-Zertifikat wird verifiziert…', 'HTTP-Sicherheitsheader werden gescannt…', 'Server- und Technologiesignatur wird extrahiert…', 'Sicherheitsheader-Richtlinien werden verglichen…', 'Cookie- und Weiterleitungskonfiguration wird geprüft…', 'Indikatoren der Außenfläche werden bewertet…', 'Befunde werden zusammengestellt und bewertet…'],
     connecting: 'Verbindung zum Ziel wird hergestellt…',
     unreachInline: 'Nicht erreichbar — Prüfungen konnten nicht ausgeführt werden',
     unreachTitle: '🚫 Ziel nicht erreichbar — nicht prüfbar',
@@ -76,9 +87,20 @@ const IS = {
     lockedNoMore: 'Details & fertige Behebungen gesperrt',
     lockedBody: <>Die <strong>vollständigen Details</strong> jedes Befunds, <strong>auf Ihre Plattform zugeschnittene fertige Behebungscodes</strong> und der<strong> herunterladbare PDF-Bericht</strong> sind gesperrt.</>,
     ctaReport: (p: string) => `Detaillierten Bericht freischalten (${p})`,
+    deeperTitle: 'Gehen Sie tiefer',
+    deeperBody: <>Dieser Scan sieht nur die <strong>passive Außenschicht</strong>. Das echte Risiko liegt oft <strong>nach dem Login, in aktiven Schwachstellen und der Geschäftslogik</strong> — das zeigen <strong>aktive/authentifizierte</strong> Tests.</>,
     scanAnother: '↺ Eine andere Website scannen',
     findingFix: 'Paket ansehen, das dies behebt',
     hint: <>Kostenlose <strong>Vorschau</strong> · nur <strong>passive externe Beobachtung</strong> (kein offizielles Audit/kein Penetrationstest).</>,
+    emailTitle: 'Vollständigen Bericht ansehen — E-Mail eingeben',
+    emailSub: 'Laden Sie Ihren Echtzeit-Basis-Scan-Bericht sofort als PDF herunter. Keine Karte nötig.',
+    emailPh: 'name@firma.de',
+    emailBtn: 'Bericht erstellen',
+    emailBusy: 'Ihr Bericht wird erstellt…',
+    emailInvalid: 'Bitte geben Sie eine gültige E-Mail-Adresse ein.',
+    reportReady: 'Ihr Bericht ist fertig 👇',
+    reportDownload: '⬇ Basis-Scan-Bericht herunterladen (PDF)',
+    reportErrMsg: 'Der Bericht konnte derzeit nicht erstellt werden. Bitte erneut versuchen.',
     priceBasit: '55 €', priceActive: '279 €',
   },
   en: {
@@ -91,7 +113,7 @@ const IS = {
     aria: 'Domain to scan',
     sev: { high: 'High', medium: 'Medium', low: 'Low' },
     grade: { A: 'Strong', B: 'Good', C: 'Fair', D: 'Weak', E: 'Risky', F: 'Critical' } as Record<string, string>,
-    phases: ['Checking HTTPS / TLS certificate…', 'Scanning HTTP security headers…', 'Inspecting server / technology signature…', 'Compiling findings…'],
+    phases: ['Verifying HTTPS / TLS certificate…', 'Scanning HTTP security headers…', 'Extracting server and technology signature…', 'Comparing security-header policies…', 'Inspecting cookie and redirect configuration…', 'Evaluating external-surface indicators…', 'Compiling and scoring findings…'],
     connecting: 'Connecting to the target…',
     unreachInline: 'Unreachable — checks could not be run',
     unreachTitle: '🚫 Target unreachable — not assessable',
@@ -112,9 +134,20 @@ const IS = {
     lockedNoMore: 'Details & ready-made fixes locked',
     lockedBody: <>The <strong>full detail</strong> of each finding, <strong>ready-made fix code tailored to your platform</strong> and the<strong> downloadable PDF report</strong> are locked.</>,
     ctaReport: (p: string) => `Open the detailed report (${p})`,
+    deeperTitle: 'Go deeper',
+    deeperBody: <>This scan only sees the <strong>passive external layer</strong>. Real risk often hides <strong>post-login, in active vulnerabilities and business logic</strong> — surfaced by <strong>active/authenticated</strong> testing.</>,
     scanAnother: '↺ Scan another site',
     findingFix: 'See the package that fixes this',
     hint: <>Free <strong>preview</strong> · <strong>passive external observation</strong> only (not an official audit/penetration test).</>,
+    emailTitle: 'See the full report — enter your e-mail',
+    emailSub: 'Download your real-time Basic Scan report as a PDF right away. No card needed.',
+    emailPh: 'you@company.com',
+    emailBtn: 'Prepare report',
+    emailBusy: 'Preparing your report…',
+    emailInvalid: 'Enter a valid e-mail address.',
+    reportReady: 'Your report is ready 👇',
+    reportDownload: '⬇ Download Basic Scan report (PDF)',
+    reportErrMsg: 'The report could not be created right now. Please try again.',
     priceBasit: '£49', priceActive: '£249',
   },
 } as const;
@@ -185,6 +218,11 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
   const [loggedIn, setLoggedIn] = useState(false);
   useEffect(() => { try { setLoggedIn(!!window.localStorage.getItem('token')); } catch { setLoggedIn(false); } }, []);
   const [phase, setPhase] = useState(-1); // -1: sadece "bağlanılıyor"; 0+: erişildikten SONRA fazlar
+  // (ANA SAYFA LEAD — TAM RAPOR) e-posta karşılığı gerçek Basit Tarama PDF'i (ödeme/kayıt/admin-onayı YOK).
+  const [email, setEmail] = useState('');
+  const [reportState, setReportState] = useState<'idle' | 'busy' | 'ready' | 'error'>('idle');
+  const [reportUrl, setReportUrl] = useState<string | null>(null);
+  const [reportErr, setReportErr] = useState<string | null>(null);
   const [reachFail, setReachFail] = useState(false);
   const [result, setResult] = useState<InstantScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -215,7 +253,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
         await sleep(650);
       } else {
         // Erişildi → kontroller GERÇEKTEN çalıştı; fazları hızlıca göster.
-        for (let p = 0; p < PHASES.length; p++) { setPhase(p); await sleep(300); }
+        for (let p = 0; p < PHASES.length; p++) { setPhase(p); await sleep(750); }
         await sleep(250);
       }
       setResult(r); setState('done');
@@ -227,7 +265,25 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
     }
   }
 
-  function again() { setState('idle'); setResult(null); setError(null); setReachFail(false); }
+  function again() {
+    setState('idle'); setResult(null); setError(null); setReachFail(false);
+    setEmail(''); setReportState('idle'); setReportErr(null);
+    if (reportUrl) { URL.revokeObjectURL(reportUrl); setReportUrl(null); }
+  }
+
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  async function submitReport(host: string, logId?: string) {
+    const em = email.trim();
+    if (!EMAIL_RE.test(em)) { setReportErr(L.emailInvalid); return; }
+    setReportState('busy'); setReportErr(null);
+    try {
+      const blob = await api.instantScanReport({ logId, url: host, email: em, region: regionCode });
+      if (reportUrl) URL.revokeObjectURL(reportUrl);
+      setReportUrl(URL.createObjectURL(blob)); setReportState('ready');
+    } catch (e) {
+      setReportErr((e as Error)?.message || L.reportErrMsg); setReportState('error');
+    }
+  }
 
   const ok = result && result.status === 'ok' ? result : null;
   const highScore = !!ok && ok.score >= 85;
@@ -343,6 +399,33 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                 </ul>
               )}
 
+              {/* (LEAD) TAM RAPOR — e-posta karşılığı GERÇEK Basit Tarama PDF'i. Ödeme/kayıt/admin-onayı YOK. */}
+              <div className="mt-4 rounded-card border-2 border-brand-200 bg-brand-50/60 p-4">
+                {reportState === 'ready' && reportUrl ? (
+                  <div className="text-center">
+                    <p className="text-sm font-extrabold text-brand">{L.reportReady}</p>
+                    <a href={reportUrl} download={`cybertestify-basit-tarama-${ok.host}.pdf`} className="btn-primary mt-3 w-full justify-center">{L.reportDownload}</a>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm font-extrabold text-brand">{L.emailTitle}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-ink-soft">{L.emailSub}</p>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitReport(ok.host, ok.logId); } }}
+                        placeholder={L.emailPh} aria-label={L.emailTitle} disabled={reportState === 'busy'}
+                        className="field flex-1"
+                      />
+                      <button type="button" onClick={() => submitReport(ok.host, ok.logId)} disabled={reportState === 'busy'} className="btn-primary shrink-0 justify-center disabled:cursor-not-allowed disabled:opacity-60">
+                        {reportState === 'busy' ? L.emailBusy : L.emailBtn}
+                      </button>
+                    </div>
+                    {reportErr && <p className="mt-2 text-xs font-medium text-red-600">{reportErr}</p>}
+                  </>
+                )}
+              </div>
+
               {ok.clean ? (
                 /* TEMİZ (bulgu yok) — pasif katman temiz; aktif CTA. */
                 <div className="mt-4 rounded-card border border-brand-200 bg-brand-50/60 p-4">
@@ -357,30 +440,13 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                   </div>
                 </div>
               ) : (
-                /* BULGU VAR — kilitli-liste efekti + değer odaklı + dinamik CTA */
-                <div className="relative mt-4 overflow-hidden rounded-card border-2 border-dashed border-accent/60 bg-accent-soft/25 p-4">
-                  <div aria-hidden className="pointer-events-none absolute inset-x-4 bottom-3 space-y-2 opacity-50 blur-[3px]">
-                    {['bg-red-200', 'bg-orange-200', 'bg-amber-200'].map((c, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <span className={`h-4 w-10 rounded-pill ${c}`} />
-                        <span className="h-3 flex-1 rounded-full bg-ink/15" />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="relative">
-                    <p className="flex items-center gap-1.5 text-sm font-extrabold text-brand">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-pulse" aria-hidden><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
-                      {ok.locked > 0 ? L.lockedMore(ok.locked) : L.lockedNoMore}
-                    </p>
-                    <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{L.lockedBody}</p>
-                    <div className="mt-3 flex flex-col items-stretch gap-2">
-                      {highScore ? (
-                        <Link href={effActiveHref} className="btn-primary justify-center">{L.ctaDeepen(pxActive)}</Link>
-                      ) : (
-                        <Link href={effPassiveHref} className="btn-primary justify-center">{L.ctaReport(pxBasit)}</Link>
-                      )}
-                      <Link href={packagesHref} className="text-center text-xs font-semibold text-accent-600 hover:underline">{L.allPackages}</Link>
-                    </div>
+                /* BULGU VAR — rapor artık ÜCRETSİZ (yukarıda e-posta ile); burada yalnız DERİNLEŞTİR önerisi. */
+                <div className="mt-4 rounded-card border border-accent/40 bg-accent-soft/25 p-4">
+                  <p className="text-sm font-extrabold text-brand">{L.deeperTitle}</p>
+                  <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{L.deeperBody}</p>
+                  <div className="mt-3 flex flex-col items-stretch gap-2">
+                    <Link href={effActiveHref} className="btn-primary justify-center">{L.ctaDeepen(pxActive)}</Link>
+                    <Link href={packagesHref} className="text-center text-xs font-semibold text-accent-600 hover:underline">{L.allPackages}</Link>
                   </div>
                 </div>
               )}

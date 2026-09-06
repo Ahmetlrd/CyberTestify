@@ -52,6 +52,7 @@ export type InstantScanResult =
       locked: number;
       clean: boolean;
       httpsOk: boolean;
+      logId?: string;
     };
 
 function authHeaders(): Record<string, string> {
@@ -160,6 +161,12 @@ export const api = {
   // (ÜCRETSİZ ANLIK ÖN-TARAMA) public, pasif teaser. turnstileToken = bot doğrulaması; website = honeypot.
   instantScan: (url: string, turnstileToken?: string, website?: string, region?: string) =>
     request<InstantScanResult>('/instant-scan', { method: 'POST', body: JSON.stringify({ url, turnstileToken, website, region }) }),
+  // (ANA SAYFA LEAD) e-posta + host → GERÇEK Basit Tarama raporu PDF blob'u. Ödeme/kayıt/admin-onayı YOK.
+  instantScanReport: async (body: { logId?: string; url: string; email: string; region?: string }): Promise<Blob> => {
+    const res = await fetch(`${API_URL}/instant-scan/report`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error((b && b.error) || 'Rapor alınamadı.'); }
+    return res.blob();
+  },
   // (0) E-posta dogrulama
   me: () => request<{ email: string; emailVerified: boolean }>('/auth/me'),
   verifyEmail: (code: string) =>
