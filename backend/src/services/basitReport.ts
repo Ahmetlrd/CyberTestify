@@ -94,17 +94,27 @@ function hostMatches(host: string, cn: string | undefined, san: string[]): boole
   });
 }
 
-// --- HTTP basliklari + HTML'i dogrudan cek (ÇÖZÜLEN protokol üzerinden: https→http fallback) ---
-async function fetchHome(origin: string): Promise<{ ok: boolean; status?: number; headers: Map<string, string>; html: string }> {
+// Varsayilan (SEFFAF) kimlik: hedefin logunda kim tarattigi gorunur.
+const HONEST_HEADERS = { 'user-agent': 'CyberTestify-PassiveCheck/1.0', accept: 'text/html,*/*' } as const;
+// (Bot-korumasi hafif by-pass) Bazi WAF'lar (Cloudflare/Akamai) tarayici-OLMAYAN UA'yi 403/503 ile eler.
+// Dürüst UA ile 403/503 alirsak AYNI URL icin 1 KEZ gercekci tarayici basliklariyla tekrar deneriz.
+// KAPSAM: yalniz basit UA-filtresini asar. JS-challenge / CAPTCHA cozumu / headless / proxy-IP rotasyonu YOK
+// → ikinci deneme de 403/503 ise DÜRÜSTCE "erisim engellendi" olarak raporlanir (200 vb. durumlar el degmez).
+const BROWSER_HEADERS = {
+  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'accept-language': 'tr-TR,tr;q=0.9,en;q=0.8',
+  'upgrade-insecure-requests': '1',
+} as const;
+
+type HomeResult = { ok: boolean; status?: number; headers: Map<string, string>; html: string };
+
+async function fetchOnce(origin: string, reqHeaders: Record<string, string>): Promise<HomeResult> {
   const headers = new Map<string, string>();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(`${origin}/`, {
-      signal: ctrl.signal,
-      redirect: 'follow',
-      headers: { 'user-agent': 'CyberTestify-PassiveCheck/1.0', accept: 'text/html,*/*' },
-    });
+    const res = await fetch(`${origin}/`, { signal: ctrl.signal, redirect: 'follow', headers: reqHeaders });
     res.headers.forEach((v, k) => headers.set(k.toLowerCase(), v));
     let html = '';
     try {
@@ -117,6 +127,18 @@ async function fetchHome(origin: string): Promise<{ ok: boolean; status?: number
   } finally {
     clearTimeout(timer);
   }
+}
+
+// --- HTTP basliklari + HTML'i dogrudan cek (ÇÖZÜLEN protokol üzerinden: https→http fallback) ---
+async function fetchHome(origin: string): Promise<HomeResult> {
+  const first = await fetchOnce(origin, { ...HONEST_HEADERS });
+  // Bot-korumasi eledi (403/503) → 1 kez gercekci tarayici basliklariyla tekrar dene.
+  if (first.ok && (first.status === 403 || first.status === 503)) {
+    const retry = await fetchOnce(origin, { ...BROWSER_HEADERS });
+    // Engel asildiysa (artik 403/503 degil) retry sonucunu kullan; degilse DÜRÜST ilk sonucu koru.
+    if (retry.ok && retry.status !== 403 && retry.status !== 503) return retry;
+  }
+  return first;
 }
 
 export async function collectEvidence(host: string): Promise<Evidence> {
