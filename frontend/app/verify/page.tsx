@@ -281,10 +281,15 @@ const HISTORY_PREVIEW = 3;
 
 // Kullanıcı "https://www.ornek.com/path" gibi girebilir; backend'le AYNI kuralla çıplak host'a
 // indir (şema/www/port/path at) ki kullanıcı ne ekleneceğini önceden görsün. (Asıl doğrulama
+// (Türkçe alan adı düzeltmesi — backend foldTurkishDomainChars ile AYNI) Türkçe/BÜYÜK harfle yazılan
+// marka alan adlarını ASCII'ye katla (İ/ı→i, ş→s, ç→c, ğ→g, ö→o, ü→u): "İpekbilgisayar"→"ipekbilgisayar",
+// "meşe"→"mese". Türkçe-DIŞI karakterler dokunulmaz (aşağıda punycode korur). toLowerCase'ten ÖNCE.
+const TR_ASCII: Record<string, string> = { 'ç':'c','Ç':'c','ğ':'g','Ğ':'g','ı':'i','İ':'i','ö':'o','Ö':'o','ş':'s','Ş':'s','ü':'u','Ü':'u' };
+function foldTurkishDomainChars(h: string): string { return h.replace(/[çÇğĞıİöÖşŞüÜ]/g, (c) => TR_ASCII[c] ?? c); }
+
 // backend'de normalizeHostname ile tekrar yapılır — bu yalnız önizleme/UX.)
 function previewHostname(input: string): string {
-  return (input ?? '')
-    .trim()
+  return foldTurkishDomainChars((input ?? '').trim())
     .toLowerCase()
     .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
     .replace(/^[^/@]*@/, '')

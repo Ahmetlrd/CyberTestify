@@ -6,6 +6,7 @@ import { prisma } from '../db.js';
 import { generateBasitReport } from '../services/basitReport.js';
 import { renderReportPdf } from '../services/pdf.js';
 import { getPackageDef, localizedPackage } from '../services/scanPackages.js';
+import { foldTurkishDomainChars } from '../services/verification.js';
 
 /**
  * (ÜCRETSİZ ANLIK ÖN-TARAMA) PUBLIC endpoint — herkes bir URL girebilir. Bu yüzden:
@@ -44,7 +45,7 @@ function cacheReport(logId: string, r: CachedReport): void {
 }
 
 function normalizeHost(raw: string): string | null {
-  let u = raw.trim();
+  let u = foldTurkishDomainChars(raw.trim());
   if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
   let host: string;
   try {

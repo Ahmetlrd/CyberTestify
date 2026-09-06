@@ -41,8 +41,25 @@ const KNOWN_PUBLIC_TEST_TARGETS = new Set<string>([
  * whitelist eşleşmesi HEP bu normalize edilmiş değer üzerinden yapılır ki "https://"/"www." yüzünden
  * "Ekle ve doğrula" reddedilmesin ve yanlış DNS-TXT adı istenmesin.
  */
+const TR_ASCII: Record<string, string> = {
+  'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g', 'ı': 'i', 'İ': 'i',
+  'ö': 'o', 'Ö': 'o', 'ş': 's', 'Ş': 's', 'ü': 'u', 'Ü': 'u',
+};
+/**
+ * (Türkçe alan adı düzeltmesi) Kullanıcılar marka/isim alan adını Türkçe harf ya da BÜYÜK harfle
+ * yazabilir (ör. "İpekbilgisayar", "meşe"); OYSA bu alan adları neredeyse her zaman ASCII kayıtlıdır
+ * (ipekbilgisayar.com, mese.com). Türkçe'ye ÖZGÜ harfleri ASCII karşılığına katlarız (İ/ı→i, ş→s, ç→c,
+ * ğ→g, ö→o, ü→u). DİKKAT: bu bir TAHMİN — çok nadir de olsa gerçek bir IDN (ör. güneş.com.tr = xn--...)
+ * yerine ASCII'ye katlanabilir; TR pazarında ASCII baskın olduğu için bilinçli tercih. Türkçe-DIŞI
+ * karakterler (Çince/Arapça/…) DOKUNULMAZ → sonraki punycode adımı onları IDN olarak korur.
+ * toLowerCase()'ten ÖNCE çağrılmalı: JS'te 'İ'.toLowerCase() birleşik-noktalı bozuk çıktı verir.
+ */
+export function foldTurkishDomainChars(h: string): string {
+  return h.replace(/[çÇğĞıİöÖşŞüÜ]/g, (c) => TR_ASCII[c] ?? c);
+}
+
 export function normalizeHostname(input: string): string {
-  let h = (input ?? '').trim().toLowerCase();
+  let h = foldTurkishDomainChars((input ?? '').trim()).toLowerCase();
   h = h.replace(/^[a-z][a-z0-9+.-]*:\/\//, ''); // şema (http:// https:// vs.)
   h = h.replace(/^[^/@]*@/, '');                // user:pass@ (varsa)
   h = h.replace(/[/?#].*$/, '');                // path / query / fragment

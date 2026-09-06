@@ -8,6 +8,7 @@ import { prisma } from '../db.js';
 import { zodError } from '../httpErrors.js';
 import { requireBeta, BETA_TOKEN_SCOPE } from '../middleware/beta.js';
 import { suggestPricingForHost, s1PriceForHost } from '../services/pricingModel.js';
+import { foldTurkishDomainChars } from '../services/verification.js';
 
 export const betaRouter = Router();
 
@@ -58,7 +59,8 @@ const estimateSchema = z.object({ domain: z.string().min(3).max(255) });
 
 /** Public alan adı + SSRF/iç-ağ reddi (instant.ts ile aynı disiplin). */
 function normalizeHost(raw: string): string | null {
-  const u = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  const raw2 = foldTurkishDomainChars(raw.trim());
+  const u = /^https?:\/\//i.test(raw2) ? raw2 : `https://${raw2}`;
   let host: string;
   try { host = new URL(u).hostname.toLowerCase(); } catch { return null; }
   if (!/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(host)) return null;
