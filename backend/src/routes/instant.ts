@@ -31,6 +31,18 @@ function im(region: string | undefined, tr: string, de: string, en: string): str
 // Aynı IP'den ANLIK OLARAK yalnız 1 tarama (altyapıyı DDoS aracı yapmaya izin verme).
 const inFlight = new Set<string>();
 
+// (ANA SAYFA — GERÇEK BASİT TARAMA) Ücretsiz test artık teaser skoru + TAM Basit Tarama'yı birlikte koşar
+// (gerçek süre, gerçekçi). Üretilen rapor markdown'ı logId ile kısa süre bellekte tutulur → "Raporu Gör"
+// adımı YENİDEN taramaz, yalnız PDF'e çevirir (hız + tutarlılık). TTL 20dk; en fazla 200 kayıt (bellek koruması).
+type CachedReport = { md: string; fix: string; host: string; exp: number };
+const reportCache = new Map<string, CachedReport>();
+const REPORT_TTL_MS = 20 * 60 * 1000;
+function cacheReport(logId: string, r: CachedReport): void {
+  if (reportCache.size > 200) { const now = Date.now(); for (const [k, v] of reportCache) if (v.exp < now) reportCache.delete(k); }
+  if (reportCache.size > 200) reportCache.delete(reportCache.keys().next().value as string);
+  reportCache.set(logId, r);
+}
+
 function normalizeHost(raw: string): string | null {
   let u = raw.trim();
   if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
@@ -95,6 +107,15 @@ instantRouter.post('/', async (req, res) => {
       });
       logId = row.id;
     } catch { /* log best-effort */ }
+    // (GERÇEK BASİT TARAMA) 'ok' ise TAM Basit Tarama raporunu ŞİMDİ üret (gerçek çok-sayfa tarama → gerçek
+    // süre) ve logId ile cache'le. "Raporu Gör" adımı bunu kullanır (yeniden taramaz). Best-effort; hata
+    // teaser'ı bozmaz (o durumda rapor adımı yeniden üretir).
+    if (result.status === 'ok' && logId) {
+      try {
+        const rep = await generateBasitReport(host, lang);
+        if (rep) cacheReport(logId, { md: rep.findings, fix: rep.fixText, host, exp: Date.now() + REPORT_TTL_MS });
+      } catch { /* rapor adımında yeniden denenir */ }
+    }
     return res.json({ host, ...result, logId });
   } catch {
     return res.status(500).json({ error: im(region, 'Tarama şu an tamamlanamadı. Lütfen tekrar deneyin.', 'Der Scan konnte derzeit nicht abgeschlossen werden. Bitte versuchen Sie es erneut.', 'The scan could not be completed right now. Please try again.') });
@@ -139,14 +160,22 @@ instantRouter.post('/report', async (req, res) => {
   } catch { /* best-effort */ }
 
   try {
-    const report = await generateBasitReport(host, lang);
-    if (!report) return res.status(422).json({ error: im(region, 'Rapor şu an üretilemedi. Lütfen tekrar deneyin.', 'Der Bericht konnte derzeit nicht erstellt werden. Bitte erneut versuchen.', 'The report could not be generated right now. Please try again.') });
+    // (CACHE) Tarama sırasında üretilen rapor varsa YENİDEN TARAMA — yalnız PDF'e çevir. Yoksa (süresi
+    // dolmuş/farklı IP) taze üret.
+    const cached = logId ? reportCache.get(logId) : undefined;
+    let md: string, fix: string;
+    if (cached && cached.host === host && cached.exp > Date.now()) { md = cached.md; fix = cached.fix; }
+    else {
+      const report = await generateBasitReport(host, lang);
+      if (!report) return res.status(422).json({ error: im(region, 'Rapor şu an üretilemedi. Lütfen tekrar deneyin.', 'Der Bericht konnte derzeit nicht erstellt werden. Bitte erneut versuchen.', 'The report could not be generated right now. Please try again.') });
+      md = report.findings; fix = report.fixText;
+    }
     const packageName = localizedPackage(getPackageDef('basit_tarama'), lang).displayName;
     // AI Çözüm Önerileri (fixText) KİLİTLİ — ücretli eklenti; ücretsiz raporda teaser olarak kilitli görünür.
     const pdf = await renderReportPdf(
-      report.findings,
+      md,
       { hostname: host, packageName, packageKey: 'basit_tarama', createdAt: new Date(), locale: lang },
-      { fixMarkdown: report.fixText, fixLocked: true },
+      { fixMarkdown: fix, fixLocked: true },
     );
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('X-Robots-Tag', 'noindex, nofollow');

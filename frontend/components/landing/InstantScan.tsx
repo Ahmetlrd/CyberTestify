@@ -48,7 +48,7 @@ const IS = {
     emailTitle: 'Tam raporu görün — e-postanızı yazın',
     emailSub: 'Gerçek zamanlı Basit Tarama raporunuzu PDF olarak hemen indirin. Kart gerekmez.',
     emailPh: 'ornek@sirket.com',
-    emailBtn: 'Raporu Hazırla',
+    emailBtn: 'Raporu Gör',
     emailBusy: 'Raporunuz hazırlanıyor…',
     emailInvalid: 'Geçerli bir e-posta adresi girin.',
     reportReady: 'Raporunuz hazır 👇',
@@ -95,7 +95,7 @@ const IS = {
     emailTitle: 'Vollständigen Bericht ansehen — E-Mail eingeben',
     emailSub: 'Laden Sie Ihren Echtzeit-Basis-Scan-Bericht sofort als PDF herunter. Keine Karte nötig.',
     emailPh: 'name@firma.de',
-    emailBtn: 'Bericht erstellen',
+    emailBtn: 'Bericht ansehen',
     emailBusy: 'Ihr Bericht wird erstellt…',
     emailInvalid: 'Bitte geben Sie eine gültige E-Mail-Adresse ein.',
     reportReady: 'Ihr Bericht ist fertig 👇',
@@ -142,7 +142,7 @@ const IS = {
     emailTitle: 'See the full report — enter your e-mail',
     emailSub: 'Download your real-time Basic Scan report as a PDF right away. No card needed.',
     emailPh: 'you@company.com',
-    emailBtn: 'Prepare report',
+    emailBtn: 'See the report',
     emailBusy: 'Preparing your report…',
     emailInvalid: 'Enter a valid e-mail address.',
     reportReady: 'Your report is ready 👇',
@@ -245,19 +245,24 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
     if (!url.trim()) { setError(L.errDomain); return; }
     if (!token) { setError(L.errToken); return; }
     setState('scanning');
+    // (GERÇEK TARAMA — terminal) Fazları GERÇEK Basit Tarama SÜRESİNCE ilerlet: yanıt gelene kadar her ~850ms
+    // bir satır büyür (son fazda bekler). Yanıt gelince durur. Böylece süre sahte değil, gerçek taramaya bağlı.
+    let advanced = -1;
+    const phaseTimer = setInterval(() => { advanced = Math.min(advanced + 1, PHASES.length - 1); setPhase(advanced); }, 850);
     try {
       const r = await api.instantScan(url.trim(), token, website, regionCode);
-      // (DÜRÜSTLÜK) Ulaşılamadıysa: SADECE "bağlanılıyor" gösterildi; sahte faz ilerlemesi YOK.
+      clearInterval(phaseTimer);
+      // (DÜRÜSTLÜK) Ulaşılamadı/erişilemedi → "bağlanılıyor"a dön, sahte tamamlanma yok.
       if (r.status === 'unreachable' || r.status === 'access_error') {
-        setReachFail(true);
+        setReachFail(true); setPhase(-1);
         await sleep(650);
       } else {
-        // Erişildi → kontroller GERÇEKTEN çalıştı; fazları hızlıca göster.
-        for (let p = 0; p < PHASES.length; p++) { setPhase(p); await sleep(750); }
-        await sleep(250);
+        setPhase(PHASES.length - 1); // tüm adımlar tamamlandı
+        await sleep(300);
       }
       setResult(r); setState('done');
     } catch (err: any) {
+      clearInterval(phaseTimer);
       setError(err?.message || L.errScan);
       setState('error');
     } finally {
