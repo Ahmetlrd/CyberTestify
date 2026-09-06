@@ -687,7 +687,14 @@ adminRouter.get('/scope-violations', async (req, res) => {
 adminRouter.get('/instant-scan-logs', async (req, res) => {
   const { skip, take, page, pageSize } = paginate(req.query);
   const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
-  const where = q ? { host: { contains: q } } : {};
+  const status = typeof req.query.status === 'string' && ['ok', 'unreachable', 'access_error'].includes(req.query.status) ? req.query.status : '';
+  const region = typeof req.query.region === 'string' && ['tr', 'de', 'en'].includes(req.query.region) ? req.query.region : '';
+  const leadOnly = req.query.lead === '1' || req.query.lead === 'true';
+  const where: Record<string, unknown> = {};
+  if (q) where.host = { contains: q };
+  if (status) where.status = status;
+  if (region) where.region = region;
+  if (leadOnly) where.email = { not: null };
   const [total, rows, uniqueHosts, last24h] = await Promise.all([
     prisma.instantScanLog.count({ where }),
     prisma.instantScanLog.findMany({ where, skip, take, orderBy: { createdAt: 'desc' } }),
@@ -695,6 +702,12 @@ adminRouter.get('/instant-scan-logs', async (req, res) => {
     prisma.instantScanLog.count({ where: { createdAt: { gte: new Date(Date.now() - 24 * 3600 * 1000) } } }),
   ]);
   res.json({ page, pageSize, total, uniqueHosts, last24h, items: rows });
+});
+
+// (ÜCRETSİZ TARAMA LOGU — SİL) Tek kayıt sil (test/çöp temizliği).
+adminRouter.delete('/instant-scan-logs/:id', async (req, res) => {
+  await prisma.instantScanLog.delete({ where: { id: req.params.id } }).catch(() => {});
+  res.json({ ok: true });
 });
 
 // --- Sistem sagligi -----------------------------------------------------------
