@@ -208,6 +208,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // (TÜRKÇE-LEAK FIX) Bölge-önekli sayfada (/de, /en) InstantScan dili URL'den GELMELİ; aksi halde
 // cookie'ye/tr-default'a düşüp SSR'da Türkçe metin basıyordu (ör. "Doğrulama bekleniyor…" → /de leak).
 // langProp verilirse (ana sayfa URL bölgesinden) kesin kullanılır; verilmezse cookie'ye düşülür.
+// (KALICILIK) Ücretsiz tarama sonucu tarayıcıda (localStorage) kısa süre saklanır → sayfa yenilense/
+// yanlışlıkla kapatılsa da sonuç + rapor erişimi KAYBOLMAZ. 1 saat TTL; sadece bu ziyaretçinin cihazında,
+// sunucuya gitmez. "Başka bir site tara" ile temizlenir.
+const STORE_KEY = 'ct_instant_scan_v1';
+const STORE_TTL_MS = 60 * 60 * 1000;
+
 export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceBasit: priceBasitProp, priceActive: priceActiveProp }: { lang?: 'tr' | 'de' | 'en'; regionCode?: string; priceBasit?: string | null; priceActive?: string | null } = {}) {
   const [url, setUrl] = useState('');
   const [website, setWebsite] = useState(''); // HONEYPOT
@@ -217,6 +223,19 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
   // itmesin → /paketler'e yönlendir; login İSE akış eskisi gibi (verify) devam eder. SSR uyumu için mount'ta okunur.
   const [loggedIn, setLoggedIn] = useState(false);
   useEffect(() => { try { setLoggedIn(!!window.localStorage.getItem('token')); } catch { setLoggedIn(false); } }, []);
+  // (KALICILIK) Mount'ta son sonucu geri yükle (TTL içindeyse). Rapor blob'u oturuma özeldir → geri
+  // gelmez; ama sonuç + e-posta korunur, kullanıcı "Raporu Gör"e tekrar basınca rapor yeniden gelir.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { result?: InstantScanResult; email?: string; ts?: number };
+      if (!saved?.result || !saved.ts || Date.now() - saved.ts > STORE_TTL_MS) { window.localStorage.removeItem(STORE_KEY); return; }
+      setResult(saved.result);
+      if (saved.email) setEmail(saved.email);
+      setState('done');
+    } catch { /* noop */ }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [phase, setPhase] = useState(-1); // -1: sadece "bağlanılıyor"; 0+: erişildikten SONRA fazlar
   // (ANA SAYFA LEAD — TAM RAPOR) e-posta karşılığı gerçek Basit Tarama PDF'i (ödeme/kayıt/admin-onayı YOK).
   const [email, setEmail] = useState('');
@@ -261,6 +280,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
         await sleep(300);
       }
       setResult(r); setState('done');
+      try { window.localStorage.setItem(STORE_KEY, JSON.stringify({ result: r, email: '', ts: Date.now() })); } catch { /* noop */ }
     } catch (err: any) {
       clearInterval(phaseTimer);
       setError(err?.message || L.errScan);
@@ -274,6 +294,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
     setState('idle'); setResult(null); setError(null); setReachFail(false);
     setEmail(''); setReportState('idle'); setReportErr(null);
     if (reportUrl) { URL.revokeObjectURL(reportUrl); setReportUrl(null); }
+    try { window.localStorage.removeItem(STORE_KEY); } catch { /* noop */ }
   }
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -285,6 +306,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
       const blob = await api.instantScanReport({ logId, url: host, email: em, region: regionCode });
       if (reportUrl) URL.revokeObjectURL(reportUrl);
       setReportUrl(URL.createObjectURL(blob)); setReportState('ready');
+      try { window.localStorage.setItem(STORE_KEY, JSON.stringify({ result, email: em, ts: Date.now() })); } catch { /* noop */ }
     } catch (e) {
       setReportErr((e as Error)?.message || L.reportErrMsg); setReportState('error');
     }
