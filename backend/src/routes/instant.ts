@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { runInstantScan } from '../services/instantScan.js';
 import { verifyTurnstile } from '../services/turnstile.js';
+import { prisma } from '../db.js';
 
 /**
  * (ÜCRETSİZ ANLIK ÖN-TARAMA) PUBLIC endpoint — herkes bir URL girebilir. Bu yüzden:
@@ -75,6 +76,19 @@ instantRouter.post('/', async (req, res) => {
   try {
     const lang: 'tr' | 'de' | 'en' = region === 'de' ? 'de' : region === 'en' ? 'en' : 'tr';
     const result = await runInstantScan(host, lang);
+    // (ÜCRETSİZ TARAMA LOGU) Girilen alan adı + sonucu admin panelinde görünsün (lead/abuse takibi).
+    // Best-effort: hata taramayı ASLA bozmaz. Yalnız teknik alan; müşteri/rapor verisi yok.
+    try {
+      await prisma.instantScanLog.create({
+        data: {
+          host, status: result.status, region: lang, ip,
+          score: result.status === 'ok' ? result.score : null,
+          grade: result.status === 'ok' ? result.grade : null,
+          findings: result.status === 'ok' ? result.total : null,
+          httpStatus: result.status === 'access_error' ? result.httpStatus : null,
+        },
+      });
+    } catch { /* log best-effort */ }
     return res.json({ host, ...result });
   } catch {
     return res.status(500).json({ error: im(region, 'Tarama şu an tamamlanamadı. Lütfen tekrar deneyin.', 'Der Scan konnte derzeit nicht abgeschlossen werden. Bitte versuchen Sie es erneut.', 'The scan could not be completed right now. Please try again.') });

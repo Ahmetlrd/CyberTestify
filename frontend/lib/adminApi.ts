@@ -113,6 +113,8 @@ export const adminApi = {
   linkedinMakeCarousel: (body: { title: string; slides: Array<Record<string, unknown>> }) =>
     areq<{ ok: boolean; id: string; url: string; thumbnailUrl: string; bytes: number; pages: number }>('/admin/linkedin/assets/carousel', { method: 'POST', body: JSON.stringify(body) }),
   scopeViolations: (page = 1) => areq<Page<any>>(`/admin/scope-violations?page=${page}`),
+  instantScanLogs: (page = 1, q = '') =>
+    areq<{ page: number; pageSize: number; total: number; uniqueHosts: number; last24h: number; items: Array<{ id: string; host: string; status: string; score: number | null; grade: string | null; findings: number | null; httpStatus: number | null; region: string; ip: string | null; createdAt: string }> }>(`/admin/instant-scan-logs?page=${page}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
   // (Fatura talebi — MANUEL) Vedat fatura bilgilerini + fiyatı görür, durumu işaretler.
   invoiceRequests: (status = '') =>
     areq<{ total: number; pendingCount: number; items: any[] }>(`/admin/invoice-requests${status ? `?status=${status}` : ''}`),

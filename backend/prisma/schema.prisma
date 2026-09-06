@@ -726,21 +726,37 @@ model LinkedinPost {
   @@index([status, createdAt])
 }
 
-/// (LINKEDIN MEDYA) Paylasimlarda kullanilan PDF carousel / gorsel dosyalari. Buffer -> LinkedIn
-/// akisi medyayi PUBLIC bir URL'den ceker; bu yuzden bayt DB'de tutulur ve /linkedin-assets/:id
-/// ucundan kimlik dogrulamasiz servis edilir (yayinlanacak icerik zaten herkese acik olacaktir).
+// (ÜCRETSİZ TARAMA LOGU) Ana sayfadaki anlık ön-tarama kutusuna girilen HER alan adı + sonucu — admin
+// panelinde görünür (lead/talep takibi + kötüye kullanım tespiti). Best-effort yazılır; tarama akışını
+// ASLA bozmaz. Yalnız teknik alan (host/sonuç/bölge/ip) tutulur; müşteri/rapor verisi DEĞİL.
+model InstantScanLog {
+  id         String   @id @default(uuid())
+  host       String // girilen (normalize) alan adı
+  status     String // ok | unreachable | access_error
+  score      Int? // status=ok ise 0-100
+  grade      String? // status=ok ise A-F
+  findings   Int? // status=ok ise toplam bulgu sayısı
+  httpStatus Int? // status=access_error ise (403/401/5xx)
+  region     String   @default("tr") // tr | de | en
+  ip         String? // kötüye kullanım/tekrar-tarama tespiti (admin-only)
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// (LINKEDIN MEDYA) PDF carousel / görsel dosyaları. TABLO zaten migration'larla (20260903090000_linkedin_assets
+// + _thumb) oluşturuldu; bu model schema.prisma'da EKSİKTİ (drift) — Prisma client'in erişimci üretmesi için
+// eklendi. Yeni migration GEREKMEZ (kolonlar prod'la birebir). id app-tarafında (@default) üretilir.
 model LinkedinAsset {
-  id        String   @id @default(uuid())
-  kind      String // 'pdf' (dokuman carousel) | 'image'
-  mime      String
-  title     String // LinkedIn dokuman basligi (carousel ust etiketi)
-  data      Bytes
-  bytes     Int
-  pages     Int? // carousel sayfa sayisi (pdf)
-  /// (ZORUNLU) Buffer DocumentAssetInput.thumbnailUrl alani String! — her PDF'in kapak PNG'si
-  /// ayri bir asset olarak uretilir ve id'si burada tutulur.
-  thumbnailId String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  kind        String // pdf | image
+  mime        String
+  title       String
+  data        Bytes
+  bytes       Int
+  pages       Int?
+  thumbnailId String? // pdf ise kapak PNG asset id'si
+  createdAt   DateTime @default(now())
 
   @@index([kind, createdAt])
 }

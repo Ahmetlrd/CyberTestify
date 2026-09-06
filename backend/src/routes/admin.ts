@@ -683,6 +683,20 @@ adminRouter.get('/scope-violations', async (req, res) => {
   });
 });
 
+// --- (ÜCRETSİZ TARAMA LOGU) Ana sayfada girilen her alan adı + sonucu -----------------------------
+adminRouter.get('/instant-scan-logs', async (req, res) => {
+  const { skip, take, page, pageSize } = paginate(req.query);
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
+  const where = q ? { host: { contains: q } } : {};
+  const [total, rows, uniqueHosts, last24h] = await Promise.all([
+    prisma.instantScanLog.count({ where }),
+    prisma.instantScanLog.findMany({ where, skip, take, orderBy: { createdAt: 'desc' } }),
+    prisma.instantScanLog.findMany({ distinct: ['host'], select: { host: true } }).then((r) => r.length),
+    prisma.instantScanLog.count({ where: { createdAt: { gte: new Date(Date.now() - 24 * 3600 * 1000) } } }),
+  ]);
+  res.json({ page, pageSize, total, uniqueHosts, last24h, items: rows });
+});
+
 // --- Sistem sagligi -----------------------------------------------------------
 async function pentagiHealthy(timeoutMs = 2500): Promise<boolean> {
   try {

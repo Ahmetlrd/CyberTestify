@@ -13,6 +13,7 @@ const NAV = [
   { href: '/admin/redteam', label: 'Red Team' },
   { href: '/admin/invoices', label: 'Faturalar' },
   { href: '/admin/scope-violations', label: 'Kapsam İhlalleri' },
+  { href: '/admin/free-scans', label: 'Ücretsiz Taramalar' },
   { href: '/admin/report-access', label: 'Rapor Erişim' },
   { href: '/admin/blog', label: 'Blog' },
   { href: '/admin/photos', label: 'Fotolar' },
