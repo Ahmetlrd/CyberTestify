@@ -36,6 +36,11 @@ const IS = {
     cleanBody: <>Dış yüzeyde öne çıkan bir eksik bulunmadı. Ancak bu tarama yalnızca <strong>pasif dış katmanı</strong> görür; gerçek risk çoğu zaman <strong>login-sonrası, aktif zafiyetler ve iş mantığında</strong> saklıdır — bunları ancak <strong>aktif/kimlik-doğrulamalı</strong> testler ortaya çıkarır.</>,
     ctaDeepen: (p: string) => `Aktif Doğrulama Paketi ile Derinleştir → ${p}`,
     allPackages: 'Tüm paketleri incele →',
+    nextTitle: 'Bir sonraki adım',
+    nextSurface: 'Dış Yüzey & Yapılandırma',
+    nextSurfaceHint: 'Yapılandırma ve başlık eksiklerini derinlemesine tarar, düzeltme kodları verir.',
+    nextActive: 'Aktif Doğrulama',
+    nextActiveHint: 'Login-sonrası ve aktif zafiyetleri gerçek problarla doğrular.',
     lockedMore: (n: number) => `+${n} bulgu daha · detaylar & düzeltmeler kilitli`,
     lockedNoMore: 'Detaylar & hazır düzeltmeler kilitli',
     lockedBody: <>Her bulgunun <strong>tam detayı</strong>, <strong>platformunuza özel hazır düzeltme kodları</strong> ve<strong> indirilebilir PDF raporu</strong> kilitli.</>,
@@ -83,6 +88,11 @@ const IS = {
     cleanBody: <>An der externen Oberfläche wurde keine auffällige Schwachstelle gefunden. Dieser Scan sieht jedoch nur die <strong>passive externe Schicht</strong>; das eigentliche Risiko steckt oft in <strong>Post-Login-, aktiven Schwachstellen und der Geschäftslogik</strong> — diese deckt nur ein <strong>aktiver/authentifizierter</strong> Test auf.</>,
     ctaDeepen: (p: string) => `Mit dem Paket „Aktive Verifizierung“ vertiefen → ${p}`,
     allPackages: 'Alle Pakete ansehen →',
+    nextTitle: 'Nächster Schritt',
+    nextSurface: 'Außenfläche & Konfiguration',
+    nextSurfaceHint: 'Prüft Konfigurations- und Header-Lücken tiefgehend und liefert Fix-Codes.',
+    nextActive: 'Aktive Verifizierung',
+    nextActiveHint: 'Verifiziert Post-Login- und aktive Schwachstellen mit echten Proben.',
     lockedMore: (n: number) => `+${n} weitere Befunde · Details & Behebungen gesperrt`,
     lockedNoMore: 'Details & fertige Behebungen gesperrt',
     lockedBody: <>Die <strong>vollständigen Details</strong> jedes Befunds, <strong>auf Ihre Plattform zugeschnittene fertige Behebungscodes</strong> und der<strong> herunterladbare PDF-Bericht</strong> sind gesperrt.</>,
@@ -130,6 +140,11 @@ const IS = {
     cleanBody: <>No notable gap was found on the external surface. But this scan sees only the <strong>passive external layer</strong>; the real risk is often hidden in <strong>post-login, active vulnerabilities and business logic</strong> — only an <strong>active/authenticated</strong> test reveals those.</>,
     ctaDeepen: (p: string) => `Go deeper with the Active Verification package → ${p}`,
     allPackages: 'Browse all packages →',
+    nextTitle: 'Next step',
+    nextSurface: 'External Surface & Config',
+    nextSurfaceHint: 'Deep-scans configuration and header gaps and provides fix codes.',
+    nextActive: 'Active Verification',
+    nextActiveHint: 'Verifies post-login and active vulnerabilities with real probes.',
     lockedMore: (n: number) => `+${n} more findings · details & fixes locked`,
     lockedNoMore: 'Details & ready-made fixes locked',
     lockedBody: <>The <strong>full detail</strong> of each finding, <strong>ready-made fix code tailored to your platform</strong> and the<strong> downloadable PDF report</strong> are locked.</>,
@@ -213,6 +228,43 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // sunucuya gitmez. "Başka bir site tara" ile temizlenir.
 const STORE_KEY = 'ct_instant_scan_v1';
 const STORE_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Tarama sonrası "Bir sonraki adım" önerisi — FİYAT GÖSTERMEZ (kullanıcı isteği: fiyatı
+ * ancak tıklayıp paketler sayfasına gidince görsün). Bulguya göre sıralama değişir:
+ *  - Bulgu VARSA: önce "Dış Yüzey & Yapılandırma" (bulunan config/başlık eksiklerini derinleştirir),
+ *  - TEMİZSE: önce "Aktif Doğrulama" (pasifin ötesine, login-sonrası/aktif zafiyetlere geçer).
+ */
+function NextSteps({ clean, L, packagesHref }: { clean: boolean; L: any; packagesHref: string }) {
+  const surface = { key: 'bundle_surface', name: L.nextSurface, hint: L.nextSurfaceHint };
+  const active = { key: 'bundle_active_verify', name: L.nextActive, hint: L.nextActiveHint };
+  const options = clean ? [active, surface] : [surface, active];
+  return (
+    <div className="mt-3">
+      <p className="text-[11px] font-extrabold uppercase tracking-wide text-ink-soft/70">{L.nextTitle}</p>
+      <div className="mt-2 flex flex-col items-stretch gap-2">
+        {options.map((o, i) => (
+          <Link
+            key={o.key}
+            href={`${packagesHref}?focus=${o.key}`}
+            className={`flex items-center gap-2 rounded-card px-3 py-2.5 text-left transition ${
+              i === 0
+                ? 'bg-accent-600 text-white shadow-sm hover:brightness-105'
+                : 'border border-line bg-white text-ink hover:bg-brand-50'
+            }`}
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold">{o.name}</span>
+              <span className={`mt-0.5 block text-[11px] font-normal leading-snug ${i === 0 ? 'text-white/85' : 'text-ink-soft'}`}>{o.hint}</span>
+            </span>
+            <span aria-hidden className="shrink-0 text-lg leading-none">→</span>
+          </Link>
+        ))}
+        <Link href={packagesHref} className="mt-0.5 text-center text-xs font-semibold text-accent-600 hover:underline">{L.allPackages}</Link>
+      </div>
+    </div>
+  );
+}
 
 export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceBasit: priceBasitProp, priceActive: priceActiveProp }: { lang?: 'tr' | 'de' | 'en'; regionCode?: string; priceBasit?: string | null; priceActive?: string | null } = {}) {
   const [url, setUrl] = useState('');
@@ -461,20 +513,14 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                     {L.cleanTitle}
                   </p>
                   <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{L.cleanBody}</p>
-                  <div className="mt-3 flex flex-col items-stretch gap-2">
-                    <Link href={effActiveHref} className="btn-primary justify-center">{L.ctaDeepen(pxActive)}</Link>
-                    <Link href={packagesHref} className="text-center text-xs font-semibold text-accent-600 hover:underline">{L.allPackages}</Link>
-                  </div>
+                  <NextSteps clean L={L} packagesHref={packagesHref} />
                 </div>
               ) : (
-                /* BULGU VAR — rapor artık ÜCRETSİZ (yukarıda e-posta ile); burada yalnız DERİNLEŞTİR önerisi. */
+                /* BULGU VAR — rapor artık ÜCRETSİZ (yukarıda e-posta ile); burada bulguya göre ÇEŞİTLİ öneri (fiyat YOK). */
                 <div className="mt-4 rounded-card border border-accent/40 bg-accent-soft/25 p-4">
                   <p className="text-sm font-extrabold text-brand">{L.deeperTitle}</p>
                   <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{L.deeperBody}</p>
-                  <div className="mt-3 flex flex-col items-stretch gap-2">
-                    <Link href={effActiveHref} className="btn-primary justify-center">{L.ctaDeepen(pxActive)}</Link>
-                    <Link href={packagesHref} className="text-center text-xs font-semibold text-accent-600 hover:underline">{L.allPackages}</Link>
-                  </div>
+                  <NextSteps clean={false} L={L} packagesHref={packagesHref} />
                 </div>
               )}
 

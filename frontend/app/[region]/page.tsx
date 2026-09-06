@@ -221,7 +221,7 @@ async function Hero({ d, region }: { d: Dict; region: RegionConfig }) {
 
         {/* ÜCRETSİZ ANLIK ÖN-TARAMA — sayfanın EN ÜSTÜNDE, manşet metninin ÜSTÜNDE (kullanıcı isteği):
             ziyaretçinin ilk gördüğü ve kayıt istemeden hemen yapabileceği şey bu. */}
-        <div className="animate-fade-up mx-auto mt-8 max-w-2xl">
+        <div id="hemen-dene" className="animate-fade-up mx-auto mt-8 max-w-2xl scroll-mt-28">
           <InstantScan lang={scanLang} regionCode={region.code} priceBasit={teaser.basit} priceActive={teaser.active} />
         </div>
 
