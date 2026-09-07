@@ -1,7 +1,7 @@
 import { LegalArticle } from '../../../../components/LegalArticle';
 import { COMPANY } from '../../../../lib/company';
 
-export const metadata = { title: 'Gizlilik Politikası ve Sözleşmesi — CyberTestify', alternates: { canonical: '/legal/gizlilik' } };
+export const metadata = { title: 'Gizlilik Politikası ve Sözleşmesi — CyberTestify', alternates: { canonical: '/tr/legal/gizlilik' } };
 
 export default function Page() {
   return (

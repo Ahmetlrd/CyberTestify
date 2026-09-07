@@ -1,7 +1,7 @@
 import { LegalArticle } from '../../../../components/LegalArticle';
 import { COMPANY } from '../../../../lib/company';
 
-export const metadata = { title: 'Mesafeli Satış Sözleşmesi — CyberTestify', alternates: { canonical: '/legal/mesafeli-satis' } };
+export const metadata = { title: 'Mesafeli Satış Sözleşmesi — CyberTestify', alternates: { canonical: '/tr/legal/mesafeli-satis' } };
 
 export default function Page() {
   return (

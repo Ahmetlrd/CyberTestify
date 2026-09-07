@@ -1,7 +1,7 @@
 import { LegalArticle } from '../../../../components/LegalArticle';
 import { COMPANY } from '../../../../lib/company';
 
-export const metadata = { title: 'Ön Bilgilendirme Formu — CyberTestify', alternates: { canonical: '/legal/on-bilgilendirme' } };
+export const metadata = { title: 'Ön Bilgilendirme Formu — CyberTestify', alternates: { canonical: '/tr/legal/on-bilgilendirme' } };
 
 export default function Page() {
   return (
