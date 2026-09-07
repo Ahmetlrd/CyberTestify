@@ -252,7 +252,7 @@ function NextSteps({ clean, L, packagesHref }: { clean: boolean; L: any; package
             href={`${packagesHref}?focus=${o.key}`}
             className={`flex items-center gap-2 rounded-card px-3 py-2.5 text-left transition ${
               i === 0
-                ? 'bg-accent-600 text-white shadow-sm hover:brightness-105'
+                ? 'bg-brand text-white shadow-sm hover:bg-brand-600'
                 : 'border border-line bg-white text-ink hover:bg-brand-50'
             }`}
           >
@@ -263,7 +263,7 @@ function NextSteps({ clean, L, packagesHref }: { clean: boolean; L: any; package
             <span aria-hidden className="shrink-0 text-lg leading-none">→</span>
           </Link>
         ))}
-        <Link href={packagesHref} className="mt-0.5 text-center text-xs font-semibold text-accent-600 hover:underline">{L.allPackages}</Link>
+        <Link href={packagesHref} className="mt-0.5 text-center text-xs font-semibold text-brand hover:underline">{L.allPackages}</Link>
       </div>
     </div>
   );
@@ -386,7 +386,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
   return (
     <div className="rounded-[20px] border border-line bg-white/95 p-5 shadow-xl backdrop-blur sm:p-7">
       <div className="flex items-center gap-2">
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent-soft text-accent-600">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" strokeLinecap="round" /></svg>
         </span>
         <h2 className="text-lg font-extrabold text-brand sm:text-xl">{L.heading}</h2>
@@ -401,7 +401,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
               <input type="text" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="example.com" className="field w-full pl-[68px]" aria-label={L.aria} />
             </div>
             <input type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} className="hidden" aria-hidden />
-            <button type="submit" disabled={!token || !url.trim()} className="btn-primary shrink-0 justify-center disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="submit" disabled={!token || !url.trim()} className="btn-dark shrink-0 justify-center disabled:cursor-not-allowed disabled:opacity-60">
               {token ? L.scan : L.waiting}
             </button>
           </div>
@@ -417,13 +417,13 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
             {/* Faz 0'a (erişim) ULAŞILANA KADAR sadece bu satır. Ulaşılamazsa burada ✗ ile durur (dürüst). */}
             <div className={reachFail ? 'text-red-300' : 'text-white/85'} dir="ltr">
               {reachFail ? '✗' : '→'} {L.connecting}
-              {!reachFail && phase < 0 && <span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" />}
+              {!reachFail && phase < 0 && <span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-brand/80" />}
             </div>
             {reachFail && <div className="text-red-300/80" dir="ltr">✗ {L.unreachInline}</div>}
             {!reachFail && PHASES.map((p, i) => (
               <div key={p} className={`${i === phase ? 'text-white/85' : 'text-emerald-300/90'} ${i <= phase ? '' : 'invisible'}`} dir="ltr">
                 {i === phase ? '→' : '✓'} {p}
-                {i === phase && <span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-accent/80" />}
+                {i === phase && <span className="ml-1 inline-block h-4 w-2 translate-y-0.5 animate-pulse bg-brand/80" />}
               </div>
             ))}
           </div>
@@ -441,7 +441,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                 <li className="flex gap-2"><span className="font-bold">1.</span><span>{L.guide1}</span></li>
                 <li className="flex gap-2"><span className="font-bold">2.</span><span>{L.guide2}</span></li>
               </ul>
-              <button onClick={again} className="btn-primary mt-4 w-full justify-center sm:w-auto">{L.fixRetry}</button>
+              <button onClick={again} className="btn-dark mt-4 w-full justify-center sm:w-auto">{L.fixRetry}</button>
             </div>
           ) : result.status === 'access_error' ? (
             /* ERİŞİM-HATASI (403/401/5xx) — bağlantı kuruldu ama geçerli yanıt alınamadı; SAHTE skor YOK. */
@@ -481,7 +481,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                 </ul>
               )}
 
-              {/* (LEAD) TAM RAPOR — BİRİNCİL dönüşüm: accent-sıcak + yükseltilmiş + kenar şeridi ile
+              {/* (LEAD) TAM RAPOR — BİRİNCİL dönüşüm: yeşil + yükseltilmiş + kenar şeridi ile
                   görsel ODAK. Çevredeki kartlar kasıtla nötr/soğuk kaldı ki "yapılacak şey burası" okunsun.
                   E-posta karşılığı GERÇEK Basit Tarama PDF'i (ödeme/kayıt/admin-onayı YOK). */}
               <div className="relative mt-5 overflow-hidden rounded-card border border-brand-300 bg-gradient-to-br from-brand-50 via-white to-white p-4 shadow-card ring-1 ring-brand-200/50 sm:p-5">
@@ -492,7 +492,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
                     </span>
                     <p className="text-sm font-extrabold text-brand">{L.reportReady}</p>
-                    <a href={reportUrl} download={`cybertestify-basit-tarama-${ok.host}.pdf`} className="btn-primary mt-3 w-full justify-center">{L.reportDownload}</a>
+                    <a href={reportUrl} download={`cybertestify-basit-tarama-${ok.host}.pdf`} className="btn-dark mt-3 w-full justify-center">{L.reportDownload}</a>
                   </div>
                 ) : (
                   <>
@@ -513,7 +513,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                         placeholder={L.emailPh} aria-label={L.emailTitle} disabled={reportState === 'busy'}
                         className="field flex-1 bg-white"
                       />
-                      <button type="button" onClick={() => submitReport(ok.host, ok.logId)} disabled={reportState === 'busy'} className="btn-primary shrink-0 justify-center shadow-sm disabled:cursor-not-allowed disabled:opacity-60">
+                      <button type="button" onClick={() => submitReport(ok.host, ok.logId)} disabled={reportState === 'busy'} className="btn-dark shrink-0 justify-center shadow-sm disabled:cursor-not-allowed disabled:opacity-60">
                         {reportState === 'busy' ? L.emailBusy : L.emailBtn}
                       </button>
                     </div>
