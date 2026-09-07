@@ -51,6 +51,7 @@ const IS = {
     findingFix: 'Bunu düzelten paketi gör',
     hint: <>Ücretsiz <strong>ön izleme</strong> · yalnızca <strong>pasif dış gözlem</strong> (resmî denetim/sızma testi değildir).</>,
     emailTitle: 'Tam raporu görün — e-postanızı yazın',
+    emailEyebrow: 'ÜCRETSİZ TAM RAPOR',
     emailSub: 'Gerçek zamanlı Basit Tarama raporunuzu PDF olarak hemen indirin. Kart gerekmez.',
     emailPh: 'ornek@sirket.com',
     emailBtn: 'Raporu Gör',
@@ -103,6 +104,7 @@ const IS = {
     findingFix: 'Paket ansehen, das dies behebt',
     hint: <>Kostenlose <strong>Vorschau</strong> · nur <strong>passive externe Beobachtung</strong> (kein offizielles Audit/kein Penetrationstest).</>,
     emailTitle: 'Vollständigen Bericht ansehen — E-Mail eingeben',
+    emailEyebrow: 'KOSTENLOSER VOLLBERICHT',
     emailSub: 'Laden Sie Ihren Echtzeit-Basis-Scan-Bericht sofort als PDF herunter. Keine Karte nötig.',
     emailPh: 'name@firma.de',
     emailBtn: 'Bericht ansehen',
@@ -155,6 +157,7 @@ const IS = {
     findingFix: 'See the package that fixes this',
     hint: <>Free <strong>preview</strong> · <strong>passive external observation</strong> only (not an official audit/penetration test).</>,
     emailTitle: 'See the full report — enter your e-mail',
+    emailEyebrow: 'FREE FULL REPORT',
     emailSub: 'Download your real-time Basic Scan report as a PDF right away. No card needed.',
     emailPh: 'you@company.com',
     emailBtn: 'See the report',
@@ -478,25 +481,39 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                 </ul>
               )}
 
-              {/* (LEAD) TAM RAPOR — e-posta karşılığı GERÇEK Basit Tarama PDF'i. Ödeme/kayıt/admin-onayı YOK. */}
-              <div className="mt-4 rounded-card border-2 border-brand-200 bg-brand-50/60 p-4">
+              {/* (LEAD) TAM RAPOR — BİRİNCİL dönüşüm: accent-sıcak + yükseltilmiş + kenar şeridi ile
+                  görsel ODAK. Çevredeki kartlar kasıtla nötr/soğuk kaldı ki "yapılacak şey burası" okunsun.
+                  E-posta karşılığı GERÇEK Basit Tarama PDF'i (ödeme/kayıt/admin-onayı YOK). */}
+              <div className="relative mt-5 overflow-hidden rounded-card border border-accent/45 bg-gradient-to-br from-accent-soft/55 via-white to-white p-4 shadow-card ring-1 ring-accent/10 sm:p-5">
+                <span aria-hidden className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-amber-400 to-orange-500" />
                 {reportState === 'ready' && reportUrl ? (
-                  <div className="text-center">
+                  <div className="py-1 text-center">
+                    <span className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-brand text-white">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
+                    </span>
                     <p className="text-sm font-extrabold text-brand">{L.reportReady}</p>
                     <a href={reportUrl} download={`cybertestify-basit-tarama-${ok.host}.pdf`} className="btn-primary mt-3 w-full justify-center">{L.reportDownload}</a>
                   </div>
                 ) : (
                   <>
-                    <p className="text-sm font-extrabold text-brand">{L.emailTitle}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-ink-soft">{L.emailSub}</p>
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <div className="flex items-start gap-3">
+                      <span aria-hidden className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent-600 ring-1 ring-accent/20">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 17h4" /></svg>
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-extrabold uppercase tracking-wider text-accent-600">{L.emailEyebrow}</p>
+                        <p className="text-sm font-extrabold leading-snug text-brand">{L.emailTitle}</p>
+                        <p className="mt-1 text-xs leading-relaxed text-ink-soft">{L.emailSub}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3.5 flex flex-col gap-2 sm:flex-row">
                       <input
                         type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitReport(ok.host, ok.logId); } }}
                         placeholder={L.emailPh} aria-label={L.emailTitle} disabled={reportState === 'busy'}
-                        className="field flex-1"
+                        className="field flex-1 bg-white"
                       />
-                      <button type="button" onClick={() => submitReport(ok.host, ok.logId)} disabled={reportState === 'busy'} className="btn-primary shrink-0 justify-center disabled:cursor-not-allowed disabled:opacity-60">
+                      <button type="button" onClick={() => submitReport(ok.host, ok.logId)} disabled={reportState === 'busy'} className="btn-primary shrink-0 justify-center shadow-sm disabled:cursor-not-allowed disabled:opacity-60">
                         {reportState === 'busy' ? L.emailBusy : L.emailBtn}
                       </button>
                     </div>
@@ -507,7 +524,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
 
               {ok.clean ? (
                 /* TEMİZ (bulgu yok) — pasif katman temiz; aktif CTA. */
-                <div className="mt-4 rounded-card border border-brand-200 bg-brand-50/60 p-4">
+                <div className="mt-3 rounded-card border border-line bg-brand-50/40 p-4">
                   <p className="flex items-center gap-1.5 text-sm font-extrabold text-brand">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
                     {L.cleanTitle}
@@ -517,7 +534,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                 </div>
               ) : (
                 /* BULGU VAR — rapor artık ÜCRETSİZ (yukarıda e-posta ile); burada bulguya göre ÇEŞİTLİ öneri (fiyat YOK). */
-                <div className="mt-4 rounded-card border border-accent/40 bg-accent-soft/25 p-4">
+                <div className="mt-3 rounded-card border border-line bg-brand-50/40 p-4">
                   <p className="text-sm font-extrabold text-brand">{L.deeperTitle}</p>
                   <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{L.deeperBody}</p>
                   <NextSteps clean={false} L={L} packagesHref={packagesHref} />
