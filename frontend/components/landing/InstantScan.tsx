@@ -14,6 +14,8 @@ const IS = {
     sub: 'Saniyeler içinde bir güvenlik skoru ve öne çıkan eksikleri görün — kart/kayıt gerekmez.',
     scan: 'Ücretsiz Tara', waiting: 'Doğrulama bekleniyor…',
     errDomain: 'Bir alan adı girin (ör. example.com).',
+    scanPh: 'firmaniz.com',
+    suggestLead: 'Bunu mu demek istediniz?',
     errToken: 'Lütfen önce doğrulama kutusunu tamamlayın.',
     errScan: 'Tarama şu an tamamlanamadı. Lütfen tekrar deneyin.',
     aria: 'Taranacak alan adı',
@@ -67,6 +69,8 @@ const IS = {
     sub: 'Sehen Sie in Sekunden einen Sicherheits-Score und die wichtigsten Schwachstellen — ohne Karte oder Registrierung.',
     scan: 'Kostenlos scannen', waiting: 'Verifizierung ausstehend…',
     errDomain: 'Geben Sie eine Domain ein (z. B. example.com).',
+    scanPh: 'ihre-firma.de',
+    suggestLead: 'Meinten Sie?',
     errToken: 'Bitte schließen Sie zuerst die Verifizierung ab.',
     errScan: 'Der Scan konnte derzeit nicht abgeschlossen werden. Bitte versuchen Sie es erneut.',
     aria: 'Zu scannende Domain',
@@ -120,6 +124,8 @@ const IS = {
     sub: 'See a security score and the top gaps in seconds — no card or sign-up required.',
     scan: 'Scan for free', waiting: 'Awaiting verification…',
     errDomain: 'Enter a domain (e.g. example.com).',
+    scanPh: 'yourcompany.com',
+    suggestLead: 'Did you mean?',
     errToken: 'Please complete the verification box first.',
     errScan: 'The scan could not be completed right now. Please try again.',
     aria: 'Domain to scan',
@@ -269,6 +275,17 @@ function NextSteps({ clean, L, packagesHref }: { clean: boolean; L: any; package
   );
 }
 
+// (AKILLI ÖNERİ) Kullanıcı TLD'siz yazarsa (ör. "firma") tek-tıkla ".com" öner. Nokta VARSA zaten
+// geçerli aday → öneri yok; boşluk varsa (çok kelime) güvenilmez → öneri yok, normal hata yolu işler.
+function suggestDomain(v: string): string | null {
+  const h = v.trim().toLowerCase()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/^www\./, '');
+  if (!h || h.includes('.') || /\s/.test(h)) return null;
+  return `${h}.com`;
+}
+
 export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceBasit: priceBasitProp, priceActive: priceActiveProp }: { lang?: 'tr' | 'de' | 'en'; regionCode?: string; priceBasit?: string | null; priceActive?: string | null } = {}) {
   const [url, setUrl] = useState('');
   const [website, setWebsite] = useState(''); // HONEYPOT
@@ -300,6 +317,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
   const [reachFail, setReachFail] = useState(false);
   const [result, setResult] = useState<InstantScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [suggest, setSuggest] = useState<string | null>(null); // AKILLI ÖNERİ: noktasız girişte '.com' adayı
   const turnstile = useRef<TurnstileHandle>(null);
   const [lang, setLang] = useState<'tr' | 'de' | 'en'>(langProp ?? 'tr');
   const [regionCode, setRegionCode] = useState(regionCodeProp ?? 'tr');
@@ -313,10 +331,11 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
   const PHASES = L.phases;
   const packagesHref = `/${regionCode}/packages`;
 
-  async function onScan(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null); setResult(null); setReachFail(false); setPhase(-1);
-    if (!url.trim()) { setError(L.errDomain); return; }
+  // Çekirdek tarama — hem form gönderimi hem "akıllı öneri" tıklaması buradan geçer.
+  async function doScan(raw: string) {
+    setError(null); setResult(null); setReachFail(false); setPhase(-1); setSuggest(null);
+    const v = raw.trim();
+    if (!v) { setError(L.errDomain); return; }
     if (!token) { setError(L.errToken); return; }
     setState('scanning');
     // (GERÇEK TARAMA — terminal) Fazları GERÇEK Basit Tarama SÜRESİNCE ilerlet: yanıt gelene kadar her ~850ms
@@ -324,7 +343,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
     let advanced = -1;
     const phaseTimer = setInterval(() => { advanced = Math.min(advanced + 1, PHASES.length - 1); setPhase(advanced); }, 850);
     try {
-      const r = await api.instantScan(url.trim(), token, website, regionCode);
+      const r = await api.instantScan(v, token, website, regionCode);
       clearInterval(phaseTimer);
       // (DÜRÜSTLÜK) Ulaşılamadı/erişilemedi → "bağlanılıyor"a dön, sahte tamamlanma yok.
       if (r.status === 'unreachable' || r.status === 'access_error') {
@@ -345,8 +364,19 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
     }
   }
 
+  function onScan(e: React.FormEvent) {
+    e.preventDefault();
+    setSuggest(null); setError(null);
+    const v = url.trim();
+    if (!v) { setError(L.errDomain); return; }
+    // Nokta yok = TLD yok (ör. "firma") → backend'e gitmeden ".com" öner, tek tıkla düzelt.
+    const guess = v.includes('.') ? null : suggestDomain(v);
+    if (guess) { setSuggest(guess); return; }
+    doScan(v);
+  }
+
   function again() {
-    setState('idle'); setResult(null); setError(null); setReachFail(false);
+    setState('idle'); setResult(null); setError(null); setReachFail(false); setSuggest(null);
     setEmail(''); setReportState('idle'); setReportErr(null);
     if (reportUrl) { URL.revokeObjectURL(reportUrl); setReportUrl(null); }
     try { window.localStorage.removeItem(STORE_KEY); } catch { /* noop */ }
@@ -398,7 +428,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
           <div className="flex flex-col gap-2.5 sm:flex-row">
             <div className="relative flex-1">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-muted">https://</span>
-              <input type="text" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="example.com" className="field w-full pl-[68px]" aria-label={L.aria} />
+              <input type="text" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder={L.scanPh} className="field w-full pl-[68px]" aria-label={L.aria} />
             </div>
             <input type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} className="hidden" aria-hidden />
             <button type="submit" disabled={!token || !url.trim()} className="btn-primary shrink-0 justify-center disabled:cursor-not-allowed disabled:opacity-60">
@@ -407,6 +437,12 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
           </div>
           <div className="mt-3"><Turnstile ref={turnstile} onToken={setToken} action="instant-scan" /></div>
           {error && <p className="mt-2 text-sm font-medium text-red-600">{error}</p>}
+          {suggest && (
+            <p className="mt-2 text-sm text-ink-soft">
+              {L.suggestLead}{' '}
+              <button type="button" onClick={() => { setUrl(suggest); doScan(suggest); }} className="font-bold text-brand underline decoration-accent decoration-2 underline-offset-2 transition hover:text-accent-700">{suggest}</button>
+            </p>
+          )}
         </form>
       )}
 
