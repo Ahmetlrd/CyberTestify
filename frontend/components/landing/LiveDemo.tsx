@@ -14,7 +14,7 @@ const LINES: Record<Lang, Line[]> = {
     { t: '→ TLS yapılandırması kontrol ediliyor…', tone: 'run' },
     { t: '⚠ Bulgu: eksik Content-Security-Policy başlığı', tone: 'warn' },
     { t: '→ Bulgular önem derecesine göre sıralanıyor…', tone: 'run' },
-    { t: '🔒 Rapor uçtan uca şifreleniyor…', tone: 'lock' },
+    { t: 'Rapor uçtan uca şifreleniyor…', tone: 'lock' },
     { t: '✓ Rapor hazır · 3 dk 12 sn · 0 kapsam dışı erişim', tone: 'ok' },
   ],
   en: [
@@ -25,7 +25,7 @@ const LINES: Record<Lang, Line[]> = {
     { t: '→ Checking TLS configuration…', tone: 'run' },
     { t: '⚠ Finding: missing Content-Security-Policy header', tone: 'warn' },
     { t: '→ Prioritizing findings by severity…', tone: 'run' },
-    { t: '🔒 Encrypting report end-to-end…', tone: 'lock' },
+    { t: 'Encrypting report end-to-end…', tone: 'lock' },
     { t: '✓ Report ready · 3m 12s · 0 out-of-scope access', tone: 'ok' },
   ],
   de: [
@@ -36,7 +36,7 @@ const LINES: Record<Lang, Line[]> = {
     { t: '→ TLS-Konfiguration wird geprüft…', tone: 'run' },
     { t: '⚠ Befund: fehlender Content-Security-Policy-Header', tone: 'warn' },
     { t: '→ Befunde werden nach Schweregrad priorisiert…', tone: 'run' },
-    { t: '🔒 Bericht wird Ende-zu-Ende verschlüsselt…', tone: 'lock' },
+    { t: 'Bericht wird Ende-zu-Ende verschlüsselt…', tone: 'lock' },
     { t: '✓ Bericht fertig · 3 Min. 12 Sek. · 0 Zugriffe außerhalb des Scope', tone: 'ok' },
   ],
 };

@@ -121,7 +121,7 @@ export default function AdminLogin() {
 
         {step === 'recovery' && (
           <div>
-            <p style={{ fontSize: 13, color: '#cbd5e1', margin: '0 0 6px' }}>✅ 2FA etkinleştirildi. Aşağıdaki <b>kurtarma kodlarını</b> güvenli bir yere kaydedin — telefonunuzu kaybederseniz bunlarla giriş yapabilirsiniz. Her kod <b>bir kez</b> kullanılır ve bu ekran <b>tekrar gösterilmez</b>.</p>
+            <p style={{ fontSize: 13, color: '#cbd5e1', margin: '0 0 6px' }}>2FA etkinleştirildi. Aşağıdaki <b>kurtarma kodlarını</b> güvenli bir yere kaydedin — telefonunuzu kaybederseniz bunlarla giriş yapabilirsiniz. Her kod <b>bir kez</b> kullanılır ve bu ekran <b>tekrar gösterilmez</b>.</p>
             <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: 14, margin: '12px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontFamily: 'ui-monospace, monospace', fontSize: 14, color: '#e2e8f0' }}>
               {recoveryCodes.map((c) => <div key={c}>{c}</div>)}
             </div>

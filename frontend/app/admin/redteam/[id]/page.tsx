@@ -79,7 +79,7 @@ export default function AdminRedTeamDetail({ params }: { params: { id: string } 
       const r = await adminApi.redteamKill(params.id);
       // D2/D3: sahte-başarı YOK — gerçek imha durumu + doğrulama ayrımı gösterilir.
       if (!r.ok) {
-        alert(`⛔ DURDURULAMADI — gerçek hata: ${r.error ?? 'bilinmeyen hata'}\n\nTekrar deneyin ya da manuel müdahale gerekebilir (DO panelinden droplet'i elle silin).`);
+        alert(`DURDURULAMADI — gerçek hata: ${r.error ?? 'bilinmeyen hata'}\n\nTekrar deneyin ya da manuel müdahale gerekebilir (DO panelinden droplet'i elle silin).`);
       } else if (r.verified === 'destroyed') {
         alert(`✓ Droplet imha edildi — DOĞRULANDI (DO API'den gerçekten silindiği teyit edildi).${r.reportGenerated ? '\nEldeki veriden rapor üretildi.' : ''}`);
       } else {
@@ -108,7 +108,7 @@ export default function AdminRedTeamDetail({ params }: { params: { id: string } 
         {active && (
           <button onClick={kill} disabled={killing}
             style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #7f1d1d', background: '#450a0a', color: '#fca5a5', fontWeight: 700, cursor: 'pointer' }}>
-            {killing ? '…' : '⛔ KILL-SWITCH'}
+            {killing ? '…' : 'KILL-SWITCH'}
           </button>
         )}
       </div>
@@ -259,7 +259,7 @@ export default function AdminRedTeamDetail({ params }: { params: { id: string } 
                 {e.responseExcerpt && <div style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 11, color: e.markerReflected ? '#4ade80' : '#64748b', paddingLeft: 8, wordBreak: 'break-all' }}>↳ {e.responseExcerpt}</div>}
               </div>
             ) : (
-              <div key={i} style={{ padding: '4px 0', color: '#a5b4fc', fontSize: 12 }}>🧠 {e.text}</div>
+              <div key={i} style={{ padding: '4px 0', color: '#a5b4fc', fontSize: 12 }}>{e.text}</div>
             ))}
           </div>
         </section>

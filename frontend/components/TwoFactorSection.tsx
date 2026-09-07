@@ -149,7 +149,7 @@ export function TwoFactorSection({ lang }: { lang: 'tr' | 'de' | 'en' }) {
 
       {mode === 'recovery' && (
         <div className="mt-4 space-y-3">
-          <p className="text-sm font-semibold text-emerald-800">✅ {t.recTitle}</p>
+          <p className="text-sm font-semibold text-emerald-800">{t.recTitle}</p>
           <p className="text-xs text-ink-muted">{t.recDesc}</p>
           <div className="grid grid-cols-2 gap-1.5 rounded-card bg-brand-50/50 p-3 font-mono text-sm text-ink">
             {recoveryCodes.map((c) => <div key={c}>{c}</div>)}

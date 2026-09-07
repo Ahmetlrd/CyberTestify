@@ -89,7 +89,7 @@ export default function AdminOrders() {
             )}
             {data.refundRequestsPending > 0 && (
               <p style={{ color: '#0f172a', background: '#f59e0b', fontWeight: 700, fontSize: 13, padding: '8px 12px', borderRadius: 8, marginBottom: 10 }}>
-                🔔 Bekleyen iade talebi: {data.refundRequestsPending} — aşağıda “İADE TALEBİ” etiketli siparişler.
+               Bekleyen iade talebi: {data.refundRequestsPending} — aşağıda “İADE TALEBİ” etiketli siparişler.
               </p>
             )}
             <Table

@@ -54,7 +54,7 @@ const ORD = {
     soon: 'Yakında', soonClosed: 'Şu an satışa kapalı',
     testCredsMembers: 'Test hesabı bilgileri',
     // Aktif Doğrulama şeffaflık kutusu
-    avTitle: '💡 Şeffaflık & Kapsam — ödemeden önce okuyun',
+    avTitle: 'Şeffaflık & Kapsam — ödemeden önce okuyun',
     avP1Html: 'Bu paket, web sitenizin <strong>herkese açık (login gerektirmeyen) dış saldırı yüzeyini</strong> zararsız problarla test eder — dışa açık arama, form, API ve login/kayıt akışı üzerindeki enjeksiyon, yetkilendirme ve mantık riskleri.',
     avP2Html: 'Sitenizde dışa açık <strong>arama, form, API veya id-tabanlı uç nokta bulunmuyorsa</strong>, içerikte listelenen <strong>IDOR / İş Mantığı / Dosya Yükleme / Race</strong> gibi kontroller raporda <strong>“İncelenemedi”</strong> görünebilir. Bu bir <strong>hata değildir</strong> — sitenizin dış yüzey yapısının doğal sonucudur (test edilecek açık bir giriş noktası olmaması).',
     avP3Html: 'Oturum içi (kullanıcı girişi <strong>sonrası</strong>) derin yetkilendirme/iş-mantığı testleri için <strong>Tam Kapsamlı Pentest</strong> paketini seçin.',
@@ -81,13 +81,13 @@ const ORD = {
     // Auth cred block
     acTitle: 'Test hesabı bilgileri', acOptional: '(opsiyonel)',
     acInfoHtml: 'Bu alan <strong>opsiyoneldir</strong>. Sitenizde bir <strong>giriş (login) mekanizması yoksa</strong> boş bırakın — tarama <strong>loginsiz (kimlik-doğrulamasız)</strong> yapılır. Giriş varsa, oturum-içi kontroller için bir <strong>TEST hesabı</strong> girebilirsiniz.',
-    acWarnTitle: '⚠️ Yalnız TEST hesabı girin — ana/üretim hesabınızı DEĞİL',
+    acWarnTitle: 'Yalnız TEST hesabı girin — ana/üretim hesabınızı DEĞİL',
     acWarnBodyHtml: 'Bu tarama için oluşturulmuş, <strong>sınırlı yetkili, tek-kullanımlık</strong> bir hesap kullanın; şifresini tarama sonrası değiştirin.',
     acWarn2Html: '<strong>2FA’sı olmayan</strong> bir hesap verin. Kimlik bilgileriniz <strong>şifreli</strong> saklanır ve tarama sonrası <strong>silinir</strong>.',
     acUser: 'Kullanıcı adı / e-posta', acPass: 'Şifre', acPassPh: 'Test hesabı şifresi',
     acCheckBtn: 'Test girişini doğrula (opsiyonel)', acChecking: 'Giriş deneniyor…',
     acCheckingHint: 'Giriş formu aranıp deneniyor — birkaç saniye sürebilir…',
-    acNoCredsHtml: 'ℹ️ Test hesabı bilgisi girmediniz — tarama <strong>loginsiz (kimlik-doğrulamasız)</strong> yapılacak. Sitenizde giriş yoksa bu normaldir.',
+    acNoCredsHtml: 'Test hesabı bilgisi girmediniz — tarama <strong>loginsiz (kimlik-doğrulamasız)</strong> yapılacak. Sitenizde giriş yoksa bu normaldir.',
     lcOk: 'Test hesabıyla giriş doğrulandı.',
     lcBad: 'Bu kullanıcı adı/şifreyle giriş yapılamadı — bilgileri kontrol edin.',
     lc2fa: 'Hesapta 2FA görünüyor — 2FA’sız bir test hesabı verin.',
@@ -100,11 +100,11 @@ const ORD = {
     queueBusyHtml: 'Sipariş verebilirsiniz — <strong>taramanız en kısa sürede başlayacaktır</strong> ve durumu bu panelden takip edebilirsiniz.',
     // Precheck warnings
     checking: 'Hedefinize ulaşılıyor mu, ön kontrol yapılıyor…',
-    unreachTitle: '🚫 Hedefinize şu an dışarıdan ulaşılamıyor',
+    unreachTitle: 'Hedefinize şu an dışarıdan ulaşılamıyor',
     unreachP1Html: 'Sitenizin ana adresi (<strong>443/HTTPS ve 80/HTTP</strong>) şu an yanıt vermiyor. Bu bir hata değildir — sitenizin <strong>yayında olmadığı, kapalı olduğu ya da bizim erişimimizi engellediği</strong> anlamına gelir. Tarama şu an başlatılırsa dışarıdan test edilecek bir yüzey bulunamayacağı için rapor büyük olasılıkla <strong>boş / "İncelenemedi"</strong> gelir.',
     unreachP2Html: '<strong>Önerimiz:</strong> sitenizin yayında ve erişilebilir olduğundan emin olun, sonra bu sayfayı yenileyip tekrar deneyin. Erişim sorununun geçici olduğunu düşünüyorsanız yine de devam edebilirsiniz.',
     unreachAck: 'Erişim sorununu anladım; yine de şimdi başlatmak istiyorum.',
-    lowTitle: '⚠️ Önemli Ön Kontrol',
+    lowTitle: 'Önemli Ön Kontrol',
     lowP1Html: 'Sitenizde otomatik hızlı taramada <strong>test edilebilir giriş noktası</strong> (form, query parametresi, sayısal ID içeren uç nokta) <strong>neredeyse hiç bulunamadı</strong>. Bu genellikle sitenin <strong>JavaScript ile render edilen (SPA)</strong> bir yapıya sahip olmasından kaynaklanır.',
     lowP2Html: 'Tarama yine de çalıştırılacaktır, ancak çoğu kontrol <strong>"kapsam dışı / incelenemedi"</strong> olarak sonuçlanabilir. Ödenen tutar <strong>bulgu garantisi değildir</strong>; kapsamlı bir değerlendirme sürecinin tamamı içindir.',
     lowAck: 'Devam etmek istiyorum.',
@@ -172,7 +172,7 @@ const ORD = {
     reconNote: 'Passive Erkundung der externen Oberfläche; keine aktive Endpunkt-Injection und keine authentifizierten Tests.',
     soon: 'Bald', soonClosed: 'Derzeit nicht im Verkauf',
     testCredsMembers: 'Testkonto-Daten',
-    avTitle: '💡 Transparenz & Umfang — bitte vor der Zahlung lesen',
+    avTitle: 'Transparenz & Umfang — bitte vor der Zahlung lesen',
     avP1Html: 'Dieses Paket testet die <strong>öffentliche (kein Login erforderliche) externe Angriffsfläche</strong> Ihrer Website mit harmlosen Prüfungen — Injection-, Autorisierungs- und Logik-Risiken bei öffentlichen Such-, Formular-, API- und Login-/Registrierungs-Flows.',
     avP2Html: 'Wenn Ihre Website <strong>keine öffentlichen Such-, Formular-, API- oder ID-basierten Endpunkte</strong> hat, können im Inhalt gelistete Prüfungen wie <strong>IDOR / Geschäftslogik / Datei-Upload / Race</strong> im Bericht als <strong>„nicht geprüft“</strong> erscheinen. Das ist <strong>kein Fehler</strong> — es ergibt sich natürlich aus der externen Oberflächenstruktur Ihrer Website (kein offener Einstiegspunkt zum Testen).',
     avP3Html: 'Für tiefe Autorisierungs-/Geschäftslogik-Tests <strong>nach</strong> dem Login wählen Sie das Paket <strong>Umfassender Pentest</strong>.',
@@ -196,13 +196,13 @@ const ORD = {
     atConsentNote: 'Ihre Zustimmung wird zusammen mit Ihrem Konto, Zeitstempel, IP und der Textversion automatisch protokolliert (keine zusätzlichen Angaben nötig). Auf Wunsch wird sie als Autorisierungs-PDF an Ihre Bestellung angehängt.',
     acTitle: 'Testkonto-Daten', acOptional: '(optional)',
     acInfoHtml: 'Dieses Feld ist <strong>optional</strong>. Wenn Ihre Website <strong>keinen Login-Mechanismus</strong> hat, lassen Sie es leer — der Scan wird <strong>ohne Login (ohne Authentifizierung)</strong> durchgeführt. Gibt es einen Login, können Sie ein <strong>TEST-Konto</strong> für sitzungsinterne Prüfungen eingeben.',
-    acWarnTitle: '⚠️ Geben Sie nur ein TEST-Konto ein — NICHT Ihr Produktivkonto',
+    acWarnTitle: 'Geben Sie nur ein TEST-Konto ein — NICHT Ihr Produktivkonto',
     acWarnBodyHtml: 'Verwenden Sie ein für diesen Scan erstelltes Konto mit <strong>minimalen Rechten und Einmalgebrauch</strong>; ändern Sie das Passwort nach dem Scan.',
     acWarn2Html: 'Geben Sie ein Konto <strong>ohne 2FA</strong> an. Ihre Zugangsdaten werden <strong>verschlüsselt</strong> gespeichert und nach dem Scan <strong>gelöscht</strong>.',
     acUser: 'Benutzername / E-Mail', acPass: 'Passwort', acPassPh: 'Testkonto-Passwort',
     acCheckBtn: 'Test-Login prüfen (optional)', acChecking: 'Anmeldung wird versucht…',
     acCheckingHint: 'Login-Formular wird gesucht und versucht — kann einige Sekunden dauern…',
-    acNoCredsHtml: 'ℹ️ Sie haben keine Testkonto-Daten eingegeben — der Scan wird <strong>ohne Login (ohne Authentifizierung)</strong> durchgeführt. Wenn Ihre Website keinen Login hat, ist das normal.',
+    acNoCredsHtml: 'Sie haben keine Testkonto-Daten eingegeben — der Scan wird <strong>ohne Login (ohne Authentifizierung)</strong> durchgeführt. Wenn Ihre Website keinen Login hat, ist das normal.',
     lcOk: 'Anmeldung mit dem Testkonto bestätigt.',
     lcBad: 'Mit diesem Benutzernamen/Passwort war keine Anmeldung möglich — bitte prüfen Sie die Daten.',
     lc2fa: 'Beim Konto scheint 2FA aktiv zu sein — bitte geben Sie ein Testkonto ohne 2FA an.',
@@ -213,11 +213,11 @@ const ORD = {
     promoAppliedPre: 'Code angewendet — Rabatt', promoNewTotal: 'Neuer Betrag:', promoFree: ' — der Zahlungsschritt entfällt, der Scan wird sofort eingereiht.',
     queueBusyHtml: 'Sie können bestellen — <strong>Ihr Scan startet baldmöglichst</strong> und Sie verfolgen den Status über dieses Panel.',
     checking: 'Erreichbarkeit Ihres Ziels wird vorab geprüft…',
-    unreachTitle: '🚫 Ihr Ziel ist derzeit von außen nicht erreichbar',
+    unreachTitle: 'Ihr Ziel ist derzeit von außen nicht erreichbar',
     unreachP1Html: 'Die Hauptadresse Ihrer Website (<strong>443/HTTPS und 80/HTTP</strong>) antwortet derzeit nicht. Das ist kein Fehler — es bedeutet, dass Ihre Website <strong>offline oder geschlossen ist oder unseren Zugriff blockiert</strong>. Wird der Scan jetzt gestartet, findet er keine von außen testbare Oberfläche, sodass der Bericht wahrscheinlich <strong>leer / „nicht geprüft“</strong> ausfällt.',
     unreachP2Html: '<strong>Unsere Empfehlung:</strong> Stellen Sie sicher, dass Ihre Website online und erreichbar ist, aktualisieren Sie dann diese Seite und versuchen Sie es erneut. Wenn Sie meinen, das Problem sei vorübergehend, können Sie dennoch fortfahren.',
     unreachAck: 'Ich habe das Zugriffsproblem verstanden; ich möchte trotzdem jetzt starten.',
-    lowTitle: '⚠️ Wichtige Vorabprüfung',
+    lowTitle: 'Wichtige Vorabprüfung',
     lowP1Html: 'Bei der automatischen Schnellprüfung wurde <strong>fast kein testbarer Einstiegspunkt</strong> (Formular, Query-Parameter, Endpunkt mit numerischer ID) auf Ihrer Website gefunden. Das liegt meist an einer <strong>per JavaScript gerenderten (SPA)</strong> Struktur der Website.',
     lowP2Html: 'Der Scan wird dennoch ausgeführt, aber viele Prüfungen können als <strong>„außerhalb des Scope / nicht geprüft“</strong> enden. Der gezahlte Betrag ist <strong>keine Fundgarantie</strong>; er gilt für den gesamten umfassenden Bewertungsprozess.',
     lowAck: 'Ich möchte fortfahren.',
@@ -277,7 +277,7 @@ const ORD = {
     reconNote: 'Passive external-surface reconnaissance; no active endpoint injection or authenticated testing.',
     soon: 'Coming soon', soonClosed: 'Not currently on sale',
     testCredsMembers: 'Test account details',
-    avTitle: '💡 Transparency & Scope — please read before payment',
+    avTitle: 'Transparency & Scope — please read before payment',
     avP1Html: 'This package tests your website’s <strong>public (no-login) external attack surface</strong> with harmless probes — injection, authorisation and logic risks across public search, form, API and login/registration flows.',
     avP2Html: 'If your website has <strong>no public search, form, API or ID-based endpoints</strong>, checks listed in the contents such as <strong>IDOR / Business Logic / File Upload / Race</strong> may appear as <strong>“Not assessed”</strong> in the report. This is <strong>not an error</strong> — it is a natural consequence of your site’s external-surface structure (no open entry point to test).',
     avP3Html: 'For deep authorisation/business-logic testing <strong>after</strong> login, choose the <strong>Full-Scope Pentest</strong> package.',
@@ -301,13 +301,13 @@ const ORD = {
     atConsentNote: 'Your consent is logged automatically together with your account, timestamp, IP and the text version (no extra details needed). On request it is attached to your order as an authorisation PDF.',
     acTitle: 'Test account details', acOptional: '(optional)',
     acInfoHtml: 'This field is <strong>optional</strong>. If your website has <strong>no login mechanism</strong>, leave it blank — the scan runs <strong>without login (unauthenticated)</strong>. If there is a login, you can enter a <strong>TEST account</strong> for in-session checks.',
-    acWarnTitle: '⚠️ Enter a TEST account only — NOT your main/production account',
+    acWarnTitle: 'Enter a TEST account only — NOT your main/production account',
     acWarnBodyHtml: 'Use an account created for this scan with <strong>minimal privileges and single use</strong>; change its password after the scan.',
     acWarn2Html: 'Provide an account <strong>without 2FA</strong>. Your credentials are stored <strong>encrypted</strong> and <strong>deleted</strong> after the scan.',
     acUser: 'Username / email', acPass: 'Password', acPassPh: 'Test account password',
     acCheckBtn: 'Verify test login (optional)', acChecking: 'Attempting login…',
     acCheckingHint: 'Searching for and trying the login form — this may take a few seconds…',
-    acNoCredsHtml: 'ℹ️ You have not entered any test account details — the scan will run <strong>without login (unauthenticated)</strong>. If your website has no login, this is normal.',
+    acNoCredsHtml: 'You have not entered any test account details — the scan will run <strong>without login (unauthenticated)</strong>. If your website has no login, this is normal.',
     lcOk: 'Login with the test account verified.',
     lcBad: 'Could not log in with this username/password — please check the details.',
     lc2fa: 'The account appears to have 2FA — please provide a test account without 2FA.',
@@ -318,11 +318,11 @@ const ORD = {
     promoAppliedPre: 'Code applied — discount', promoNewTotal: 'New total:', promoFree: ' — the payment step is skipped and the scan is queued immediately.',
     queueBusyHtml: 'You can place your order — <strong>your scan will start as soon as possible</strong> and you can track its status from this panel.',
     checking: 'Pre-checking whether your target is reachable…',
-    unreachTitle: '🚫 Your target is currently unreachable from outside',
+    unreachTitle: 'Your target is currently unreachable from outside',
     unreachP1Html: 'Your website’s main address (<strong>443/HTTPS and 80/HTTP</strong>) is not responding at the moment. This is not an error — it means your website is <strong>offline, closed, or blocking our access</strong>. If the scan starts now it will find no externally testable surface, so the report will most likely come back <strong>empty / “Not assessed”</strong>.',
     unreachP2Html: '<strong>Our recommendation:</strong> make sure your website is online and reachable, then refresh this page and try again. If you believe the issue is temporary you can still continue.',
     unreachAck: 'I understand the access issue; I want to start now anyway.',
-    lowTitle: '⚠️ Important Pre-check',
+    lowTitle: 'Important Pre-check',
     lowP1Html: 'The automatic quick scan found <strong>almost no testable entry point</strong> (form, query parameter, endpoint with a numeric ID) on your website. This is usually because the site has a <strong>JavaScript-rendered (SPA)</strong> structure.',
     lowP2Html: 'The scan will still run, but many checks may end up as <strong>“out of scope / not assessed”</strong>. The amount paid is <strong>not a guarantee of findings</strong>; it covers the entire comprehensive assessment process.',
     lowAck: 'I want to continue.',
@@ -925,7 +925,6 @@ export default function OrderPage() {
   const authCredBlock = (
     <div className="mt-3 space-y-4 rounded-card border-2 border-brand/20 bg-brand-50/50 p-4 sm:p-5">
       <p className="flex items-center gap-2 text-sm font-bold text-brand">
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand text-xs text-white">🔑</span>
         {L.acTitle} <span className="font-normal text-ink-muted">{L.acOptional}</span>
       </p>
       {/* (LOGİNSİZ TEST) Opsiyonel olduğunu net söyle — sitede login olmayabilir. */}
@@ -1199,7 +1198,7 @@ export default function OrderPage() {
               <p className="text-xs font-bold uppercase tracking-wide text-brand-500">{L.atDoes}</p>
               <ul className="mt-1 space-y-1 text-sm text-ink-soft">
                 {selectedPkg.activeTest.scope.does.map((d) => (
-                  <li key={d}>✅ {d}</li>
+                  <li key={d}>✓ {d}</li>
                 ))}
               </ul>
             </div>
@@ -1207,7 +1206,7 @@ export default function OrderPage() {
               <p className="text-xs font-bold uppercase tracking-wide text-red-600">{L.atDoesNot}</p>
               <ul className="mt-1 space-y-1 text-sm text-ink-soft">
                 {selectedPkg.activeTest.scope.doesNot.map((d) => (
-                  <li key={d}>⛔ {d}</li>
+                  <li key={d}>✗ {d}</li>
                 ))}
               </ul>
             </div>

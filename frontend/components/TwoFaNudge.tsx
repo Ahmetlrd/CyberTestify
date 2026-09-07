@@ -44,7 +44,7 @@ export function TwoFaNudge() {
   return (
     <div className="mb-4 flex flex-col gap-3 rounded-card border border-accent/40 bg-accent-soft/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <p className="flex items-start gap-2 text-sm text-ink">
-        <span aria-hidden className="mt-0.5">🔒</span>
+        <span aria-hidden className="mt-0.5"></span>
         <span>{t.msg}</span>
       </p>
       <div className="flex shrink-0 flex-wrap items-center gap-2">

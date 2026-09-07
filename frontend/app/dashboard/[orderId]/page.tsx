@@ -37,7 +37,7 @@ const DASH = {
     refundTitle: 'Siparişiniz iade edildi',
     refundBodyPre: 'Bu sipariş iptal/iade edilmiştir. Bir ödeme yaptıysanız iade tutarı, bankanıza bağlı olarak birkaç iş günü içinde kartınıza/hesabınıza yansır. Sorunuz varsa ',
     refundBodyPost: ' ile iletişime geçebilirsiniz.',
-    incompletePre: '⚠️ Bu tarama eksik tamamlandı.', incompleteDefault: 'Tarama beklenenden erken sonlandı ve rapor içeriği eksik/boş olabilir.',
+    incompletePre: 'Bu tarama eksik tamamlandı.', incompleteDefault: 'Tarama beklenenden erken sonlandı ve rapor içeriği eksik/boş olabilir.',
     incompleteMid: ' Ücret iadesi veya taramanın yeniden çalıştırılması için ', incompleteTail: (id: string) => ` ile iletişime geçin (sipariş no: ${id}).`,
     reportDownloaded: 'Rapor indirildi ✓', reportReady: 'Şifreli raporunuz hazır', oneTimeCode: 'Tek kullanımlık erişim koduyla açılır',
     codeSentHtml: '<strong>Erişim kodunuz e-posta ile gönderildi.</strong> Raporunuzu açmak için e-postanızdaki tek kullanımlık kodu aşağıya girin. (Bir kez açtığınızda bu cihazda hatırlanır.)',
@@ -46,7 +46,7 @@ const DASH = {
     campaign: 'KAMPANYA', campaignFree: '— kampanyaya özel ücretsiz, sizin için açıldı',
     fixUnlockedHtml: '✓ Açık — çözüm önerileri artık <strong>raporunuzun içinde</strong> yer alıyor. Güncel raporu (çözüm önerileri dahil) indirmek için aşağıdaki butonu kullanın.',
     downloadWithFix: 'Raporu indir (çözüm önerileri dahil)', enterCodeFirst: 'Önce yukarıdaki erişim kodunu girin.',
-    fixLockedPre: '🔒 Bu içerik kilitli.', fixLockedPost: ' karşılığında açılır.',
+    fixLockedPre: 'Bu içerik kilitli.', fixLockedPost: ' karşılığında açılır.',
     promoOptional: 'Promosyon kodu (opsiyonel)', promoPlaceholder: 'Kodunuz', processing: 'İşleniyor…', buyUnlock: 'Satın al ve aç',
     fixNote: 'Güvenli ödeme iyzico ile alınır. Promosyon kodu %100 ise ödeme adımı atlanır.',
     scopeViolation: 'Tarama, kapsam dışı bir hedefe erişim girişimi tespit edildiği için güvenlik gereği durduruldu. Bu, sizi ve üçüncü tarafları koruyan bilinçli bir önlemdir.',
@@ -71,7 +71,7 @@ const DASH = {
     refundTitle: 'Ihre Bestellung wurde erstattet',
     refundBodyPre: 'Diese Bestellung wurde storniert/erstattet. Falls Sie gezahlt haben, wird der Erstattungsbetrag je nach Bank innerhalb weniger Werktage auf Ihrer Karte/Ihrem Konto gutgeschrieben. Bei Fragen erreichen Sie uns unter ',
     refundBodyPost: '.',
-    incompletePre: '⚠️ Dieser Scan wurde unvollständig abgeschlossen.', incompleteDefault: 'Der Scan endete früher als erwartet und der Berichtsinhalt kann unvollständig/leer sein.',
+    incompletePre: 'Dieser Scan wurde unvollständig abgeschlossen.', incompleteDefault: 'Der Scan endete früher als erwartet und der Berichtsinhalt kann unvollständig/leer sein.',
     incompleteMid: ' Für eine Erstattung oder eine erneute Ausführung des Scans kontaktieren Sie ', incompleteTail: (id: string) => ` (Bestellnummer: ${id}).`,
     reportDownloaded: 'Bericht heruntergeladen ✓', reportReady: 'Ihr verschlüsselter Bericht ist fertig', oneTimeCode: 'Wird mit einem Einmal-Zugangscode geöffnet',
     codeSentHtml: '<strong>Ihr Zugangscode wurde per E-Mail gesendet.</strong> Geben Sie den Einmal-Code aus Ihrer E-Mail unten ein, um Ihren Bericht zu öffnen. (Nach dem ersten Öffnen wird er auf diesem Gerät gemerkt.)',
@@ -80,7 +80,7 @@ const DASH = {
     campaign: 'AKTION', campaignFree: '— im Rahmen der Aktion kostenlos für Sie freigeschaltet',
     fixUnlockedHtml: '✓ Freigeschaltet — die Lösungsempfehlungen sind jetzt <strong>in Ihrem Bericht</strong> enthalten. Nutzen Sie die Schaltfläche unten, um den aktuellen Bericht (inkl. Empfehlungen) herunterzuladen.',
     downloadWithFix: 'Bericht herunterladen (inkl. Lösungsempfehlungen)', enterCodeFirst: 'Geben Sie zuerst oben den Zugangscode ein.',
-    fixLockedPre: '🔒 Dieser Inhalt ist gesperrt.', fixLockedPost: ' freigeschaltet.',
+    fixLockedPre: 'Dieser Inhalt ist gesperrt.', fixLockedPost: ' freigeschaltet.',
     promoOptional: 'Aktionscode (optional)', promoPlaceholder: 'Ihr Code', processing: 'Wird verarbeitet…', buyUnlock: 'Kaufen und freischalten',
     fixNote: 'Die sichere Zahlung erfolgt über iyzico. Bei einem 100%-Aktionscode entfällt der Zahlungsschritt.',
     scopeViolation: 'Der Scan wurde aus Sicherheitsgründen gestoppt, weil ein Zugriffsversuch auf ein Ziel außerhalb des Scope erkannt wurde. Dies ist eine bewusste Schutzmaßnahme für Sie und Dritte.',
@@ -105,7 +105,7 @@ const DASH = {
     refundTitle: 'Your order has been refunded',
     refundBodyPre: 'This order has been cancelled/refunded. If you made a payment, the refund amount will be credited to your card/account within a few business days, depending on your bank. If you have any questions, you can contact ',
     refundBodyPost: '.',
-    incompletePre: '⚠️ This scan completed incompletely.', incompleteDefault: 'The scan ended earlier than expected and the report content may be incomplete/empty.',
+    incompletePre: 'This scan completed incompletely.', incompleteDefault: 'The scan ended earlier than expected and the report content may be incomplete/empty.',
     incompleteMid: ' For a refund or to have the scan re-run, contact ', incompleteTail: (id: string) => ` (order number: ${id}).`,
     reportDownloaded: 'Report downloaded ✓', reportReady: 'Your encrypted report is ready', oneTimeCode: 'Opened with a one-time access code',
     codeSentHtml: '<strong>Your access code has been sent by email.</strong> Enter the one-time code from your email below to open your report. (Once opened, it is remembered on this device.)',
@@ -114,7 +114,7 @@ const DASH = {
     campaign: 'CAMPAIGN', campaignFree: '— unlocked free for you as part of the campaign',
     fixUnlockedHtml: '✓ Unlocked — the remediation suggestions are now <strong>included in your report</strong>. Use the button below to download the current report (including suggestions).',
     downloadWithFix: 'Download report (including remediation suggestions)', enterCodeFirst: 'Enter the access code above first.',
-    fixLockedPre: '🔒 This content is locked. Unlocks for', fixLockedPost: '.',
+    fixLockedPre: 'This content is locked. Unlocks for', fixLockedPost: '.',
     promoOptional: 'Promo code (optional)', promoPlaceholder: 'Your code', processing: 'Processing…', buyUnlock: 'Buy and unlock',
     fixNote: 'Secure payment is processed via iyzico. If the promo code is 100%, the payment step is skipped.',
     scopeViolation: 'The scan was stopped for security reasons because an attempt to access an out-of-scope target was detected. This is a deliberate protective measure for you and third parties.',
@@ -579,7 +579,7 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
           {lang === 'tr' && (
             <div className="flex flex-col gap-3 rounded-card border border-accent/50 bg-gradient-to-br from-accent-soft/70 to-brand-50/50 px-5 py-4 shadow-[0_2px_12px_rgba(245,166,35,0.18)] sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-bold text-ink">📝 Raporunuz nasıldı?</p>
+                <p className="text-sm font-bold text-ink">Raporunuz nasıldı?</p>
                 <p className="mt-0.5 text-xs text-ink-soft">Anonim — görüşleriniz raporlarımızı geliştirir (1 dakika).</p>
               </div>
               <span className="relative inline-flex shrink-0 self-start sm:self-auto">

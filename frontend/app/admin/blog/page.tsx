@@ -88,7 +88,7 @@ export default function AdminBlog() {
 
       {/* (Çok-dilli) Dil/bölge sekmesi — LİSTE, YÜKLEME ve YAYINLAMA hepsi seçili dile göre çalışır. */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {([['tr', '🇹🇷 Türkçe'], ['de', '🇩🇪 Deutsch'], ['en', '🇬🇧 English']] as const).map(([code, label]) => (
+        {([['tr', 'Türkçe'], ['de', 'Deutsch'], ['en', 'English']] as const).map(([code, label]) => (
           <button
             key={code}
             onClick={() => { setLang(code); setResult(null); setNote(null); }}
@@ -168,8 +168,8 @@ export default function AdminBlog() {
                 ? <img src={coverUrl(p.coverImageId)} alt="" style={{ width: 46, height: 30, objectFit: 'cover', borderRadius: 4, border: p.coverManual ? '2px solid #F5A623' : '1px solid #334155' }} />
                 : <span style={{ width: 46, height: 30, borderRadius: 4, border: '1px dashed #475569', display: 'inline-block' }} />}
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <button onClick={() => reroll(p.id)} title="Kategoriden rastgele yeniden seç" style={miniBtn}>🎲 yeniden</button>
-                <button onClick={() => openPicker(p.id, p.category)} title="Belirli görsel seç" style={miniBtn}>🖼 seç</button>
+                <button onClick={() => reroll(p.id)} title="Kategoriden rastgele yeniden seç" style={miniBtn}>yeniden</button>
+                <button onClick={() => openPicker(p.id, p.category)} title="Belirli görsel seç" style={miniBtn}>seç</button>
               </span>
             </div>,
             <span key="ct" style={{ fontSize: 11, color: '#94a3b8' }}>{p.category ?? '—'}</span>,
