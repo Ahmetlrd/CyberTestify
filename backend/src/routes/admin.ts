@@ -715,6 +715,16 @@ adminRouter.delete('/instant-scan-logs/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// (LEAD E-POSTA DÜZENLE/SİL) Admin logda e-postayı elle düzeltebilir; boş -> null (siler).
+adminRouter.patch('/instant-scan-logs/:id', async (req, res) => {
+  const raw = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const email = raw === '' ? null : raw;
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Geçersiz e-posta.' });
+  const row = await prisma.instantScanLog.update({ where: { id: req.params.id }, data: { email } }).catch(() => null);
+  if (!row) return res.status(404).json({ error: 'Kayıt bulunamadı.' });
+  res.json({ ok: true, email: row.email });
+});
+
 // --- Sistem sagligi -----------------------------------------------------------
 async function pentagiHealthy(timeoutMs = 2500): Promise<boolean> {
   try {

@@ -27,6 +27,9 @@ export default function AdminFreeScans() {
   const [suspicious, setSuspicious] = useState(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null); // e-posta inline duzenleme
+  const [editVal, setEditVal] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
     setData(null);
@@ -39,6 +42,34 @@ export default function AdminFreeScans() {
     if (!window.confirm('Bu kaydı sil?')) return;
     try { await adminApi.instantScanLogDelete(id); load(); } catch (e: any) { setError(e.message); }
   }
+
+  async function saveEmail(id: string) {
+    setSaving(true);
+    try { await adminApi.instantScanLogSetEmail(id, editVal.trim() || null); setEditId(null); setEditVal(''); load(); }
+    catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  }
+
+  // E-posta hücresi: kalem → inline düzelt/sil (boş kaydet = sil).
+  const emailCell = (r: any) => editId === r.id ? (
+    <span key="e" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <input autoFocus value={editVal} onChange={(e) => setEditVal(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') saveEmail(r.id); if (e.key === 'Escape') { setEditId(null); setEditVal(''); } }}
+        placeholder="e-posta (boş = sil)"
+        style={{ background: '#0b1120', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: '4px 7px', fontSize: 12, width: 180 }} />
+      <button onClick={() => saveEmail(r.id)} disabled={saving} style={{ background: '#166534', color: '#dcfce7', border: 'none', borderRadius: 6, padding: '4px 9px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>kaydet</button>
+      <button onClick={() => { setEditId(null); setEditVal(''); }} style={{ background: 'none', color: '#94a3b8', border: 'none', fontSize: 11, cursor: 'pointer' }}>iptal</button>
+    </span>
+  ) : (
+    <span key="e" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+      {r.email
+        ? <span style={{ color: '#4ade80', wordBreak: 'break-all' }}>{r.email}{r.suspicious && <span style={{ marginLeft: 6, background: '#7c2d12', color: '#fdba74', borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>ŞÜPHELİ</span>}</span>
+        : <span style={{ color: '#475569' }}>—</span>}
+      <button onClick={() => { setEditId(r.id); setEditVal(r.email ?? ''); }} title="Düzenle / sil" style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: 2, display: 'inline-flex' }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>
+      </button>
+    </span>
+  );
 
   const stat: React.CSSProperties = { background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: '10px 14px' };
 
@@ -97,12 +128,7 @@ export default function AdminFreeScans() {
             rows={data.items.map((r: any) => [
               fmtDate(r.createdAt),
               <span key="h" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{r.host}</span>,
-              r.email ? (
-                <span key="e" style={{ color: '#4ade80', wordBreak: 'break-all' }}>
-                  {r.email}
-                  {r.suspicious && <span style={{ marginLeft: 6, background: '#7c2d12', color: '#fdba74', borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>ŞÜPHELİ</span>}
-                </span>
-              ) : <span key="e" style={{ color: '#475569' }}>—</span>,
+              emailCell(r),
               resultCell(r),
               <span key="rg" style={{ textTransform: 'uppercase', fontSize: 11, color: '#93c5fd' }}>{r.region}</span>,
               <span key="ip" style={{ color: '#64748b', fontSize: 12 }}>{r.ip ?? '—'}</span>,

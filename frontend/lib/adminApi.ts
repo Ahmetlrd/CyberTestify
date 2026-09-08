@@ -123,6 +123,8 @@ export const adminApi = {
     return areq<{ page: number; pageSize: number; total: number; uniqueHosts: number; last24h: number; items: Array<{ id: string; host: string; status: string; score: number | null; grade: string | null; findings: number | null; httpStatus: number | null; region: string; ip: string | null; email: string | null; createdAt: string; suspicious?: boolean }> }>(`/admin/instant-scan-logs?${p.toString()}`);
   },
   instantScanLogDelete: (id: string) => areq<{ ok: boolean }>(`/admin/instant-scan-logs/${id}`, { method: 'DELETE' }),
+  instantScanLogSetEmail: (id: string, email: string | null) =>
+    areq<{ ok: boolean; email: string | null }>(`/admin/instant-scan-logs/${id}`, { method: 'PATCH', body: JSON.stringify({ email }) }),
   // (Fatura talebi — MANUEL) Vedat fatura bilgilerini + fiyatı görür, durumu işaretler.
   invoiceRequests: (status = '') =>
     areq<{ total: number; pendingCount: number; items: any[] }>(`/admin/invoice-requests${status ? `?status=${status}` : ''}`),
