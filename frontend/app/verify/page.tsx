@@ -133,6 +133,7 @@ const VER_T = {
     addEyebrow: 'YENİ ALAN ADI',
     addTitle: 'Alan adı ekle ve doğrula',
     addDesc: 'DNS kaydı ya da HTML dosyasıyla sahipliği dakikalar içinde doğrula.',
+    star: 'Yıldızla', unstar: 'Yıldızı kaldır',
     selectDomain: 'Alan adı seçin',
     startScanning: 'Taramaya Başla',
     activeNotice1: 'Aktif güvenlik testlerini başlatabilmemiz için alan adının size ait olduğunu',
@@ -207,6 +208,7 @@ const VER_T = {
     addEyebrow: 'NEUE DOMAIN',
     addTitle: 'Domain hinzufügen & verifizieren',
     addDesc: 'Bestätigen Sie den Besitz in Minuten per DNS-Eintrag oder HTML-Datei.',
+    star: 'Markieren', unstar: 'Markierung entfernen',
     selectDomain: 'Domain auswählen',
     startScanning: 'Scan starten',
     activeNotice1: 'Damit wir aktive Sicherheitstests starten können, müssen Sie mit einem',
@@ -281,6 +283,7 @@ const VER_T = {
     addEyebrow: 'NEW DOMAIN',
     addTitle: 'Add & verify a domain',
     addDesc: 'Verify ownership in minutes via a DNS record or HTML file.',
+    star: 'Star', unstar: 'Unstar',
     selectDomain: 'Select a domain',
     startScanning: 'Start scanning',
     activeNotice1: 'Before we can start active security tests, you need to prove the domain belongs to you with a',
@@ -376,6 +379,14 @@ export default function VerifyHub() {
   const [notice, setNotice] = useState<string | null>(null);
   // (İŞ 2) Panel sekmeleri — dağınık iç içe bölümler yerine net ayrım.
   const [tab, setTab] = useState<'domains' | 'history'>('domains');
+  const [starred, setStarred] = useState<Set<string>>(new Set());
+  useEffect(() => { try { const r = window.localStorage.getItem('ct_starred_domains'); if (r) setStarred(new Set(JSON.parse(r))); } catch { /* noop */ } }, []);
+  const toggleStar = (id: string) => setStarred((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    try { window.localStorage.setItem('ct_starred_domains', JSON.stringify([...next])); } catch { /* noop */ }
+    return next;
+  });
   // (Çok-bölge) Dil + locale: region cookie'sinden. de → Almanca metin + Alman tarih biçimi.
   const [region, setRegion] = useState<RegionCode>('tr');
   const lang: 'tr' | 'de' | 'en' = getRegion(region).lang === 'de' ? 'de' : getRegion(region).lang === 'en' ? 'en' : 'tr';
@@ -523,67 +534,66 @@ export default function VerifyHub() {
     }
   }
 
-  const validDomains = domains.filter((d) => d.valid);
-  const pendingDomains = domains.filter((d) => !d.valid);
+  const validDomains = domains.filter((d) => d.valid).sort((a, b) => Number(starred.has(b.id)) - Number(starred.has(a.id)));
+  const pendingDomains = domains.filter((d) => !d.valid).sort((a, b) => Number(starred.has(b.id)) - Number(starred.has(a.id)));
   const shownHistory = showAllHistory ? orders : orders.slice(0, HISTORY_PREVIEW);
   // (Hero özet çipleri) tıklayınca ilgili sekmeye geç + o bölüme yumuşak kaydır.
   const goToSection = (target: 'domains' | 'history', id: string) => {
     setTab(target);
     setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   };
+  const starBtn = (id: string) => {
+    const on = starred.has(id);
+    return (
+      <button type="button" onClick={() => toggleStar(id)} title={on ? T.unstar : T.star} aria-label={on ? T.unstar : T.star}
+        className={`shrink-0 transition ${on ? 'text-accent' : 'text-ink-muted hover:text-accent'}`}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
+      </button>
+    );
+  };
 
   // --- Alan adı seçim/ekleme bölümü (hem normal hem satın-alma modunda kullanılır) ---
   const addDomainBlock = (
-    <>
-
-        {/* (Kullanıcı beğendi) Her zaman görünür YEŞİL "alan adı ekle" kartı — mockup deseni. */}
-        <form onSubmit={addDomain} className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-brand-deep p-6 text-white shadow-card">
-          <span aria-hidden className="pointer-events-none absolute -bottom-14 -right-10 h-44 w-44 rounded-full bg-accent/15" />
-          <div className="relative">
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">{T.addEyebrow}</p>
-            <p className="mt-1.5 text-lg font-bold">{T.addTitle}</p>
-            <p className="mt-1 max-w-md text-sm leading-relaxed text-white/70">{T.addDesc}</p>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <input
-                required
-                placeholder={T.domainPlaceholder}
-                className="flex-1 rounded-lg border border-white/20 bg-white/10 px-3 py-3 text-sm text-white placeholder-white/45 outline-none transition focus:border-accent"
-                value={newHostname}
-                onChange={(e) => setNewHostname(e.target.value)}
-              />
-              <button type="submit" disabled={busy} className="shrink-0 rounded-lg bg-gradient-to-b from-amber-400 to-accent px-5 py-3 text-sm font-bold text-ink shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60">
-                {busy ? T.adding : purchaseMode && !activePurchase ? T.addAndContinue : T.add}
-              </button>
-            </div>
-            {(() => {
-              const raw = newHostname.trim();
-              const host = toBareHost(newHostname);
-              if (host && raw.toLowerCase() !== host) {
-                return (
-                  <p className="mt-2 text-xs text-white/60">
-                    {T.willBeAdded} <span className="font-mono font-semibold text-white">{host}</span>{' '}
-                    (<code>https://</code>, <code>www.</code> {T.stripNote1})
-                  </p>
-                );
-              }
-              return null;
-            })()}
-          </div>
-        </form>
-        {!purchaseMode && domains.length > 0 && (
-          <button onClick={delAll} className="mt-3 text-sm font-semibold text-red-600 transition hover:underline">
-            {T.deleteAll}
+    <form onSubmit={addDomain} className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-brand-deep p-6 text-white shadow-card">
+      <span aria-hidden className="pointer-events-none absolute -bottom-14 -right-10 h-44 w-44 rounded-full bg-accent/15" />
+      <div className="relative">
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">{T.addEyebrow}</p>
+        <p className="mt-1.5 text-lg font-bold">{T.addTitle}</p>
+        <p className="mt-1 max-w-md text-sm leading-relaxed text-white/70">{T.addDesc}</p>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <input
+            required
+            placeholder={T.domainPlaceholder}
+            className="flex-1 rounded-lg border border-white/20 bg-white/10 px-3 py-3 text-sm text-white placeholder-white/45 outline-none transition focus:border-accent"
+            value={newHostname}
+            onChange={(e) => setNewHostname(e.target.value)}
+          />
+          <button type="submit" disabled={busy} className="shrink-0 rounded-lg bg-gradient-to-b from-amber-400 to-accent px-5 py-3 text-sm font-bold text-ink shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60">
+            {busy ? T.adding : purchaseMode && !activePurchase ? T.addAndContinue : T.add}
           </button>
-        )}
-        {/* Ekle / toplu-sil sonucu — bölümün HEMEN ALTINDA (sayfa sonunda değil). */}
+        </div>
+        {/* (Hata/sonuç) butonun HEMEN altında, kart tonuyla uyumlu — sayfa sonunda değil. */}
         {bulkMsg && (
-          <p className="mt-3 rounded-card border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">{bulkMsg}</p>
+          <p className="mt-3 rounded-lg border border-red-300/40 bg-red-500/15 px-3 py-2 text-xs font-medium text-red-100">{bulkMsg}</p>
         )}
         {notice && (
-          <p className="mt-3 rounded-card border border-emerald-300/50 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-800">✓ {notice}</p>
+          <p className="mt-3 rounded-lg border border-emerald-300/40 bg-emerald-400/15 px-3 py-2 text-xs font-medium text-emerald-100">✓ {notice}</p>
         )}
-      
-    </>
+        {(() => {
+          const raw = newHostname.trim();
+          const host = toBareHost(newHostname);
+          if (host && raw.toLowerCase() !== host) {
+            return (
+              <p className="mt-2 text-xs text-white/60">
+                {T.willBeAdded} <span className="font-mono font-semibold text-white">{host}</span>{' '}
+                (<code>https://</code>, <code>www.</code> {T.stripNote1})
+              </p>
+            );
+          }
+          return null;
+        })()}
+      </div>
+    </form>
   );
 
   const scheduledCard = (
@@ -611,7 +621,7 @@ export default function VerifyHub() {
               <div key={d.id} className="card p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <div className="truncate font-semibold text-ink">{d.hostname}</div>
+                    <div className="flex items-center gap-2">{starBtn(d.id)}<span className="truncate font-semibold text-ink">{d.hostname}</span></div>
                     <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> {T.verifiedValid}
                     </span>
@@ -647,7 +657,7 @@ export default function VerifyHub() {
                 <div key={d.id} id={`domain-${d.id}`} className="card p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
-                      <div className="truncate font-semibold text-ink">{d.hostname}</div>
+                      <div className="flex items-center gap-2">{starBtn(d.id)}<span className="truncate font-semibold text-ink">{d.hostname}</span></div>
                       <span className={`mt-0.5 block text-xs font-medium ${expired ? 'text-red-600' : 'text-amber-600'}`}>
                         {expired ? T.expiredReverify : T.notVerifiedYet}
                       </span>
@@ -727,7 +737,7 @@ export default function VerifyHub() {
     <div key={o.id} className="px-5 py-4">
       {/* (DUZELTME) Once sag taraf sm:shrink-0 idi ve sol sutunu eziyordu (alan adi "g.." gibi
           kirpiliyordu). Grid ile sol sutuna EN AZ 200px garanti edildi; sag taraf gerekirse sarar. */}
-      <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(300px,1fr)_auto] sm:items-center sm:gap-5">
+      <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
         <button
           onClick={() => router.push(`/dashboard/${o.id}`)}
           className="group flex min-w-0 items-center gap-3.5 text-left"
@@ -746,7 +756,7 @@ export default function VerifyHub() {
             </span>
           </span>
         </button>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:flex-nowrap sm:justify-end">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:justify-end">
           <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border px-2.5 py-1 text-xs font-semibold ${statusTone(o.status)}`}>
             <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
             {ORDER_STATUS_LABEL[lang][o.status] ?? o.status}
@@ -768,16 +778,16 @@ export default function VerifyHub() {
             </button>
           )}
           {isArchived ? (
-            <button onClick={() => archiveOrder(o.id, false)} className="whitespace-nowrap px-2 py-1 text-xs font-medium text-ink-muted transition hover:text-brand">
-              {T.unarchive}
+            <button onClick={() => archiveOrder(o.id, false)} title={T.unarchive} aria-label={T.unarchive} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line text-ink-muted transition hover:border-brand-300 hover:text-brand">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 3h18v4H3z" /><path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7M10 12h4" /></svg>
             </button>
           ) : (
             <>
-              <button onClick={() => archiveOrder(o.id, true)} className="whitespace-nowrap px-2 py-1 text-xs font-medium text-ink-muted transition hover:text-brand">
-                {T.archive}
+              <button onClick={() => archiveOrder(o.id, true)} title={T.archive} aria-label={T.archive} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line text-ink-muted transition hover:border-brand-300 hover:text-brand">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 3h18v4H3z" /><path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7M10 12h4" /></svg>
               </button>
-              <button onClick={() => deleteOrder(o.id)} className="whitespace-nowrap px-2 py-1 text-xs font-medium text-red-600 transition hover:text-red-700">
-                {T.delete}
+              <button onClick={() => deleteOrder(o.id)} title={T.delete} aria-label={T.delete} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line text-ink-muted transition hover:border-red-300 hover:bg-red-50 hover:text-red-600">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /></svg>
               </button>
             </>
           )}
@@ -872,11 +882,11 @@ export default function VerifyHub() {
                 onClick={() => setTab(key)}
                 aria-pressed={tab === key}
                 className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm transition ${
-                  tab === key ? 'bg-brand font-bold text-white shadow-sm' : 'font-medium text-ink-muted hover:bg-brand-50/70'
+                  tab === key ? 'bg-accent font-bold text-ink shadow-sm' : 'font-medium text-ink-muted hover:bg-brand-50/70'
                 }`}
               >
                 {label}
-                {count > 0 && <span className={`rounded-pill px-1.5 py-0.5 text-[10px] font-bold ${tab === key ? 'bg-white/25 text-white' : 'bg-line text-ink-soft'}`}>{count}</span>}
+                {count > 0 && <span className={`rounded-pill px-1.5 py-0.5 text-[10px] font-bold ${tab === key ? 'bg-ink/15 text-ink' : 'bg-line text-ink-soft'}`}>{count}</span>}
               </button>
             ))}
           </nav>
