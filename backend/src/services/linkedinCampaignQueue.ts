@@ -60,6 +60,7 @@ export async function syncLinkedinPostStatuses(): Promise<{ checked: number; upd
 }
 
 
+const CAMPAIGN_WAIT_NOTE = 'Buffer plan sınırı (10 zamanlanmış gönderi) dolu — slot açılınca otomatik kuyruğa alınacak.';
 const assetUrl = (id: string) => `${config.publicApiUrl.replace(/\/+$/, '')}/linkedin-assets/${id}`;
 
 export async function topUpLinkedinCampaign(): Promise<{ queued: number; remaining: number; capped: boolean }> {
@@ -75,7 +76,16 @@ export async function topUpLinkedinCampaign(): Promise<{ queued: number; remaini
     if (done) continue;
     if (new Date(p.dueAtUtc).getTime() < Date.now()) continue; // tarihi geçmiş — sessizce atla
     remaining++;
-    if (capped) continue; // bu turda slot yok; kalanları saymaya devam et
+    if (capped) {
+      // Slot yok — AMA gönderiyi PANELDE görünür kıl: bu kampanya postu için DRAFT satırı yoksa oluştur
+      // (medya ÜRETİLMEZ; slot açılıp gerçekten kuyruğa alınınca üretilir). Böylece kullanıcı SIRADAKİ
+      // tüm postları planlı tarihleriyle görebilir.
+      const existing = await prisma.linkedinPost.findFirst({ where: { content: { startsWith: marker } }, select: { id: true } });
+      if (!existing) {
+        await prisma.linkedinPost.create({ data: { content: p.text, status: 'DRAFT', errorMessage: CAMPAIGN_WAIT_NOTE, scheduledFor: new Date(p.dueAtUtc) } });
+      }
+      continue;
+    }
 
     try {
       let docUrl: string | null = null, docThumb: string | null = null, imgUrl: string | null = null;
@@ -111,7 +121,7 @@ export async function topUpLinkedinCampaign(): Promise<{ queued: number; remaini
       if (/scheduled posts limit/i.test(msg)) {
         capped = true;
         const waiting = await prisma.linkedinPost.findFirst({ where: { content: { startsWith: marker }, status: { in: ['DRAFT', 'FAILED'] } }, select: { id: true } });
-        const note = 'Buffer plan sınırı (10 zamanlanmış gönderi) dolu — slot açılınca otomatik kuyruğa alınacak.';
+        const note = CAMPAIGN_WAIT_NOTE;
         if (waiting) await prisma.linkedinPost.update({ where: { id: waiting.id }, data: { status: 'DRAFT', errorMessage: note, scheduledFor: new Date(p.dueAtUtc) } });
         else await prisma.linkedinPost.create({ data: { content: p.text, status: 'DRAFT', errorMessage: note, scheduledFor: new Date(p.dueAtUtc) } });
         continue;

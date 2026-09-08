@@ -171,7 +171,9 @@ export default function AdminLinkedin() {
         <p style={{ margin: '6px 0 0', fontSize: 13, color: '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{p.content}</p>
         {p.mediaUrl && <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748b', wordBreak: 'break-all' }}>Görsel: {p.mediaUrl}</p>}
         {p.errorMessage && (
-          <p style={{ margin: '6px 0 0', fontSize: 12, color: '#fca5a5', fontWeight: 600 }}>Hata: {p.errorMessage}</p>
+          <p style={{ margin: '6px 0 0', fontSize: 12, color: p.status === 'FAILED' ? '#fca5a5' : '#94a3b8', fontWeight: 600 }}>
+            {p.status === 'FAILED' ? 'Hata: ' : 'Sırada: '}{p.errorMessage}
+          </p>
         )}
         {p.bufferPostId && <p style={{ margin: '4px 0 0', fontSize: 11, color: '#475569' }}>Buffer id: {p.bufferPostId}</p>}
       </div>
