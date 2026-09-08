@@ -15,7 +15,7 @@ import { promoteQueued } from './services/orchestrator.js';
 import { checkEgressProxyHealth } from './services/egressHealth.js';
 import { runDueSchedules, recordScheduleOutcome } from './services/schedules.js';
 import { syncUsomCatalog, USOM_SYNC_INTERVAL_MS } from './services/usomSync.js';
-import { topUpLinkedinCampaign, CAMPAIGN_TOPUP_INTERVAL_MS } from './services/linkedinCampaignQueue.js';
+import { topUpLinkedinCampaign, CAMPAIGN_TOPUP_INTERVAL_MS, syncLinkedinPostStatuses, LINKEDIN_SYNC_INTERVAL_MS } from './services/linkedinCampaignQueue.js';
 import { reapStuckFlows } from './services/watchdog.js';
 
 // Fail-fast: kapsam kilidi konfigurasyonu eksik/gecersizse hemen dur.
@@ -55,6 +55,7 @@ const TERMINAL_ORDER = new Set(['scan_failed', 'scan_completed', 'report_deliver
 let lastLogRetentionAt = 0; // (gözlemlenebilirlik) log retention'ı günde bir kez çalıştırmak için guard
 let lastUsomSyncAt = 0;      // (USOM/SGB) katalog senkronunu USOM_SYNC_INTERVAL_MS'de bir çalıştırmak için guard (restart-güvenli: idempotent upsert)
 let lastLinkedinTopUpAt = 0; // (LINKEDIN) kampanya Buffer kuyruğunu CAMPAIGN_TOPUP_INTERVAL_MS'de bir doldur (Buffer 10-slot sınırı açıldıkça); idempotent/marker-güvenli
+let lastLinkedinSyncAt = 0; // (LINKEDIN) Buffer'daki durum (sent->PUBLISHED vb.) LINKEDIN_SYNC_INTERVAL_MS'de bir DB'ye yansit
 async function failOrderIfPending(orderId: string, reason: string): Promise<void> {
   const o = await prisma.order.findUnique({ where: { id: orderId }, select: { status: true } });
   if (!o || TERMINAL_ORDER.has(o.status)) return;
@@ -483,6 +484,12 @@ async function main() {
         lastLinkedinTopUpAt = Date.now();
         const r = await topUpLinkedinCampaign();
         if (r.queued) console.log(`[worker] LinkedIn kampanya: ${r.queued} gonderi kuyruklandi, ${r.remaining} sirada${r.capped ? ' (Buffer plan siniri dolu)' : ''}.`);
+      }
+      // (DURUM SENKRONU) Buffer gonderiyi yayinladiginda DB'yi SCHEDULED->PUBLISHED cevir — panel acilmasa da guncel.
+      if (Date.now() - lastLinkedinSyncAt > LINKEDIN_SYNC_INTERVAL_MS) {
+        lastLinkedinSyncAt = Date.now();
+        const sr = await syncLinkedinPostStatuses();
+        if (sr.updated) console.log(`[worker] LinkedIn durum senkronu: ${sr.updated}/${sr.checked} gonderi guncellendi.`);
       }
     } catch (err) {
       console.error('[worker] LinkedIn kampanya kuyruklama sirasinda hata (yine de devam):', err);

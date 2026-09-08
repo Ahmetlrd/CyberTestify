@@ -33,6 +33,8 @@ export default function AdminLinkedin() {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState<string>(''); // durum filtresi ('' = tümü)
+  const [syncing, setSyncing] = useState(false);
 
   const [content, setContent] = useState('');
   const [mediaUrl, setMediaUrl] = useState('');
@@ -48,7 +50,10 @@ export default function AdminLinkedin() {
   useEffect(() => {
     adminApi.linkedinStatus().then(setStatus).catch((e) => setStatus({ enabled: false, error: e.message }));
     adminApi.linkedinAssets().then((d) => setAssets(d.items)).catch(() => {});
-    load();
+    // (OTOMATİK SENKRON) Panel açılınca Buffer'daki güncel durumu çek → yayınlanan gönderi ANINDA
+    // "Yayınlandı" görünür (worker zaten 20 dk'da bir de senkronlar). Best-effort; hata taramayı bozmaz.
+    setSyncing(true);
+    adminApi.linkedinSync().catch(() => {}).finally(() => { setSyncing(false); load(); });
   }, [load]);
 
   async function submit(mode: 'addToQueue' | 'customScheduled') {
@@ -121,9 +126,32 @@ export default function AdminLinkedin() {
   }
 
   const items = data?.items ?? [];
-  const pending = items.filter((p) => p.status === 'QUEUED' || p.status === 'SCHEDULED');
-  const failed = items.filter((p) => p.status === 'FAILED');
-  const published = items.filter((p) => p.status === 'PUBLISHED');
+  const STATUS_ORDER = ['DRAFT', 'QUEUED', 'SCHEDULED', 'PUBLISHED', 'FAILED'];
+  const counts: Record<string, number> = {};
+  for (const p of items) counts[p.status] = (counts[p.status] ?? 0) + 1;
+  // Zaman çizelgesi: planlanan tarihe göre (yakın olan önce); tarihi olmayan (Buffer sırası) en sona.
+  const sorted = [...items].sort((a, b) => {
+    const ta = a.scheduledFor ? new Date(a.scheduledFor).getTime() : Infinity;
+    const tb = b.scheduledFor ? new Date(b.scheduledFor).getTime() : Infinity;
+    if (ta !== tb) return ta - tb;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+  const shown = filter ? sorted.filter((p) => p.status === filter) : sorted;
+
+  const filterChip = (key: string, label: string, count: number) => {
+    const active = filter === key;
+    const c = key ? (STATUS_COLOR[key] ?? '#64748b') : '#38bdf8';
+    return (
+      <button key={key || 'ALL'} onClick={() => setFilter(key)} style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999,
+        fontSize: 12, fontWeight: 700, cursor: 'pointer',
+        border: `1px solid ${active ? c : '#334155'}`, background: active ? c : '#0f172a',
+        color: active ? '#0f172a' : '#cbd5e1',
+      }}>
+        {label} <span style={{ opacity: 0.75 }}>{count}</span>
+      </button>
+    );
+  };
 
   const pill = (s: string) => (
     <span style={{ background: STATUS_COLOR[s] ?? '#64748b', color: '#0f172a', borderRadius: 999, padding: '2px 9px', fontSize: 11, fontWeight: 800 }}>
@@ -242,25 +270,20 @@ export default function AdminLinkedin() {
         </div>
       </div>
 
-      {/* --- Zamanlanmış / sırada --- */}
-      <div style={{ ...card, marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-          <strong style={{ color: '#fff', fontSize: 15 }}>Bekleyen gönderiler ({pending.length})</strong>
-          <button onClick={sync} disabled={busy} style={{ ...btn, marginLeft: 'auto' }}>Durumları yenile</button>
-        </div>
-        {pending.length === 0 ? <p style={{ color: '#64748b', fontSize: 13 }}>Bekleyen gönderi yok.</p> : pending.map((p) => row(p, true))}
-      </div>
-
-      {failed.length > 0 && (
-        <div style={{ ...card, marginBottom: 20, borderColor: '#7f1d1d' }}>
-          <strong style={{ color: '#fca5a5', fontSize: 15 }}>Başarısız ({failed.length})</strong>
-          {failed.map((p) => row(p, true))}
-        </div>
-      )}
-
+      {/* --- TÜM gönderiler: her durum görünür, filtrelenebilir, zaman sırasına göre --- */}
       <div style={card}>
-        <strong style={{ color: '#fff', fontSize: 15 }}>Yayınlananlar ({published.length})</strong>
-        {published.length === 0 ? <p style={{ color: '#64748b', fontSize: 13 }}>Henüz yayınlanmış gönderi yok.</p> : published.map((p) => row(p, false))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <strong style={{ color: '#fff', fontSize: 15 }}>Gönderiler ({items.length})</strong>
+          {syncing && <span style={{ fontSize: 12, color: '#38bdf8' }}>Buffer ile senkronize ediliyor…</span>}
+          <button onClick={sync} disabled={busy || syncing} style={{ ...btn, marginLeft: 'auto' }}>Durumları yenile</button>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0 4px' }}>
+          {filterChip('', 'Tümü', items.length)}
+          {STATUS_ORDER.map((st) => (counts[st] ? filterChip(st, STATUS_LABEL[st], counts[st]) : null))}
+        </div>
+        {shown.length === 0
+          ? <p style={{ color: '#64748b', fontSize: 13, marginTop: 12 }}>{items.length === 0 ? 'Henüz gönderi yok.' : 'Bu filtrede gönderi yok.'}</p>
+          : shown.map((p) => row(p, p.status !== 'PUBLISHED'))}
       </div>
     </>
   );

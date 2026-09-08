@@ -15,9 +15,9 @@ import {
   resolveLinkedInTarget,
   scheduleLinkedInPost,
   deleteBufferPost,
-  getBufferPost,
   BufferError,
 } from '../services/bufferClient.js';
+import { syncLinkedinPostStatuses } from '../services/linkedinCampaignQueue.js';
 
 export const adminLinkedinRouter = Router();
 
@@ -28,18 +28,6 @@ function msgOf(e: unknown): string {
   return 'Buffer isteği tamamlanamadı.';
 }
 
-/** Buffer durum -> bizim durum. Buffer PostStatus: draft|error|needs_approval|scheduled|sending|sent */
-function mapBufferStatus(bufferStatus: string | null, fallback: string): string {
-  switch (bufferStatus) {
-    case 'sent': return 'PUBLISHED';
-    case 'error': return 'FAILED';
-    case 'draft': return 'DRAFT';
-    case 'scheduled':
-    case 'sending':
-    case 'needs_approval': return fallback === 'SCHEDULED' ? 'SCHEDULED' : 'QUEUED';
-    default: return fallback;
-  }
-}
 
 // --- Baglanti durumu: kanal bagli mi, anahtar var mi ------------------------------------------
 adminLinkedinRouter.get('/status', async (_req, res) => {
@@ -228,22 +216,6 @@ adminLinkedinRouter.delete('/posts/:id', async (req, res) => {
 
 // --- Durum senkronu: bekleyen gonderilerin Buffer'daki guncel durumu ---------------------------
 adminLinkedinRouter.post('/sync', async (_req, res) => {
-  const pending = await prisma.linkedinPost.findMany({
-    where: { status: { in: ['QUEUED', 'SCHEDULED'] }, bufferPostId: { not: null } },
-    take: 100,
-  });
-  let updated = 0;
-  for (const p of pending) {
-    const remote = await getBufferPost(p.bufferPostId as string); // best-effort; null ise dokunma
-    if (!remote) continue;
-    const next = mapBufferStatus(remote.status, p.status);
-    if (next !== p.status) {
-      await prisma.linkedinPost.update({
-        where: { id: p.id },
-        data: { status: next, errorMessage: next === 'FAILED' ? 'Buffer gönderiyi yayınlayamadı.' : null },
-      });
-      updated++;
-    }
-  }
-  res.json({ ok: true, checked: pending.length, updated });
+  const r = await syncLinkedinPostStatuses();
+  res.json({ ok: true, checked: r.checked, updated: r.updated });
 });

@@ -13,10 +13,52 @@
 import { prisma } from '../db.js';
 import { CAMPAIGN } from '../campaigns/linkedin2026_09.js';
 import { renderCarouselPdf, renderSlidePng, type Slide } from './linkedinCarousel.js';
-import { scheduleLinkedInPost, bufferEnabled } from './bufferClient.js';
+import { scheduleLinkedInPost, bufferEnabled, getBufferPost } from './bufferClient.js';
 import { config } from '../config.js';
 
 export const CAMPAIGN_TOPUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 saatte bir dener (gün içi slot açılırsa yakalar)
+
+/** (DURUM SENKRONU) Buffer PostStatus (draft|error|needs_approval|scheduled|sending|sent) -> bizim durum. */
+export const LINKEDIN_SYNC_INTERVAL_MS = 20 * 60 * 1000; // 20 dk: Buffer yayinlayinca DB'yi SCHEDULED->PUBLISHED cevir
+function mapBufferStatus(bufferStatus: string | null, fallback: string): string {
+  switch (bufferStatus) {
+    case 'sent': return 'PUBLISHED';
+    case 'error': return 'FAILED';
+    case 'draft': return 'DRAFT';
+    case 'scheduled':
+    case 'sending':
+    case 'needs_approval': return fallback === 'SCHEDULED' ? 'SCHEDULED' : 'QUEUED';
+    default: return fallback;
+  }
+}
+
+/**
+ * Bekleyen (QUEUED/SCHEDULED, bufferPostId'li) gonderilerin Buffer'daki GUNCEL durumunu ceker ve DB'yi
+ * gunceller. Buffer yayinladiginda (status='sent') kayit PUBLISHED olur. BEST-EFFORT: getBufferPost null
+ * donerse o kayda dokunulmaz. Hem admin '/sync' ucu hem worker periyodik olarak bunu cagirir -> panel
+ * acilmasa bile durum kendiliginden guncellenir.
+ */
+export async function syncLinkedinPostStatuses(): Promise<{ checked: number; updated: number }> {
+  const pending = await prisma.linkedinPost.findMany({
+    where: { status: { in: ['QUEUED', 'SCHEDULED'] }, bufferPostId: { not: null } },
+    take: 200,
+  });
+  let updated = 0;
+  for (const p of pending) {
+    const remote = await getBufferPost(p.bufferPostId as string);
+    if (!remote) continue;
+    const next = mapBufferStatus(remote.status, p.status);
+    if (next !== p.status) {
+      await prisma.linkedinPost.update({
+        where: { id: p.id },
+        data: { status: next, errorMessage: next === 'FAILED' ? 'Buffer gönderiyi yayınlayamadı.' : null },
+      });
+      updated++;
+    }
+  }
+  return { checked: pending.length, updated };
+}
+
 
 const assetUrl = (id: string) => `${config.publicApiUrl.replace(/\/+$/, '')}/linkedin-assets/${id}`;
 
