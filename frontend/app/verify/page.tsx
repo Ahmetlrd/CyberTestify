@@ -154,6 +154,9 @@ const VER_T = {
     showAll: (n: number) => `Tümünü gör (${n})`,
     noArchivedScans: 'Arşivlenmiş tarama yok.',
     noScansYet: 'Henüz bir taramanız yok. “Alan Adları” sekmesinden bir tarama başlatın.',
+    confirmArchive: 'Bu taramayı arşivlemek istediğinize emin misiniz?',
+    scanSearch: 'Taramalarda ara (alan adı / paket)…',
+    noScanMatch: 'Aramanızla eşleşen tarama yok.',
     confirmDeleteDomain: 'Bu alan adını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
     confirmDeleteAll: 'Taraması olmayan tüm alan adları silinsin mi?',
     confirmDeleteReport: 'Bu raporu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
@@ -229,6 +232,9 @@ const VER_T = {
     showAll: (n: number) => `Alle anzeigen (${n})`,
     noArchivedScans: 'Keine archivierten Scans.',
     noScansYet: 'Sie haben noch keine Scans. Starten Sie einen Scan über den Tab „Domains“.',
+    confirmArchive: 'Möchten Sie diesen Scan wirklich archivieren?',
+    scanSearch: 'Scans durchsuchen (Domain / Paket)…',
+    noScanMatch: 'Keine Scans für Ihre Suche gefunden.',
     confirmDeleteDomain: 'Möchten Sie diese Domain wirklich löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.',
     confirmDeleteAll: 'Sollen alle Domains ohne Scans gelöscht werden?',
     confirmDeleteReport: 'Möchten Sie diesen Bericht wirklich löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.',
@@ -304,6 +310,9 @@ const VER_T = {
     showAll: (n: number) => `Show all (${n})`,
     noArchivedScans: 'No archived scans.',
     noScansYet: 'You don\'t have any scans yet. Start a scan from the “Domains” tab.',
+    confirmArchive: 'Are you sure you want to archive this scan?',
+    scanSearch: 'Search scans (domain / package)…',
+    noScanMatch: 'No scans match your search.',
     confirmDeleteDomain: 'Are you sure you want to delete this domain? This action cannot be undone.',
     confirmDeleteAll: 'Delete all domains without scans?',
     confirmDeleteReport: 'Are you sure you want to delete this report? This action cannot be undone.',
@@ -372,6 +381,7 @@ export default function VerifyHub() {
   // ilgili butonun/kartın HEMEN ALTINDA göster.
   const [domainMsg, setDomainMsg] = useState<{ id: string; text: string } | null>(null); // alan adı kartı (sil vb.)
   const [orderMsg, setOrderMsg] = useState<{ id: string; text: string } | null>(null); // tarama kartı (sil/arşiv)
+  const [scanQuery, setScanQuery] = useState(''); // Taramalarım araması (alan adı / paket)
   const [bulkMsg, setBulkMsg] = useState<string | null>(null); // ekle-formu / toplu-sil bölgesi
   const [busy, setBusy] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -508,6 +518,7 @@ export default function VerifyHub() {
   }
 
   async function archiveOrder(id: string, archived: boolean) {
+    if (archived && !window.confirm(T.confirmArchive)) return;
     setOrderMsg(null);
     try {
       await api.archiveOrder(id, archived);
@@ -542,7 +553,10 @@ export default function VerifyHub() {
 
   const validDomains = domains.filter((d) => d.valid).sort((a, b) => Number(starred.has(b.id)) - Number(starred.has(a.id)));
   const pendingDomains = domains.filter((d) => !d.valid).sort((a, b) => Number(starred.has(b.id)) - Number(starred.has(a.id)));
-  const shownHistory = showAllHistory ? orders : orders.slice(0, HISTORY_PREVIEW);
+  const scanMatches = scanQuery.trim()
+    ? orders.filter((o) => `${o.hostname} ${o.packageName}`.toLowerCase().includes(scanQuery.trim().toLowerCase()))
+    : orders;
+  const shownHistory = showAllHistory || scanQuery.trim() ? scanMatches : scanMatches.slice(0, HISTORY_PREVIEW);
   // (Hero özet çipleri) tıklayınca ilgili sekmeye geç + o bölüme yumuşak kaydır.
   const goToSection = (target: 'domains' | 'history', id: string) => {
     setTab(target);
@@ -569,7 +583,7 @@ export default function VerifyHub() {
           <input
             required
             placeholder={T.domainPlaceholder}
-            className="flex-1 rounded-lg border border-white/20 bg-white/10 px-3 py-3 text-sm text-white placeholder-white/45 outline-none transition focus:border-accent"
+            className="flex-1 rounded-lg border border-white/20 bg-white/10 px-3 py-3 text-base text-white placeholder-white/45 outline-none transition focus:border-accent sm:text-sm"
             value={newHostname}
             onChange={(e) => setNewHostname(e.target.value)}
           />
@@ -869,14 +883,10 @@ export default function VerifyHub() {
       ) : (
         <>
           <div className="grid gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-          {/* Mobilde EN ALTTA / desktop sağ-üst: yeni alan adı ekle */}
-          <div className="order-3 lg:order-none lg:col-start-2 lg:row-start-1">{addDomainBlock}</div>
-          {/* Mobilde ortada / desktop sağ-alt: zamanlanmış */}
-          <div className="order-2 lg:order-none lg:col-start-2 lg:row-start-2">{scheduledCard}</div>
-          {/* Mobilde ÜSTTE / desktop sol (2 satır): sekmeler + liste/geçmiş */}
-          <div className="order-1 min-w-0 lg:order-none lg:col-start-1 lg:row-start-1 lg:row-span-2">
+          {/* SOL SÜTUN (mobilde ÜSTTE): sekmeler + liste/geçmiş */}
+          <div className="min-w-0 lg:col-start-1 lg:row-start-1">
           {/* (İŞ 2) SEKME NAVİGASYONU */}
-          <nav className="flex flex-wrap gap-2 rounded-2xl border border-line bg-white p-1.5 shadow-card">
+          <nav className="mx-auto flex w-fit max-w-full flex-wrap justify-center gap-2 rounded-2xl border border-line bg-white p-1.5 shadow-card">
             {([
               ['history', T.tabMyScans, orders.length],
               ['domains', T.tabDomains, validDomains.length],
@@ -902,18 +912,26 @@ export default function VerifyHub() {
               <section id="scans-history" className="mt-6 scroll-mt-24">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">{T.myScans}</h2>
-                  <button onClick={toggleArchived} className="text-xs font-medium text-accent-600 hover:underline">
+                  <button onClick={toggleArchived} className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-line bg-white px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:border-brand-300 hover:text-brand">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 3h18v4H3z" /><path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7M10 12h4" /></svg>
                     {showArchived ? T.hideArchived : T.archived}
                     {archivedOrders && archivedOrders.length > 0 ? ` (${archivedOrders.length})` : ''}
                   </button>
                 </div>
-                {/* (FORMAT) Tek kart + satır ayraçları; "Tümünü gör" kartın alt şeridi olarak içeride. */}
+                {/* (Arama) Taramalarım içinde alan adı / paket ara. */}
+                <div className="relative mt-3">
+                  <svg className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                  <input value={scanQuery} onChange={(e) => setScanQuery(e.target.value)} placeholder={T.scanSearch} aria-label={T.scanSearch}
+                    className="w-full rounded-lg border border-line bg-white py-2.5 pl-9 pr-3 text-base text-ink outline-none transition focus:border-brand-300 sm:text-sm" />
+                </div>
                 <div className="card mt-3 divide-y divide-line overflow-hidden">
-                  {shownHistory.map((o) => orderCard(o, false))}
-                  {orders.length > HISTORY_PREVIEW && (
+                  {shownHistory.length > 0 ? shownHistory.map((o) => orderCard(o, false)) : (
+                    <p className="px-5 py-6 text-center text-sm text-ink-muted">{T.noScanMatch}</p>
+                  )}
+                  {!scanQuery.trim() && orders.length > HISTORY_PREVIEW && (
                     <button
                       onClick={() => setShowAllHistory((v) => !v)}
-                      className="w-full px-5 py-3.5 text-left text-sm font-semibold text-accent-600 transition hover:bg-brand-50/50"
+                      className="flex w-full items-center justify-center gap-1.5 bg-brand-50/40 px-5 py-3 text-sm font-bold text-brand transition hover:bg-brand-50"
                     >
                       {showAllHistory ? T.showLess : `${T.showAll(orders.length)} →`}
                     </button>
@@ -936,6 +954,12 @@ export default function VerifyHub() {
             )
           )}
           </div>
+          {/* SAĞ SÜTUN — desktop: add üstte, zamanlanmış hemen altında (yukarıda). Mobil: ters
+              (zamanlanmış üstte, alan-ekleme EN ALTTA). */}
+          <aside className="flex flex-col-reverse gap-4 lg:col-start-2 lg:row-start-1 lg:flex-col">
+            {addDomainBlock}
+            {scheduledCard}
+          </aside>
           </div>
         </>
       )}
