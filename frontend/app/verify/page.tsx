@@ -533,6 +533,74 @@ export default function VerifyHub() {
   };
 
   // --- Alan adı seçim/ekleme bölümü (hem normal hem satın-alma modunda kullanılır) ---
+  const addDomainBlock = (
+    <>
+
+        {/* (Kullanıcı beğendi) Her zaman görünür YEŞİL "alan adı ekle" kartı — mockup deseni. */}
+        <form onSubmit={addDomain} className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-brand-deep p-6 text-white shadow-card">
+          <span aria-hidden className="pointer-events-none absolute -bottom-14 -right-10 h-44 w-44 rounded-full bg-accent/15" />
+          <div className="relative">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">{T.addEyebrow}</p>
+            <p className="mt-1.5 text-lg font-bold">{T.addTitle}</p>
+            <p className="mt-1 max-w-md text-sm leading-relaxed text-white/70">{T.addDesc}</p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <input
+                required
+                placeholder={T.domainPlaceholder}
+                className="flex-1 rounded-lg border border-white/20 bg-white/10 px-3 py-3 text-sm text-white placeholder-white/45 outline-none transition focus:border-accent"
+                value={newHostname}
+                onChange={(e) => setNewHostname(e.target.value)}
+              />
+              <button type="submit" disabled={busy} className="shrink-0 rounded-lg bg-gradient-to-b from-amber-400 to-accent px-5 py-3 text-sm font-bold text-ink shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60">
+                {busy ? T.adding : purchaseMode && !activePurchase ? T.addAndContinue : T.add}
+              </button>
+            </div>
+            {(() => {
+              const raw = newHostname.trim();
+              const host = toBareHost(newHostname);
+              if (host && raw.toLowerCase() !== host) {
+                return (
+                  <p className="mt-2 text-xs text-white/60">
+                    {T.willBeAdded} <span className="font-mono font-semibold text-white">{host}</span>{' '}
+                    (<code>https://</code>, <code>www.</code> {T.stripNote1})
+                  </p>
+                );
+              }
+              return null;
+            })()}
+          </div>
+        </form>
+        {!purchaseMode && domains.length > 0 && (
+          <button onClick={delAll} className="mt-3 text-sm font-semibold text-red-600 transition hover:underline">
+            {T.deleteAll}
+          </button>
+        )}
+        {/* Ekle / toplu-sil sonucu — bölümün HEMEN ALTINDA (sayfa sonunda değil). */}
+        {bulkMsg && (
+          <p className="mt-3 rounded-card border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">{bulkMsg}</p>
+        )}
+        {notice && (
+          <p className="mt-3 rounded-card border border-emerald-300/50 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-800">✓ {notice}</p>
+        )}
+      
+    </>
+  );
+
+  const scheduledCard = (
+    <a href="/schedules" className="flex items-center justify-between gap-4 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-5 shadow-card transition hover:border-brand-300">
+            <span className="flex items-center gap-3.5">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+              </span>
+              <span className="min-w-0">
+                <span className="block font-bold text-brand">{T.schedTitle}</span>
+                <span className="mt-0.5 block text-sm text-ink-soft">{T.schedDesc}</span>
+              </span>
+            </span>
+            <span className="shrink-0 whitespace-nowrap text-sm font-bold text-accent-600">{T.schedManage} →</span>
+          </a>
+  );
+
   const domainSection = (
     <>
       {validDomains.length > 0 && (
@@ -643,55 +711,6 @@ export default function VerifyHub() {
           </div>
         </section>
       )}
-
-      <section className="mt-8">
-        {/* (Kullanıcı beğendi) Her zaman görünür YEŞİL "alan adı ekle" kartı — mockup deseni. */}
-        <form onSubmit={addDomain} className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-brand-deep p-6 text-white shadow-card">
-          <span aria-hidden className="pointer-events-none absolute -bottom-14 -right-10 h-44 w-44 rounded-full bg-accent/15" />
-          <div className="relative">
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">{T.addEyebrow}</p>
-            <p className="mt-1.5 text-lg font-bold">{T.addTitle}</p>
-            <p className="mt-1 max-w-md text-sm leading-relaxed text-white/70">{T.addDesc}</p>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <input
-                required
-                placeholder={T.domainPlaceholder}
-                className="flex-1 rounded-lg border border-white/20 bg-white/10 px-3 py-3 text-sm text-white placeholder-white/45 outline-none transition focus:border-accent"
-                value={newHostname}
-                onChange={(e) => setNewHostname(e.target.value)}
-              />
-              <button type="submit" disabled={busy} className="shrink-0 rounded-lg bg-gradient-to-b from-amber-400 to-accent px-5 py-3 text-sm font-bold text-ink shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60">
-                {busy ? T.adding : purchaseMode && !activePurchase ? T.addAndContinue : T.add}
-              </button>
-            </div>
-            {(() => {
-              const raw = newHostname.trim();
-              const host = toBareHost(newHostname);
-              if (host && raw.toLowerCase() !== host) {
-                return (
-                  <p className="mt-2 text-xs text-white/60">
-                    {T.willBeAdded} <span className="font-mono font-semibold text-white">{host}</span>{' '}
-                    (<code>https://</code>, <code>www.</code> {T.stripNote1})
-                  </p>
-                );
-              }
-              return null;
-            })()}
-          </div>
-        </form>
-        {!purchaseMode && domains.length > 0 && (
-          <button onClick={delAll} className="mt-3 text-sm font-semibold text-red-600 transition hover:underline">
-            {T.deleteAll}
-          </button>
-        )}
-        {/* Ekle / toplu-sil sonucu — bölümün HEMEN ALTINDA (sayfa sonunda değil). */}
-        {bulkMsg && (
-          <p className="mt-3 rounded-card border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">{bulkMsg}</p>
-        )}
-        {notice && (
-          <p className="mt-3 rounded-card border border-emerald-300/50 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-800">✓ {notice}</p>
-        )}
-      </section>
 
       {domains.length === 0 && !showAdd && (
         <p className="mt-4 text-sm text-ink-muted">
@@ -830,10 +849,19 @@ export default function VerifyHub() {
             </div>
           )}
           {domainSection}
+          <div className="mt-8">{addDomainBlock}</div>
         </>
       ) : (
         <>
-          {/* (İŞ 2) SEKME NAVİGASYONU — Taramalarım · Alan Adları · Zamanlanmış (net ayrım). */}
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+          {/* SAĞ SÜTUN (mobilde EN ÜSTTE): yeni alan adı + zamanlanmış */}
+          <aside className="order-first flex flex-col gap-4 lg:order-none lg:col-start-2 lg:row-start-1">
+            {addDomainBlock}
+            {scheduledCard}
+          </aside>
+          {/* SOL SÜTUN: sekmeler + liste/geçmiş */}
+          <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          {/* (İŞ 2) SEKME NAVİGASYONU */}
           <nav className="flex flex-wrap gap-2 rounded-2xl border border-line bg-white p-1.5 shadow-card">
             {([
               ['history', T.tabMyScans, orders.length],
@@ -893,19 +921,8 @@ export default function VerifyHub() {
               <p className="mt-8 text-sm text-ink-muted">{T.noScansYet}</p>
             )
           )}
-          {/* (Kullanıcı isteği) Zamanlanmış taramalar KENDİ özel alanında — mobilde de düzgün. */}
-          <a href="/schedules" className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-5 shadow-card transition hover:border-brand-300">
-            <span className="flex items-center gap-3.5">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand text-white">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-              </span>
-              <span className="min-w-0">
-                <span className="block font-bold text-brand">{T.schedTitle}</span>
-                <span className="mt-0.5 block text-sm text-ink-soft">{T.schedDesc}</span>
-              </span>
-            </span>
-            <span className="shrink-0 whitespace-nowrap text-sm font-bold text-accent-600">{T.schedManage} →</span>
-          </a>
+          </div>
+          </div>
         </>
       )}
       </div>
