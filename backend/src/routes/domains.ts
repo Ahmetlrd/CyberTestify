@@ -59,7 +59,7 @@ domainsRouter.get('/', requireAuth, async (req, res) => {
 
 domainsRouter.post('/', requireAuth, async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: zodError(parsed.error) });
+  if (!parsed.success) return res.status(400).json({ error: M(dLoc(req), 'Geçerli bir alan adı girin (ör. ornek.com).', 'Geben Sie eine gültige Domain ein (z. B. beispiel.de).', 'Enter a valid domain (e.g. example.com).') });
 
   const domain = await createDomainVerification(req.customerId!, parsed.data.hostname);
   // Zaten ekli VE doğrulaması geçerliyse: yeniden DNS doğrulatma; net "zaten var" bilgisi dön.
@@ -69,7 +69,7 @@ domainsRouter.post('/', requireAuth, async (req, res) => {
       domainId: domain.id,
       hostname: domain.hostname,
       alreadyVerified: true,
-      message: `“${domain.hostname}” zaten ekli ve doğrulanmış — yeniden DNS doğrulaması gerekmez.`,
+      message: M(dLoc(req), `“${domain.hostname}” zaten ekli ve doğrulanmış — yeniden DNS doğrulaması gerekmez.`, `„${domain.hostname}“ ist bereits hinzugefügt und verifiziert — keine erneute DNS-Verifizierung nötig.`, `“${domain.hostname}” is already added and verified — no re-verification needed.`),
     });
   }
   res.json({
@@ -80,7 +80,7 @@ domainsRouter.post('/', requireAuth, async (req, res) => {
       type: 'DNS TXT',
       recordName: `_pentest-verify.${domain.hostname}`,
       recordValue: domain.verificationToken,
-      note: 'DNS panelinize bu TXT kaydini ekleyin. Yayilim birkac dakika surebilir.',
+      note: M(dLoc(req), 'DNS panelinize bu TXT kaydını ekleyin. Yayılım birkaç dakika sürebilir.', 'Fügen Sie diesen TXT-Eintrag in Ihrem DNS-Panel hinzu. Die Verbreitung kann einige Minuten dauern.', 'Add this TXT record to your DNS panel. Propagation may take a few minutes.'),
     },
   });
 });

@@ -391,6 +391,12 @@ export default function VerifyHub() {
   const [region, setRegion] = useState<RegionCode>('tr');
   const lang: 'tr' | 'de' | 'en' = getRegion(region).lang === 'de' ? 'de' : getRegion(region).lang === 'en' ? 'en' : 'tr';
   const T = VER_T[lang];
+  const CHIP_TONE: Record<string, string> = {
+    emerald: 'border-emerald-300/30 bg-emerald-400/15 hover:bg-emerald-400/25 text-emerald-50',
+    sky: 'border-sky-300/30 bg-sky-400/15 hover:bg-sky-400/25 text-sky-50',
+    amber: 'border-amber-300/40 bg-amber-400/20 hover:bg-amber-400/30 text-amber-50',
+  };
+  const CHIP_NUM: Record<string, string> = { emerald: 'text-emerald-300', sky: 'text-sky-300', amber: 'text-amber-300' };
   const dateLocale = getRegion(region).locale;
 
   const refresh = useCallback(async () => {
@@ -554,12 +560,11 @@ export default function VerifyHub() {
 
   // --- Alan adı seçim/ekleme bölümü (hem normal hem satın-alma modunda kullanılır) ---
   const addDomainBlock = (
-    <form onSubmit={addDomain} className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-brand-deep p-6 text-white shadow-card">
-      <span aria-hidden className="pointer-events-none absolute -bottom-14 -right-10 h-44 w-44 rounded-full bg-accent/15" />
+    <form onSubmit={addDomain} className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-brand-deep p-4 text-white shadow-card sm:p-6">
       <div className="relative">
         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">{T.addEyebrow}</p>
         <p className="mt-1.5 text-lg font-bold">{T.addTitle}</p>
-        <p className="mt-1 max-w-md text-sm leading-relaxed text-white/70">{T.addDesc}</p>
+        <p className="mt-1 hidden max-w-md text-sm leading-relaxed text-white/70 sm:block">{T.addDesc}</p>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <input
             required
@@ -597,14 +602,14 @@ export default function VerifyHub() {
   );
 
   const scheduledCard = (
-    <a href="/schedules" className="flex items-center justify-between gap-4 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-5 shadow-card transition hover:border-brand-300">
+    <a href="/schedules" className="flex items-center justify-between gap-4 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-4 shadow-card transition hover:border-brand-300 sm:p-5">
             <span className="flex items-center gap-3.5">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand text-white">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
               </span>
               <span className="min-w-0">
                 <span className="block font-bold text-brand">{T.schedTitle}</span>
-                <span className="mt-0.5 block text-sm text-ink-soft">{T.schedDesc}</span>
+                <span className="mt-0.5 hidden text-sm text-ink-soft sm:block">{T.schedDesc}</span>
               </span>
             </span>
             <span className="shrink-0 whitespace-nowrap text-sm font-bold text-accent-600">{T.schedManage} →</span>
@@ -816,13 +821,13 @@ export default function VerifyHub() {
           {!purchaseMode && (
             <div className="mt-5 flex flex-wrap gap-2.5">
               {([
-                [validDomains.length, T.statDomains, 'domains', 'verified-domains'],
-                [orders.length, T.statScans, 'history', 'scans-history'],
-                [pendingDomains.length, T.statPending, 'domains', 'pending-domains'],
-              ] as const).map(([n, lbl, tgt, id]) => (
+                [validDomains.length, T.statDomains, 'domains', 'verified-domains', 'emerald'],
+                [orders.length, T.statScans, 'history', 'scans-history', 'sky'],
+                [pendingDomains.length, T.statPending, 'domains', 'pending-domains', 'amber'],
+              ] as const).map(([n, lbl, tgt, id, tone]) => (
                 <button key={lbl} type="button" onClick={() => goToSection(tgt, id)}
-                  className="inline-flex items-baseline gap-1.5 rounded-pill border border-white/15 bg-white/10 px-3 py-1.5 text-xs text-white/75 transition hover:border-white/40 hover:bg-white/20 hover:text-white">
-                  <strong className="text-sm font-extrabold text-white">{n}</strong>{lbl}
+                  className={`inline-flex items-baseline gap-1.5 rounded-pill border px-3 py-1.5 text-xs font-medium transition ${CHIP_TONE[tone]}`}>
+                  <strong className={`text-sm font-extrabold ${CHIP_NUM[tone]}`}>{n}</strong>{lbl}
                 </button>
               ))}
             </div>
@@ -863,14 +868,13 @@ export default function VerifyHub() {
         </>
       ) : (
         <>
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-          {/* SAĞ SÜTUN (mobilde EN ÜSTTE): yeni alan adı + zamanlanmış */}
-          <aside className="order-first flex flex-col gap-4 lg:order-none lg:col-start-2 lg:row-start-1">
-            {addDomainBlock}
-            {scheduledCard}
-          </aside>
-          {/* SOL SÜTUN: sekmeler + liste/geçmiş */}
-          <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          <div className="grid gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+          {/* Mobilde EN ALTTA / desktop sağ-üst: yeni alan adı ekle */}
+          <div className="order-3 lg:order-none lg:col-start-2 lg:row-start-1">{addDomainBlock}</div>
+          {/* Mobilde ortada / desktop sağ-alt: zamanlanmış */}
+          <div className="order-2 lg:order-none lg:col-start-2 lg:row-start-2">{scheduledCard}</div>
+          {/* Mobilde ÜSTTE / desktop sol (2 satır): sekmeler + liste/geçmiş */}
+          <div className="order-1 min-w-0 lg:order-none lg:col-start-1 lg:row-start-1 lg:row-span-2">
           {/* (İŞ 2) SEKME NAVİGASYONU */}
           <nav className="flex flex-wrap gap-2 rounded-2xl border border-line bg-white p-1.5 shadow-card">
             {([
