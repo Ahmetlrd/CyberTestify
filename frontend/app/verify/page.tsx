@@ -146,6 +146,7 @@ const VER_T = {
     passiveBody3: '— DNS kaydı eklemenize gerek yok.',
     tabMyScans: 'Taramalarım',
     tabDomains: 'Alan Adları',
+    tabAdd: 'Ekle',
     tabScheduled: 'Zamanlanmış ↗',
     myScans: 'Taramalarım',
     hideArchived: 'Arşivlenenleri gizle',
@@ -224,6 +225,7 @@ const VER_T = {
     passiveBody3: '— Sie müssen keinen DNS-Eintrag hinzufügen.',
     tabMyScans: 'Meine Scans',
     tabDomains: 'Domains',
+    tabAdd: 'Hinzufügen',
     tabScheduled: 'Geplant ↗',
     myScans: 'Meine Scans',
     hideArchived: 'Archivierte ausblenden',
@@ -302,6 +304,7 @@ const VER_T = {
     passiveBody3: '— no need to add a DNS record.',
     tabMyScans: 'My scans',
     tabDomains: 'Domains',
+    tabAdd: 'Add',
     tabScheduled: 'Scheduled ↗',
     myScans: 'My scans',
     hideArchived: 'Hide archived',
@@ -388,7 +391,7 @@ export default function VerifyHub() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // (İŞ 2) Panel sekmeleri — dağınık iç içe bölümler yerine net ayrım.
-  const [tab, setTab] = useState<'domains' | 'history'>('domains');
+  const [tab, setTab] = useState<'domains' | 'history' | 'add'>('domains');
   const [starred, setStarred] = useState<Set<string>>(new Set());
   useEffect(() => { try { const r = window.localStorage.getItem('ct_starred_domains'); if (r) setStarred(new Set(JSON.parse(r))); } catch { /* noop */ } }, []);
   const toggleStar = (id: string) => setStarred((prev) => {
@@ -833,14 +836,14 @@ export default function VerifyHub() {
           <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">{purchaseMode ? T.selectDomain : T.startScanning}</h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">{T.heroSub}</p>
           {!purchaseMode && (
-            <div className="mt-5 flex flex-wrap gap-2.5">
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-2.5">
               {([
                 [validDomains.length, T.statDomains, 'domains', 'verified-domains', 'emerald'],
                 [orders.length, T.statScans, 'history', 'scans-history', 'sky'],
                 [pendingDomains.length, T.statPending, 'domains', 'pending-domains', 'amber'],
               ] as const).map(([n, lbl, tgt, id, tone]) => (
                 <button key={lbl} type="button" onClick={() => goToSection(tgt, id)}
-                  className={`inline-flex items-baseline gap-1.5 rounded-pill border px-3 py-1.5 text-xs font-medium transition ${CHIP_TONE[tone]}`}>
+                  className={`inline-flex w-full items-baseline justify-start gap-1.5 rounded-pill border px-3 py-1.5 text-xs font-medium transition sm:w-auto ${CHIP_TONE[tone]}`}>
                   <strong className={`text-sm font-extrabold ${CHIP_NUM[tone]}`}>{n}</strong>{lbl}
                 </button>
               ))}
@@ -882,30 +885,39 @@ export default function VerifyHub() {
         </>
       ) : (
         <>
-          <div className="grid gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-          {/* SOL SÜTUN (mobilde ÜSTTE): sekmeler + liste/geçmiş */}
-          <div className="min-w-0 lg:col-start-1 lg:row-start-1">
-          {/* (İŞ 2) SEKME NAVİGASYONU */}
+          {/* SEKMELER — Taramalarım · Alan Adları · Ekle (tek sütun, ortalı) */}
           <nav className="mx-auto flex w-fit max-w-full flex-wrap justify-center gap-2 rounded-2xl border border-line bg-white p-1.5 shadow-card">
             {([
               ['history', T.tabMyScans, orders.length],
               ['domains', T.tabDomains, validDomains.length],
+              ['add', T.tabAdd, 0],
             ] as const).map(([key, label, count]) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
                 aria-pressed={tab === key}
-                className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm transition ${
-                  tab === key ? 'bg-accent font-bold text-ink shadow-sm' : 'font-medium text-ink-muted hover:bg-brand-50/70'
+                className={`flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-sm transition ${
+                  tab === key
+                    ? (key === 'add' ? 'bg-brand font-bold text-white shadow-sm' : 'bg-accent font-bold text-ink shadow-sm')
+                    : 'font-medium text-ink-muted hover:bg-brand-50/70'
                 }`}
               >
+                {key === 'add' && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>}
                 {label}
                 {count > 0 && <span className={`rounded-pill px-1.5 py-0.5 text-[10px] font-bold ${tab === key ? 'bg-ink/15 text-ink' : 'bg-line text-ink-soft'}`}>{count}</span>}
               </button>
             ))}
           </nav>
 
-          {tab === 'domains' && domainSection}
+          {tab === 'domains' && (
+            <div className="mt-6">
+              <a href="/schedules" className="inline-flex items-center gap-2 rounded-pill border border-line bg-white px-3 py-1.5 text-sm font-semibold text-brand transition hover:border-brand-300">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-brand text-white"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg></span>
+                {T.schedTitle} →
+              </a>
+              {domainSection}
+            </div>
+          )}
 
           {tab === 'history' && (
             orders.length > 0 ? (
@@ -953,14 +965,11 @@ export default function VerifyHub() {
               <p className="mt-8 text-sm text-ink-muted">{T.noScansYet}</p>
             )
           )}
-          </div>
-          {/* SAĞ SÜTUN — desktop: add üstte, zamanlanmış hemen altında (yukarıda). Mobil: ters
-              (zamanlanmış üstte, alan-ekleme EN ALTTA). */}
-          <aside className="flex flex-col-reverse gap-4 lg:col-start-2 lg:row-start-1 lg:flex-col">
-            {addDomainBlock}
-            {scheduledCard}
-          </aside>
-          </div>
+
+          {/* EKLE sekmesi — aşağı doğru açılan, ortalı, ince yeşil panel */}
+          {tab === 'add' && (
+            <div className="mx-auto mt-6 max-w-xl">{addDomainBlock}</div>
+          )}
         </>
       )}
       </div>

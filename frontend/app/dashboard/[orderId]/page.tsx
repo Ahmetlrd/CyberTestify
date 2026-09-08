@@ -186,6 +186,12 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const [lang, setLang] = useState<'tr' | 'de' | 'en'>('tr');
   useEffect(() => { const l = getRegion(readRegionCookie()).lang; setLang(l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr'); }, []);
+  // (#fatura) /verify 'Fatura talep et' -> bu sayfada fatura bölümüne otomatik kaydır + odak.
+  useEffect(() => {
+    if (order?.paidAt && typeof window !== 'undefined' && window.location.hash === '#fatura') {
+      setTimeout(() => document.getElementById('fatura')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
+    }
+  }, [order]);
   const rr = RR[lang];
   // (UX) "Kodu tekrar gönder" — e-postayı bulamayan kullanıcı kilitli kalmasın.
   async function handleResendCode() {
@@ -689,14 +695,17 @@ export default function OrderDashboard({ params }: { params: { orderId: string }
         />
       )}
 
-      {/* (Fatura talebi) yalnız ödemesi tamamlanmış + başarısız/iade OLMAYAN siparişlerde göster. */}
+      {/* (Fatura talebi) yalnız ödemesi tamamlanmış + başarısız/iade OLMAYAN siparişlerde göster.
+          (#fatura) /verify'daki 'Fatura talep et' linki buraya odaklanır — aşağıdaki effect kaydırır. */}
       {order?.paidAt && !['scan_failed', 'scope_violation', 'report_purged', 'refunded'].includes(status) && (
-        <InvoiceRequestForm
-          orderId={order.id}
-          defaultEmail={order.customer?.email ?? ''}
-          existing={order.invoiceRequest ?? null}
-          lang={lang}
-        />
+        <div id="fatura" className="scroll-mt-24">
+          <InvoiceRequestForm
+            orderId={order.id}
+            defaultEmail={order.customer?.email ?? ''}
+            existing={order.invoiceRequest ?? null}
+            lang={lang}
+          />
+        </div>
       )}
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
