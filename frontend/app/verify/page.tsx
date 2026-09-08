@@ -122,6 +122,11 @@ const VER_T = {
     unarchive: 'Arşivden çıkar',
     archive: 'Arşivle',
     myPanel: 'Panelim',
+    heroSub: 'Doğrulanmış alan adlarından birini seç ya da yeni bir alan adı ekle. Sonuçlar dakikalar içinde hazır olur.',
+    online: 'Hesabınız aktif',
+    statDomains: 'doğrulanmış alan adı',
+    statScans: 'tarama',
+    statPending: 'doğrulama bekliyor',
     selectDomain: 'Alan adı seçin',
     startScanning: 'Taramaya Başla',
     activeNotice1: 'Aktif güvenlik testlerini başlatabilmemiz için alan adının size ait olduğunu',
@@ -185,6 +190,11 @@ const VER_T = {
     unarchive: 'Aus Archiv entfernen',
     archive: 'Archivieren',
     myPanel: 'Mein Bereich',
+    heroSub: 'Wählen Sie eine Ihrer verifizierten Domains oder fügen Sie eine neue hinzu. Ergebnisse sind in wenigen Minuten fertig.',
+    online: 'Konto aktiv',
+    statDomains: 'verifizierte Domains',
+    statScans: 'Scans',
+    statPending: 'zu verifizieren',
     selectDomain: 'Domain auswählen',
     startScanning: 'Scan starten',
     activeNotice1: 'Damit wir aktive Sicherheitstests starten können, müssen Sie mit einem',
@@ -248,6 +258,11 @@ const VER_T = {
     unarchive: 'Unarchive',
     archive: 'Archive',
     myPanel: 'My dashboard',
+    heroSub: 'Pick one of your verified domains or add a new one. Results are ready within minutes.',
+    online: 'Account active',
+    statDomains: 'verified domains',
+    statScans: 'scans',
+    statPending: 'to verify',
     selectDomain: 'Select a domain',
     startScanning: 'Start scanning',
     activeNotice1: 'Before we can start active security tests, you need to prove the domain belongs to you with a',
@@ -740,13 +755,33 @@ export default function VerifyHub() {
   );
 
   return (
-    <main className="container-page max-w-5xl py-14">
-      <div>
-        <p className="eyebrow">{T.myPanel}</p>
-        <h1 className="mt-1 text-2xl font-extrabold text-brand">
-          {purchaseMode ? T.selectDomain : T.startScanning}
-        </h1>
+    <main className="min-h-screen bg-canvas pb-16">
+      {/* HERO — koyu yeşil gradyan (markanın 3. rengi); krem zemin + amber vurgu ile denge. */}
+      <div className="bg-gradient-to-b from-brand to-brand-deep text-white">
+        <div className="container-page max-w-5xl pt-12 pb-24">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">{T.myPanel}</p>
+            <span className="inline-flex items-center gap-2 text-xs text-white/70">
+              <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" /></span>
+              {T.online}
+            </span>
+          </div>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">{purchaseMode ? T.selectDomain : T.startScanning}</h1>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">{T.heroSub}</p>
+          {!purchaseMode && (
+            <div className="mt-5 flex flex-wrap gap-2.5">
+              {([[validDomains.length, T.statDomains], [orders.length, T.statScans], [pendingDomains.length, T.statPending]] as const).map(([n, lbl]) => (
+                <span key={lbl} className="inline-flex items-baseline gap-1.5 rounded-pill border border-white/15 bg-white/10 px-3 py-1.5 text-xs text-white/75">
+                  <strong className="text-sm font-extrabold text-white">{n}</strong>{lbl}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* İÇERİK — hero'nun üstüne biner (kart yükseltme hissi). */}
+      <div className="container-page max-w-5xl -mt-16">
 
       {/* Sayfa-yükleme / genel hata — başlığın hemen altında (görünür), en altta değil. */}
       {error && <p className="form-error mt-4">{error}</p>}
@@ -778,7 +813,7 @@ export default function VerifyHub() {
       ) : (
         <>
           {/* (İŞ 2) SEKME NAVİGASYONU — Taramalarım · Alan Adları · Zamanlanmış (net ayrım). */}
-          <nav className="mt-6 flex flex-wrap gap-1.5 border-b border-line">
+          <nav className="flex flex-wrap gap-1 rounded-2xl border border-line bg-white p-1.5 shadow-card">
             {([
               ['history', T.tabMyScans, orders.length],
               ['domains', T.tabDomains, validDomains.length],
@@ -786,17 +821,17 @@ export default function VerifyHub() {
               <button
                 key={key}
                 onClick={() => setTab(key)}
-                className={`-mb-px rounded-t-card border-b-2 px-3.5 py-2 text-sm font-semibold transition ${
-                  tab === key ? 'border-brand text-brand' : 'border-transparent text-ink-muted hover:text-ink'
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                  tab === key ? 'bg-brand text-white shadow-sm' : 'text-ink-muted hover:bg-brand-50'
                 }`}
               >
                 {label}
-                {count > 0 && <span className="ml-1.5 rounded-pill bg-brand-50 px-1.5 py-0.5 text-[10px] font-bold text-brand">{count}</span>}
+                {count > 0 && <span className={`ml-1.5 rounded-pill px-1.5 py-0.5 text-[10px] font-bold ${tab === key ? 'bg-white/20 text-white' : 'bg-brand-50 text-brand'}`}>{count}</span>}
               </button>
             ))}
             <a
               href="/schedules"
-              className="-mb-px rounded-t-card border-b-2 border-transparent px-3.5 py-2 text-sm font-semibold text-ink-muted transition hover:text-ink"
+              className="ml-auto self-center rounded-xl px-4 py-2 text-sm font-semibold text-accent-600 transition hover:bg-brand-50"
             >
               {T.tabScheduled}
             </a>
@@ -844,6 +879,7 @@ export default function VerifyHub() {
           )}
         </>
       )}
+      </div>
     </main>
   );
 }
