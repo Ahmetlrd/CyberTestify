@@ -43,6 +43,22 @@ const IS = {
     nextSurfaceHint: 'Yapılandırma ve başlık eksiklerini derinlemesine tarar, düzeltme kodları verir.',
     nextActive: 'Aktif Doğrulama',
     nextActiveHint: 'Login-sonrası ve aktif zafiyetleri gerçek problarla doğrular.',
+    gapsFound: (n: number) => `Dış yüzeyinizde ${n} açık bulundu`,
+    ratedHigh: (n: number) => `${n} tanesi YÜKSEK riskli`,
+    summaryNote: 'Bu ekran özeti gösterir. Tam rapor her açığı ve nasıl kapatılacağını anlatır.',
+    emailBtnFull: 'Tam PDF raporumu gönder',
+    emailReassure: 'Ücretsiz · ~1 dk içinde gelir · kart yok, satış görüşmesi yok',
+    topFindings: 'Öne çıkan bulgular',
+    fixIncluded: 'Çözümü şu pakette →',
+    pkgSurfaceShort: 'Dış Yüzey',
+    moreInReport: (n: number) => `+${n} tanesi tam raporda`,
+    cantSee: 'Bu taramanın göremedikleri',
+    biggerRisk: 'Genelde asıl risk',
+    cantSeeBody: 'Login-sonrası zafiyetler, iş mantığı hataları ve API kötüye kullanımı ancak aktif/kimlik-doğrulamalı testlerle ortaya çıkar.',
+    coversGaps: (n: number) => `${n} BULGUNU KAPSAR`,
+    recommended: 'ÖNERİLEN',
+    beyondScan: 'BU TARAMANIN ÖTESİ',
+    viewPackage: 'Paketi gör →',
     lockedMore: (n: number) => `+${n} bulgu daha · detaylar & düzeltmeler kilitli`,
     lockedNoMore: 'Detaylar & hazır düzeltmeler kilitli',
     lockedBody: <>Her bulgunun <strong>tam detayı</strong>, <strong>platformunuza özel hazır düzeltme kodları</strong> ve<strong> indirilebilir PDF raporu</strong> kilitli.</>,
@@ -98,6 +114,22 @@ const IS = {
     nextSurfaceHint: 'Prüft Konfigurations- und Header-Lücken tiefgehend und liefert Fix-Codes.',
     nextActive: 'Aktive Verifizierung',
     nextActiveHint: 'Verifiziert Post-Login- und aktive Schwachstellen mit echten Proben.',
+    gapsFound: (n: number) => `${n} Lücken auf Ihrer Außenfläche gefunden`,
+    ratedHigh: (n: number) => `${n} als HOCH eingestuft`,
+    summaryNote: 'Diese Ansicht zeigt die Zusammenfassung. Der vollständige Bericht erklärt jede Lücke und wie man sie behebt.',
+    emailBtnFull: 'Vollständigen PDF-Bericht senden',
+    emailReassure: 'Kostenlos · in ~1 Min · keine Karte, kein Verkaufsgespräch',
+    topFindings: 'Wichtigste Funde',
+    fixIncluded: 'Behebung enthalten in →',
+    pkgSurfaceShort: 'Außenfläche',
+    moreInReport: (n: number) => `+${n} weitere im vollständigen Bericht`,
+    cantSee: 'Was dieser Scan nicht sieht',
+    biggerRisk: 'Meist das größere Risiko',
+    cantSeeBody: 'Post-Login-Schwachstellen, Geschäftslogikfehler und API-Missbrauch zeigen sich nur bei aktiven/authentifizierten Tests.',
+    coversGaps: (n: number) => `DECKT IHRE ${n} LÜCKEN AB`,
+    recommended: 'EMPFOHLEN',
+    beyondScan: 'ÜBER DIESEN SCAN HINAUS',
+    viewPackage: 'Paket ansehen →',
     lockedMore: (n: number) => `+${n} weitere Befunde · Details & Behebungen gesperrt`,
     lockedNoMore: 'Details & fertige Behebungen gesperrt',
     lockedBody: <>Die <strong>vollständigen Details</strong> jedes Befunds, <strong>auf Ihre Plattform zugeschnittene fertige Behebungscodes</strong> und der<strong> herunterladbare PDF-Bericht</strong> sind gesperrt.</>,
@@ -153,6 +185,22 @@ const IS = {
     nextSurfaceHint: 'Deep-scans configuration and header gaps and provides fix codes.',
     nextActive: 'Active Verification',
     nextActiveHint: 'Verifies post-login and active vulnerabilities with real probes.',
+    gapsFound: (n: number) => `${n} gaps found on your external surface`,
+    ratedHigh: (n: number) => `${n} rated HIGH`,
+    summaryNote: 'This page shows the summary. The full report explains each gap and how to fix it.',
+    emailBtnFull: 'Send my full PDF report',
+    emailReassure: 'Free · arrives in ~1 min · no card, no sales call',
+    topFindings: 'Top findings',
+    fixIncluded: 'Fix included in →',
+    pkgSurfaceShort: 'External Surface',
+    moreInReport: (n: number) => `+${n} more in the full report`,
+    cantSee: "What this scan can't see",
+    biggerRisk: 'Usually the bigger risk',
+    cantSeeBody: 'Post-login vulnerabilities, business-logic flaws and API abuse only show up with active/authenticated testing.',
+    coversGaps: (n: number) => `COVERS YOUR ${n} GAPS`,
+    recommended: 'RECOMMENDED',
+    beyondScan: 'GOES BEYOND THIS SCAN',
+    viewPackage: 'View package →',
     lockedMore: (n: number) => `+${n} more findings · details & fixes locked`,
     lockedNoMore: 'Details & ready-made fixes locked',
     lockedBody: <>The <strong>full detail</strong> of each finding, <strong>ready-made fix code tailored to your platform</strong> and the<strong> downloadable PDF report</strong> are locked.</>,
@@ -198,7 +246,7 @@ function scoreTheme(score: number) {
   return { stroke: '#dc2626', text: 'text-red-700', soft: 'bg-red-50 border-red-200' };
 }
 
-function ScoreRing({ score, grade, gradeWord }: { score: number; grade: string; gradeWord: string }) {
+function ScoreRing({ score, grade, gradeWord, dark = false }: { score: number; grade: string; gradeWord: string; dark?: boolean }) {
   const [display, setDisplay] = useState(0);
   useEffect(() => {
     let raf = 0, start: number | null = null;
@@ -216,12 +264,12 @@ function ScoreRing({ score, grade, gradeWord }: { score: number; grade: string; 
   return (
     <div className="relative h-32 w-32 shrink-0">
       <svg viewBox="0 0 120 120" className="h-32 w-32 -rotate-90">
-        <circle cx="60" cy="60" r={R} fill="none" stroke="#e5e7eb" strokeWidth="10" />
+        <circle cx="60" cy="60" r={R} fill="none" stroke={dark ? 'rgba(255,255,255,0.16)' : '#e5e7eb'} strokeWidth="10" />
         <circle cx="60" cy="60" r={R} fill="none" stroke={t.stroke} strokeWidth="10" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - display / 100)} style={{ transition: 'stroke-dashoffset 60ms linear' }} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className={`text-3xl font-extrabold leading-none ${t.text}`}>{display}</span>
-        <span className={`mt-0.5 text-xs font-bold ${t.text}`}>{grade} · {gradeWord}</span>
+        <span className={`text-3xl font-extrabold leading-none ${dark ? 'text-white' : t.text}`}>{display}</span>
+        <span className={`mt-0.5 text-xs font-bold ${dark ? 'text-amber-300' : t.text}`}>{grade} · {gradeWord}</span>
       </div>
     </div>
   );
@@ -440,7 +488,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
           {suggest && (
             <p className="mt-2 text-sm text-ink-soft">
               {L.suggestLead}{' '}
-              <button type="button" onClick={() => { setUrl(suggest); doScan(suggest); }} className="font-bold text-brand underline decoration-accent decoration-2 underline-offset-2 transition hover:text-accent-700">{suggest}</button>
+              <button type="button" onClick={() => { setUrl(suggest); doScan(suggest); }} className="font-bold text-brand underline decoration-accent decoration-2 underline-offset-2 transition hover:text-accent-600">{suggest}</button>
             </p>
           )}
         </form>
@@ -487,97 +535,103 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
               <button onClick={again} className="mt-4 inline-flex w-full items-center justify-center rounded-pill border border-amber-400 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 sm:w-auto">{L.scanAnother}</button>
             </div>
           ) : ok ? (
-            <div className="rounded-card border border-line bg-white p-5">
-              {/* Skor + anlamı — büyük, merkezî; ne demek olduğu 1 cümle */}
-              <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-5">
-                <ScoreRing score={ok.score} grade={ok.grade} gradeWord={L.grade[ok.grade] ?? ''} />
-                <div className="text-center sm:text-left">
-                  <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">{L.scoreLabel}</p>
-                  <p className="text-base font-bold text-ink">{ok.host}</p>
-                  <p className="mt-1 text-sm text-ink-soft">
-                    {ok.clean ? L.clean : L.finding(ok.total)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Bulgu başlıkları — severity etiketli, hizalı */}
-              {ok.shown.length > 0 && (
-                <ul className="mt-4 space-y-2">
-                  {ok.shown.map((f, i) => (
-                    <li key={f.title} className="animate-fade-up" style={{ animationDelay: `${i * 110}ms` }}>
-                      <Link href={`${packagesHref}?focus=basit_tarama`} aria-label={`${f.title} — ${L.findingFix}`} title={L.findingFix} className={`flex items-center gap-2.5 rounded-card border px-3 py-2.5 text-sm font-medium transition hover:brightness-[0.97] ${SEV_STYLE[f.severity].box}`}>
-                        <span className={`inline-flex shrink-0 items-center rounded-pill px-2 py-0.5 text-[10px] font-bold uppercase leading-none ${SEV_STYLE[f.severity].chip}`}>{L.sev[f.severity]}</span>
-                        <span className="flex-1 leading-snug">{f.title}</span>
-                        <span className="ml-1 shrink-0 opacity-60 transition group-hover:opacity-100" aria-hidden>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {/* (LEAD) TAM RAPOR — BİRİNCİL dönüşüm: accent-sıcak + yükseltilmiş + kenar şeridi ile
-                  görsel ODAK. Çevredeki kartlar kasıtla nötr/soğuk kaldı ki "yapılacak şey burası" okunsun.
-                  E-posta karşılığı GERÇEK Basit Tarama PDF'i (ödeme/kayıt/admin-onayı YOK). */}
-              <div className="relative mt-5 overflow-hidden rounded-card border border-brand-300 bg-gradient-to-br from-brand-50 via-white to-white p-4 shadow-card ring-1 ring-brand-200/50 sm:p-5">
-                <span aria-hidden className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-brand to-brand-deep" />
-                {reportState === 'ready' && reportUrl ? (
-                  <div className="py-1 text-center">
-                    <span className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-brand text-white">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
-                    </span>
-                    <p className="text-sm font-extrabold text-brand">{L.reportReady}</p>
-                    <a href={reportUrl} download={`cybertestify-basit-tarama-${ok.host}.pdf`} className="btn-primary mt-3 w-full justify-center">{L.reportDownload}</a>
+            <div className="rounded-card border border-line bg-brand-50/30 p-4 sm:p-5">
+              {/* ===== 1b — KOYU SKOR KUTUSU: skor + TEK birincil aksiyon (e-posta) AYNI kutuda ===== */}
+              <div className="rounded-card bg-brand p-4 text-white sm:p-5">
+                <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-5">
+                  <ScoreRing score={ok.score} grade={ok.grade} gradeWord={L.grade[ok.grade] ?? ''} dark />
+                  <div className="min-w-0 text-center sm:text-left">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-wider text-white/55">{ok.host}</p>
+                    <p className="mt-0.5 text-base font-bold leading-snug">
+                      {ok.clean ? L.cleanTitle : (
+                        <>{L.gapsFound(ok.total)}{ok.shown.some((f) => f.severity === 'high') && (<span className="text-amber-300"> — {L.ratedHigh(ok.shown.filter((f) => f.severity === 'high').length)}</span>)}</>
+                      )}
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-white/65">{ok.clean ? L.cleanBody : L.summaryNote}</p>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex items-start gap-3">
-                      <span aria-hidden className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand ring-1 ring-brand/20">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M9 13h6M9 17h4" /></svg>
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-extrabold uppercase tracking-wider text-brand">{L.emailEyebrow}</p>
-                        <p className="text-sm font-extrabold leading-snug text-brand">{L.emailTitle}</p>
-                        <p className="mt-1 text-xs leading-relaxed text-ink-soft">{L.emailSub}</p>
+                </div>
+                {/* E-posta formu — dark box İÇİNDE (rapor hazır olunca indir butonuna döner) */}
+                <div className="mt-4">
+                  {reportState === 'ready' && reportUrl ? (
+                    <div className="flex flex-col items-center gap-2.5 rounded-lg bg-white/10 p-3 text-center sm:flex-row sm:justify-between sm:text-left">
+                      <p className="flex items-center gap-2 text-sm font-bold">
+                        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-400 text-brand"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden><path d="M20 6 9 17l-5-5" /></svg></span>
+                        {L.reportReady}
+                      </p>
+                      <a href={reportUrl} download={`cybertestify-basit-tarama-${ok.host}.pdf`} className="btn-primary w-full justify-center sm:w-auto">{L.reportDownload}</a>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <input
+                          type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitReport(ok.host, ok.logId); } }}
+                          placeholder={L.emailPh} aria-label={L.emailBtnFull} disabled={reportState === 'busy'}
+                          className="flex-1 rounded-lg border border-white/20 bg-white/10 px-3 py-3 text-sm text-white placeholder-white/45 outline-none transition focus:border-white/45"
+                        />
+                        <button type="button" onClick={() => submitReport(ok.host, ok.logId)} disabled={reportState === 'busy'} className="btn-primary shrink-0 justify-center disabled:cursor-not-allowed disabled:opacity-60">
+                          {reportState === 'busy' ? L.emailBusy : L.emailBtnFull}
+                        </button>
                       </div>
-                    </div>
-                    <div className="mt-3.5 flex flex-col gap-2 sm:flex-row">
-                      <input
-                        type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitReport(ok.host, ok.logId); } }}
-                        placeholder={L.emailPh} aria-label={L.emailTitle} disabled={reportState === 'busy'}
-                        className="field flex-1 bg-white"
-                      />
-                      <button type="button" onClick={() => submitReport(ok.host, ok.logId)} disabled={reportState === 'busy'} className="btn-primary shrink-0 justify-center shadow-sm disabled:cursor-not-allowed disabled:opacity-60">
-                        {reportState === 'busy' ? L.emailBusy : L.emailBtn}
-                      </button>
-                    </div>
-                    {reportErr && <p className="mt-2 text-xs font-medium text-red-600">{reportErr}</p>}
-                  </>
-                )}
+                      <p className="mt-2 text-[11px] text-white/55">{L.emailReassure}</p>
+                      {reportErr && <p className="mt-2 text-xs font-medium text-red-300">{reportErr}</p>}
+                    </>
+                  )}
+                </div>
               </div>
 
-              {ok.clean ? (
-                /* TEMİZ (bulgu yok) — pasif katman temiz; aktif CTA. */
-                <div className="mt-3 rounded-card border border-line bg-brand-50/40 p-4">
-                  <p className="flex items-center gap-1.5 text-sm font-extrabold text-brand">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
-                    {L.cleanTitle}
-                  </p>
-                  <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{L.cleanBody}</p>
-                  <NextSteps clean L={L} packagesHref={packagesHref} />
-                </div>
-              ) : (
-                /* BULGU VAR — rapor artık ÜCRETSİZ (yukarıda e-posta ile); burada bulguya göre ÇEŞİTLİ öneri (fiyat YOK). */
-                <div className="mt-3 rounded-card border border-line bg-brand-50/40 p-4">
-                  <p className="text-sm font-extrabold text-brand">{L.deeperTitle}</p>
-                  <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{L.deeperBody}</p>
-                  <NextSteps clean={false} L={L} packagesHref={packagesHref} />
+              {/* ===== 2 — ÖNE ÇIKAN BULGULAR: her satır çözen pakete bağlanır (bulgu varsa) ===== */}
+              {ok.shown.length > 0 && (
+                <div className="mt-3 rounded-card border border-line bg-white p-4">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-[13px] font-bold text-ink">{L.topFindings}</p>
+                    <p className="shrink-0 text-[11px] text-ink-muted">{L.fixIncluded}</p>
+                  </div>
+                  <ul className="mt-2 space-y-2">
+                    {ok.shown.map((f, i) => (
+                      <li key={f.title} className="animate-fade-up" style={{ animationDelay: `${i * 90}ms` }}>
+                        <div className={`flex items-center gap-2.5 rounded-card border px-3 py-2.5 text-[12.5px] font-medium ${SEV_STYLE[f.severity].box}`}>
+                          <span className={`inline-flex shrink-0 items-center rounded-pill px-2 py-0.5 text-[9px] font-bold uppercase leading-none ${SEV_STYLE[f.severity].chip}`}>{L.sev[f.severity]}</span>
+                          <span className="min-w-0 flex-1 leading-snug">{f.title}</span>
+                          <Link href={`${packagesHref}?focus=bundle_surface`} title={L.findingFix} className="ml-auto shrink-0 whitespace-nowrap rounded-pill bg-accent-soft px-2.5 py-1 text-[10.5px] font-bold text-accent-600 transition hover:bg-accent/25">{L.pkgSurfaceShort}</Link>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  {ok.total > ok.shown.length && (
+                    <p className="mt-2 text-center text-xs text-ink-muted">{L.moreInReport(ok.total - ok.shown.length)}</p>
+                  )}
                 </div>
               )}
 
-              <button onClick={again} className="mt-3 inline-flex w-full items-center justify-center rounded-pill border border-line px-3 py-2 text-xs font-semibold text-ink-soft hover:bg-brand-50">{L.scanAnother}</button>
+              {/* ===== 3 — BU TARAMANIN GÖREMEDİKLERİ: 2 paket (Dış Yüzey vurgulu / Aktif Doğrulama) ===== */}
+              <div className="mt-3 rounded-card border border-line bg-white p-4">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-[13px] font-bold text-ink">{L.cantSee}</p>
+                  <p className="shrink-0 text-[11px] font-bold text-red-600">{L.biggerRisk}</p>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-ink-soft">{L.cantSeeBody}</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <Link href={`${packagesHref}?focus=bundle_surface`} className="flex flex-col gap-1.5 rounded-card border-[1.5px] border-accent bg-accent-soft/40 p-3 transition hover:brightness-[0.98]">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wide text-accent-600">{ok.clean ? L.recommended : L.coversGaps(ok.total)}</span>
+                    <span className="text-[13px] font-bold text-ink">{L.nextSurface}</span>
+                    <span className="flex-1 text-[11px] leading-snug text-ink-soft">{L.nextSurfaceHint}</span>
+                    <span className="mt-1 inline-flex items-center justify-center rounded-lg bg-accent px-3 py-2 text-xs font-bold text-ink">{L.viewPackage}</span>
+                  </Link>
+                  <Link href={`${packagesHref}?focus=bundle_active_verify`} className="flex flex-col gap-1.5 rounded-card border border-line bg-white p-3 transition hover:border-ink-soft">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wide text-ink-muted">{L.beyondScan}</span>
+                    <span className="text-[13px] font-bold text-ink">{L.nextActive}</span>
+                    <span className="flex-1 text-[11px] leading-snug text-ink-soft">{L.nextActiveHint}</span>
+                    <span className="mt-1 inline-flex items-center justify-center rounded-lg border border-line px-3 py-2 text-xs font-bold text-ink">{L.viewPackage}</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* ===== 4 — FOOTER ===== */}
+              <div className="mt-3 flex items-center justify-between gap-3 text-xs">
+                <button onClick={again} className="font-semibold text-ink-soft transition hover:text-brand">{L.scanAnother}</button>
+                <Link href={packagesHref} className="font-semibold text-accent-600 hover:underline">{L.allPackages}</Link>
+              </div>
             </div>
           ) : null}
         </div>
