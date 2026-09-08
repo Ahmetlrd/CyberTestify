@@ -33,6 +33,7 @@ function minDateTimeLocal(): string {
 // KVKK yerine DSGVO. /tr metni birebir korunur.
 const ORD = {
   tr: {
+    orderEyebrow: 'SİPARİŞ',
     title: 'Taramanızı Başlatın', sub: 'Paketi seçin, onayları işaretleyin ve güvenli ödemeye geçin.',
     noDomainPre: 'Önce taranacak bir alan adı seçin.', noDomainLink: 'Alan adı seç →',
     dnsVerified: 'Alan adı DNS ile doğrulandı — aktif tarama ödeme onayından sonra başlar.',
@@ -152,6 +153,7 @@ const ORD = {
     intlSoonHtml: '',
   },
   de: {
+    orderEyebrow: 'BESTELLUNG',
     title: 'Starten Sie Ihren Scan', sub: 'Paket wählen, Zustimmungen ankreuzen und zur sicheren Zahlung.',
     noDomainPre: 'Wählen Sie zuerst eine zu scannende Domain.', noDomainLink: 'Domain wählen →',
     dnsVerified: 'Domain per DNS bestätigt — der aktive Scan startet nach der Zahlungsbestätigung.',
@@ -257,6 +259,7 @@ const ORD = {
     intlSoonHtml: '',
   },
   en: {
+    orderEyebrow: 'ORDER',
     title: 'Start Your Scan', sub: 'Choose a package, tick the consents and proceed to secure payment.',
     noDomainPre: 'First choose a domain to scan.', noDomainLink: 'Choose a domain →',
     dnsVerified: 'Domain verified via DNS — the active scan starts after payment confirmation.',
@@ -985,11 +988,16 @@ export default function OrderPage() {
   );
 
   return (
-    <main className="container-page max-w-6xl py-10 pb-36 lg:py-14 lg:pb-14">
-      <div>
-        <h1 className="text-2xl font-extrabold text-brand sm:text-3xl">{L.title}</h1>
-        <p className="mt-1 text-sm text-ink-soft">{L.sub}</p>
+    <main className="min-h-screen bg-canvas pb-36 lg:pb-14">
+      {/* HERO — koyu yeşil gradyan (marka); krem zemin + amber vurgu ile profesyonel checkout. */}
+      <div className="bg-gradient-to-b from-brand to-brand-deep text-white">
+        <div className="container-page max-w-6xl pt-10 pb-20 lg:pt-14">
+          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">{L.orderEyebrow}</p>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">{L.title}</h1>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">{L.sub}</p>
+        </div>
       </div>
+      <div className="container-page max-w-6xl -mt-12">
 
       {!domainId && (
         <p className="mt-4 rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -1457,6 +1465,7 @@ export default function OrderPage() {
             )
           )}
         </div>
+      </div>
       </div>
     </main>
   );
