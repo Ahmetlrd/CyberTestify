@@ -146,7 +146,7 @@ const VER_T = {
     passiveBody3: '— DNS kaydı eklemenize gerek yok.',
     tabMyScans: 'Taramalarım',
     tabDomains: 'Alan Adları',
-    tabAdd: 'Ekle',
+    tabAdd: 'Alan adı ekle',
     tabScheduled: 'Zamanlanmış ↗',
     myScans: 'Taramalarım',
     hideArchived: 'Arşivlenenleri gizle',
@@ -225,7 +225,7 @@ const VER_T = {
     passiveBody3: '— Sie müssen keinen DNS-Eintrag hinzufügen.',
     tabMyScans: 'Meine Scans',
     tabDomains: 'Domains',
-    tabAdd: 'Hinzufügen',
+    tabAdd: 'Domain hinzufügen',
     tabScheduled: 'Geplant ↗',
     myScans: 'Meine Scans',
     hideArchived: 'Archivierte ausblenden',
@@ -304,7 +304,7 @@ const VER_T = {
     passiveBody3: '— no need to add a DNS record.',
     tabMyScans: 'My scans',
     tabDomains: 'Domains',
-    tabAdd: 'Add',
+    tabAdd: 'Add domain',
     tabScheduled: 'Scheduled ↗',
     myScans: 'My scans',
     hideArchived: 'Hide archived',
@@ -433,6 +433,14 @@ export default function VerifyHub() {
       .finally(() => setLoading(false));
   }, [router, refresh]);
 
+  // (bfcache) Rapor sayfasından GERİ dönünce sayfa donmuş/eski kalabiliyor (mobilde sil/arşiv
+  // tıklamaları çalışmıyordu). Sayfa geri-önbellekten restore olunca veriyi tazele → güncel + tıklanabilir.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => { if (e.persisted) refresh().catch(() => {}); };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+  }, [refresh]);
+
   const goToOrder = (domainId: string) => router.push(`/order?domainId=${domainId}${purchaseQuery}`);
 
   // (İş 2) Teaser'dan gelen alan adını ekleme formuna otomatik doldur + formu aç (kullanıcı yazmasın).
@@ -471,9 +479,11 @@ export default function VerifyHub() {
         return;
       }
       await refresh();
+      // (Kullanıcı isteği) Eklenince Alan Adları sekmesine geç + yeni alan adına kaydır (DNS paneli açık) → görünür geri bildirim.
+      setTab('domains');
       setOpenId(res.domainId);
-      // Zaten ekli + doğrulanmışsa: onaylı kayıt KORUNUR (yeniden DNS doğrulama yok) + net bilgi.
-      if (res.alreadyVerified) setNotice(res.message || T.alreadyVerified(res.hostname));
+      setNotice(res.alreadyVerified ? (res.message || T.alreadyVerified(res.hostname)) : null);
+      setTimeout(() => document.getElementById(`domain-${res.domainId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 220);
     } catch (e: any) {
       setBulkMsg(e.message);
     } finally {
@@ -552,6 +562,7 @@ export default function VerifyHub() {
         setError(e.message);
       }
     }
+    if (next) setTimeout(() => document.getElementById('archived-scans')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
   }
 
   const validDomains = domains.filter((d) => d.valid).sort((a, b) => Number(starred.has(b.id)) - Number(starred.has(a.id)));
@@ -837,16 +848,18 @@ export default function VerifyHub() {
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">{T.heroSub}</p>
           {!purchaseMode && (
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-2.5">
-              {([
-                [validDomains.length, T.statDomains, 'domains', 'verified-domains', 'emerald'],
-                [orders.length, T.statScans, 'history', 'scans-history', 'sky'],
-                [pendingDomains.length, T.statPending, 'domains', 'pending-domains', 'amber'],
-              ] as const).map(([n, lbl, tgt, id, tone]) => (
-                <button key={lbl} type="button" onClick={() => goToSection(tgt, id)}
-                  className={`inline-flex w-full items-baseline justify-start gap-1.5 rounded-pill border px-3 py-1.5 text-xs font-medium transition sm:w-auto ${CHIP_TONE[tone]}`}>
-                  <strong className={`text-sm font-extrabold ${CHIP_NUM[tone]}`}>{n}</strong>{lbl}
-                </button>
-              ))}
+              {loading
+                ? [0, 1, 2].map((i) => <span key={i} className="h-[30px] w-full animate-pulse rounded-pill bg-white/10 sm:w-36" />)
+                : ([
+                    [validDomains.length, T.statDomains, 'domains', 'verified-domains', 'emerald'],
+                    [orders.length, T.statScans, 'history', 'scans-history', 'sky'],
+                    [pendingDomains.length, T.statPending, 'domains', 'pending-domains', 'amber'],
+                  ] as const).map(([n, lbl, tgt, id, tone]) => (
+                    <button key={lbl} type="button" onClick={() => goToSection(tgt, id)}
+                      className={`inline-flex w-full items-baseline justify-start gap-1.5 rounded-pill border px-3 py-1.5 text-xs font-medium transition sm:w-auto ${CHIP_TONE[tone]}`}>
+                      <strong className={`text-sm font-extrabold ${CHIP_NUM[tone]}`}>{n}</strong>{lbl}
+                    </button>
+                  ))}
             </div>
           )}
         </div>
@@ -886,7 +899,7 @@ export default function VerifyHub() {
       ) : (
         <>
           {/* SEKMELER — Taramalarım · Alan Adları · Ekle (tek sütun, ortalı) */}
-          <nav className="mx-auto flex w-fit max-w-full flex-wrap justify-center gap-2 rounded-2xl border border-line bg-white p-1.5 shadow-card">
+          <nav className="mx-auto flex w-full flex-wrap justify-center gap-2 rounded-2xl border border-line bg-white p-1.5 shadow-card sm:w-fit sm:max-w-full">
             {([
               ['history', T.tabMyScans, orders.length],
               ['domains', T.tabDomains, validDomains.length],
@@ -896,10 +909,8 @@ export default function VerifyHub() {
                 key={key}
                 onClick={() => setTab(key)}
                 aria-pressed={tab === key}
-                className={`flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-sm transition ${
-                  tab === key
-                    ? (key === 'add' ? 'bg-brand font-bold text-white shadow-sm' : 'bg-accent font-bold text-ink shadow-sm')
-                    : 'font-medium text-ink-muted hover:bg-brand-50/70'
+                className={`flex items-center justify-center gap-1.5 rounded-xl px-5 py-2.5 text-sm transition ${key === 'add' ? 'w-full sm:w-auto' : ''} ${
+                  tab === key ? 'bg-accent font-bold text-ink shadow-sm' : 'font-medium text-ink-muted hover:bg-brand-50/70'
                 }`}
               >
                 {key === 'add' && <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>}
@@ -951,7 +962,7 @@ export default function VerifyHub() {
                 </div>
 
                 {showArchived && (
-                  <div className="mt-6 border-t border-line pt-6">
+                  <div id="archived-scans" className="mt-6 scroll-mt-24 border-t border-line pt-6">
                     <h3 className="text-xs font-bold uppercase tracking-wide text-ink-muted">{T.archived}</h3>
                     {archivedOrders && archivedOrders.length > 0 ? (
                       <div className="card mt-2 divide-y divide-line overflow-hidden">{archivedOrders.map((o) => orderCard(o, true))}</div>

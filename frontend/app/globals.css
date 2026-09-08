@@ -89,3 +89,14 @@
   .blog-body img { @apply my-4 max-w-full rounded-card; }
   .blog-body hr { @apply my-8 border-line; }
 }
+
+/* (MOBİL ZOOM FIX — TÜM SAYFALAR) iOS/Safari, font-size < 16px olan inputlara focus'ta otomatik
+   zoom yapar (login, kayıt, ücretsiz tarama, e-posta, erişim kodu, promosyon, fatura vb.). Mobilde
+   tüm form alanlarını 16px'e sabitleyerek klavye açılınca zoom'u engelle. */
+@media (max-width: 639px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
