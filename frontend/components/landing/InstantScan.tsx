@@ -349,8 +349,13 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
     try {
       const raw = window.localStorage.getItem(STORE_KEY);
       if (!raw) return;
-      const saved = JSON.parse(raw) as { result?: InstantScanResult; email?: string; ts?: number };
+      const saved = JSON.parse(raw) as { result?: InstantScanResult; email?: string; ts?: number; lang?: string };
       if (!saved?.result || !saved.ts || Date.now() - saved.ts > STORE_TTL_MS) { window.localStorage.removeItem(STORE_KEY); return; }
+      // (ÇOK-DİL LEAK FIX) Sonuç, TARANDIĞI dilde saklanır (bulgu başlıkları backend'de o dile göre üretilir).
+      // Şu anki sayfanın dili farklıysa GERİ YÜKLEME — aksi halde /tr'de taranan Türkçe başlıklar /de arayüzünde
+      // görünür. Silme (o dile dönülürse dursun); yalnız bu dilde gösterme.
+      const effLang = langProp ?? ((): 'tr' | 'de' | 'en' => { const l = getRegion(readRegionCookie()).lang; return l === 'de' ? 'de' : l === 'en' ? 'en' : 'tr'; })();
+      if (saved.lang && saved.lang !== effLang) return;
       setResult(saved.result);
       if (saved.email) setEmail(saved.email);
       setState('done');
@@ -402,7 +407,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
         await sleep(300);
       }
       setResult(r); setState('done');
-      try { window.localStorage.setItem(STORE_KEY, JSON.stringify({ result: r, email: '', ts: Date.now() })); } catch { /* noop */ }
+      try { window.localStorage.setItem(STORE_KEY, JSON.stringify({ result: r, email: '', ts: Date.now(), lang })); } catch { /* noop */ }
     } catch (err: any) {
       clearInterval(phaseTimer);
       setError(err?.message || L.errScan);
@@ -439,7 +444,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
       const blob = await api.instantScanReport({ logId, url: host, email: em, region: regionCode });
       if (reportUrl) URL.revokeObjectURL(reportUrl);
       setReportUrl(URL.createObjectURL(blob)); setReportState('ready');
-      try { window.localStorage.setItem(STORE_KEY, JSON.stringify({ result, email: em, ts: Date.now() })); } catch { /* noop */ }
+      try { window.localStorage.setItem(STORE_KEY, JSON.stringify({ result, email: em, ts: Date.now(), lang })); } catch { /* noop */ }
     } catch (e) {
       setReportErr((e as Error)?.message || L.reportErrMsg); setReportState('error');
     }
