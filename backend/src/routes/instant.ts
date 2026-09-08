@@ -7,6 +7,7 @@ import { generateBasitReport } from '../services/basitReport.js';
 import { renderReportPdf } from '../services/pdf.js';
 import { getPackageDef, localizedPackage } from '../services/scanPackages.js';
 import { foldTurkishDomainChars } from '../services/verification.js';
+import { classifyLeadEmail } from '../services/emailQuality.js';
 
 /**
  * (ÜCRETSİZ ANLIK ÖN-TARAMA) PUBLIC endpoint — herkes bir URL girebilir. Bu yüzden:
@@ -148,6 +149,11 @@ instantRouter.post('/report', async (req, res) => {
   const lang: 'tr' | 'de' | 'en' = region === 'de' ? 'de' : region === 'en' ? 'en' : 'tr';
   const host = normalizeHost(url);
   if (!host) return res.status(400).json({ error: im(region, 'Geçerli, herkese açık bir alan adı girin.', 'Geben Sie eine gültige, öffentliche Domain ein.', 'Enter a valid, public domain.') });
+
+  // (LEAD KALİTE) Küfür/çöp/tek-kullanımlık/MX-yok e-postaları ENGELLE — format-geçerli ama sahte
+  // girişler (ör. "yarak@gmail.com") lead logunu kirletmesin. Sebep söylenmez (kibar mesaj).
+  const eq = await classifyLeadEmail(email);
+  if (eq.block) return res.status(400).json({ error: im(region, 'Geçerli bir e-posta adresi girin.', 'Bitte geben Sie eine gültige E-Mail-Adresse ein.', 'Enter a valid e-mail address.') });
 
   const ip = (req.ip || 'unknown').toString();
   // (LEAD) e-postayı admin logunda domain yanına yaz — best-effort, hata raporu engellemez.

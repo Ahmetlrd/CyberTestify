@@ -24,13 +24,14 @@ export default function AdminFreeScans() {
   const [status, setStatus] = useState('');
   const [region, setRegion] = useState('');
   const [lead, setLead] = useState(false);
+  const [suspicious, setSuspicious] = useState(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setData(null);
-    adminApi.instantScanLogs(page, { q: query, status, region, lead }).then(setData).catch((e) => setError(e.message));
-  }, [page, query, status, region, lead]);
+    adminApi.instantScanLogs(page, { q: query, status, region, lead, suspicious }).then(setData).catch((e) => setError(e.message));
+  }, [page, query, status, region, lead, suspicious]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -80,8 +81,11 @@ export default function AdminFreeScans() {
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#cbd5e1', cursor: 'pointer' }}>
           <input type="checkbox" checked={lead} onChange={(e) => { setPage(1); setLead(e.target.checked); }} /> Sadece lead (e-postalı)
         </label>
-        {(query || status || region || lead) && (
-          <button onClick={() => { setQ(''); setQuery(''); setStatus(''); setRegion(''); setLead(false); setPage(1); }}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#cbd5e1', cursor: 'pointer' }}>
+          <input type="checkbox" checked={suspicious} onChange={(e) => { setPage(1); setSuspicious(e.target.checked); }} /> Sadece şüpheli
+        </label>
+        {(query || status || region || lead || suspicious) && (
+          <button onClick={() => { setQ(''); setQuery(''); setStatus(''); setRegion(''); setLead(false); setSuspicious(false); setPage(1); }}
             style={{ background: 'none', color: '#94a3b8', border: 'none', fontSize: 13, cursor: 'pointer' }}>filtreleri temizle</button>
         )}
       </div>
@@ -93,7 +97,12 @@ export default function AdminFreeScans() {
             rows={data.items.map((r: any) => [
               fmtDate(r.createdAt),
               <span key="h" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{r.host}</span>,
-              r.email ? <span key="e" style={{ color: '#4ade80', wordBreak: 'break-all' }}>{r.email}</span> : <span key="e" style={{ color: '#475569' }}>—</span>,
+              r.email ? (
+                <span key="e" style={{ color: '#4ade80', wordBreak: 'break-all' }}>
+                  {r.email}
+                  {r.suspicious && <span style={{ marginLeft: 6, background: '#7c2d12', color: '#fdba74', borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' }}>ŞÜPHELİ</span>}
+                </span>
+              ) : <span key="e" style={{ color: '#475569' }}>—</span>,
               resultCell(r),
               <span key="rg" style={{ textTransform: 'uppercase', fontSize: 11, color: '#93c5fd' }}>{r.region}</span>,
               <span key="ip" style={{ color: '#64748b', fontSize: 12 }}>{r.ip ?? '—'}</span>,

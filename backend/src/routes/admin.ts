@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { prisma } from '../db.js';
+import { isSuspiciousLeadEmail, ROLE_LOCALPARTS } from '../services/emailQuality.js';
 import { config } from '../config.js';
 import { checkEgressProxyHealth } from '../services/egressHealth.js';
 import { sendRefundNotice, sendReportReady } from '../services/mailer.js';
@@ -690,18 +691,22 @@ adminRouter.get('/instant-scan-logs', async (req, res) => {
   const status = typeof req.query.status === 'string' && ['ok', 'unreachable', 'access_error'].includes(req.query.status) ? req.query.status : '';
   const region = typeof req.query.region === 'string' && ['tr', 'de', 'en'].includes(req.query.region) ? req.query.region : '';
   const leadOnly = req.query.lead === '1' || req.query.lead === 'true';
+  const suspiciousOnly = req.query.suspicious === '1' || req.query.suspicious === 'true';
   const where: Record<string, unknown> = {};
   if (q) where.host = { contains: q };
   if (status) where.status = status;
   if (region) where.region = region;
   if (leadOnly) where.email = { not: null };
+  // (ŞÜPHELİ) Rol/jenerik mailbox (info@, admin@…) — e-posta local-part'ı rol kelimesine eşit → startsWith 'x@'.
+  if (suspiciousOnly) where.OR = ROLE_LOCALPARTS.map((r) => ({ email: { startsWith: `${r}@` } }));
   const [total, rows, uniqueHosts, last24h] = await Promise.all([
     prisma.instantScanLog.count({ where }),
     prisma.instantScanLog.findMany({ where, skip, take, orderBy: { createdAt: 'desc' } }),
     prisma.instantScanLog.findMany({ distinct: ['host'], select: { host: true } }).then((r) => r.length),
     prisma.instantScanLog.count({ where: { createdAt: { gte: new Date(Date.now() - 24 * 3600 * 1000) } } }),
   ]);
-  res.json({ page, pageSize, total, uniqueHosts, last24h, items: rows });
+  const items = rows.map((r) => ({ ...r, suspicious: isSuspiciousLeadEmail(r.email) }));
+  res.json({ page, pageSize, total, uniqueHosts, last24h, items });
 });
 
 // (ÜCRETSİZ TARAMA LOGU — SİL) Tek kayıt sil (test/çöp temizliği).
