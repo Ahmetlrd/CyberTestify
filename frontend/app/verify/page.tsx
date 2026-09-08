@@ -127,6 +127,12 @@ const VER_T = {
     statDomains: 'doğrulanmış alan adı',
     statScans: 'tarama',
     statPending: 'doğrulama bekliyor',
+    schedTitle: 'Zamanlanmış taramalar',
+    schedDesc: 'Taramalarını otomatik tekrarla — haftalık, günlük ya da aylık.',
+    schedManage: 'Planları yönet',
+    addEyebrow: 'YENİ ALAN ADI',
+    addTitle: 'Alan adı ekle ve doğrula',
+    addDesc: 'DNS kaydı ya da HTML dosyasıyla sahipliği dakikalar içinde doğrula.',
     selectDomain: 'Alan adı seçin',
     startScanning: 'Taramaya Başla',
     activeNotice1: 'Aktif güvenlik testlerini başlatabilmemiz için alan adının size ait olduğunu',
@@ -195,6 +201,12 @@ const VER_T = {
     statDomains: 'verifizierte Domains',
     statScans: 'Scans',
     statPending: 'zu verifizieren',
+    schedTitle: 'Geplante Scans',
+    schedDesc: 'Wiederholen Sie Scans automatisch — wöchentlich, täglich oder monatlich.',
+    schedManage: 'Pläne verwalten',
+    addEyebrow: 'NEUE DOMAIN',
+    addTitle: 'Domain hinzufügen & verifizieren',
+    addDesc: 'Bestätigen Sie den Besitz in Minuten per DNS-Eintrag oder HTML-Datei.',
     selectDomain: 'Domain auswählen',
     startScanning: 'Scan starten',
     activeNotice1: 'Damit wir aktive Sicherheitstests starten können, müssen Sie mit einem',
@@ -263,6 +275,12 @@ const VER_T = {
     statDomains: 'verified domains',
     statScans: 'scans',
     statPending: 'to verify',
+    schedTitle: 'Scheduled scans',
+    schedDesc: 'Repeat your scans automatically — weekly, daily or monthly.',
+    schedManage: 'Manage plans',
+    addEyebrow: 'NEW DOMAIN',
+    addTitle: 'Add & verify a domain',
+    addDesc: 'Verify ownership in minutes via a DNS record or HTML file.',
     selectDomain: 'Select a domain',
     startScanning: 'Start scanning',
     activeNotice1: 'Before we can start active security tests, you need to prove the domain belongs to you with a',
@@ -508,12 +526,17 @@ export default function VerifyHub() {
   const validDomains = domains.filter((d) => d.valid);
   const pendingDomains = domains.filter((d) => !d.valid);
   const shownHistory = showAllHistory ? orders : orders.slice(0, HISTORY_PREVIEW);
+  // (Hero özet çipleri) tıklayınca ilgili sekmeye geç + o bölüme yumuşak kaydır.
+  const goToSection = (target: 'domains' | 'history', id: string) => {
+    setTab(target);
+    setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  };
 
   // --- Alan adı seçim/ekleme bölümü (hem normal hem satın-alma modunda kullanılır) ---
   const domainSection = (
     <>
       {validDomains.length > 0 && (
-        <section className="mt-8">
+        <section id="verified-domains" className="mt-8 scroll-mt-24">
           <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">{T.verifiedDomains}</h2>
           <div className="mt-3 space-y-2.5">
             {validDomains.map((d) => (
@@ -530,8 +553,8 @@ export default function VerifyHub() {
                       {purchaseMode ? T.continueWithDomain : T.startScan}
                     </button>
                     {!purchaseMode && (
-                      <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
-                        {T.delete}
+                      <button onClick={() => del(d.id)} title={T.delete} aria-label={T.delete} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-line bg-white text-ink-muted transition hover:border-red-300 hover:bg-red-50 hover:text-red-600">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /></svg>
                       </button>
                     )}
                   </div>
@@ -546,7 +569,7 @@ export default function VerifyHub() {
       )}
 
       {pendingDomains.length > 0 && (
-        <section className="mt-8">
+        <section id="pending-domains" className="mt-8 scroll-mt-24">
           <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">{T.pendingVerification}</h2>
           <div className="mt-3 space-y-2.5">
             {pendingDomains.map((d) => {
@@ -583,8 +606,8 @@ export default function VerifyHub() {
                       <button onClick={() => { setCheckMsg(null); setOpenId(open ? null : d.id); }} className="btn-outline text-sm">
                         {open ? T.hide : T.verify}
                       </button>
-                      <button onClick={() => del(d.id)} className="btn-ghost text-sm text-red-600">
-                        {T.delete}
+                      <button onClick={() => del(d.id)} title={T.delete} aria-label={T.delete} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-line bg-white text-ink-muted transition hover:border-red-300 hover:bg-red-50 hover:text-red-600">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /></svg>
                       </button>
                     </div>
                   </div>
@@ -622,51 +645,44 @@ export default function VerifyHub() {
       )}
 
       <section className="mt-8">
-        {!showAdd ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <button onClick={() => setShowAdd(true)} className="btn-outline">
-              {T.addNewDomain}
-            </button>
-            {!purchaseMode && domains.length > 0 && (
-              <button onClick={delAll} className="btn-ghost text-sm text-red-600">
-                {T.deleteAll}
-              </button>
-            )}
-          </div>
-        ) : (
-          <form onSubmit={addDomain} className="card max-w-2xl p-5">
-            <label className="label">{T.newDomain}</label>
-            <div className="flex flex-col gap-2 sm:flex-row">
+        {/* (Kullanıcı beğendi) Her zaman görünür YEŞİL "alan adı ekle" kartı — mockup deseni. */}
+        <form onSubmit={addDomain} className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-brand-deep p-6 text-white shadow-card">
+          <span aria-hidden className="pointer-events-none absolute -bottom-14 -right-10 h-44 w-44 rounded-full bg-accent/15" />
+          <div className="relative">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">{T.addEyebrow}</p>
+            <p className="mt-1.5 text-lg font-bold">{T.addTitle}</p>
+            <p className="mt-1 max-w-md text-sm leading-relaxed text-white/70">{T.addDesc}</p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <input
                 required
                 placeholder={T.domainPlaceholder}
-                className="field flex-1"
+                className="flex-1 rounded-lg border border-white/20 bg-white/10 px-3 py-3 text-sm text-white placeholder-white/45 outline-none transition focus:border-accent"
                 value={newHostname}
                 onChange={(e) => setNewHostname(e.target.value)}
               />
-              <button type="submit" disabled={busy} className="btn-primary disabled:opacity-60">
+              <button type="submit" disabled={busy} className="shrink-0 rounded-lg bg-gradient-to-b from-amber-400 to-accent px-5 py-3 text-sm font-bold text-ink shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60">
                 {busy ? T.adding : purchaseMode && !activePurchase ? T.addAndContinue : T.add}
               </button>
             </div>
             {(() => {
               const raw = newHostname.trim();
               const host = toBareHost(newHostname);
-              // "https://", "www.", sondaki "/" vb. yazıldıysa hangi çıplak alan adının
-              // ekleneceğini göster (kafa karışıklığını önler).
               if (host && raw.toLowerCase() !== host) {
                 return (
-                  <p className="mt-2 text-xs text-ink-muted">
-                    {T.willBeAdded} <span className="font-mono font-semibold text-ink">{host}</span>
-                    <br />
-                    <span className="text-ink-muted">
-                      (<code>https://</code>, <code>www.</code> {T.stripNote1})
-                    </span>
+                  <p className="mt-2 text-xs text-white/60">
+                    {T.willBeAdded} <span className="font-mono font-semibold text-white">{host}</span>{' '}
+                    (<code>https://</code>, <code>www.</code> {T.stripNote1})
                   </p>
                 );
               }
               return null;
             })()}
-          </form>
+          </div>
+        </form>
+        {!purchaseMode && domains.length > 0 && (
+          <button onClick={delAll} className="mt-3 text-sm font-semibold text-red-600 transition hover:underline">
+            {T.deleteAll}
+          </button>
         )}
         {/* Ekle / toplu-sil sonucu — bölümün HEMEN ALTINDA (sayfa sonunda değil). */}
         {bulkMsg && (
@@ -770,10 +786,15 @@ export default function VerifyHub() {
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">{T.heroSub}</p>
           {!purchaseMode && (
             <div className="mt-5 flex flex-wrap gap-2.5">
-              {([[validDomains.length, T.statDomains], [orders.length, T.statScans], [pendingDomains.length, T.statPending]] as const).map(([n, lbl]) => (
-                <span key={lbl} className="inline-flex items-baseline gap-1.5 rounded-pill border border-white/15 bg-white/10 px-3 py-1.5 text-xs text-white/75">
+              {([
+                [validDomains.length, T.statDomains, 'domains', 'verified-domains'],
+                [orders.length, T.statScans, 'history', 'scans-history'],
+                [pendingDomains.length, T.statPending, 'domains', 'pending-domains'],
+              ] as const).map(([n, lbl, tgt, id]) => (
+                <button key={lbl} type="button" onClick={() => goToSection(tgt, id)}
+                  className="inline-flex items-baseline gap-1.5 rounded-pill border border-white/15 bg-white/10 px-3 py-1.5 text-xs text-white/75 transition hover:border-white/40 hover:bg-white/20 hover:text-white">
                   <strong className="text-sm font-extrabold text-white">{n}</strong>{lbl}
-                </span>
+                </button>
               ))}
             </div>
           )}
@@ -813,7 +834,7 @@ export default function VerifyHub() {
       ) : (
         <>
           {/* (İŞ 2) SEKME NAVİGASYONU — Taramalarım · Alan Adları · Zamanlanmış (net ayrım). */}
-          <nav className="flex flex-wrap gap-1 rounded-2xl border border-line bg-white p-1.5 shadow-card">
+          <nav className="flex flex-wrap gap-2 rounded-2xl border border-line bg-white p-1.5 shadow-card">
             {([
               ['history', T.tabMyScans, orders.length],
               ['domains', T.tabDomains, validDomains.length],
@@ -821,27 +842,22 @@ export default function VerifyHub() {
               <button
                 key={key}
                 onClick={() => setTab(key)}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                  tab === key ? 'bg-brand text-white shadow-sm' : 'text-ink-muted hover:bg-brand-50'
+                aria-pressed={tab === key}
+                className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm transition ${
+                  tab === key ? 'bg-brand font-bold text-white shadow-sm' : 'font-medium text-ink-muted hover:bg-brand-50/70'
                 }`}
               >
                 {label}
-                {count > 0 && <span className={`ml-1.5 rounded-pill px-1.5 py-0.5 text-[10px] font-bold ${tab === key ? 'bg-white/20 text-white' : 'bg-brand-50 text-brand'}`}>{count}</span>}
+                {count > 0 && <span className={`rounded-pill px-1.5 py-0.5 text-[10px] font-bold ${tab === key ? 'bg-white/25 text-white' : 'bg-line text-ink-soft'}`}>{count}</span>}
               </button>
             ))}
-            <a
-              href="/schedules"
-              className="ml-auto self-center rounded-xl px-4 py-2 text-sm font-semibold text-accent-600 transition hover:bg-brand-50"
-            >
-              {T.tabScheduled}
-            </a>
           </nav>
 
           {tab === 'domains' && domainSection}
 
           {tab === 'history' && (
             orders.length > 0 ? (
-              <section className="mt-6">
+              <section id="scans-history" className="mt-6 scroll-mt-24">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">{T.myScans}</h2>
                   <button onClick={toggleArchived} className="text-xs font-medium text-accent-600 hover:underline">
@@ -877,6 +893,19 @@ export default function VerifyHub() {
               <p className="mt-8 text-sm text-ink-muted">{T.noScansYet}</p>
             )
           )}
+          {/* (Kullanıcı isteği) Zamanlanmış taramalar KENDİ özel alanında — mobilde de düzgün. */}
+          <a href="/schedules" className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-5 shadow-card transition hover:border-brand-300">
+            <span className="flex items-center gap-3.5">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+              </span>
+              <span className="min-w-0">
+                <span className="block font-bold text-brand">{T.schedTitle}</span>
+                <span className="mt-0.5 block text-sm text-ink-soft">{T.schedDesc}</span>
+              </span>
+            </span>
+            <span className="shrink-0 whitespace-nowrap text-sm font-bold text-accent-600">{T.schedManage} →</span>
+          </a>
         </>
       )}
       </div>
