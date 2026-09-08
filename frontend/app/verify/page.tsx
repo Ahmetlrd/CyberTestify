@@ -877,20 +877,28 @@ export default function VerifyHub() {
         <>
           {/* SATIN-ALMA MODU: yalnız alan adı seçimi (rapor geçmişi YOK). Paket sonraki adımda hazır gelir. */}
           {activePurchase ? (
-            /* AKTİF paket — DNS doğrulaması ZORUNLU (çelik kapı / yasal). */
-            <div className="mt-6 rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900/90">
-              <p className="leading-relaxed">
-                {T.activeNotice1} <strong>{T.activeNoticeStrong}</strong> {T.activeNotice2}
+            /* AKTİF paket — DNS doğrulaması ZORUNLU. Yeşil hero'ya oturan BEYAZ kart (amber aksan). */
+            <div className="mt-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-white p-4 text-left shadow-card sm:p-5">
+              <span aria-hidden className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4M12 17h.01" /></svg>
+              </span>
+              <p className="text-sm leading-relaxed text-ink-soft">
+                {T.activeNotice1} <strong className="text-ink">{T.activeNoticeStrong}</strong> {T.activeNotice2}
               </p>
             </div>
           ) : (
-            /* PASİF paket — doğrulama gerekmez, sürtünmesiz. */
-            <div className="mt-6 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900/90">
-              <p className="font-bold text-emerald-900">{T.passiveTitle}</p>
-              <p className="mt-1 leading-relaxed">
-                {T.passiveBody1}{' '}
-                {T.passiveBody2} <strong>{T.passiveBodyStrong}</strong> {T.passiveBody3}
-              </p>
+            /* PASİF paket — doğrulama gerekmez. Yeşil hero'ya oturan BEYAZ kart (emerald aksan). */
+            <div className="mt-6 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-left shadow-card sm:p-5">
+              <span aria-hidden className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-ink">{T.passiveTitle}</p>
+                <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+                  {T.passiveBody1}{' '}
+                  {T.passiveBody2} <strong className="text-ink">{T.passiveBodyStrong}</strong> {T.passiveBody3}
+                </p>
+              </div>
             </div>
           )}
           {domainSection}
