@@ -846,6 +846,28 @@ export default function VerifyHub() {
           </div>
           <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">{purchaseMode ? T.selectDomain : T.startScanning}</h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">{T.heroSub}</p>
+          {purchaseMode && (activePurchase ? (
+            <div className="mt-5 flex max-w-2xl items-start gap-3 rounded-xl border border-amber-300/40 bg-amber-400/15 p-3.5 sm:p-4">
+              <span aria-hidden className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-400/25 text-amber-200">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4M12 17h.01" /></svg>
+              </span>
+              <p className="text-sm leading-relaxed text-white/85">
+                {T.activeNotice1} <strong className="text-white">{T.activeNoticeStrong}</strong> {T.activeNotice2}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-5 flex max-w-2xl items-start gap-3 rounded-xl border border-emerald-300/40 bg-emerald-400/15 p-3.5 sm:p-4">
+              <span aria-hidden className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-400/25 text-emerald-100">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-white">{T.passiveTitle}</p>
+                <p className="mt-1 text-sm leading-relaxed text-white/80">
+                  {T.passiveBody1}{' '} {T.passiveBody2} <strong className="text-white">{T.passiveBodyStrong}</strong> {T.passiveBody3}
+                </p>
+              </div>
+            </div>
+          ))}
           {!purchaseMode && (
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-2.5">
               {loading
@@ -875,32 +897,7 @@ export default function VerifyHub() {
         <div className="mt-8 h-32 animate-pulse rounded-card bg-brand-50" />
       ) : purchaseMode ? (
         <>
-          {/* SATIN-ALMA MODU: yalnız alan adı seçimi (rapor geçmişi YOK). Paket sonraki adımda hazır gelir. */}
-          {activePurchase ? (
-            /* AKTİF paket — DNS doğrulaması ZORUNLU. Yeşil hero'ya oturan BEYAZ kart (amber aksan). */
-            <div className="mt-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-white p-4 text-left shadow-card sm:p-5">
-              <span aria-hidden className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4M12 17h.01" /></svg>
-              </span>
-              <p className="text-sm leading-relaxed text-ink-soft">
-                {T.activeNotice1} <strong className="text-ink">{T.activeNoticeStrong}</strong> {T.activeNotice2}
-              </p>
-            </div>
-          ) : (
-            /* PASİF paket — doğrulama gerekmez. Yeşil hero'ya oturan BEYAZ kart (emerald aksan). */
-            <div className="mt-6 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-left shadow-card sm:p-5">
-              <span aria-hidden className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-ink">{T.passiveTitle}</p>
-                <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-                  {T.passiveBody1}{' '}
-                  {T.passiveBody2} <strong className="text-ink">{T.passiveBodyStrong}</strong> {T.passiveBody3}
-                </p>
-              </div>
-            </div>
-          )}
+          {/* SATIN-ALMA MODU: uyarı hero'da (yeşil zemin). Burada yalnız alan adı seçimi. */}
           {domainSection}
           <div className="mt-8">{addDomainBlock}</div>
         </>
