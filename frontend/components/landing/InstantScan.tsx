@@ -686,7 +686,10 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                   <p className="shrink-0 text-[11px] font-bold text-red-600">{L.biggerRisk}</p>
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-ink-soft">{L.cantSeeBody}</p>
-                <p className="mt-2 rounded-md bg-accent-soft/50 px-2.5 py-1.5 text-[11px] font-semibold text-brand">{L.socialProof}</p>
+                <div className="mt-2.5 flex items-start gap-2.5 rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-3 shadow-sm">
+                  <span aria-hidden className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-brand text-white"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v6h-6"/></svg></span>
+                  <p className="text-[12.5px] font-semibold leading-snug text-brand">{L.socialProof}</p>
+                </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <Link href={`${packagesHref}?focus=bundle_surface${domainQ}`} className="flex flex-col gap-1.5 rounded-card border-[1.5px] border-accent bg-accent-soft/40 p-3 transition hover:brightness-[0.98]">
                     <span className="text-[10px] font-extrabold uppercase tracking-wide text-accent-600">{ok.clean ? L.recommended : L.coversGaps(ok.total)}</span>
