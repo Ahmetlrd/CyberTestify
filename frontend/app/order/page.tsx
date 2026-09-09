@@ -96,7 +96,7 @@ const ORD = {
     lcTimeout: 'Doğrulama uzun sürdü — yine de devam edebilirsiniz (gerçek tarama daha kapsamlı deneyecektir).',
     lcOther: 'Giriş şu an doğrulanamadı — yine de devam edebilirsiniz.',
     // Promo
-    promoLabel: 'Promosyon kodu (opsiyonel)', promoPh: 'Kodunuz', apply: 'Uygula', promoCheckFail: 'Kod kontrol edilemedi.',
+    promoLabel: 'Promosyon kodu', promoPh: 'Kodunuz', apply: 'Uygula', promoCheckFail: 'Kod kontrol edilemedi.',
     promoAppliedPre: 'Kod uygulandı — indirim', promoNewTotal: 'Yeni tutar:', promoFree: ' — ödeme adımı atlanır, tarama hemen kuyruğa alınır.',
     queueBusyHtml: 'Sipariş verebilirsiniz — <strong>taramanız en kısa sürede başlayacaktır</strong> ve durumu bu panelden takip edebilirsiniz.',
     // Precheck warnings
@@ -211,7 +211,7 @@ const ORD = {
     lcNoForm: 'Kein automatisches Login-Formular gefunden — Sie können dennoch fortfahren (der Scan versucht mehr).',
     lcTimeout: 'Die Prüfung hat zu lange gedauert — Sie können dennoch fortfahren (der echte Scan versucht mehr).',
     lcOther: 'Die Anmeldung konnte derzeit nicht bestätigt werden — Sie können dennoch fortfahren.',
-    promoLabel: 'Aktionscode (optional)', promoPh: 'Ihr Code', apply: 'Anwenden', promoCheckFail: 'Code konnte nicht geprüft werden.',
+    promoLabel: 'Aktionscode', promoPh: 'Ihr Code', apply: 'Anwenden', promoCheckFail: 'Code konnte nicht geprüft werden.',
     promoAppliedPre: 'Code angewendet — Rabatt', promoNewTotal: 'Neuer Betrag:', promoFree: ' — der Zahlungsschritt entfällt, der Scan wird sofort eingereiht.',
     queueBusyHtml: 'Sie können bestellen — <strong>Ihr Scan startet baldmöglichst</strong> und Sie verfolgen den Status über dieses Panel.',
     checking: 'Erreichbarkeit Ihres Ziels wird vorab geprüft…',
@@ -317,7 +317,7 @@ const ORD = {
     lcNoForm: 'No automatic login form found — you can still continue (the scan will try more thoroughly).',
     lcTimeout: 'Verification took too long — you can still continue (the real scan will try more thoroughly).',
     lcOther: 'Login could not be verified at the moment — you can still continue.',
-    promoLabel: 'Promo code (optional)', promoPh: 'Your code', apply: 'Apply', promoCheckFail: 'Could not check the code.',
+    promoLabel: 'Promo code', promoPh: 'Your code', apply: 'Apply', promoCheckFail: 'Could not check the code.',
     promoAppliedPre: 'Code applied — discount', promoNewTotal: 'New total:', promoFree: ' — the payment step is skipped and the scan is queued immediately.',
     queueBusyHtml: 'You can place your order — <strong>your scan will start as soon as possible</strong> and you can track its status from this panel.',
     checking: 'Pre-checking whether your target is reachable…',
@@ -991,13 +991,34 @@ export default function OrderPage() {
     <main className="min-h-screen bg-canvas pb-36 lg:pb-14">
       {/* HERO — koyu yeşil gradyan (marka); krem zemin + amber vurgu ile profesyonel checkout. */}
       <div className="bg-gradient-to-b from-brand to-brand-deep text-white">
-        <div className="container-page max-w-6xl pt-10 pb-20 lg:pt-14">
+        <div className="container-page max-w-6xl pt-10 pb-10 lg:pt-14">
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">{L.orderEyebrow}</p>
           <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">{L.title}</h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/70">{L.sub}</p>
+          {domainId && (selected || selectedBundle) && (
+            isActiveLightSel ? (
+              domainVerified ? (
+                <p className="mt-5 flex max-w-2xl items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-400/15 p-3 text-sm font-medium text-emerald-50">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="shrink-0" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
+                  {L.dnsVerified}
+                </p>
+              ) : (
+                <div className="mt-5 max-w-2xl rounded-xl border border-amber-300/40 bg-amber-400/15 p-3.5">
+                  <p className="font-bold text-white">{L.activeVerifyTitle}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-white/80" dangerouslySetInnerHTML={{ __html: L.activeVerifyBodyHtml }} />
+                  <Link href={verifyHref} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-amber-200 underline hover:text-amber-100">{L.verifyNow}</Link>
+                </div>
+              )
+            ) : (
+              <p className="mt-5 flex max-w-2xl items-center gap-2 rounded-xl border border-emerald-300/40 bg-emerald-400/15 p-3 text-sm font-medium text-emerald-50">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="shrink-0" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
+                {L.passiveNoVerify}
+              </p>
+            )
+          )}
         </div>
       </div>
-      <div className="container-page max-w-6xl -mt-12">
+      <div className="container-page max-w-6xl mt-6">
 
       {!domainId && (
         <p className="mt-4 rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -1008,32 +1029,7 @@ export default function OrderPage() {
         </p>
       )}
 
-      {/* (PASİF/AKTİF AYRIMI) Doğrulama gereksinimi — paket tipine göre net mesaj. */}
-      {domainId && (selected || selectedBundle) && (
-        isActiveLightSel ? (
-          domainVerified ? (
-            <p className="mt-4 flex items-center gap-2 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="shrink-0" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
-              {L.dnsVerified}
-            </p>
-          ) : (
-            <div className="mt-4 rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900/90">
-              <p className="font-bold text-amber-900">{L.activeVerifyTitle}</p>
-              <p className="mt-1 leading-relaxed" dangerouslySetInnerHTML={{ __html: L.activeVerifyBodyHtml }} />
-              <Link href={verifyHref} className="mt-2 inline-flex items-center gap-1 font-semibold text-amber-900 underline">
-                {L.verifyNow}
-              </Link>
-            </div>
-          )
-        ) : (
-          <p className="mt-4 flex items-center gap-2 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="shrink-0" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
-            {L.passiveNoVerify}
-          </p>
-        )
-      )}
-
-      <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10">
+      <div className="mt-2 grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10">
         {/* ================= SOL: form adimlari ================= */}
         <div className="min-w-0">
       {/* Paket seçimi — SADECE paketler: Basit Tarama (giriş) + kombine paketler. Tekil kontrol satışı YOK. */}
@@ -1097,13 +1093,14 @@ export default function OrderPage() {
       {/* Onaylar — (İŞ 3) ≤3 gruplu checkbox; sunucu-tarafı bireysel zorunluluk korunur. */}
       <h2 id="onaylar" className="mt-8 scroll-mt-24 text-base font-extrabold text-brand">{L.step2}</h2>
       {(selected || selectedBundle) && !allConsents && (
-        <p className="mt-2 rounded-card border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-800">
+        <p className="mt-2 flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-3.5 py-2.5 text-xs font-semibold text-ink shadow-sm">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E5A21B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>
           {L.needConsents(consentGroups.length)}
         </p>
       )}
       <div className="mt-3 space-y-2.5">
         {consentGroups.map(({ checked, set, node }, i) => (
-          <label key={i} className={`flex items-start gap-3 rounded-card border p-3.5 text-sm text-ink-soft transition ${checked ? 'border-brand-200 bg-brand-50/50' : 'border-amber-300 bg-amber-50/40'}`}>
+          <label key={i} className={`flex items-start gap-3 rounded-xl border p-3.5 text-sm text-ink-soft transition ${checked ? 'border-brand-300 bg-brand-50/60 ring-1 ring-brand-100' : 'border-line bg-white hover:border-brand-200'}`}>
             <input type="checkbox" checked={checked} onChange={(e) => set(e.target.checked)} className="mt-0.5 h-4 w-4 accent-brand" />
             <span>{node}</span>
           </label>
