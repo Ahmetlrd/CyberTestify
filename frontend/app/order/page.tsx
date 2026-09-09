@@ -68,6 +68,7 @@ const ORD = {
     fpAiHtml: '<strong class="text-ink">Opsiyonel AI katmanı:</strong> İki kontrolde (yetki yükseltme + çok-adımlı iş mantığı) isteğe bağlı, hafif bir <strong>yapay zekâ danışma katmanı</strong> vardır; <strong>varsayılan olarak kapalıdır</strong> ve yalnız açıkken ek, doğrulanabilir bir gösterge bulduğunda devreye girer. Kapalıyken sonuçlar <strong>tam deterministik authenticated kontrollerle</strong> üretilir — normal ve beklenen davranıştır, rapor bunu şeffaf gösterir.',
     fpScopeHtml: '<strong class="text-ink">Kapsam:</strong> <strong>Cross-account</strong> (başka bir kullanıcının verisine erişim) IDOR bu sürümün kapsamı dışındadır.',
     step2: '2 · Onaylar', needConsents: (n: number) => `Devam etmek için aşağıdaki ${n} onayı işaretleyin.`,
+    consentRefundNote: 'Cayma hakkından feragat iadeyi engellemez: tarama başlatılamaz veya tamamlanamazsa ücretiniz iade edilir.',
     contractShow: 'Bu siparişe özel Mesafeli Satış Sözleşmesi’ni görüntüle', contractHide: 'Bu siparişe özel sözleşmeyi gizle',
     step3: '3 · Tekrar', oneOff: 'Tek seferlik tarama', repeat: 'Düzenli tekrarla',
     frequency: 'Sıklık', weekly: 'Haftalık', biweekly: 'İki haftada bir', monthly: 'Aylık',
@@ -188,6 +189,7 @@ const ORD = {
     fpAiHtml: '<strong class="text-ink">Optionale KI-Schicht:</strong> Bei zwei Prüfungen (Rechteausweitung + mehrstufige Geschäftslogik) gibt es eine optionale, leichte <strong>KI-Beratungsschicht</strong>; sie ist <strong>standardmäßig deaktiviert</strong> und greift nur ein, wenn sie aktiviert ist und einen zusätzlichen, nachweisbaren Indikator findet. Deaktiviert werden die Ergebnisse mit <strong>vollständig deterministischen authentifizierten Prüfungen</strong> erzeugt — das ist normal und erwartet; der Bericht zeigt dies transparent.',
     fpScopeHtml: '<strong class="text-ink">Umfang:</strong> <strong>Cross-Account</strong>-IDOR (Zugriff auf Daten eines anderen Nutzers) ist in dieser Version außerhalb des Scope.',
     step2: '2 · Zustimmungen', needConsents: (n: number) => `Kreuzen Sie die folgenden ${n} Zustimmungen an, um fortzufahren.`,
+    consentRefundNote: 'Der Verzicht auf das Widerrufsrecht schließt eine Erstattung nicht aus: Kann der Scan nicht starten oder abgeschlossen werden, wird Ihr Betrag erstattet.',
     contractShow: 'Für diese Bestellung gültigen Fernabsatzvertrag anzeigen', contractHide: 'Vertrag für diese Bestellung ausblenden',
     step3: '3 · Wiederholung', oneOff: 'Einmaliger Scan', repeat: 'Regelmäßig wiederholen',
     frequency: 'Häufigkeit', weekly: 'Wöchentlich', biweekly: 'Alle zwei Wochen', monthly: 'Monatlich',
@@ -296,6 +298,7 @@ const ORD = {
     fpAiHtml: '<strong class="text-ink">Optional AI layer:</strong> Two checks (privilege escalation + multi-step business logic) have an optional, lightweight <strong>AI advisory layer</strong>; it is <strong>disabled by default</strong> and only engages when enabled and it finds an additional, verifiable indicator. When disabled, results are produced with <strong>fully deterministic authenticated checks</strong> — this is normal and expected, and the report shows it transparently.',
     fpScopeHtml: '<strong class="text-ink">Scope:</strong> <strong>Cross-account</strong> IDOR (accessing another user’s data) is out of scope in this version.',
     step2: '2 · Consents', needConsents: (n: number) => `Tick the following ${n} consents to continue.`,
+    consentRefundNote: 'Waiving withdrawal does not block a refund: if the scan cannot start or complete, you are refunded.',
     contractShow: 'View the Distance Sales Agreement for this order', contractHide: 'Hide the agreement for this order',
     step3: '3 · Repeat', oneOff: 'One-off scan', repeat: 'Repeat regularly',
     frequency: 'Frequency', weekly: 'Weekly', biweekly: 'Every two weeks', monthly: 'Monthly',
@@ -1114,6 +1117,10 @@ export default function OrderPage() {
           </label>
         ))}
       </div>
+      <p className="mt-2.5 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3.5 py-2.5 text-xs font-medium text-emerald-900">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" className="mt-px shrink-0" aria-hidden><path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        {L.consentRefundNote}
+      </p>
       {selectedPkg && (
         <div className="mt-3">
           <button type="button" onClick={() => setShowContract((v) => !v)} className="text-xs font-semibold text-accent-600 underline">
