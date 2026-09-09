@@ -725,7 +725,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                   ))}
                 </ul>
                 <div className="absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-white via-white/95 to-transparent px-4 pb-4 pt-12">
-                  <Link href={`${packagesHref}${domainQ}`} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2.5 text-xs font-bold text-white shadow-card transition hover:bg-brand-deep">
+                  <Link href={`${packagesHref}?focus=bundle_active_verify${domainQ}`} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2.5 text-xs font-bold text-white shadow-card transition hover:bg-brand-deep">
                     {L.lockedListCta} <span aria-hidden>→</span>
                   </Link>
                 </div>
