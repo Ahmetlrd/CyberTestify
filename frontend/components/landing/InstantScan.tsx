@@ -46,6 +46,7 @@ const IS = {
     gapsFound: (n: number) => `Dış yüzeyinizde ${n} açık bulundu`,
     ratedHigh: (n: number) => `${n} tanesi YÜKSEK riskli`,
     summaryNote: 'Bu ekran özeti gösterir. Tam rapor her açığı ve nasıl kapatılacağını anlatır.',
+    coverageNote: 'Bu skor yalnızca dışarıdan görülebilen kontrolleri (güvenlik başlıkları, SSL/TLS, sunucu/teknoloji ifşası) kapsar; login-sonrası alanlar ve API dahil değildir.',
     emailBtnFull: 'Tam PDF raporumu gönder',
     emailReassure: 'Ücretsiz · ~1 dk içinde gelir · kart yok, satış görüşmesi yok',
     topFindings: 'Öne çıkan bulgular',
@@ -118,6 +119,7 @@ const IS = {
     gapsFound: (n: number) => `${n} Lücken auf Ihrer Außenfläche gefunden`,
     ratedHigh: (n: number) => `${n} als HOCH eingestuft`,
     summaryNote: 'Diese Ansicht zeigt die Zusammenfassung. Der vollständige Bericht erklärt jede Lücke und wie man sie behebt.',
+    coverageNote: 'Dieser Score umfasst nur von außen sichtbare Prüfungen (Sicherheits-Header, SSL/TLS, Server-/Technologie-Offenlegung); Post-Login-Bereiche und API sind nicht enthalten.',
     emailBtnFull: 'Vollständigen PDF-Bericht senden',
     emailReassure: 'Kostenlos · in ~1 Min · keine Karte, kein Verkaufsgespräch',
     topFindings: 'Wichtigste Funde',
@@ -190,6 +192,7 @@ const IS = {
     gapsFound: (n: number) => `${n} gaps found on your external surface`,
     ratedHigh: (n: number) => `${n} rated HIGH`,
     summaryNote: 'This page shows the summary. The full report explains each gap and how to fix it.',
+    coverageNote: 'This score covers only externally-visible checks (security headers, SSL/TLS, server/tech disclosure); post-login areas and the API are not included.',
     emailBtnFull: 'Send my full PDF report',
     emailReassure: 'Free · arrives in ~1 min · no card, no sales call',
     topFindings: 'Top findings',
@@ -568,6 +571,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                       )}
                     </p>
                     <p className="mt-1 text-xs leading-relaxed text-white/65">{ok.clean ? L.cleanBody : L.summaryNote}</p>
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-white/45">{L.coverageNote}</p>
                   </div>
                 </div>
                 {/* E-posta formu — dark box İÇİNDE (rapor hazır olunca indir butonuna döner) */}
