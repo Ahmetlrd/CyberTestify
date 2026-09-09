@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation';
 import { EnLegalArticle } from '../../../../components/EnLegalArticle';
 
 export const metadata: Metadata = {
-  title: 'Terms &amp; Conditions — CyberTestify',
+  title: 'Terms & Conditions — CyberTestify',
   description: 'Terms and conditions for the CyberTestify automated security pre-assessment service.',
   alternates: { canonical: '/en/legal/terms' },
   robots: { index: true, follow: true },

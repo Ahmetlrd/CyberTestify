@@ -47,7 +47,8 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
   const [first, setFirst] = useState<boolean | null>(null);
   const [goal, setGoal] = useState<string | null>(null);
   const [exp, setExp] = useState<boolean | null>(null);
-  const answered = first !== null && goal !== null && exp !== null;
+  const showExp = !!redTeamKey; // Deneysel soru yalniz Red Team olan bolgede (TR) anlamli
+  const answered = first !== null && goal !== null && (showExp ? exp !== null : true);
 
   // Hedef -> paket anahtarı (birebir, gerçek paketlere)
   const GOAL_MAP: Record<string, string> = {
@@ -140,7 +141,7 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
           <div>
             <div className="flex items-center gap-2"><span aria-hidden className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand text-[11px] font-bold text-white">2</span><p className="text-sm font-bold text-brand">{L.wizQ2}</p></div>
             <div className="mt-2 flex flex-wrap gap-2">
-              {L.wizGoals.map((g) => (
+              {L.wizGoals.filter((g) => cols.some((c) => c.key === GOAL_MAP[g.id])).map((g) => (
                 <button key={g.id} type="button" onClick={() => setGoal(g.id)}
                   className={`rounded-pill border px-3.5 py-1.5 text-sm font-semibold transition ${goal === g.id ? 'border-accent bg-accent text-white' : 'border-line bg-canvas text-ink-soft hover:border-accent hover:text-brand'}`}>
                   {g.label}
@@ -149,6 +150,7 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
             </div>
           </div>
 
+          {showExp && (
           <div>
             <div className="flex items-center gap-2"><span aria-hidden className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand text-[11px] font-bold text-white">3</span><p className="text-sm font-bold text-brand">{L.wizQ3}</p></div>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -160,6 +162,7 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
               ))}
             </div>
           </div>
+          )}
         </div>
 
         {answered && primary && (

@@ -295,7 +295,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         </span>
                         {hasSaving && (
                           <span className="whitespace-nowrap rounded-pill bg-accent px-2.5 py-1 text-xs font-bold text-white">
-                            %{savedPct} {t3('avantaj', 'Rabatt', 'off')}
+                            {t3(`%${savedPct} avantaj`, `${savedPct} % Rabatt`, `${savedPct}% off`)}
                           </span>
                         )}
                       </span>
@@ -306,14 +306,14 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         </span>
                         {hasSaving && (
                           <span className="whitespace-nowrap rounded-pill bg-brand px-2.5 py-1 text-xs font-bold text-white">
-                            %{savedPct} {t3('avantaj', 'Rabatt', 'off')}
+                            {t3(`%${savedPct} avantaj`, `${savedPct} % Rabatt`, `${savedPct}% off`)}
                           </span>
                         )}
                       </span>
                     ) : hasSaving ? (
                       <span className="mb-3 flex flex-wrap items-center gap-1.5">
                         <span className="whitespace-nowrap rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
-                          %{savedPct} {t3('avantaj', 'Rabatt', 'off')}
+                          {t3(`%${savedPct} avantaj`, `${savedPct} % Rabatt`, `${savedPct}% off`)}
                         </span>
                         {/* (USOM/SGB — YALNIZCA /tr) Keşif kartı olgusal rozet; %avantaj ile aynı kümede (yeşil+amber uyumu). /de-/en'de yok. */}
                         {tr && b.key === 'bundle_recon' && (

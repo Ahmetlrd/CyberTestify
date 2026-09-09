@@ -85,7 +85,9 @@ export function middleware(req: NextRequest) {
   // (COK-BOLGE) Legal sayfalar artik bolge-onekli (/{bolge}/legal/...). Eski cıplak /legal/* linkleri
   // (mail/bookmark/eski iç link) KIRILMASIN diye uygun bolgeye yonlendirilir.
   if (pathname === '/legal' || pathname.startsWith('/legal/')) {
-    return NextResponse.redirect(new URL(`/${region}${pathname}`, req.url), 301);
+    // Cıplak /legal/* yollari ESKI TR-slug linkleri (mesafeli-satis, kullanim-kosullari...) -> her zaman /tr.
+    // (Bolge-onekli DE/EN yasal sayfalari zaten /{bolge}/legal/... ile ayri; onlar bu kaliba dusmez.)
+    return NextResponse.redirect(new URL(`/tr${pathname}`, req.url), 301);
   }
   // (Cok-dilli blog) Eski cıplak /blog LİSTELEME -> KALICI /tr/blog (301). /de/blog yukarıda ele alındı.
   // Eski /blog/<slug> YAZI sayfaları burada DEĞİL, app/blog/[slug]/route.ts'te DİLİNE göre 301/410 edilir

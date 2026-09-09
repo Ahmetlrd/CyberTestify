@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation';
 import { EnLegalArticle } from '../../../../components/EnLegalArticle';
 
 export const metadata: Metadata = {
-  title: 'Cancellation &amp; Refund Policy — CyberTestify',
+  title: 'Cancellation & Refund Policy — CyberTestify',
   description: 'Cancellation and refund policy for CyberTestify under the Consumer Contracts Regulations 2013.',
   alternates: { canonical: '/en/legal/cancellation' },
   robots: { index: true, follow: true },
