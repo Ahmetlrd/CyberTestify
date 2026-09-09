@@ -217,7 +217,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
         {bundles.length > 0 && (
           <div className="relative z-[1] -mt-24 mb-14 sm:-mt-28">
             <PackageFocus />
-            <div className="grid items-start gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid items-stretch gap-6 md:grid-cols-2 lg:grid-cols-3">
               {/* Basit Tarama — giris seviyesi PAKET (grid'in ilk karti; ayriksi degil). */}
               {basit && !basit.comingSoon && (
                 <div id="pkg-basit_tarama" className="card relative flex flex-col border-2 border-line p-6 scroll-mt-24 transition-transform hover:-translate-y-1">
@@ -231,7 +231,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                       'Das ideale Einstiegspaket, um die externe Sicherheitslage Ihrer Website schnell einzuschätzen und grundlegende Risiken zu schließen.',
                       'The ideal starter package to quickly gauge your site’s external security posture and close basic risks.')}
                   </p>
-                  <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
+                  <div className="mt-3 flex-1 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
                     <span className="font-semibold">{t3('Kapsam', 'Umfang', 'Scope')}:</span>{' '}
                     {t3(
                       'HTTP güvenlik başlıkları · SSL/TLS yapılandırması · Sunucu & teknoloji ifşası · Temel yapılandırma dosyaları (robots.txt, assetlinks) · Platforma özel hazır düzeltme kodları (Nginx, IIS, Vercel vb.).',
@@ -330,7 +330,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                     <h3 className={`text-lg font-bold ${flagship ? 'text-white' : 'text-brand'}`}>{b.displayName}</h3>
                     <p className={`mt-2 text-sm leading-relaxed ${flagship ? 'text-white/75' : 'text-ink-soft'}`}>{renderEmphasis(b.description)}</p>
                     {b.selectable ? (
-                      <div className="mt-3 rounded-card border border-accent/40 bg-accent-soft/30 px-3 py-2 text-xs text-ink-soft">
+                      <div className="mt-3 flex-1 rounded-card border border-accent/40 bg-accent-soft/30 px-3 py-2 text-xs text-ink-soft">
                         <span className="font-semibold">{t3('İçerik seçilebilir', 'Inhalt wählbar', 'Content is selectable')}</span>{' '}
                         — {t3(
                           `${(b.selectableModules ?? []).map((m) => m.displayName).join(' / ')}'den istediğinizi seçin`,
@@ -340,7 +340,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                     ) : b.key === 'bundle_recon' ? (
                       // (Keşif) İçindekiler = gerçek kapsam maddeleri (üye adları değil). CT ayrı teslimat
                       // DEĞİL — subdomain envanterinin yöntemi olarak 1. maddenin içinde (ikinci kez sayma).
-                      <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
+                      <div className="mt-3 flex-1 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
                         <span className="font-semibold">{t3('İçindekiler', 'Enthält', 'Includes')}:</span>
                         <ul className="mt-1.5 space-y-1">
                           {(region.lang === 'de'
@@ -380,7 +380,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                     ) : b.key === 'bundle_full_pentest' ? (
                       // (Tam Kapsamlı) İncelenen alanlar = gerçekten çalıştırdığımız kapsam (Faz 0–5).
                       // Üye adları yerine dürüst kapsam maddeleri + sınırlar/güvence.
-                      <div className="mt-3 rounded-card border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white/85">
+                      <div className="mt-3 flex-1 rounded-card border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white/85">
                         <span className="font-semibold text-accent">{t3('İncelenen alanlar', 'Was wir prüfen', 'What we examine')}:</span>
                         <CollapsibleList
                           dark
@@ -433,7 +433,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         </CollapsibleList>
                       </div>
                     ) : b.members.length > 0 ? (
-                      <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
+                      <div className="mt-3 flex-1 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
                         <span className="font-semibold">{t3('İçindekiler', 'Enthält', 'Includes')}:</span>{' '}
                         {b.members.map((m) => m.displayName).join(' · ')}
                       </div>
