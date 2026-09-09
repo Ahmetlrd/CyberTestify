@@ -232,7 +232,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
               {/* Basit Tarama — giris seviyesi PAKET (grid'in ilk karti; ayriksi degil). */}
               {basit && !basit.comingSoon && (
                 <div id="pkg-basit_tarama" className="card relative flex flex-col border-2 border-line p-6 scroll-mt-24 transition-transform hover:-translate-y-1">
-                  <span className="absolute -top-3 left-6 rounded-pill bg-ink-soft px-3 py-1 text-xs font-bold text-white">
+                  <span className="mb-3 inline-flex w-fit rounded-pill bg-ink-soft px-3 py-1 text-xs font-bold text-white">
                     {t3('Giriş', 'Einstieg', 'Entry')}
                   </span>
                   <h3 className="text-lg font-bold text-brand">{basit.displayName}</h3>
@@ -290,17 +290,17 @@ export default async function PackagesPage({ params }: { params: { region: strin
                     key={b.key}
                     id={`pkg-${b.key}`}
                     className={`card relative flex flex-col p-6 scroll-mt-24 transition-transform hover:-translate-y-1 ${
-                      flagship ? 'border-2 border-brand shadow-lg ring-2 ring-brand/25 bg-brand-50/20'
-                        : popular ? 'border-2 border-accent shadow-md ring-2 ring-accent/25'
+                      flagship ? 'border-2 border-brand shadow-lg ring-2 ring-brand/30 bg-brand-50/40'
+                        : popular ? 'border-2 border-accent shadow-md ring-2 ring-accent/25 bg-amber-50/40'
                         : 'border-2 border-accent/40'
                     } ${b.comingSoon ? 'opacity-90' : ''}`}
                   >
                     {b.comingSoon ? (
-                      <span className="absolute -top-3 left-6 rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
+                      <span className="mb-3 inline-flex w-fit rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
                         {t3('Yakında', 'Bald', 'Soon')}
                       </span>
                     ) : flagship ? (
-                      <span className="absolute -top-3 left-6 flex items-center gap-1.5">
+                      <span className="mb-3 flex flex-wrap items-center gap-1.5">
                         <span className="whitespace-nowrap rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
                           ★ {t3('En Kapsamlı Paket', 'Umfangreichstes Paket', 'Most Complete')}
                         </span>
@@ -311,7 +311,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         )}
                       </span>
                     ) : popular ? (
-                      <span className="absolute -top-3 left-6 flex items-center gap-1.5">
+                      <span className="mb-3 flex flex-wrap items-center gap-1.5">
                         <span className="whitespace-nowrap rounded-pill bg-accent px-3 py-1 text-xs font-bold text-white">
                           ★ {t3('Popüler', 'Beliebt', 'Popular')}
                         </span>
@@ -322,7 +322,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         )}
                       </span>
                     ) : hasSaving ? (
-                      <span className="absolute -top-3 left-6 flex items-center gap-1.5">
+                      <span className="mb-3 flex flex-wrap items-center gap-1.5">
                         <span className="whitespace-nowrap rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
                           %{savedPct} {t3('avantaj', 'Rabatt', 'off')}
                         </span>
@@ -334,7 +334,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         )}
                       </span>
                     ) : tr && b.key === 'bundle_recon' && !b.comingSoon ? (
-                      <span className="absolute -top-3 left-6 rounded-pill bg-accent px-3 py-1 text-xs font-bold text-white">
+                      <span className="mb-3 inline-flex w-fit rounded-pill bg-accent px-3 py-1 text-xs font-bold text-white">
                         USOM Eşleme
                       </span>
                     ) : null}
