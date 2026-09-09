@@ -136,7 +136,7 @@ const ORD = {
     errLowScopeAck: 'Devam etmek için ön kontrol uyarısını onaylamalısınız.',
     errUnreachAck: 'Hedefe erişilemiyor — devam etmek için uyarıyı onaylamalısınız.',
     // Trust strip
-    trustSSL: '256-bit SSL · iyzico güvenli ödeme', trustCard: 'Kart bilgileri iyzico’da işlenir, bizde saklanmaz', trustKvkk: 'KVKK’ya uygun · veriler şifreli saklanır',
+    trustSSL: '256-bit SSL · iyzico güvenli ödeme', trustCard: 'Kart bilgileri iyzico’da işlenir, bizde saklanmaz', trustKvkk: 'KVKK’ya uygun · veriler şifreli saklanır', trustRefund: 'Tarama başlatılamaz veya tamamlanamazsa ücretiniz iade edilir',
     payAlt: 'iyzico ile Öde',
     // Mobile bar
     noPackage: 'Paket seçilmedi', mobileVerify: 'Doğrula',
@@ -247,7 +247,7 @@ const ORD = {
     errSelectModule: 'Wählen Sie mindestens ein Modul.',
     errLowScopeAck: 'Zum Fortfahren müssen Sie den Vorabprüfungs-Hinweis bestätigen.',
     errUnreachAck: 'Ziel nicht erreichbar — zum Fortfahren müssen Sie den Hinweis bestätigen.',
-    trustSSL: '256-Bit-SSL · sichere Zahlung über iyzico', trustCard: 'Kartendaten werden bei iyzico verarbeitet, nicht bei uns gespeichert', trustKvkk: 'DSGVO-konform · Daten werden verschlüsselt gespeichert',
+    trustSSL: '256-Bit-SSL · sichere Zahlung über iyzico', trustCard: 'Kartendaten werden bei iyzico verarbeitet, nicht bei uns gespeichert', trustKvkk: 'DSGVO-konform · Daten werden verschlüsselt gespeichert', trustRefund: 'Kann der Scan nicht starten oder abgeschlossen werden, wird Ihr Betrag erstattet',
     payAlt: 'Mit iyzico bezahlen',
     noPackage: 'Kein Paket gewählt', mobileVerify: 'Bestätigen',
     cGenStrong: 'Ich habe gelesen und stimme zu:', cGenOwn1: 'Ich bin Inhaber/Berechtigter dieser Domain', cGenOwn2: 'und ihrer Infrastruktur', cGenOwn3: 'und willige ein, dass an diesem Ziel',
@@ -355,7 +355,7 @@ const ORD = {
     errSelectModule: 'Choose at least one module.',
     errLowScopeAck: 'To continue you must acknowledge the pre-check notice.',
     errUnreachAck: 'Target unreachable — to continue you must acknowledge the notice.',
-    trustSSL: '256-bit SSL · secure payment via iyzico', trustCard: 'Card details are processed at iyzico, not stored by us', trustKvkk: 'GDPR-compliant · data stored encrypted',
+    trustSSL: '256-bit SSL · secure payment via iyzico', trustCard: 'Card details are processed at iyzico, not stored by us', trustKvkk: 'GDPR-compliant · data stored encrypted', trustRefund: 'If the scan cannot start or complete, you are refunded',
     payAlt: 'Pay with iyzico',
     noPackage: 'No package selected', mobileVerify: 'Verify',
     cGenStrong: 'I have read and agree:', cGenOwn1: 'I am the owner/authorised person of this domain', cGenOwn2: 'and its infrastructure', cGenOwn3: 'and I consent to',
@@ -1424,6 +1424,10 @@ export default function OrderPage() {
                 <li className="flex items-center gap-2">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1C6B60" strokeWidth="2" className="shrink-0" aria-hidden><circle cx="12" cy="12" r="9"/><path d="M8 12l2.5 2.5L16 9" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   {L.trustKvkk}
+                </li>
+                <li className="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#123F3A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+                  {L.trustRefund}
                 </li>
               </ul>
               <div className="mt-3 flex flex-wrap items-center gap-3">
