@@ -124,13 +124,13 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
           )}
         </div>
 
-        <div className="mt-5 space-y-4">
+        <div className="mt-5 space-y-5">
           <div>
-            <p className="text-sm font-semibold text-ink">{L.wizQ1}</p>
+            <div className="flex items-center gap-2"><span aria-hidden className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand text-[11px] font-bold text-white">1</span><p className="text-sm font-bold text-brand">{L.wizQ1}</p></div>
             <div className="mt-2 flex flex-wrap gap-2">
               {[{ v: true, l: L.wizFirstYes }, { v: false, l: L.wizFirstNo }].map((o) => (
                 <button key={String(o.v)} type="button" onClick={() => setFirst(o.v)}
-                  className={`rounded-pill border px-3.5 py-1.5 text-sm font-semibold transition ${first === o.v ? 'border-accent bg-accent text-white' : 'border-line bg-white text-ink-soft hover:border-accent/60'}`}>
+                  className={`rounded-pill border px-3.5 py-1.5 text-sm font-semibold transition ${first === o.v ? 'border-accent bg-accent text-white' : 'border-line bg-canvas text-ink-soft hover:border-accent hover:text-brand'}`}>
                   {o.l}
                 </button>
               ))}
@@ -138,11 +138,11 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
           </div>
 
           <div>
-            <p className="text-sm font-semibold text-ink">{L.wizQ2}</p>
+            <div className="flex items-center gap-2"><span aria-hidden className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand text-[11px] font-bold text-white">2</span><p className="text-sm font-bold text-brand">{L.wizQ2}</p></div>
             <div className="mt-2 flex flex-wrap gap-2">
               {L.wizGoals.map((g) => (
                 <button key={g.id} type="button" onClick={() => setGoal(g.id)}
-                  className={`rounded-pill border px-3.5 py-1.5 text-sm font-semibold transition ${goal === g.id ? 'border-accent bg-accent text-white' : 'border-line bg-white text-ink-soft hover:border-accent/60'}`}>
+                  className={`rounded-pill border px-3.5 py-1.5 text-sm font-semibold transition ${goal === g.id ? 'border-accent bg-accent text-white' : 'border-line bg-canvas text-ink-soft hover:border-accent hover:text-brand'}`}>
                   {g.label}
                 </button>
               ))}
@@ -150,11 +150,11 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
           </div>
 
           <div>
-            <p className="text-sm font-semibold text-ink">{L.wizQ3}</p>
+            <div className="flex items-center gap-2"><span aria-hidden className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand text-[11px] font-bold text-white">3</span><p className="text-sm font-bold text-brand">{L.wizQ3}</p></div>
             <div className="mt-2 flex flex-wrap gap-2">
               {[{ v: true, l: L.wizExpYes }, { v: false, l: L.wizExpNo }].map((o) => (
                 <button key={String(o.v)} type="button" onClick={() => setExp(o.v)}
-                  className={`rounded-pill border px-3.5 py-1.5 text-sm font-semibold transition ${exp === o.v ? 'border-accent bg-accent text-white' : 'border-line bg-white text-ink-soft hover:border-accent/60'}`}>
+                  className={`rounded-pill border px-3.5 py-1.5 text-sm font-semibold transition ${exp === o.v ? 'border-accent bg-accent text-white' : 'border-line bg-canvas text-ink-soft hover:border-accent hover:text-brand'}`}>
                   {o.l}
                 </button>
               ))}

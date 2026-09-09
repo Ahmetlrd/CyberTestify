@@ -810,6 +810,9 @@ ordersRouter.delete('/:orderId', requireAuth, async (req, res) => {
     await tx.flow.deleteMany({ where: { orderId: order.id } });
     await tx.activeTestConsent.deleteMany({ where: { orderId: order.id } });
     await tx.invoiceRequest.deleteMany({ where: { orderId: order.id } });
+    // (FIX) Order'a FK ile bağlı ama önce silinmezse FK ihlali → 500 veren çocuklar:
+    await tx.testCredential.deleteMany({ where: { orderId: order.id } }); // authenticated/aktif paketlerde test hesabı kimlik bilgileri
+    await tx.redTeamJob.deleteMany({ where: { orderId: order.id } });     // S1 red team koşusu (logları onDelete:Cascade)
     await tx.order.delete({ where: { id: order.id } });
   });
   res.json({ ok: true });
