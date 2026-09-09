@@ -50,6 +50,7 @@ export type InstantScanResult =
       total: number;
       shown: InstantFinding[];
       locked: number;
+      lockedCats?: { ssl: number; header: number };
       clean: boolean;
       httpsOk: boolean;
       logId?: string;

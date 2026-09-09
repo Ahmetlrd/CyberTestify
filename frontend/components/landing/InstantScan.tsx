@@ -53,6 +53,8 @@ const IS = {
     fixIncluded: 'Çözümü şu pakette →',
     pkgSurfaceShort: 'Dış Yüzey',
     moreInReport: (n: number) => `+${n} tanesi tam raporda`,
+    lockedSsl: (n: number) => `SSL/TLS yapılandırmasında ${n} uyarı daha`,
+    lockedHeader: (n: number) => `Güvenlik başlıklarında ${n} bulgu daha`,
     cantSee: 'Bu taramanın göremedikleri',
     biggerRisk: 'Genelde asıl risk',
     cantSeeBody: 'Login-sonrası zafiyetler, iş mantığı hataları ve API kötüye kullanımı ancak aktif/kimlik-doğrulamalı testlerle ortaya çıkar.',
@@ -126,6 +128,8 @@ const IS = {
     fixIncluded: 'Behebung enthalten in →',
     pkgSurfaceShort: 'Außenfläche',
     moreInReport: (n: number) => `+${n} weitere im vollständigen Bericht`,
+    lockedSsl: (n: number) => `${n} weitere Warnung(en) zur SSL/TLS-Konfiguration`,
+    lockedHeader: (n: number) => `${n} weitere Befund(e) bei Sicherheits-Headern`,
     cantSee: 'Was dieser Scan nicht sieht',
     biggerRisk: 'Meist das größere Risiko',
     cantSeeBody: 'Post-Login-Schwachstellen, Geschäftslogikfehler und API-Missbrauch zeigen sich nur bei aktiven/authentifizierten Tests.',
@@ -199,6 +203,8 @@ const IS = {
     fixIncluded: 'Fix included in →',
     pkgSurfaceShort: 'External Surface',
     moreInReport: (n: number) => `+${n} more in the full report`,
+    lockedSsl: (n: number) => `${n} more SSL/TLS configuration warning${n > 1 ? 's' : ''}`,
+    lockedHeader: (n: number) => `${n} more security header finding${n > 1 ? 's' : ''}`,
     cantSee: "What this scan can't see",
     biggerRisk: 'Usually the bigger risk',
     cantSeeBody: 'Post-login vulnerabilities, business-logic flaws and API abuse only show up with active/authenticated testing.',
@@ -622,9 +628,22 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                       </li>
                     ))}
                   </ul>
-                  {ok.total > ok.shown.length && (
+                  {ok.lockedCats && (ok.lockedCats.ssl > 0 || ok.lockedCats.header > 0) ? (
+                    <div className="mt-2.5 space-y-1.5">
+                      {ok.lockedCats.ssl > 0 && (
+                        <Link href={`${packagesHref}?focus=bundle_surface${domainQ}`} className="flex items-center gap-2 rounded-card border border-dashed border-accent/40 bg-accent-soft/25 px-3 py-2 text-[12px] font-medium text-ink-soft transition hover:border-accent hover:bg-accent-soft/40">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-accent-600" aria-hidden><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span className="min-w-0 flex-1 leading-snug">{L.lockedSsl(ok.lockedCats.ssl)}</span><span className="shrink-0 text-[10px] font-bold text-accent-600">{L.viewPackage} →</span>
+                        </Link>
+                      )}
+                      {ok.lockedCats.header > 0 && (
+                        <Link href={`${packagesHref}?focus=bundle_surface${domainQ}`} className="flex items-center gap-2 rounded-card border border-dashed border-accent/40 bg-accent-soft/25 px-3 py-2 text-[12px] font-medium text-ink-soft transition hover:border-accent hover:bg-accent-soft/40">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-accent-600" aria-hidden><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span className="min-w-0 flex-1 leading-snug">{L.lockedHeader(ok.lockedCats.header)}</span><span className="shrink-0 text-[10px] font-bold text-accent-600">{L.viewPackage} →</span>
+                        </Link>
+                      )}
+                    </div>
+                  ) : ok.total > ok.shown.length ? (
                     <p className="mt-2 text-center text-xs text-ink-muted">{L.moreInReport(ok.total - ok.shown.length)}</p>
-                  )}
+                  ) : null}
                 </div>
               )}
 

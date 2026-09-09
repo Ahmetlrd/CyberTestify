@@ -10,7 +10,7 @@
 import { collectEvidence } from './basitReport.js';
 
 export type InstantSeverity = 'high' | 'medium' | 'low';
-export type InstantFinding = { title: string; severity: InstantSeverity };
+export type InstantFinding = { title: string; severity: InstantSeverity; category: 'ssl' | 'header' };
 export type InstantResult =
   | { status: 'unreachable' }
   | { status: 'access_error'; httpStatus: number }  // bağlantı kuruldu ama 4xx/5xx (engel/erişim kısıtı) → skorlanamaz
@@ -21,6 +21,7 @@ export type InstantResult =
       total: number;               // toplam gerçek bulgu sayısı ("+N daha" kilidi için)
       shown: InstantFinding[];     // teaser'da gösterilecek ≤3 başlık (yalnız "ne eksik")
       locked: number;              // total - shown.length (kilitli kalan)
+      lockedCats: { ssl: number; header: number }; // (#3) gizli bulgularin kategori sayimlari
       clean: boolean;              // 0 bulgu → temel katman temiz
       httpsOk: boolean;
     };
@@ -56,20 +57,20 @@ export async function runInstantScan(host: string, lang: 'tr' | 'de' | 'en' = 't
 
   // HTTPS yok (şifresiz iletişim) — tek başına ciddi, gerçek bulgu.
   if (ev.reachable && !ev.httpsWorks) {
-    findings.push({ title: t('HTTPS desteklenmiyor (şifresiz iletişim)', 'HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation)', 'HTTPS not supported (unencrypted communication)'), severity: 'high' });
+    findings.push({ title: t('HTTPS desteklenmiyor (şifresiz iletişim)', 'HTTPS wird nicht unterstützt (unverschlüsselte Kommunikation)', 'HTTPS not supported (unencrypted communication)'), severity: 'high', category: 'ssl' });
     score -= 40;
   }
 
   // TLS geçerliliği (yalnız https çalışıyorsa anlamlı).
   if (ev.httpsWorks && ev.tls.found) {
     if (ev.tls.hostnameMatch === false) {
-      findings.push({ title: t('TLS sertifikası alan adıyla uyuşmuyor', 'TLS-Zertifikat stimmt nicht mit der Domain überein', 'TLS certificate does not match the domain'), severity: 'high' });
+      findings.push({ title: t('TLS sertifikası alan adıyla uyuşmuyor', 'TLS-Zertifikat stimmt nicht mit der Domain überein', 'TLS certificate does not match the domain'), severity: 'high', category: 'ssl' });
       score -= 30;
     } else if (ev.tls.daysLeft != null && ev.tls.daysLeft < 0) {
-      findings.push({ title: t('TLS sertifikasının süresi dolmuş', 'TLS-Zertifikat ist abgelaufen', 'TLS certificate has expired'), severity: 'high' });
+      findings.push({ title: t('TLS sertifikasının süresi dolmuş', 'TLS-Zertifikat ist abgelaufen', 'TLS certificate has expired'), severity: 'high', category: 'ssl' });
       score -= 30;
     } else if (ev.tls.daysLeft != null && ev.tls.daysLeft < 15) {
-      findings.push({ title: t(`TLS sertifikası ${ev.tls.daysLeft} gün içinde doluyor`, `TLS-Zertifikat läuft in ${ev.tls.daysLeft} Tagen ab`, `TLS certificate expires in ${ev.tls.daysLeft} days`), severity: 'medium' });
+      findings.push({ title: t(`TLS sertifikası ${ev.tls.daysLeft} gün içinde doluyor`, `TLS-Zertifikat läuft in ${ev.tls.daysLeft} Tagen ab`, `TLS certificate expires in ${ev.tls.daysLeft} days`), severity: 'medium', category: 'ssl' });
       score -= 10;
     }
   }
@@ -78,7 +79,7 @@ export async function runInstantScan(host: string, lang: 'tr' | 'de' | 'en' = 't
   if (ev.ok && ev.reachable) {
     for (const h of SEC_HEADERS) {
       if (!ev.headers.has(h.hdr)) {
-        findings.push({ title: t(h.label.tr, h.label.de, h.label.en), severity: h.critical ? 'medium' : 'low' });
+        findings.push({ title: t(h.label.tr, h.label.de, h.label.en), severity: h.critical ? 'medium' : 'low', category: 'header' });
         score -= h.critical ? 12 : 6;
       }
     }
@@ -90,6 +91,13 @@ export async function runInstantScan(host: string, lang: 'tr' | 'de' | 'en' = 't
   const rank: Record<InstantSeverity, number> = { high: 0, medium: 1, low: 2 };
   const sorted = findings.slice().sort((a, b) => rank[a.severity] - rank[b.severity]);
   const shown = sorted.slice(0, 3); // KANİBALİZASYON: teaser en fazla 3 başlık
+  // (#3 kilitli önizleme) shown'da OLMAYAN (gizli) gerçek bulguları kategoriye göre say. DNS ücretsiz
+  // taramada HESAPLANMADIĞI için burada yok — uydurma kategori eklenmez.
+  const lockedFindings = sorted.slice(shown.length);
+  const lockedCats = {
+    ssl: lockedFindings.filter((f) => f.category === 'ssl').length,
+    header: lockedFindings.filter((f) => f.category === 'header').length,
+  };
 
   return {
     status: 'ok',
@@ -98,6 +106,7 @@ export async function runInstantScan(host: string, lang: 'tr' | 'de' | 'en' = 't
     total: findings.length,
     shown,
     locked: Math.max(0, findings.length - shown.length),
+    lockedCats,
     clean: findings.length === 0,
     httpsOk: ev.httpsWorks,
   };
