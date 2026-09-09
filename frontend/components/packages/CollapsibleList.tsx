@@ -13,7 +13,7 @@ export function CollapsibleList({
 }: {
   items: string[];
   collapsedCount: number;
-  moreLabel: (n: number) => string;
+  moreLabel: string;
   lessLabel: string;
   dark?: boolean;
   children?: ReactNode;
@@ -35,7 +35,7 @@ export function CollapsibleList({
       </ul>
       {hidden > 0 && (
         <button type="button" onClick={() => setOpen((v) => !v)} className={`mt-2 text-[11px] font-semibold underline-offset-2 hover:underline ${link}`}>
-          {open ? lessLabel : moreLabel(hidden)}
+          {open ? lessLabel : moreLabel}
         </button>
       )}
       {open && children}

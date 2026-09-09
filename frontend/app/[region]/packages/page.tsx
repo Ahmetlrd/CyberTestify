@@ -385,7 +385,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         <CollapsibleList
                           dark
                           collapsedCount={4}
-                          moreLabel={(n) => t3(`+${n} kontrol daha`, `+${n} weitere Prüfungen`, `+${n} more checks`)}
+                          moreLabel={t3('+3 kontrol daha', '+3 weitere Prüfungen', '+3 more checks')}
                           lessLabel={t3('Daha az göster', 'Weniger anzeigen', 'Show less')}
                           items={(region.lang === 'de'
                             ? [
