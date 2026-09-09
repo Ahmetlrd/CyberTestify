@@ -6,6 +6,7 @@ import { JsonLd } from '../../../components/JsonLd';
 import { renderEmphasis, stripEmphasis } from '../../../lib/richText';
 import { PackageCompare, type CompareCol } from '../../../components/packages/PackageCompare';
 import { PackageFocus } from '../../../components/packages/PackageFocus';
+import { CollapsibleList } from '../../../components/packages/CollapsibleList';
 
 type Pkg = { key: string; displayName: string; description: string; priceMinorUnit: number; currency?: string; comingSoon?: boolean; bundleOnly?: boolean; bundleName?: string | null };
 type Bundle = {
@@ -279,7 +280,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                     id={`pkg-${b.key}`}
                     className={`card relative flex flex-col p-6 scroll-mt-24 transition-transform hover:-translate-y-1 ${
                       flagship ? 'border-2 border-brand bg-gradient-to-b from-brand to-brand-deep text-white shadow-xl'
-                        : popular ? 'border-2 border-accent shadow-md ring-2 ring-accent/25 bg-amber-50/40'
+                        : popular ? 'border-2 border-accent shadow-md ring-2 ring-accent/25 bg-[#FFFBF0]'
                         : 'border-2 border-accent/40'
                     } ${b.comingSoon ? 'opacity-90' : ''}`}
                   >
@@ -381,8 +382,12 @@ export default async function PackagesPage({ params }: { params: { region: strin
                       // Üye adları yerine dürüst kapsam maddeleri + sınırlar/güvence.
                       <div className="mt-3 rounded-card border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white/85">
                         <span className="font-semibold text-accent">{t3('İncelenen alanlar', 'Was wir prüfen', 'What we examine')}:</span>
-                        <ul className="mt-1.5 space-y-1">
-                          {(region.lang === 'de'
+                        <CollapsibleList
+                          dark
+                          collapsedCount={4}
+                          moreLabel={(n) => t3(`+${n} kontrol daha`, `+${n} weitere Prüfungen`, `+${n} more checks`)}
+                          lessLabel={t3('Daha az göster', 'Weniger anzeigen', 'Show less')}
+                          items={(region.lang === 'de'
                             ? [
                                 'Authentifizierter Tiefen-Scan — Cookie/Session/Autorisierung, authentifizierte Injection (SQLi/XSS) und IDOR-Indikatoren, Forced Browsing, Rechteausweitung, mehrstufige Geschäftslogik',
                                 'Client-Side & JS-Analyse — JS-Bundle-/Secret-Scan, Source-Map-Preisgabe, bekannte verwundbare Bibliotheken, DOM-XSS/postMessage/Browser-Storage, SRI / Reverse-Tabnabbing / Open-Redirect',
@@ -411,13 +416,8 @@ export default async function PackagesPage({ params }: { params: { region: strin
                                 'Configuration & Exposure — backup/old files, admin interfaces, host-header injection, HTTP method discovery, cache indicators, comment/metadata leakage',
                                 'Email, DNS & Subdomain — DMARC/SPF/DKIM policy strength, MTA-STS, DNSSEC, CAA, subdomain takeover (dangling DNS)',
                               ]
-                          ).map((it) => (
-                            <li key={it} className="flex gap-1.5">
-                              <span className="mt-0.5 text-accent-600">·</span>
-                              <span>{it}</span>
-                            </li>
-                          ))}
-                        </ul>
+                          )}
+                        >
                         <p className="mt-2 border-t border-white/15 pt-2 text-[11px] text-white/55">
                           {t3(
                             'Sınırlar & güvence: “Kanıtla, istismar etme.” Gerçek veri değiştirme/silme veya ödeme tamamlama kod seviyesinde engellidir. Cross-account (başka kullanıcının verisi) IDOR kapsam dışıdır. Kimlik bilgileriniz şifreli/geçici saklanır, tarama bitince silinir; yetkilendirme beyanı zorunludur.',
@@ -430,6 +430,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                             'Wichtig — TEST-Konto: Es wird ein Einmal-Konto ohne 2FA, mit minimalen Rechten und NICHT Ihr Produktivkonto benötigt. Hinweis zum Umfang: Ergebnisse hängen von der Architektur des Ziels ab; bei Seiten mit begrenzter authentifizierter Oberfläche/SPA werden einige Prüfungen als „außerhalb des Scope / nicht geprüft“ berichtet — das ist normal.',
                             'Important — TEST account: a no-2FA, least-privilege, single-use account that is NOT your production account. Scope note: results vary with the target’s architecture; on sites with limited authenticated surface/SPA, some checks are reported as “out of scope / not scanned” — this is normal.')}
                         </p>
+                        </CollapsibleList>
                       </div>
                     ) : b.members.length > 0 ? (
                       <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
