@@ -82,13 +82,13 @@ const ORD = {
     atDoes: 'Bu tarama NE YAPAR', atDoesNot: 'Bu tarama NE YAPMAZ',
     atConsentNote: 'Onayınız; hesabınız, zaman damgası, IP ve metin sürümü ile birlikte otomatik olarak kayıt altına alınır (ek bilgi girmenize gerek yoktur). İsterseniz bir yetkilendirme PDF’i olarak siparişinize bağlanır.',
     // Auth cred block
-    acTitle: 'Test hesabı bilgileri', acOptional: '(opsiyonel)',
-    acInfoHtml: 'Bu alan <strong>opsiyoneldir</strong>. Sitenizde bir <strong>giriş (login) mekanizması yoksa</strong> boş bırakın — tarama <strong>loginsiz (kimlik-doğrulamasız)</strong> yapılır. Giriş varsa, oturum-içi kontroller için bir <strong>TEST hesabı</strong> girebilirsiniz.',
+    acTitle: 'Test hesabı bilgileri', acOptional: 'Opsiyonel',
+    acInfoHtml: 'Sitenizde <strong>giriş yoksa boş bırakın</strong> — tarama loginsiz yapılır. Giriş varsa oturum-içi kontroller için bir <strong>TEST hesabı</strong> girin.',
     acWarnTitle: 'Yalnız TEST hesabı girin — ana/üretim hesabınızı DEĞİL',
-    acWarnBodyHtml: 'Bu tarama için oluşturulmuş, <strong>sınırlı yetkili, tek-kullanımlık</strong> bir hesap kullanın; şifresini tarama sonrası değiştirin.',
+    acWarnBodyHtml: '<strong>Sınırlı yetkili, tek-kullanımlık, 2FA’sız</strong> bir hesap kullanın; bilgiler <strong>şifreli</strong> saklanır ve tarama sonrası <strong>silinir</strong>.',
     acWarn2Html: '<strong>2FA’sı olmayan</strong> bir hesap verin. Kimlik bilgileriniz <strong>şifreli</strong> saklanır ve tarama sonrası <strong>silinir</strong>.',
     acUser: 'Kullanıcı adı / e-posta', acPass: 'Şifre', acPassPh: 'Test hesabı şifresi',
-    acCheckBtn: 'Test girişini doğrula (opsiyonel)', acChecking: 'Giriş deneniyor…',
+    acCheckBtn: 'Test girişini doğrula', acChecking: 'Giriş deneniyor…',
     acCheckingHint: 'Giriş formu aranıp deneniyor — birkaç saniye sürebilir…',
     acNoCredsHtml: 'Test hesabı bilgisi girmediniz — tarama <strong>loginsiz (kimlik-doğrulamasız)</strong> yapılacak. Sitenizde giriş yoksa bu normaldir.',
     lcOk: 'Test hesabıyla giriş doğrulandı.',
@@ -200,13 +200,13 @@ const ORD = {
     atBody: 'Dieses Paket sendet begrenzte aktive Testanfragen, um Schwachstellen zu bestätigen. Zum Fortfahren müssen Sie den Umfang lesen und die Erklärung ausfüllen.',
     atDoes: 'Was dieser Scan TUT', atDoesNot: 'Was dieser Scan NICHT tut',
     atConsentNote: 'Ihre Zustimmung wird zusammen mit Ihrem Konto, Zeitstempel, IP und der Textversion automatisch protokolliert (keine zusätzlichen Angaben nötig). Auf Wunsch wird sie als Autorisierungs-PDF an Ihre Bestellung angehängt.',
-    acTitle: 'Testkonto-Daten', acOptional: '(optional)',
-    acInfoHtml: 'Dieses Feld ist <strong>optional</strong>. Wenn Ihre Website <strong>keinen Login-Mechanismus</strong> hat, lassen Sie es leer — der Scan wird <strong>ohne Login (ohne Authentifizierung)</strong> durchgeführt. Gibt es einen Login, können Sie ein <strong>TEST-Konto</strong> für sitzungsinterne Prüfungen eingeben.',
+    acTitle: 'Testkonto-Daten', acOptional: 'Optional',
+    acInfoHtml: '<strong>Kein Login? Leer lassen</strong> — der Scan läuft ohne Anmeldung. Bei Login geben Sie ein <strong>TEST-Konto</strong> für sitzungsinterne Prüfungen ein.',
     acWarnTitle: 'Geben Sie nur ein TEST-Konto ein — NICHT Ihr Produktivkonto',
-    acWarnBodyHtml: 'Verwenden Sie ein für diesen Scan erstelltes Konto mit <strong>minimalen Rechten und Einmalgebrauch</strong>; ändern Sie das Passwort nach dem Scan.',
+    acWarnBodyHtml: 'Nutzen Sie ein Konto mit <strong>minimalen Rechten, Einmalgebrauch, ohne 2FA</strong>; Daten werden <strong>verschlüsselt</strong> gespeichert und nach dem Scan <strong>gelöscht</strong>.',
     acWarn2Html: 'Geben Sie ein Konto <strong>ohne 2FA</strong> an. Ihre Zugangsdaten werden <strong>verschlüsselt</strong> gespeichert und nach dem Scan <strong>gelöscht</strong>.',
     acUser: 'Benutzername / E-Mail', acPass: 'Passwort', acPassPh: 'Testkonto-Passwort',
-    acCheckBtn: 'Test-Login prüfen (optional)', acChecking: 'Anmeldung wird versucht…',
+    acCheckBtn: 'Test-Login prüfen', acChecking: 'Anmeldung wird versucht…',
     acCheckingHint: 'Login-Formular wird gesucht und versucht — kann einige Sekunden dauern…',
     acNoCredsHtml: 'Sie haben keine Testkonto-Daten eingegeben — der Scan wird <strong>ohne Login (ohne Authentifizierung)</strong> durchgeführt. Wenn Ihre Website keinen Login hat, ist das normal.',
     lcOk: 'Anmeldung mit dem Testkonto bestätigt.',
@@ -308,13 +308,13 @@ const ORD = {
     atBody: 'This package sends limited active test requests to confirm vulnerabilities. To continue you must read the scope and complete the declaration.',
     atDoes: 'What this scan DOES', atDoesNot: 'What this scan does NOT do',
     atConsentNote: 'Your consent is logged automatically together with your account, timestamp, IP and the text version (no extra details needed). On request it is attached to your order as an authorisation PDF.',
-    acTitle: 'Test account details', acOptional: '(optional)',
-    acInfoHtml: 'This field is <strong>optional</strong>. If your website has <strong>no login mechanism</strong>, leave it blank — the scan runs <strong>without login (unauthenticated)</strong>. If there is a login, you can enter a <strong>TEST account</strong> for in-session checks.',
+    acTitle: 'Test account details', acOptional: 'Optional',
+    acInfoHtml: '<strong>No login? Leave blank</strong> — the scan runs unauthenticated. If there is a login, enter a <strong>TEST account</strong> for in-session checks.',
     acWarnTitle: 'Enter a TEST account only — NOT your main/production account',
-    acWarnBodyHtml: 'Use an account created for this scan with <strong>minimal privileges and single use</strong>; change its password after the scan.',
+    acWarnBodyHtml: 'Use an account with <strong>minimal privileges, single-use, no 2FA</strong>; data is stored <strong>encrypted</strong> and <strong>deleted</strong> after the scan.',
     acWarn2Html: 'Provide an account <strong>without 2FA</strong>. Your credentials are stored <strong>encrypted</strong> and <strong>deleted</strong> after the scan.',
     acUser: 'Username / email', acPass: 'Password', acPassPh: 'Test account password',
-    acCheckBtn: 'Verify test login (optional)', acChecking: 'Attempting login…',
+    acCheckBtn: 'Verify test login', acChecking: 'Attempting login…',
     acCheckingHint: 'Searching for and trying the login form — this may take a few seconds…',
     acNoCredsHtml: 'You have not entered any test account details — the scan will run <strong>without login (unauthenticated)</strong>. If your website has no login, this is normal.',
     lcOk: 'Login with the test account verified.',
@@ -936,29 +936,31 @@ export default function OrderPage() {
   }
 
   const authCredBlock = (
-    <div className="mt-3 space-y-4 rounded-card border-2 border-brand/20 bg-brand-50/50 p-4 sm:p-5">
-      <p className="flex items-center gap-2 text-sm font-bold text-brand">
-        {L.acTitle} <span className="font-normal text-ink-muted">{L.acOptional}</span>
-      </p>
-      {/* (LOGİNSİZ TEST) Opsiyonel olduğunu net söyle — sitede login olmayabilir. */}
-      <div className="rounded-card border border-brand-200 bg-white/70 px-4 py-3 text-sm text-ink-soft">
-        <p dangerouslySetInnerHTML={{ __html: L.acInfoHtml }} />
+    <div className="mt-3 space-y-3.5 rounded-2xl border border-line bg-white p-4 shadow-card sm:p-5">
+      {/* Baslik + Opsiyonel etiketi (tek baslik) */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span aria-hidden className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
+        </span>
+        <p className="text-sm font-bold text-brand">{L.acTitle}</p>
+        <span className="rounded-pill bg-ink-muted/15 px-2 py-0.5 text-[11px] font-semibold text-ink-muted">{L.acOptional}</span>
       </div>
-      {/* Uyarı — güçlü kontrast: sol accent bar + koyu kırmızı başlık + koyu metin */}
-      <div className="rounded-card border border-red-300 border-l-4 border-l-red-600 bg-red-50 px-4 py-3 text-red-900">
-        <p className="text-sm font-bold text-red-700">{L.acWarnTitle}</p>
-        <p className="mt-1 text-sm" dangerouslySetInnerHTML={{ __html: L.acWarnBodyHtml }} />
-        <p className="mt-1.5 text-xs text-red-800" dangerouslySetInnerHTML={{ __html: L.acWarn2Html }} />
+      {/* Kisa aciklama */}
+      <p className="text-sm leading-relaxed text-ink-soft" dangerouslySetInnerHTML={{ __html: L.acInfoHtml }} />
+      {/* Uyari — kompakt amber (ikon + tek satir) */}
+      <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3">
+        <span aria-hidden className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-amber-400 text-[13px] font-black text-[#3a2c00]">!</span>
+        <p className="text-xs leading-relaxed text-amber-900"><strong className="font-bold">{L.acWarnTitle}.</strong> <span dangerouslySetInnerHTML={{ __html: L.acWarnBodyHtml }} /></p>
       </div>
-      {/* Etiketli girişler — beyaz alanlar tint zemine karşı belirgin */}
+      {/* Etiketli girisler */}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="label !mb-1 !text-ink">{L.acUser}</span>
-          <input placeholder="test@example.com" value={authUser} onChange={(e) => { setAuthUser(e.target.value); setLoginCheck('idle'); }} className="field border-line/80" autoComplete="off" />
+          <input placeholder="test@example.com" value={authUser} onChange={(e) => { setAuthUser(e.target.value); setLoginCheck('idle'); }} className="field" autoComplete="off" />
         </label>
         <label className="block">
           <span className="label !mb-1 !text-ink">{L.acPass}</span>
-          <input type="password" placeholder={L.acPassPh} value={authPass} onChange={(e) => { setAuthPass(e.target.value); setLoginCheck('idle'); }} className="field border-line/80" autoComplete="new-password" />
+          <input type="password" placeholder={L.acPassPh} value={authPass} onChange={(e) => { setAuthPass(e.target.value); setLoginCheck('idle'); }} className="field" autoComplete="new-password" />
         </label>
       </div>
       {/* (ÖDEME ÖNCESİ TEST GİRİŞİ) tek buton + tek satır sonuç — ek checkbox/uyarı YOK, bloklamaz. */}
@@ -1071,8 +1073,7 @@ export default function OrderPage() {
       {/* (İŞ 3) Aktif-hafif risk kabulü aşağıdaki gruplu onaya taşındı; burada YALNIZ (varsa) test-hesabı
           giriş alanları gösterilir (kimlik-doğrulamalı bundle üyesi için). */}
       {selectedBundle?.members?.some((m: any) => m.key === 'authenticated_scan') && (
-        <div id="test-hesabi" className="mt-3 scroll-mt-24 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm">
-          <p className="text-sm font-semibold text-brand">{L.testCredsMembers}</p>
+        <div id="test-hesabi" className="scroll-mt-24">
           {authCredBlock}
         </div>
       )}
@@ -1258,8 +1259,7 @@ export default function OrderPage() {
           <p className="mt-3 rounded-card bg-white/70 p-3 text-xs text-ink-soft">{selectedPkg.activeTest.riskText}</p>
           <p className="mt-2 text-xs text-ink-muted">{L.atConsentNote}</p>
           {needsAuthCreds && (
-            <div className="mt-4 border-t border-accent/30 pt-4">
-              <p className="text-sm font-semibold text-brand">{L.testCredsMembers}</p>
+            <div className="mt-4">
               {authCredBlock}
             </div>
           )}
