@@ -70,6 +70,7 @@ const IS = {
     hint: <>Ücretsiz <strong>ön izleme</strong> · yalnızca <strong>pasif dış gözlem</strong> (resmî denetim/sızma testi değildir).</>,
     emailTitle: 'Tam raporu görün — e-postanızı yazın',
     emailEyebrow: 'ÜCRETSİZ TAM RAPOR',
+    socialProof: 'Yüzlerce sitede ücretsiz tarama yapıldı — çoğunda düzeltilmesi gereken en az bir bulgu çıktı. Tam rapor hepsini hazır düzeltme koduyla verir.',
     emailSub: 'Gerçek zamanlı Basit Tarama raporunuzu PDF olarak hemen indirin. Kart gerekmez.',
     emailPh: 'ornek@sirket.com',
     emailBtn: 'Raporu Gör',
@@ -141,6 +142,7 @@ const IS = {
     hint: <>Kostenlose <strong>Vorschau</strong> · nur <strong>passive externe Beobachtung</strong> (kein offizielles Audit/kein Penetrationstest).</>,
     emailTitle: 'Vollständigen Bericht ansehen — E-Mail eingeben',
     emailEyebrow: 'KOSTENLOSER VOLLBERICHT',
+    socialProof: 'Hunderte Websites wurden kostenlos gescannt — bei den meisten gab es mindestens einen zu behebenden Befund. Der vollständige Bericht liefert alle mit fertigem Fix-Code.',
     emailSub: 'Laden Sie Ihren Echtzeit-Basis-Scan-Bericht sofort als PDF herunter. Keine Karte nötig.',
     emailPh: 'name@firma.de',
     emailBtn: 'Bericht ansehen',
@@ -212,6 +214,7 @@ const IS = {
     hint: <>Free <strong>preview</strong> · <strong>passive external observation</strong> only (not an official audit/penetration test).</>,
     emailTitle: 'See the full report — enter your e-mail',
     emailEyebrow: 'FREE FULL REPORT',
+    socialProof: 'Hundreds of sites have been scanned for free — most had at least one issue to fix. The full report delivers them all with ready-made fix code.',
     emailSub: 'Download your real-time Basic Scan report as a PDF right away. No card needed.',
     emailPh: 'you@company.com',
     emailBtn: 'See the report',
@@ -628,14 +631,15 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                   <p className="shrink-0 text-[11px] font-bold text-red-600">{L.biggerRisk}</p>
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-ink-soft">{L.cantSeeBody}</p>
+                <p className="mt-2 rounded-md bg-accent-soft/50 px-2.5 py-1.5 text-[11px] font-semibold text-brand">{L.socialProof}</p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <Link href={`${packagesHref}?focus=bundle_surface`} className="flex flex-col gap-1.5 rounded-card border-[1.5px] border-accent bg-accent-soft/40 p-3 transition hover:brightness-[0.98]">
+                  <Link href={`${packagesHref}?focus=bundle_surface${domainQ}`} className="flex flex-col gap-1.5 rounded-card border-[1.5px] border-accent bg-accent-soft/40 p-3 transition hover:brightness-[0.98]">
                     <span className="text-[10px] font-extrabold uppercase tracking-wide text-accent-600">{ok.clean ? L.recommended : L.coversGaps(ok.total)}</span>
                     <span className="text-[13px] font-bold text-ink">{L.nextSurface}</span>
                     <span className="flex-1 text-[11px] leading-snug text-ink-soft">{L.nextSurfaceHint}</span>
                     <span className="mt-1 inline-flex items-center justify-center rounded-lg bg-accent px-3 py-2 text-xs font-bold text-ink">{L.viewPackage}</span>
                   </Link>
-                  <Link href={`${packagesHref}?focus=bundle_active_verify`} className="flex flex-col gap-1.5 rounded-card border border-line bg-white p-3 transition hover:border-ink-soft">
+                  <Link href={`${packagesHref}?focus=bundle_active_verify${domainQ}`} className="flex flex-col gap-1.5 rounded-card border border-line bg-white p-3 transition hover:border-ink-soft">
                     <span className="text-[10px] font-extrabold uppercase tracking-wide text-ink-muted">{L.beyondScan}</span>
                     <span className="text-[13px] font-bold text-ink">{L.nextActive}</span>
                     <span className="flex-1 text-[11px] leading-snug text-ink-soft">{L.nextActiveHint}</span>
