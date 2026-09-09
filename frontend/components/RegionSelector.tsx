@@ -31,10 +31,13 @@ export function RegionSelector({ current }: { current: RegionCode }) {
     const seg = (pathname ?? '/').split('/')[1] ?? '';
     if ((REGION_CODES as readonly string[]).includes(seg)) {
       const rest = (pathname ?? '').slice(seg.length + 1); // '/tr/paketler' → '/paketler'
-      // (BUG FIX) TAM navigasyon — router.push SOFT geçişte KÖK layout'u (Nav/Footer; region-önekli
-      // linkler cookie'den okunur) YENİDEN RENDER ETMEZ → linkler ESKİ bölgede kalır ve sonraki tıklamada
-      // bölge geri döner. window.location ile kabuk da yeni bölgeyle tazelenir (dil/link tutarlı).
-      window.location.assign(`/${code}${rest}`);
+      // (BUG #1) TR-only bölümler (blog yazıları, otonom-red-team) hedef bölgede YOK → dil değiştirince
+      // '/en/blog/...' veya '/en/otonom-red-team' 404 olur. Bu yollarda aynı alt-yol yerine HEDEF BÖLGENİN
+      // ANA SAYFASINA düş (dil değişir, 404 olmaz). Diğer tüm yollar aynı alt-yolda geçer.
+      const trOnly = rest.startsWith('/blog') || rest.startsWith('/otonom-red-team');
+      // (BUG FIX) TAM navigasyon — router.push SOFT geçişte KÖK layout'u YENİDEN RENDER ETMEZ → linkler
+      // ESKİ bölgede kalır. window.location ile kabuk da yeni bölgeyle tazelenir (dil/link tutarlı).
+      window.location.assign(trOnly ? `/${code}` : `/${code}${rest}`);
     } else {
       // Cookie-tabanlı sayfa (çoğu client component dili mount'ta cookie'den okur): YERİNDE tam
       // yenile → dil güncellenir, token localStorage'da KALIR (logout YOK, homepage'e atma YOK).
