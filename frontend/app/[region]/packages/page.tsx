@@ -216,7 +216,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
         {bundles.length > 0 && (
           <div className="relative z-[1] -mt-24 mb-14 sm:-mt-28">
             <PackageFocus />
-            <div className="grid items-stretch gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid items-start gap-6 md:grid-cols-2 lg:grid-cols-3">
               {/* Basit Tarama — giris seviyesi PAKET (grid'in ilk karti; ayriksi degil). */}
               {basit && !basit.comingSoon && (
                 <div id="pkg-basit_tarama" className="card relative flex flex-col border-2 border-line p-6 scroll-mt-24 transition-transform hover:-translate-y-1">
@@ -237,7 +237,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                       'HTTP-Sicherheitsheader · SSL/TLS-Konfiguration · Server- & Technologie-Preisgabe · Grundlegende Konfigurationsdateien (robots.txt, assetlinks) · Plattform-spezifische, einsatzbereite Fix-Snippets (Nginx, IIS, Vercel usw.).',
                       'HTTP security headers · SSL/TLS configuration · Server & tech disclosure · Basic config files (robots.txt, assetlinks) · Platform-specific ready-to-use fix snippets (Nginx, IIS, Vercel, etc.).')}
                   </div>
-                  <div className="mt-4 flex-1">
+                  <div className="mt-4">
                     <div>
                       <span className="text-3xl font-extrabold text-accent-600">{t3('Ücretsiz', 'Kostenlos', 'Free')}</span>
                       <span className="ml-1 text-xs text-ink-muted">{t3('anlık ön-tarama', 'Sofort-Vorabscan', 'instant pre-scan')}</span>
@@ -437,7 +437,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         {b.members.map((m) => m.displayName).join(' · ')}
                       </div>
                     ) : null}
-                    <div className="mt-4 flex-1">
+                    <div className="mt-4">
                       {b.comingSoon ? (
                         b.contactOnly ? (
                           <div>
