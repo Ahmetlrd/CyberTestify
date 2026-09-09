@@ -196,15 +196,16 @@ export default async function PackagesPage({ params }: { params: { region: strin
   return (
     <>
       {serviceItems.length > 0 && <JsonLd data={servicesLd} />}
-      <section className="bg-brand-50/60 py-16">
-        <div className="container-page text-center">
-          <p className="eyebrow">{d.eyebrow}</p>
-          <h1 className="mx-auto mt-3 max-w-2xl text-4xl font-extrabold text-brand sm:text-5xl">{d.title}</h1>
-          <p className="mx-auto mt-4 max-w-xl text-lg text-ink-soft">{d.subtitle}</p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+      <section className="relative overflow-hidden bg-gradient-to-b from-brand-deep to-brand py-20 text-white sm:py-24">
+        <div aria-hidden className="pointer-events-none absolute left-1/2 top-[-160px] h-[440px] w-[720px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(245,166,35,0.18),transparent_65%)]" />
+        <div className="container-page relative text-center">
+          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">{d.eyebrow}</p>
+          <h1 className="mx-auto mt-3 max-w-2xl text-4xl font-extrabold tracking-tight sm:text-5xl">{d.title}</h1>
+          <p className="mx-auto mt-4 max-w-xl text-lg leading-relaxed text-white/70">{d.subtitle}</p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
             {d.trust.map((t) => (
-              <span key={t} className="badge">
-                {t}
+              <span key={t} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-white/85">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent" />{t}
               </span>
             ))}
           </div>
@@ -230,7 +231,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
             <div className="grid items-stretch gap-6 md:grid-cols-2 lg:grid-cols-3">
               {/* Basit Tarama — giris seviyesi PAKET (grid'in ilk karti; ayriksi degil). */}
               {basit && !basit.comingSoon && (
-                <div id="pkg-basit_tarama" className="card relative flex flex-col border-2 border-line p-6 scroll-mt-24">
+                <div id="pkg-basit_tarama" className="card relative flex flex-col border-2 border-line p-6 scroll-mt-24 transition-transform hover:-translate-y-1">
                   <span className="absolute -top-3 left-6 rounded-pill bg-ink-soft px-3 py-1 text-xs font-bold text-white">
                     {t3('Giriş', 'Einstieg', 'Entry')}
                   </span>
@@ -260,11 +261,14 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         'An external-surface pre-assessment; no active penetration test or in-depth code audit.')}
                     </div>
                   </div>
+                  <Link href={`/${region.code}#hemen-dene`} className="btn-dark mt-6 w-full">
+                    {t3('Hemen Dene', 'Jetzt testen', 'Try Now')}
+                  </Link>
                   <a
                     href={`${API}/orders/sample-report/${basit.key}?v=lansman1&region=${region.code}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-6 flex w-full items-center justify-center gap-1.5 rounded-pill bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-105"
+                    className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-pill border border-line px-4 py-2.5 text-sm font-semibold text-ink-soft transition hover:border-brand hover:text-brand"
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -272,9 +276,6 @@ export default async function PackagesPage({ params }: { params: { region: strin
                     </svg>
                     {t3('Örnek raporu gör', 'Musterbericht ansehen', 'View sample report')}
                   </a>
-                  <Link href={`/${region.code}#hemen-dene`} className="btn-outline mt-3 w-full">
-                    {t3('Hemen Dene', 'Jetzt testen', 'Try Now')}
-                  </Link>
                 </div>
               )}
               {bundles.map((b) => {
@@ -288,7 +289,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                   <div
                     key={b.key}
                     id={`pkg-${b.key}`}
-                    className={`card relative flex flex-col p-6 scroll-mt-24 ${
+                    className={`card relative flex flex-col p-6 scroll-mt-24 transition-transform hover:-translate-y-1 ${
                       flagship ? 'border-2 border-brand shadow-lg ring-2 ring-brand/25 bg-brand-50/20'
                         : popular ? 'border-2 border-accent shadow-md ring-2 ring-accent/25'
                         : 'border-2 border-accent/40'
@@ -490,11 +491,14 @@ export default async function PackagesPage({ params }: { params: { region: strin
                       <span className="btn-ghost mt-6 w-full cursor-default">{t3('Yakında', 'Bald verfügbar', 'Coming soon')}</span>
                     ) : (
                       <>
+                        <Link href={`/verify?bundle=${b.key}`} className="btn-primary mt-6 w-full">
+                          {t3('Satın Al', 'Jetzt kaufen', 'Buy Now')}
+                        </Link>
                         <a
                           href={`${API}/orders/sample-report/${b.key}?v=lansman1&region=${region.code}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="mt-6 flex w-full items-center justify-center gap-1.5 rounded-pill bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-105"
+                          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-pill border border-line px-4 py-2.5 text-sm font-semibold text-ink-soft transition hover:border-brand hover:text-brand"
                         >
                           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -502,9 +506,6 @@ export default async function PackagesPage({ params }: { params: { region: strin
                           </svg>
                           {t3('Örnek raporu gör', 'Musterbericht ansehen', 'View sample report')}
                         </a>
-                        <Link href={`/verify?bundle=${b.key}`} className="btn-primary mt-3 w-full">
-                          {t3('Satın Al', 'Jetzt kaufen', 'Buy Now')}
-                        </Link>
                       </>
                     )}
                   </div>
@@ -611,9 +612,10 @@ export default async function PackagesPage({ params }: { params: { region: strin
           </div>
         )}
 
-        <div className="mt-14 rounded-[20px] bg-brand-deep px-8 py-12 text-center text-white">
-          <h2 className="text-2xl font-extrabold sm:text-3xl">{d.freeTitle}</h2>
-          <p className="mx-auto mt-2 max-w-md text-white/75">{d.freeSubtitle}</p>
+        <div className="mt-16 overflow-hidden rounded-[22px] bg-gradient-to-br from-brand-deep to-brand px-8 py-14 text-center text-white shadow-card">
+          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">{t3('Başlamak için', 'Zum Start', 'To begin')}</p>
+          <h2 className="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">{d.freeTitle}</h2>
+          <p className="mx-auto mt-3 max-w-md leading-relaxed text-white/75">{d.freeSubtitle}</p>
           <Link href="/register" className="btn-primary mt-7">
             {d.freeCta}
           </Link>
