@@ -196,7 +196,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
   return (
     <>
       {serviceItems.length > 0 && <JsonLd data={servicesLd} />}
-      <section className="relative overflow-hidden bg-gradient-to-b from-brand-deep to-brand py-20 text-white sm:py-24">
+      <section className="relative overflow-hidden bg-gradient-to-b from-brand-deep to-brand pt-20 pb-32 text-white sm:pt-24 sm:pb-40">
         <div aria-hidden className="pointer-events-none absolute left-1/2 top-[-160px] h-[440px] w-[720px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(245,166,35,0.18),transparent_65%)]" />
         <div className="container-page relative text-center">
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">{d.eyebrow}</p>
@@ -212,21 +212,9 @@ export default async function PackagesPage({ params }: { params: { region: strin
         </div>
       </section>
 
-      <section className="container-page py-16">
+      <section className="container-page pb-16 pt-0">
         {bundles.length > 0 && (
-          <div className="mb-14">
-            <div className="mb-8 text-center">
-              <p className="eyebrow">{t3('Paketlerimiz', 'Unsere Pakete', 'Our Packages')}</p>
-              <h2 className="mt-2 text-2xl font-extrabold text-brand sm:text-3xl">
-                {t3('İhtiyacınıza uygun paketi seçin', 'Wählen Sie das passende Paket', 'Choose the package that fits you')}
-              </h2>
-              <p className="mx-auto mt-2 max-w-xl text-sm text-ink-soft">
-                {t3(
-                  'Her paket ilgili kontrolleri birlikte, indirimli sunar. Hızlı bir ön bakış için Basit Tarama ile başlayabilirsiniz.',
-                  'Jedes Paket bündelt die passenden Prüfungen zu einem vergünstigten Preis. Für einen schnellen Überblick starten Sie mit dem Basis-Scan.',
-                  'Each package bundles its checks together at a discount. Start with the Basic Scan for a quick preview.')}
-              </p>
-            </div>
+          <div className="relative z-[1] -mt-24 mb-14 sm:-mt-28">
             <PackageFocus />
             <div className="grid items-stretch gap-6 md:grid-cols-2 lg:grid-cols-3">
               {/* Basit Tarama — giris seviyesi PAKET (grid'in ilk karti; ayriksi degil). */}
