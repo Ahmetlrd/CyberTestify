@@ -38,6 +38,8 @@ const ORD = {
     noDomainPre: 'Önce taranacak bir alan adı seçin.', noDomainLink: 'Alan adı seç →',
     dnsVerified: 'Alan adı DNS ile doğrulandı — aktif tarama ödeme onayından sonra başlar.',
     activeVerifyTitle: 'Bu paket aktif problar gönderir — DNS doğrulaması gerekir',
+    activeVerifyShort: 'Aktif tarama için DNS doğrulaması gerekir.',
+    unreachShort: 'Hedefinize şu an dışarıdan ulaşılamıyor — tarama boş / “İncelenemedi” gelebilir.',
     activeVerifyBodyHtml: 'Alan adı sahipliğinizi DNS ile doğrulamadan aktif tarama (enjeksiyon/oturum denemeleri) <strong>başlamaz</strong> — ödeme alınsa bile sipariş <strong>“alan adı doğrulaması bekleniyor”</strong> durumunda tutulur, doğrulanınca <strong>otomatik başlar</strong>.',
     verifyNow: 'Şimdi DNS ile doğrula →',
     passiveNoVerify: 'Bu paket için doğrulama gerekmez — ödeme onaylanınca tarama hemen başlar.',
@@ -158,6 +160,8 @@ const ORD = {
     noDomainPre: 'Wählen Sie zuerst eine zu scannende Domain.', noDomainLink: 'Domain wählen →',
     dnsVerified: 'Domain per DNS bestätigt — der aktive Scan startet nach der Zahlungsbestätigung.',
     activeVerifyTitle: 'Dieses Paket sendet aktive Prüfungen — DNS-Bestätigung erforderlich',
+    activeVerifyShort: 'Für den aktiven Scan ist eine DNS-Bestätigung erforderlich.',
+    unreachShort: 'Ihr Ziel ist derzeit von außen nicht erreichbar — der Bericht kann leer / „nicht geprüft“ sein.',
     activeVerifyBodyHtml: 'Ohne DNS-Bestätigung Ihrer Domain-Inhaberschaft startet der aktive Scan (Injection-/Session-Versuche) <strong>nicht</strong> — selbst nach Zahlung wird die Bestellung im Status <strong>„Domain-Bestätigung ausstehend“</strong> gehalten und startet nach der Bestätigung <strong>automatisch</strong>.',
     verifyNow: 'Jetzt per DNS bestätigen →',
     passiveNoVerify: 'Für dieses Paket ist keine Bestätigung nötig — der Scan startet direkt nach der Zahlungsbestätigung.',
@@ -264,6 +268,8 @@ const ORD = {
     noDomainPre: 'First choose a domain to scan.', noDomainLink: 'Choose a domain →',
     dnsVerified: 'Domain verified via DNS — the active scan starts after payment confirmation.',
     activeVerifyTitle: 'This package sends active probes — DNS verification required',
+    activeVerifyShort: 'DNS verification is required for the active scan.',
+    unreachShort: 'Your target is currently unreachable — the report may come back empty / “Not assessed”.',
     activeVerifyBodyHtml: 'Without DNS verification of your domain ownership the active scan (injection/session attempts) <strong>will not start</strong> — even after payment the order is held in the <strong>“awaiting domain verification”</strong> status and starts <strong>automatically</strong> once verified.',
     verifyNow: 'Verify via DNS now →',
     passiveNoVerify: 'No verification is required for this package — the scan starts immediately after payment confirmation.',
@@ -858,7 +864,7 @@ export default function OrderPage() {
       <button
         key={b.key}
         type="button"
-        onClick={() => { setSelectedBundle(on ? null : b); setSelected(null); setBundleModules([]); setPromo(null); }}
+        onClick={() => { setSelectedBundle(on ? null : b); setSelected(null); setBundleModules([]); setPromo(null); if (!on) setTimeout(() => document.getElementById('onaylar')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 90); }}
         className={`card relative flex flex-col p-4 text-left transition ${
           on ? 'ring-2 ring-brand' : b.popular ? 'border-accent hover:border-accent' : 'hover:border-brand-300'
         }`}
@@ -1003,10 +1009,9 @@ export default function OrderPage() {
                   {L.dnsVerified}
                 </p>
               ) : (
-                <div className="mt-5 max-w-2xl rounded-xl border border-amber-300/40 bg-amber-400/15 p-3.5">
-                  <p className="font-bold text-white">{L.activeVerifyTitle}</p>
-                  <p className="mt-1 text-sm leading-relaxed text-white/80" dangerouslySetInnerHTML={{ __html: L.activeVerifyBodyHtml }} />
-                  <Link href={verifyHref} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-amber-200 underline hover:text-amber-100">{L.verifyNow}</Link>
+                <div className="mt-5 flex max-w-2xl flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-amber-400 px-3.5 py-2.5 text-sm font-semibold text-[#3a2c00] shadow-[0_8px_20px_-10px_rgba(229,162,27,.8)]">
+                  <span className="flex items-center gap-2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="shrink-0" aria-hidden><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>{L.activeVerifyShort}</span>
+                  <Link href={verifyHref} className="whitespace-nowrap font-bold text-brand underline hover:text-brand-600">{L.verifyNow}</Link>
                 </div>
               )
             ) : (
@@ -1092,12 +1097,6 @@ export default function OrderPage() {
 
       {/* Onaylar — (İŞ 3) ≤3 gruplu checkbox; sunucu-tarafı bireysel zorunluluk korunur. */}
       <h2 id="onaylar" className="mt-8 scroll-mt-24 text-base font-extrabold text-brand">{L.step2}</h2>
-      {(selected || selectedBundle) && !allConsents && (
-        <p className="mt-2 flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-3.5 py-2.5 text-xs font-semibold text-ink shadow-sm">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E5A21B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>
-          {L.needConsents(consentGroups.length)}
-        </p>
-      )}
       <div className="mt-3 space-y-2.5">
         {consentGroups.map(({ checked, set, node }, i) => (
           <label key={i} className={`flex items-start gap-3 rounded-xl border p-3.5 text-sm text-ink-soft transition ${checked ? 'border-brand-300 bg-brand-50/60 ring-1 ring-brand-100' : 'border-line bg-white hover:border-brand-200'}`}>
@@ -1118,6 +1117,32 @@ export default function OrderPage() {
               region={region}
             />
           )}
+        </div>
+      )}
+
+      {/* ÖN KONTROL UYARILARI — onayların hemen altında (mobil dâhil). */}
+      {scopeChecking && <p className="mt-3 text-center text-xs text-ink-muted">{L.checking}</p>}
+      {showUnreachableWarning && (
+        <div id="oncontrol-uyari" className="mt-3 scroll-mt-24 rounded-xl border border-amber-300 bg-white p-3.5 text-sm shadow-sm">
+          <div className="flex items-start gap-2.5">
+            <span aria-hidden className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg></span>
+            <p className="text-ink-soft">{L.unreachShort}</p>
+          </div>
+          <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-xs font-semibold text-ink">
+            <input type="checkbox" checked={unreachableAck} onChange={(e) => setUnreachableAck(e.target.checked)} className="h-4 w-4 accent-brand" />
+            <span>{L.unreachAck}</span>
+          </label>
+        </div>
+      )}
+      {showLowScopeWarning && (
+        <div id="oncontrol-uyari" className="mt-3 scroll-mt-24 rounded-xl border border-amber-300 bg-white p-3.5 text-sm shadow-sm">
+          <p className="font-bold text-amber-800">{L.lowTitle}</p>
+          <p className="mt-1 leading-relaxed text-ink-soft" dangerouslySetInnerHTML={{ __html: L.lowP1Html }} />
+          <p className="mt-2 leading-relaxed text-ink-soft" dangerouslySetInnerHTML={{ __html: L.lowP2Html }} />
+          <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs font-semibold text-ink">
+            <input type="checkbox" checked={lowScopeAck} onChange={(e) => setLowScopeAck(e.target.checked)} className="mt-0.5 h-4 w-4 accent-brand" />
+            <span>{L.lowAck}</span>
+          </label>
         </div>
       )}
 
@@ -1290,33 +1315,6 @@ export default function OrderPage() {
         </div>
       )}
 
-      {/* ÖN KONTROL UYARILARI — ana kolonda (mobil DÂHİL görünür). aside masaüstü-only olduğundan
-          buraya taşındı; aksi halde mobilde onay kutusuna ulaşılamayıp sistem kilitleniyordu. */}
-              {scopeChecking && (
-                <p className="mt-3 text-center text-xs text-ink-muted">{L.checking}</p>
-              )}
-              {showUnreachableWarning && (
-                <div id="oncontrol-uyari" className="mt-4 scroll-mt-24 rounded-card border-2 border-rose-400 bg-rose-50 p-4 text-sm">
-                  <p className="font-bold text-rose-900">{L.unreachTitle}</p>
-                  <p className="mt-1 leading-relaxed text-rose-900/90" dangerouslySetInnerHTML={{ __html: L.unreachP1Html }} />
-                  <p className="mt-2 leading-relaxed text-rose-900/90" dangerouslySetInnerHTML={{ __html: L.unreachP2Html }} />
-                  <label className="mt-3 flex cursor-pointer items-start gap-2 font-medium text-rose-900">
-                    <input type="checkbox" checked={unreachableAck} onChange={(e) => setUnreachableAck(e.target.checked)} className="mt-0.5" />
-                    <span>{L.unreachAck}</span>
-                  </label>
-                </div>
-              )}
-              {showLowScopeWarning && (
-                <div id="oncontrol-uyari" className="mt-4 scroll-mt-24 rounded-card border-2 border-amber-400 bg-amber-50 p-4 text-sm">
-                  <p className="font-bold text-amber-900">{L.lowTitle}</p>
-                  <p className="mt-1 leading-relaxed text-amber-900/90" dangerouslySetInnerHTML={{ __html: L.lowP1Html }} />
-                  <p className="mt-2 leading-relaxed text-amber-900/90" dangerouslySetInnerHTML={{ __html: L.lowP2Html }} />
-                  <label className="mt-3 flex cursor-pointer items-start gap-2 font-medium text-amber-900">
-                    <input type="checkbox" checked={lowScopeAck} onChange={(e) => setLowScopeAck(e.target.checked)} className="mt-0.5" />
-                    <span>{L.lowAck}</span>
-                  </label>
-                </div>
-              )}
 
 
       {/* MOBİL: sol kolon sonunda (özet kolonu masaüstünde görünür; mobilde sabit alt çubuk var). */}
@@ -1379,7 +1377,7 @@ export default function OrderPage() {
                 <p className="mt-2 text-center text-[11px] text-amber-300">{L.verifyHint}</p>
               ) : disabledHint ? (
                 disabledHint.scroll ? (
-                  <button type="button" onClick={() => scrollToTarget(disabledHint.target ?? 'onaylar')} className="mt-2 w-full rounded-lg border border-amber-300/40 bg-amber-400/15 px-3 py-2 text-center text-xs font-semibold text-amber-100 hover:bg-amber-400/25">
+                  <button type="button" onClick={() => scrollToTarget(disabledHint.target ?? 'onaylar')} className="mt-2 w-full rounded-lg border border-amber-400 bg-amber-400 px-3 py-2 text-center text-xs font-bold text-[#3a2c00] hover:bg-amber-300">
                     {disabledHint.text}
                   </button>
                 ) : (
