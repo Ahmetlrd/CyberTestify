@@ -1037,7 +1037,7 @@ export default function OrderPage() {
         {/* ================= SOL: form adimlari ================= */}
         <div className="min-w-0">
       {/* Paket seçimi — SADECE paketler: Basit Tarama (giriş) + kombine paketler. Tekil kontrol satışı YOK. */}
-      <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">{L.step1}</h2>
+      <h2 className="text-base font-extrabold text-brand">{L.step1}</h2>
       <div className="mt-3 grid items-stretch gap-3 sm:grid-cols-2">
         {/* Basit Tarama artik satin alinmaz — anasayfada ücretsiz "Hemen Dene" anlik taramasina yonlendirilir. */}
         {activeBundles.map((b) => bundleCard(b))}
@@ -1095,7 +1095,7 @@ export default function OrderPage() {
       )}
 
       {/* Onaylar — (İŞ 3) ≤3 gruplu checkbox; sunucu-tarafı bireysel zorunluluk korunur. */}
-      <h2 id="onaylar" className="mt-8 scroll-mt-24 text-sm font-bold uppercase tracking-wide text-ink-muted">{L.step2}</h2>
+      <h2 id="onaylar" className="mt-8 scroll-mt-24 text-base font-extrabold text-brand">{L.step2}</h2>
       {(selected || selectedBundle) && !allConsents && (
         <p className="mt-2 rounded-card border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-800">
           {L.needConsents(consentGroups.length)}
@@ -1128,7 +1128,7 @@ export default function OrderPage() {
       {!selectedBundle && (
       <>
       {/* Düzenli tekrar (opsiyonel) */}
-      <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">{L.step3}</h2>
+      <h2 className="mt-8 text-base font-extrabold text-brand">{L.step3}</h2>
       <div className="mt-3 space-y-2.5">
         <label className={`flex items-center gap-3 rounded-card border p-3.5 text-sm ${!recurring ? 'border-brand-300 bg-brand-50/50' : 'border-line'}`}>
           <input type="radio" checked={!recurring} onChange={() => setRecurring(false)} className="h-4 w-4 accent-brand" />
@@ -1167,7 +1167,7 @@ export default function OrderPage() {
       </div>
 
       {/* Başlangıç zamanı */}
-      <h2 className="mt-8 text-sm font-bold uppercase tracking-wide text-ink-muted">
+      <h2 className="mt-8 text-base font-extrabold text-brand">
         {L.step4} {recurring && <span className="font-normal normal-case text-ink-muted">{L.firstScan}</span>}
       </h2>
       <div className="mt-3 space-y-2.5">
@@ -1329,44 +1329,44 @@ export default function OrderPage() {
 
         {/* ================= SAĞ: kaydırmada sabit özet (masaüstü) ================= */}
         <aside className="hidden lg:block">
-          <div className="sticky top-6 space-y-3">
-            <div className="rounded-card border border-line bg-white p-5 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">{L.summary}</p>
+          <div className="sticky top-6 space-y-4">
+            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-brand to-brand-deep p-5 text-white shadow-card">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-accent">{L.summary}</p>
               {selName ? (
                 <>
-                  <p className="mt-2 text-base font-bold text-brand">{selName}</p>
+                  <p className="mt-1.5 text-lg font-bold text-white">{selName}</p>
                   <dl className="mt-3 space-y-1.5 text-sm">
                     {hostname && (
                       <div className="flex justify-between gap-2">
-                        <dt className="text-ink-muted">{L.domainLabel}</dt>
-                        <dd className="text-right font-semibold text-ink break-all">{hostname}</dd>
+                        <dt className="text-white/60">{L.domainLabel}</dt>
+                        <dd className="text-right font-semibold text-white break-all">{hostname}</dd>
                       </div>
                     )}
                     <div className="flex justify-between gap-2">
-                      <dt className="text-ink-muted">{L.freqLabel}</dt>
-                      <dd className="text-right font-medium text-ink">{freqLabel}</dd>
+                      <dt className="text-white/60">{L.freqLabel}</dt>
+                      <dd className="text-right font-medium text-white">{freqLabel}</dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-ink-muted">{L.startLabelKey}</dt>
-                      <dd className="text-right font-medium text-ink">{startLabel}</dd>
+                      <dt className="text-white/60">{L.startLabelKey}</dt>
+                      <dd className="text-right font-medium text-white">{startLabel}</dd>
                     </div>
                     {selectedBundle && (
                       <div className="flex justify-between gap-2">
-                        <dt className="text-ink-muted">{L.contentLabel}</dt>
-                        <dd className="text-right font-medium text-ink">{L.scanCount(selectedBundle.members.length)}</dd>
+                        <dt className="text-white/60">{L.contentLabel}</dt>
+                        <dd className="text-right font-medium text-white">{L.scanCount(selectedBundle.members.length)}</dd>
                       </div>
                     )}
                   </dl>
-                  <div className="mt-3 border-t border-line pt-3">
+                  <div className="mt-3 border-t border-white/15 pt-3">
                     <div className="flex items-baseline justify-between">
-                      <span className="text-sm text-ink-muted">{recurring ? L.totalRuns(runs) : L.total}</span>
-                      <span className="text-2xl font-extrabold text-brand">{formatMoney(totalMinor, getRegion(region))}</span>
+                      <span className="text-sm text-white/70">{recurring ? L.totalRuns(runs) : L.total}</span>
+                      <span className="text-2xl font-extrabold text-white">{formatMoney(totalMinor, getRegion(region))}</span>
                     </div>
-                    <p className="mt-0.5 text-right text-[11px] text-ink-muted">{L.kdvIncl}</p>
+                    <p className="mt-0.5 text-right text-[11px] text-white/50">{L.kdvIncl}</p>
                   </div>
                 </>
               ) : (
-                <p className="mt-2 text-sm text-ink-soft">{L.selectPackage}</p>
+                <p className="mt-2 text-sm text-white/70">{L.selectPackage}</p>
               )}
               {needsDomainVerify ? (
                 <button onClick={() => router.push(verifyHref)} className="btn-primary mt-4 flex w-full items-center justify-center gap-1.5">
@@ -1379,26 +1379,26 @@ export default function OrderPage() {
                 </button>
               )}
               {needsDomainVerify ? (
-                <p className="mt-2 text-center text-[11px] text-amber-700">{L.verifyHint}</p>
+                <p className="mt-2 text-center text-[11px] text-amber-300">{L.verifyHint}</p>
               ) : disabledHint ? (
                 disabledHint.scroll ? (
-                  <button type="button" onClick={() => scrollToTarget(disabledHint.target ?? 'onaylar')} className="mt-2 w-full rounded-card border border-amber-300 bg-amber-50 px-3 py-2 text-center text-xs font-semibold text-amber-800 hover:bg-amber-100">
+                  <button type="button" onClick={() => scrollToTarget(disabledHint.target ?? 'onaylar')} className="mt-2 w-full rounded-lg border border-amber-300/40 bg-amber-400/15 px-3 py-2 text-center text-xs font-semibold text-amber-100 hover:bg-amber-400/25">
                     {disabledHint.text}
                   </button>
                 ) : (
-                  <p className="mt-2 text-center text-[11px] font-semibold text-amber-700">{disabledHint.text}</p>
+                  <p className="mt-2 text-center text-[11px] font-semibold text-amber-300">{disabledHint.text}</p>
                 )
               ) : (
-                <p className="mt-2 text-center text-[11px] text-ink-muted">
+                <p className="mt-2 text-center text-[11px] text-white/50">
                   {recurring || startMode === 'later' ? L.scheduledHint : L.autoStartHint}
                 </p>
               )}
               {/* Ödeme/başlatma hatası — CTA'nın HEMEN ALTINDA (masaüstü özet kolonunda). */}
-              {error && <p className="mt-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+              {error && <p className="mt-3 rounded-lg border border-red-300/30 bg-red-500/15 px-3 py-2 text-sm text-red-100">{error}</p>}
             </div>
 
             {/* Güven şeridi — DÜRÜST sinyaller (uydurma istatistik/puan YOK) */}
-            <div className="rounded-card border border-line bg-brand-50/40 p-4 text-xs text-ink-soft">
+            <div className="rounded-2xl border border-line bg-white p-4 text-xs text-ink-soft shadow-card">
               <ul className="space-y-1.5">
                 <li className="flex items-center gap-2">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0" aria-hidden><path d="M12 2l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V5l7-3z" fill="#123F3A"/><path d="M9 12l2 2 4-4" stroke="#F5A623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
