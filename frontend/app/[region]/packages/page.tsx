@@ -540,6 +540,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
               experimentalTag: t3('Deneysel', 'Experimentell', 'Experimental'),
               view: t3('İncele', 'Ansehen', 'View'),
               scrollHint: t3('Tabloyu yandan kaydırabilirsiniz.', 'Sie können die Tabelle seitlich scrollen.', 'You can scroll the table sideways.'),
+              recoBadge: t3('Öneri', 'Empfehlung', 'Suggestion'),
               wizTitle: t3('Size uygun paketi bulun', 'Finden Sie das passende Paket', 'Find the right package'),
               wizIntro: t3('Üç soru; yönlendirme amaçlıdır, kesin bir taahhüt değildir.', 'Drei Fragen; dient der Orientierung, keine verbindliche Zusage.', 'Three questions; guidance only, not a commitment.'),
               wizQ1: t3('İlk kez tarama yaptırıyor musunuz?', 'Ist dies Ihr erster Scan?', 'Is this your first scan?'),
@@ -585,16 +586,16 @@ export default async function PackagesPage({ params }: { params: { region: strin
                   href={`${API}/orders/sample-report/${c.key}?v=lansman1&region=${region.code}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="card flex items-center justify-between gap-3 p-4 transition-colors hover:border-accent/60"
+                  className="card flex items-center gap-3 p-4 transition hover:-translate-y-0.5 hover:border-accent/60"
                 >
-                  <span className="text-sm font-semibold text-brand">{c.displayName}</span>
-                  <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-accent-600">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <path d="M14 2v6h6" />
+                      <path d="M14 2v6h6M9 13h6M9 17h6" />
                     </svg>
-                    PDF
                   </span>
+                  <span className="min-w-0 flex-1 text-sm font-semibold text-brand">{c.displayName}</span>
+                  <span className="inline-flex shrink-0 items-center rounded-md border border-accent/40 bg-accent-soft/50 px-2 py-1 text-[10px] font-bold text-accent-600">PDF</span>
                 </a>
               ))}
             </div>

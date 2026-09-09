@@ -31,7 +31,7 @@ export type CompareLabels = {
   rowPrice: string; rowKind: string; rowChecks: string; rowScope: string; rowEvidence: string;
   rowSample: string; rowDns: string; rowExperimental: string; rowFit: string;
   yes: string; no: string; deterministic: string; experimentalTag: string;
-  view: string; scrollHint: string;
+  view: string; scrollHint: string; recoBadge: string;
   // Sihirbaz
   wizTitle: string; wizIntro: string; wizQ1: string; wizQ2: string; wizQ3: string;
   wizFirstYes: string; wizFirstNo: string;
@@ -110,9 +110,19 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
       </div>
 
       {/* ================= SİHİRBAZ ================= */}
-      <div className="mt-8 rounded-card border border-brand-100 bg-brand-50/40 p-5">
-        <h3 className="text-base font-bold text-brand">{L.wizTitle}</h3>
-        <p className="mt-1 text-sm text-ink-soft">{L.wizIntro}</p>
+      <div className="mt-8 rounded-2xl border border-line bg-white p-5 shadow-card sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-bold text-brand">{L.wizTitle}</h3>
+            <p className="mt-1 text-sm text-ink-soft">{L.wizIntro}</p>
+          </div>
+          {primary && (
+            <span className="inline-flex items-center gap-2 self-start rounded-full border border-accent/40 bg-accent-soft/60 px-3 py-1.5 text-xs font-bold text-brand">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-accent-600">{L.recoBadge}</span>
+              {primary.name}
+            </span>
+          )}
+        </div>
 
         <div className="mt-5 space-y-4">
           <div>
@@ -192,7 +202,7 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
             <tr>
               <th className="sticky left-0 z-10 border-b border-line bg-canvas p-3 text-left text-xs font-bold uppercase tracking-wide text-ink-muted">&nbsp;</th>
               {cols.map((c) => (
-                <th key={c.key} className="border-b border-line p-3 text-left align-bottom">
+                <th key={c.key} className={`border-b border-line p-3 text-left align-bottom ${c.key === primaryKey ? 'bg-accent-soft/40' : ''}`}>
                   <span className="block font-extrabold text-brand">{c.name}</span>
                   {c.badge && (
                     <span className={`mt-1 inline-block rounded-pill px-2 py-0.5 text-[10px] font-bold ${c.experimental ? 'bg-amber-100 text-amber-800' : 'bg-accent-soft text-brand'}`}>{c.badge}</span>
@@ -206,15 +216,15 @@ export function PackageCompare({ cols, labels, redTeamKey }: { cols: CompareCol[
               <tr key={r.label} className={i % 2 ? 'bg-brand-50/30' : ''}>
                 <th scope="row" className="sticky left-0 z-10 border-b border-line/70 bg-inherit p-3 text-left text-xs font-bold uppercase tracking-wide text-ink-muted">{r.label}</th>
                 {cols.map((c) => (
-                  <td key={c.key} className="border-b border-line/70 p-3 align-top">{r.render(c)}</td>
+                  <td key={c.key} className={`border-b border-line/70 p-3 align-top ${c.key === primaryKey ? 'bg-accent-soft/30' : ''}`}>{r.render(c)}</td>
                 ))}
               </tr>
             ))}
             <tr>
               <th scope="row" className="sticky left-0 z-10 bg-canvas p-3">&nbsp;</th>
               {cols.map((c) => (
-                <td key={c.key} className="p-3 align-top">
-                  <Link href={c.href} className="btn-outline w-full justify-center text-xs">{L.view}</Link>
+                <td key={c.key} className={`p-3 align-top ${c.key === primaryKey ? 'bg-accent-soft/40' : ''}`}>
+                  <Link href={c.href} className={`${c.key === primaryKey ? 'btn-primary' : 'btn-outline'} w-full justify-center text-xs`}>{L.view}</Link>
                 </td>
               ))}
             </tr>
