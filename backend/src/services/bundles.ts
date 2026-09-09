@@ -262,7 +262,9 @@ export function bundlePrice(
       ? bundle.anchorOriginalMinorUnitDe
       : region === 'en' && bundle.anchorOriginalMinorUnitEn != null
       ? bundle.anchorOriginalMinorUnitEn
-      : singlesSum;
+      // (UI) Cirkin anchor sayilari (orn. ₺25.498) olmasin: uye-toplam liste fiyatini en yakin 100 birime
+      // yuvarla (indirim% neredeyse aynen kalir). Override/anchor dallari etkilenmez.
+      : Math.round(singlesSum / 10000) * 10000;
   const effectiveDiscountPct =
     originalMinorUnit > 0 ? Math.max(0, Math.round((1 - amountMinorUnit / originalMinorUnit) * 100)) : 0;
   return { memberKeys, originalMinorUnit, amountMinorUnit, currency, discountPct: effectiveDiscountPct };

@@ -868,7 +868,7 @@ export default function OrderPage() {
       <button
         key={b.key}
         type="button"
-        onClick={() => { setSelectedBundle(on ? null : b); setSelected(null); setBundleModules([]); setPromo(null); if (!on) setTimeout(() => document.getElementById('onaylar')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 90); }}
+        onClick={() => { setSelectedBundle(on ? null : b); setSelected(null); setBundleModules([]); setPromo(null); if (!on) { const tgt = b.key === 'bundle_full_pentest' ? 'test-hesabi' : 'onaylar'; setTimeout(() => document.getElementById(tgt)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 90); } }}
         className={`card relative flex flex-col p-4 text-left transition ${
           on ? 'ring-2 ring-brand' : b.popular ? 'border-accent hover:border-accent' : 'hover:border-brand-300'
         }`}
@@ -1042,6 +1042,7 @@ export default function OrderPage() {
         {/* ================= SOL: form adimlari ================= */}
         <div className="min-w-0">
       {/* Paket seçimi — SADECE paketler: Basit Tarama (giriş) + kombine paketler. Tekil kontrol satışı YOK. */}
+      <section className="rounded-2xl border border-line bg-white p-5 shadow-card sm:p-6">
       <h2 className="text-base font-extrabold text-brand">{L.step1}</h2>
       <div className="mt-3 grid items-stretch gap-3 sm:grid-cols-2">
         {/* Basit Tarama artik satin alinmaz — anasayfada ücretsiz "Hemen Dene" anlik taramasina yonlendirilir. */}
@@ -1070,7 +1071,7 @@ export default function OrderPage() {
       {/* (İŞ 3) Aktif-hafif risk kabulü aşağıdaki gruplu onaya taşındı; burada YALNIZ (varsa) test-hesabı
           giriş alanları gösterilir (kimlik-doğrulamalı bundle üyesi için). */}
       {selectedBundle?.members?.some((m: any) => m.key === 'authenticated_scan') && (
-        <div className="mt-3 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm">
+        <div id="test-hesabi" className="mt-3 scroll-mt-24 rounded-card border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm">
           <p className="text-sm font-semibold text-brand">{L.testCredsMembers}</p>
           {authCredBlock}
         </div>
@@ -1100,7 +1101,10 @@ export default function OrderPage() {
       )}
 
       {/* Onaylar — (İŞ 3) ≤3 gruplu checkbox; sunucu-tarafı bireysel zorunluluk korunur. */}
-      <h2 id="onaylar" className="mt-8 scroll-mt-24 text-base font-extrabold text-brand">{L.step2}</h2>
+      </section>
+
+      <section className="mt-5 rounded-2xl border border-line bg-white p-5 shadow-card sm:p-6">
+      <h2 id="onaylar" className="scroll-mt-24 text-base font-extrabold text-brand">{L.step2}</h2>
       <div className="mt-3 space-y-2.5">
         {consentGroups.map(({ checked, set, node }, i) => (
           <label key={i} className={`flex items-start gap-3 rounded-xl border p-3.5 text-sm text-ink-soft transition ${checked ? 'border-brand-300 bg-brand-50/60 ring-1 ring-brand-100' : 'border-line bg-white hover:border-brand-200'}`}>
@@ -1150,11 +1154,14 @@ export default function OrderPage() {
         </div>
       )}
 
+      </section>
+
       {/* Tekrar + Başlangıç YALNIZ tekil paket için (bundle'lar hemen çalışır, zamanlanamaz). */}
       {!selectedBundle && (
       <>
+      <section className="mt-5 rounded-2xl border border-line bg-white p-5 shadow-card sm:p-6">
       {/* Düzenli tekrar (opsiyonel) */}
-      <h2 className="mt-8 text-base font-extrabold text-brand">{L.step3}</h2>
+      <h2 className="text-base font-extrabold text-brand">{L.step3}</h2>
       <div className="mt-3 space-y-2.5">
         <label className={`flex items-center gap-3 rounded-card border p-3.5 text-sm ${!recurring ? 'border-brand-300 bg-brand-50/50' : 'border-line'}`}>
           <input type="radio" checked={!recurring} onChange={() => setRecurring(false)} className="h-4 w-4 accent-brand" />
@@ -1219,6 +1226,7 @@ export default function OrderPage() {
           </div>
         )}
       </div>
+      </section>
       </>
       )}
 
