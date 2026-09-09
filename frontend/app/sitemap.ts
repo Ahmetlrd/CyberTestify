@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next';
+import { corpSlug, corpLanguages } from '../config/slugs';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const SITE = 'https://cybertestify.com';
@@ -44,11 +45,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     [['hakkimizda', 0.5, 'monthly'], ['iletisim', 0.4, 'monthly'], ['acik-kaynak', 0.3, 'yearly']] as const
   ).flatMap(([slug, prio, freq]) =>
     (['tr', 'de', 'en'] as const).map((lang) => ({
-      url: `${SITE}/${lang}/${slug}`,
+      url: `${SITE}/${lang}/${corpSlug(slug, lang)}`,
       lastModified: now,
       changeFrequency: freq as 'monthly' | 'yearly',
       priority: lang === 'tr' ? prio : prio - 0.1,
-      alternates: langAlt(`/${slug}`),
+      alternates: { languages: corpLanguages(slug, SITE) },
     })),
   );
 

@@ -1,4 +1,5 @@
 import { COMPANY } from '../../../lib/company';
+import { corpSlug, corpLanguages } from '../../../config/slugs';
 import { notFound } from 'next/navigation';
 import { VISIBLE_REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 
@@ -56,10 +57,10 @@ export function generateMetadata({ params }: { params: { region: string } }) {
     title: t.metaTitle,
     description: t.metaDesc,
     alternates: {
-      canonical: `${SITE_URL}/${params.region}/iletisim`,
-      languages: { tr: `${SITE_URL}/tr/iletisim`, de: `${SITE_URL}/de/iletisim`, en: `${SITE_URL}/en/iletisim`, 'x-default': `${SITE_URL}/tr/iletisim` },
+      canonical: `${SITE_URL}/${params.region}/${corpSlug('iletisim', params.region)}`,
+      languages: corpLanguages('iletisim', SITE_URL),
     },
-    openGraph: { type: 'website' as const, siteName: 'CyberTestify', url: `${SITE_URL}/${params.region}/iletisim`, title: t.metaTitle, description: t.metaDesc },
+    openGraph: { type: 'website' as const, siteName: 'CyberTestify', url: `${SITE_URL}/${params.region}/${corpSlug('iletisim', params.region)}`, title: t.metaTitle, description: t.metaDesc },
   };
 }
 

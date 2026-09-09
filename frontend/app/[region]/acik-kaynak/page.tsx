@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { corpSlug, corpLanguages } from '../../../config/slugs';
 import { notFound } from 'next/navigation';
 import { VISIBLE_REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
 
@@ -72,8 +73,8 @@ export function generateMetadata({ params }: { params: { region: string } }) {
     title: t.metaTitle,
     description: t.metaDesc,
     alternates: {
-      canonical: `${SITE_URL}/${params.region}/acik-kaynak`,
-      languages: { tr: `${SITE_URL}/tr/acik-kaynak`, de: `${SITE_URL}/de/acik-kaynak`, en: `${SITE_URL}/en/acik-kaynak`, 'x-default': `${SITE_URL}/tr/acik-kaynak` },
+      canonical: `${SITE_URL}/${params.region}/${corpSlug('acik-kaynak', params.region)}`,
+      languages: corpLanguages('acik-kaynak', SITE_URL),
     },
   };
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { corpSlug } from '../config/slugs';
 import { usePathname } from 'next/navigation';
 import { COMPANY } from '../lib/company';
 import { Logo } from './Logo';
@@ -74,13 +75,13 @@ export function Footer({ region }: { region: RegionConfig }) {
               </a>
             </p>
             <p className="mt-2 flex flex-wrap gap-x-4 text-sm">
-              <Link href={`/${activeRegion.code}/hakkimizda`} className="font-medium text-white/80 hover:text-white hover:underline">
+              <Link href={`/${activeRegion.code}/${corpSlug('hakkimizda', activeRegion.code)}`} className="font-medium text-white/80 hover:text-white hover:underline">
                 {nav.about}
               </Link>
               <Link href={`/${activeRegion.code}/blog`} className="font-medium text-white/80 hover:text-white hover:underline">
                 {nav.blog}
               </Link>
-              <Link href={`/${activeRegion.code}/acik-kaynak`} className="font-medium text-white/80 hover:text-white hover:underline">
+              <Link href={`/${activeRegion.code}/${corpSlug('acik-kaynak', activeRegion.code)}`} className="font-medium text-white/80 hover:text-white hover:underline">
                 {nav.openSource}
               </Link>
               <Link href={contactHref} className="font-medium text-white/80 hover:text-white hover:underline">

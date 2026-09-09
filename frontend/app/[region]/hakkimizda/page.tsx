@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { corpSlug, corpLanguages } from '../../../config/slugs';
 import { notFound } from 'next/navigation';
 import { COMPANY } from '../../../lib/company';
 import { VISIBLE_REGION_CODES, isRegionCode, getRegion } from '../../../config/regions';
@@ -180,10 +181,10 @@ export function generateMetadata({ params }: { params: { region: string } }) {
     title: t.metaTitle,
     description: t.metaDesc,
     alternates: {
-      canonical: `${SITE_URL}/${params.region}/hakkimizda`,
-      languages: { tr: `${SITE_URL}/tr/hakkimizda`, de: `${SITE_URL}/de/hakkimizda`, en: `${SITE_URL}/en/hakkimizda`, 'x-default': `${SITE_URL}/tr/hakkimizda` },
+      canonical: `${SITE_URL}/${params.region}/${corpSlug('hakkimizda', params.region)}`,
+      languages: corpLanguages('hakkimizda', SITE_URL),
     },
-    openGraph: { type: 'website' as const, siteName: 'CyberTestify', url: `${SITE_URL}/${params.region}/hakkimizda`, title: t.metaTitle, description: t.metaDesc },
+    openGraph: { type: 'website' as const, siteName: 'CyberTestify', url: `${SITE_URL}/${params.region}/${corpSlug('hakkimizda', params.region)}`, title: t.metaTitle, description: t.metaDesc },
   };
 }
 
