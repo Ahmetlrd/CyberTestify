@@ -60,10 +60,13 @@ async function getBundles(region: string): Promise<Bundle[]> {
 }
 
 // Aktif basit_tarama promo kodu (varsa) — Basit Tarama kartında kampanya olarak gösterilir.
-export default async function PackagesPage({ params }: { params: { region: string } }) {
+export default async function PackagesPage({ params, searchParams }: { params: { region: string }; searchParams?: { domain?: string } }) {
   if (!isRegionCode(params.region)) notFound();
   const region = getRegion(params.region);
   const d = getDict(region).pkg;
+  // (#4) Ucretsiz taramadan gelen domain — Satin Al/Incele linklerine &hostname= (verify oto-doldurur).
+  const domainParam = typeof searchParams?.domain === "string" ? searchParams.domain.slice(0, 253) : "";
+  const hostQ = domainParam ? `&hostname=${encodeURIComponent(domainParam)}` : "";
   const packages = await getPackages(region.code);
   const bundles = await getBundles(region.code);
   // SATIS MODELI: tekil satis KAPALI — SADECE basit_tarama tekil ("6. paket") satilir; digerleri
@@ -145,7 +148,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
       dnsRequired: b.category === 'active-light',
       experimental: false,
       fit: m?.fit ?? '',
-      href: `/verify?bundle=${b.key}`,
+      href: `/verify?bundle=${b.key}${hostQ}`,
       badge: badgeOf(b),
     });
   }
@@ -480,7 +483,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                       <span className="btn-ghost mt-6 w-full cursor-default">{t3('Yakında', 'Bald verfügbar', 'Coming soon')}</span>
                     ) : (
                       <>
-                        <Link href={`/verify?bundle=${b.key}`} className="btn-primary mt-6 w-full">
+                        <Link href={`/verify?bundle=${b.key}${hostQ}`} className="btn-primary mt-6 w-full">
                           {t3('Satın Al', 'Jetzt kaufen', 'Buy Now')}
                         </Link>
                         <a

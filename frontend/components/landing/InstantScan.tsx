@@ -470,8 +470,10 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
   const activeNext = ok?.host ? `/verify?bundle=bundle_active_verify&hostname=${buyHostname}` : '/verify';
   const activeBuyHref = `/register?next=${encodeURIComponent(activeNext)}`;
   // Login değilse → paketler; login ise → mevcut satın-alma akışı (eskisi gibi).
-  const effActiveHref = loggedIn ? activeBuyHref : `${packagesHref}?focus=bundle_active_verify`;
-  const effPassiveHref = loggedIn ? passiveBuyHref : `${packagesHref}?focus=basit_tarama`;
+  // (#4) Taranan domain'i paketler zincirine tasi (login degilse packages -> Satin Al -> /verify?hostname=).
+  const domainQ = buyHostname ? `&domain=${buyHostname}` : '';
+  const effActiveHref = loggedIn ? activeBuyHref : `${packagesHref}?focus=bundle_active_verify${domainQ}`;
+  const effPassiveHref = loggedIn ? passiveBuyHref : `${packagesHref}?focus=basit_tarama${domainQ}`;
   // (İŞ 1) Fiyatlar CANLI API'den (server sayfası prop geçer) → de/en/tr her zaman doğru, hardcoded drift YOK.
   const pxBasit = priceBasitProp ?? L.priceBasit;
   const pxActive = priceActiveProp ?? L.priceActive;
