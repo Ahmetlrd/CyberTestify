@@ -168,6 +168,7 @@ export const COMBO_BUNDLES: ComboBundle[] = [
     category: 'active-light',
     discountPct: 20,
     finalPriceMinorUnitTr: 2299900, // 22.999 TL (FAZ E — nihai sabit fiyat; üye order tutarları buna bölünür)
+    anchorOriginalMinorUnitTr: 2549900, // 25.499 TL (Vedat) — liste; indirim = 25.499 − 22.999 = 2.500 (temiz), ödenen AYNI
     comingSoon: false,              // (FAZ E) LANSMAN
     flagship: true,                 // amiral gemisi — premium çerçeve/rozet
     memberKeys: ['authenticated_scan', 'autonomous_pentest'],
