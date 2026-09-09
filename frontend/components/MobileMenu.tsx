@@ -33,6 +33,19 @@ export function MobileMenu({
     setLoggedIn(typeof window !== 'undefined' && !!window.localStorage.getItem('token'));
   }, [pathname]);
 
+  // (MOBİL #1) Menü açıkken: arka plan scroll KİLİDİ + Escape ile kapat.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  // Rota değişince menüyü kapat (link tıklanınca zaten kapanıyor; güvenlik için).
+  useEffect(() => { setOpen(false); }, [pathname]);
+
   return (
     <div className="md:hidden">
       <button
@@ -53,8 +66,8 @@ export function MobileMenu({
 
       {open && (
         <>
-          <button className="fixed inset-0 z-40 cursor-default bg-transparent" aria-hidden onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 top-16 z-50 border-b border-line/70 bg-canvas/95 backdrop-blur">
+          <button className="fixed inset-x-0 bottom-0 top-16 z-40 cursor-default bg-ink/40" aria-hidden onClick={() => setOpen(false)} />
+          <div className="absolute left-0 right-0 top-16 z-50 border-b border-line/70 bg-canvas shadow-card">
             <div className="container-page flex flex-col py-2">
               {links.map(([label, href]) => (
                 <Link

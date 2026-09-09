@@ -145,7 +145,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
       dnsRequired: b.category === 'active-light',
       experimental: false,
       fit: m?.fit ?? '',
-      href: `/order?bundle=${b.key}`,
+      href: `/verify?bundle=${b.key}`,
       badge: badgeOf(b),
     });
   }
