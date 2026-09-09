@@ -436,6 +436,16 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
   }
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  // (#1) Rapor ham blob PDF olarak acilinca sekme about:blank + jenerik ikon oluyordu. Onun yerine
+  // markali bir HTML wrapper (blob) ac: sekme "CyberTestify | {domain}" + site favicon, PDF iframe icinde.
+  function openBrandedReport(pdfBlobUrl: string, host: string) {
+    const safeHost = String(host).replace(/[<>&"']/g, '');
+    const title = `CyberTestify | ${safeHost}`;
+    const html = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><link rel="icon" href="https://cybertestify.com/icon.svg" type="image/svg+xml"><style>html,body{margin:0;height:100%;background:#1b2b2a}iframe{width:100%;height:100%;border:0;display:block}</style></head><body><iframe src="${pdfBlobUrl}" title="${title}"></iframe></body></html>`;
+    const wrapperUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    window.open(wrapperUrl, '_blank');
+  }
+
   async function submitReport(host: string, logId?: string) {
     const em = email.trim();
     if (!EMAIL_RE.test(em)) { setReportErr(L.emailInvalid); return; }
@@ -563,7 +573,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                         <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-400 text-brand"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden><path d="M20 6 9 17l-5-5" /></svg></span>
                         {L.reportReady}
                       </p>
-                      <a href={reportUrl} download={`cybertestify-basit-tarama-${ok.host}.pdf`} className="btn-primary w-full justify-center sm:w-auto">{L.reportDownload}</a>
+                      <button type="button" onClick={() => reportUrl && openBrandedReport(reportUrl, ok.host)} className="btn-primary w-full justify-center sm:w-auto">{L.reportDownload}</button>
                     </div>
                   ) : (
                     <>
