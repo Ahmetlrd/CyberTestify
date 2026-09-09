@@ -112,7 +112,7 @@ const ORD = {
     lowP2Html: 'Tarama yine de çalıştırılacaktır, ancak çoğu kontrol <strong>"kapsam dışı / incelenemedi"</strong> olarak sonuçlanabilir. Ödenen tutar <strong>bulgu garantisi değildir</strong>; kapsamlı bir değerlendirme sürecinin tamamı içindir.',
     lowAck: 'Devam etmek istiyorum.',
     // Summary
-    summary: 'Sipariş Özeti', domainLabel: 'Alan adı', freqLabel: 'Sıklık', startLabelKey: 'Başlangıç', contentLabel: 'İçerik',
+    summary: 'Sipariş Özeti', domainLabel: 'Alan adı', freqLabel: 'Sıklık', startLabelKey: 'Başlangıç', contentLabel: 'İçerik', listPriceLabel: 'Liste fiyatı', discountLabel: 'İndirim',
     scanCount: (n: number) => `${n} tarama`, total: 'Toplam', totalRuns: (n: number) => `Toplam · ${n} tarama`, kdvIncl: 'KDV dahildir',
     verifyDomain: 'Alan adını doğrula',
     verifyHint: 'Aktif tarama için önce alan adı sahipliğinizi DNS ile doğrulayın — doğrulandıktan sonra satın alabilirsiniz.',
@@ -227,7 +227,7 @@ const ORD = {
     lowP1Html: 'Bei der automatischen Schnellprüfung wurde <strong>fast kein testbarer Einstiegspunkt</strong> (Formular, Query-Parameter, Endpunkt mit numerischer ID) auf Ihrer Website gefunden. Das liegt meist an einer <strong>per JavaScript gerenderten (SPA)</strong> Struktur der Website.',
     lowP2Html: 'Der Scan wird dennoch ausgeführt, aber viele Prüfungen können als <strong>„außerhalb des Scope / nicht geprüft“</strong> enden. Der gezahlte Betrag ist <strong>keine Fundgarantie</strong>; er gilt für den gesamten umfassenden Bewertungsprozess.',
     lowAck: 'Ich möchte fortfahren.',
-    summary: 'Bestellübersicht', domainLabel: 'Domain', freqLabel: 'Häufigkeit', startLabelKey: 'Start', contentLabel: 'Inhalt',
+    summary: 'Bestellübersicht', domainLabel: 'Domain', freqLabel: 'Häufigkeit', startLabelKey: 'Start', contentLabel: 'Inhalt', listPriceLabel: 'Listenpreis', discountLabel: 'Rabatt',
     scanCount: (n: number) => `${n} Scans`, total: 'Gesamt', totalRuns: (n: number) => `Gesamt · ${n} Scans`, kdvIncl: 'inkl. MwSt.',
     verifyDomain: 'Domain bestätigen',
     verifyHint: 'Für den aktiven Scan bestätigen Sie zuerst Ihre Domain-Inhaberschaft per DNS — danach können Sie kaufen.',
@@ -335,7 +335,7 @@ const ORD = {
     lowP1Html: 'The automatic quick scan found <strong>almost no testable entry point</strong> (form, query parameter, endpoint with a numeric ID) on your website. This is usually because the site has a <strong>JavaScript-rendered (SPA)</strong> structure.',
     lowP2Html: 'The scan will still run, but many checks may end up as <strong>“out of scope / not assessed”</strong>. The amount paid is <strong>not a guarantee of findings</strong>; it covers the entire comprehensive assessment process.',
     lowAck: 'I want to continue.',
-    summary: 'Order Summary', domainLabel: 'Domain', freqLabel: 'Frequency', startLabelKey: 'Start', contentLabel: 'Contents',
+    summary: 'Order Summary', domainLabel: 'Domain', freqLabel: 'Frequency', startLabelKey: 'Start', contentLabel: 'Contents', listPriceLabel: 'List price', discountLabel: 'Discount',
     scanCount: (n: number) => `${n} scans`, total: 'Total', totalRuns: (n: number) => `Total · ${n} scans`, kdvIncl: 'VAT included',
     verifyDomain: 'Verify domain',
     verifyHint: 'For the active scan, first verify your domain ownership via DNS — you can purchase once verified.',
@@ -811,6 +811,10 @@ export default function OrderPage() {
       ? promo.finalAmountMinorUnit
       : baseAmountMinor;
   const totalMinor = !selectedBundle && recurring ? unitAmountMinor * runs : unitAmountMinor;
+  // (Özet indirim) Liste fiyatı vs ödenecek toplam farkı (bundle indirimi + varsa promo).
+  const unitListMinor = selectedBundle ? (selectedBundle.originalMinorUnit ?? selectedBundle.amountMinorUnit) : (selectedPkg?.priceMinorUnit ?? 0);
+  const listTotalMinor = !selectedBundle && recurring ? unitListMinor * runs : unitListMinor;
+  const discountMinor = Math.max(0, listTotalMinor - totalMinor);
   // (Kullanıcı isteği) AKTİF paket + DOĞRULANMAMIŞ alan adı: "Satın Al" HİÇ tıklanmasın. Ödeme-sonra-tut
   // yerine, kullanıcı önce doğrulamaya yönlendirilir. Bu durumda buy CTA'sı yerine "Doğrula" butonu çıkar
   // ve /verify'da o alan adının DNS paneline odaklanır (domainId param).
@@ -1324,7 +1328,7 @@ export default function OrderPage() {
 
         {/* ================= SAĞ: kaydırmada sabit özet (masaüstü) ================= */}
         <aside className="hidden lg:block">
-          <div className="sticky top-6 space-y-4">
+          <div className="sticky top-24 space-y-4">
             <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-brand to-brand-deep p-5 text-white shadow-card">
               <p className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-accent">{L.summary}</p>
               {selName ? (
@@ -1345,11 +1349,17 @@ export default function OrderPage() {
                       <dt className="text-white/60">{L.startLabelKey}</dt>
                       <dd className="text-right font-medium text-white">{startLabel}</dd>
                     </div>
-                    {selectedBundle && (
-                      <div className="flex justify-between gap-2">
-                        <dt className="text-white/60">{L.contentLabel}</dt>
-                        <dd className="text-right font-medium text-white">{L.scanCount(selectedBundle.members.length)}</dd>
-                      </div>
+                    {discountMinor > 0 && (
+                      <>
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-white/60">{L.listPriceLabel}</dt>
+                          <dd className="text-right font-medium text-white/70 line-through">{formatMoney(listTotalMinor, getRegion(region))}</dd>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-white/60">{L.discountLabel}</dt>
+                          <dd className="text-right font-bold text-amber-300">−{formatMoney(discountMinor, getRegion(region))}</dd>
+                        </div>
+                      </>
                     )}
                   </dl>
                   <div className="mt-3 border-t border-white/15 pt-3">
