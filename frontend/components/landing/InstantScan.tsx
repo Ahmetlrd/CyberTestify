@@ -46,11 +46,20 @@ const IS = {
     nextActiveHint: 'Login-sonrası ve aktif zafiyetleri gerçek problarla doğrular.',
     gapsFound: (n: number) => `Dış yüzeyinizde ${n} açık bulundu`,
     ratedHigh: (n: number) => `${n} tanesi YÜKSEK riskli`,
-    summaryNote: 'Bu ekran özeti gösterir. Tam rapor her açığı ve nasıl kapatılacağını anlatır.',
     coverageNote: 'Bu skor yalnızca dışarıdan görülebilen kontrolleri (güvenlik başlıkları, SSL/TLS, sunucu/teknoloji ifşası) kapsar; login-sonrası alanlar ve API dahil değildir.',
     coverTitle: 'Bu taramanın kapsamı', layerUnit: 'katman',
     layers: ['HTTP başlıkları', 'SSL/TLS', 'Sunucu ifşası', 'DNS & e-posta', 'CORS / CSP derin', 'Login sonrası', 'API güvenliği', 'Enjeksiyon / IDOR', 'İş mantığı'],
     coverNoteBottom: 'Gri katmanlar bu taramada hiç kontrol edilmedi — gerçek ihlallerin büyük çoğunluğu bu katmanlarda başlar.',
+    lockedListTitle: 'Bu taramanın açmadığı kontroller',
+    lockedList: [
+      { t: 'SQL / komut enjeksiyonu', p: 'Aktif Doğrulama' },
+      { t: 'IDOR — başkasının verisine erişim', p: 'Aktif Doğrulama' },
+      { t: 'Login sonrası oturum & yetki', p: 'Pentest' },
+      { t: 'DNS / SPF / DMARC yapılandırması', p: 'Dış Yüzey' },
+      { t: 'Açık API & Swagger ifşası', p: 'Keşif' },
+      { t: 'İş mantığı & race condition', p: 'Aktif Doğrulama' },
+    ],
+    lockedListCta: 'Bu kontrolleri açan paketleri gör',
     emailBtnFull: 'Basit PDF raporumu gönder',
     emailReassure: 'Ücretsiz · ~1 dk içinde gelir · kart yok, satış görüşmesi yok',
     topFindings: 'Öne çıkan bulgular',
@@ -125,11 +134,20 @@ const IS = {
     nextActiveHint: 'Verifiziert Post-Login- und aktive Schwachstellen mit echten Proben.',
     gapsFound: (n: number) => `${n} Lücken auf Ihrer Außenfläche gefunden`,
     ratedHigh: (n: number) => `${n} als HOCH eingestuft`,
-    summaryNote: 'Diese Ansicht zeigt die Zusammenfassung. Der vollständige Bericht erklärt jede Lücke und wie man sie behebt.',
     coverageNote: 'Dieser Score umfasst nur von außen sichtbare Prüfungen (Sicherheits-Header, SSL/TLS, Server-/Technologie-Offenlegung); Post-Login-Bereiche und API sind nicht enthalten.',
     coverTitle: 'Umfang dieses Scans', layerUnit: 'Ebenen',
     layers: ['HTTP-Header', 'SSL/TLS', 'Server-Offenlegung', 'DNS & E-Mail', 'CORS / CSP tief', 'Nach dem Login', 'API-Sicherheit', 'Injektion / IDOR', 'Geschäftslogik'],
     coverNoteBottom: 'Graue Ebenen wurden in diesem Scan nicht geprüft — die meisten echten Sicherheitsvorfälle beginnen genau dort.',
+    lockedListTitle: 'Prüfungen, die dieser Scan nicht durchführt',
+    lockedList: [
+      { t: 'SQL-/Command-Injection', p: 'Aktive Verifizierung' },
+      { t: 'IDOR — Zugriff auf fremde Daten', p: 'Aktive Verifizierung' },
+      { t: 'Sitzung & Rechte nach Login', p: 'Pentest' },
+      { t: 'DNS / SPF / DMARC-Konfiguration', p: 'Außenfläche' },
+      { t: 'Offene API & Swagger-Offenlegung', p: 'Aufklärung' },
+      { t: 'Geschäftslogik & Race Conditions', p: 'Aktive Verifizierung' },
+    ],
+    lockedListCta: 'Pakete ansehen, die diese Prüfungen freischalten',
     emailBtnFull: 'Basis-PDF-Bericht senden',
     emailReassure: 'Kostenlos · in ~1 Min · keine Karte, kein Verkaufsgespräch',
     topFindings: 'Wichtigste Funde',
@@ -204,11 +222,20 @@ const IS = {
     nextActiveHint: 'Verifies post-login and active vulnerabilities with real probes.',
     gapsFound: (n: number) => `${n} gaps found on your external surface`,
     ratedHigh: (n: number) => `${n} rated HIGH`,
-    summaryNote: 'This page shows the summary. The full report explains each gap and how to fix it.',
     coverageNote: 'This score covers only externally-visible checks (security headers, SSL/TLS, server/tech disclosure); post-login areas and the API are not included.',
     coverTitle: 'What this scan covers', layerUnit: 'layers',
     layers: ['HTTP headers', 'SSL/TLS', 'Server disclosure', 'DNS & email', 'CORS / CSP deep', 'Post-login', 'API security', 'Injection / IDOR', 'Business logic'],
     coverNoteBottom: 'The grey layers were not checked in this scan — the vast majority of real breaches start there.',
+    lockedListTitle: 'Checks this scan does not run',
+    lockedList: [
+      { t: 'SQL / command injection', p: 'Active Verification' },
+      { t: "IDOR — access to others' data", p: 'Active Verification' },
+      { t: 'Post-login session & authorization', p: 'Pentest' },
+      { t: 'DNS / SPF / DMARC configuration', p: 'External Surface' },
+      { t: 'Exposed API & Swagger disclosure', p: 'Recon' },
+      { t: 'Business logic & race conditions', p: 'Active Verification' },
+    ],
+    lockedListCta: 'See packages that unlock these checks',
     emailBtnFull: 'Send my basic PDF report',
     emailReassure: 'Free · arrives in ~1 min · no card, no sales call',
     topFindings: 'Top findings',
@@ -588,7 +615,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                         <>{L.gapsFound(ok.total)}{ok.shown.some((f) => f.severity === 'high') && (<span className="text-amber-300"> — {L.ratedHigh(ok.shown.filter((f) => f.severity === 'high').length)}</span>)}</>
                       )}
                     </p>
-                    <p className="mt-1 text-xs leading-relaxed text-white/65">{ok.clean ? L.cleanBody : L.summaryNote}</p>
+                    {ok.clean && <p className="mt-1 text-xs leading-relaxed text-white/65">{L.cleanBody}</p>}
                   </div>
                 </div>
                 {/* (Mockup) KAPSAM PANELI — 9 katman; ucretsiz tarama GERCEKTE ilk 3'unu (baslik/SSL/ifsa) kontrol eder. */}
@@ -610,7 +637,10 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                       </span>
                     ))}
                   </div>
-                  <p className="mt-3 text-[12px] leading-relaxed text-white/65">{L.coverNoteBottom}</p>
+                  <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-accent/50 bg-accent/[0.12] p-3">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="mt-px shrink-0 text-accent" aria-hidden><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                    <p className="text-[13px] font-semibold leading-snug text-white">{L.coverNoteBottom}</p>
+                  </div>
                 </div>
                 {/* E-posta formu — dark box İÇİNDE (rapor hazır olunca indir butonuna döner) */}
                 <div className="mt-4">
@@ -678,6 +708,28 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                   ) : null}
                 </div>
               )}
+
+              {/* ===== 2b — KİLİTLİ KONTROLLER: paket etiketli, aşağı doğru sansürlenen liste ===== */}
+              <div className="relative mt-3 overflow-hidden rounded-card border border-line bg-white p-4">
+                <div className="flex items-center gap-2">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-ink-muted" aria-hidden><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                  <p className="text-[13px] font-bold text-ink">{L.lockedListTitle}</p>
+                </div>
+                <ul className="mt-2.5 space-y-1.5 pb-16">
+                  {L.lockedList.map((it: { t: string; p: string }, i: number) => (
+                    <li key={it.t} style={{ filter: `blur(${i * 0.7}px)`, opacity: 1 - i * 0.12 }} className="flex items-center gap-2.5 rounded-card border border-dashed border-line bg-canvas/60 px-3 py-2.5">
+                      <span aria-hidden className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-ink/[0.06] text-ink-muted"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+                      <span className="min-w-0 flex-1 text-[12.5px] font-medium leading-snug text-ink">{it.t}</span>
+                      <span className="shrink-0 rounded-pill bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand">{it.p}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-white via-white/95 to-transparent px-4 pb-4 pt-12">
+                  <Link href={`${packagesHref}${domainQ}`} className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2.5 text-xs font-bold text-white shadow-card transition hover:bg-brand-deep">
+                    {L.lockedListCta} <span aria-hidden>→</span>
+                  </Link>
+                </div>
+              </div>
 
               {/* ===== 3 — BU TARAMANIN GÖREMEDİKLERİ: 2 paket (Dış Yüzey vurgulu / Aktif Doğrulama) ===== */}
               <div className="mt-3 rounded-card border border-line bg-white p-4">
