@@ -278,7 +278,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                     key={b.key}
                     id={`pkg-${b.key}`}
                     className={`card relative flex flex-col p-6 scroll-mt-24 transition-transform hover:-translate-y-1 ${
-                      flagship ? 'border-2 border-brand shadow-lg ring-2 ring-brand/30 bg-brand-50/40'
+                      flagship ? 'border-2 border-brand bg-gradient-to-b from-brand to-brand-deep text-white shadow-xl'
                         : popular ? 'border-2 border-accent shadow-md ring-2 ring-accent/25 bg-amber-50/40'
                         : 'border-2 border-accent/40'
                     } ${b.comingSoon ? 'opacity-90' : ''}`}
@@ -289,7 +289,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                       </span>
                     ) : flagship ? (
                       <span className="mb-3 flex flex-wrap items-center gap-1.5">
-                        <span className="whitespace-nowrap rounded-pill bg-brand px-3 py-1 text-xs font-bold text-white">
+                        <span className="whitespace-nowrap rounded-pill bg-white/15 px-3 py-1 text-xs font-bold text-white">
                           ★ {t3('En Kapsamlı Paket', 'Umfangreichstes Paket', 'Most Complete')}
                         </span>
                         {hasSaving && (
@@ -326,8 +326,8 @@ export default async function PackagesPage({ params }: { params: { region: strin
                         USOM Eşleme
                       </span>
                     ) : null}
-                    <h3 className="text-lg font-bold text-brand">{b.displayName}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-ink-soft">{renderEmphasis(b.description)}</p>
+                    <h3 className={`text-lg font-bold ${flagship ? 'text-white' : 'text-brand'}`}>{b.displayName}</h3>
+                    <p className={`mt-2 text-sm leading-relaxed ${flagship ? 'text-white/75' : 'text-ink-soft'}`}>{renderEmphasis(b.description)}</p>
                     {b.selectable ? (
                       <div className="mt-3 rounded-card border border-accent/40 bg-accent-soft/30 px-3 py-2 text-xs text-ink-soft">
                         <span className="font-semibold">{t3('İçerik seçilebilir', 'Inhalt wählbar', 'Content is selectable')}</span>{' '}
@@ -379,8 +379,8 @@ export default async function PackagesPage({ params }: { params: { region: strin
                     ) : b.key === 'bundle_full_pentest' ? (
                       // (Tam Kapsamlı) İncelenen alanlar = gerçekten çalıştırdığımız kapsam (Faz 0–5).
                       // Üye adları yerine dürüst kapsam maddeleri + sınırlar/güvence.
-                      <div className="mt-3 rounded-card bg-brand-50/50 px-3 py-2 text-xs text-ink-soft">
-                        <span className="font-semibold">{t3('İncelenen alanlar', 'Was wir prüfen', 'What we examine')}:</span>
+                      <div className="mt-3 rounded-card border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-white/85">
+                        <span className="font-semibold text-accent">{t3('İncelenen alanlar', 'Was wir prüfen', 'What we examine')}:</span>
                         <ul className="mt-1.5 space-y-1">
                           {(region.lang === 'de'
                             ? [
@@ -418,13 +418,13 @@ export default async function PackagesPage({ params }: { params: { region: strin
                             </li>
                           ))}
                         </ul>
-                        <p className="mt-2 border-t border-line/60 pt-2 text-[11px] text-ink-muted">
+                        <p className="mt-2 border-t border-white/15 pt-2 text-[11px] text-white/55">
                           {t3(
                             'Sınırlar & güvence: “Kanıtla, istismar etme.” Gerçek veri değiştirme/silme veya ödeme tamamlama kod seviyesinde engellidir. Cross-account (başka kullanıcının verisi) IDOR kapsam dışıdır. Kimlik bilgileriniz şifreli/geçici saklanır, tarama bitince silinir; yetkilendirme beyanı zorunludur.',
                             'Grenzen & Zusicherung: „Nachweisen, nicht ausnutzen.“ Echte Datenänderung/-löschung oder Zahlungsabschluss sind auf Code-Ebene blockiert. Cross-Account-IDOR (Daten anderer Nutzer) ist außerhalb des Scope. Zugangsdaten werden verschlüsselt/temporär gespeichert und nach dem Scan gelöscht; eine Autorisierungserklärung ist erforderlich.',
                             'Limits & assurance: “Prove, don’t exploit.” Real data changes/deletion or payment completion are blocked at the code level. Cross-account IDOR (another user’s data) is out of scope. Credentials are stored encrypted/temporarily and deleted after the scan; an authorization declaration is required.')}
                         </p>
-                        <p className="mt-1.5 text-[11px] italic text-ink-muted">
+                        <p className="mt-1.5 text-[11px] italic text-white/55">
                           {t3(
                             'Önemli — TEST hesabı: 2FA’sız, sınırlı yetkili, ana/üretim hesabınız olmayan, tek kullanımlık bir hesap gerekir. Kapsam notu: sonuçlar hedefin mimarisine göre değişir; authenticated yüzeyi sınırlı/SPA ağırlıklı sitelerde bazı kontroller “kapsam dışı / incelenemedi” raporlanır — bu normaldir.',
                             'Wichtig — TEST-Konto: Es wird ein Einmal-Konto ohne 2FA, mit minimalen Rechten und NICHT Ihr Produktivkonto benötigt. Hinweis zum Umfang: Ergebnisse hängen von der Architektur des Ziels ab; bei Seiten mit begrenzter authentifizierter Oberfläche/SPA werden einige Prüfungen als „außerhalb des Scope / nicht geprüft“ berichtet — das ist normal.',
@@ -464,12 +464,12 @@ export default async function PackagesPage({ params }: { params: { region: strin
                           <div className="flex items-baseline gap-2">
                             {/* Kompakt indirim: yalnizca ustu-cizili referans + nihai fiyat (metin kalabaligi yok). */}
                             {hasSaving && (
-                              <span className="text-sm text-ink-muted line-through">{formatMoney(b.originalMinorUnit, region)}</span>
+                              <span className={`text-sm line-through ${flagship ? 'text-white/50' : 'text-ink-muted'}`}>{formatMoney(b.originalMinorUnit, region)}</span>
                             )}
-                            <span className="text-3xl font-extrabold text-ink">{formatMoney(b.amountMinorUnit, region)}</span>
-                            <span className="text-xs text-ink-muted">{t3('KDV Dahil', 'inkl. MwSt.', 'incl. tax')}</span>
+                            <span className={`text-3xl font-extrabold ${flagship ? 'text-white' : 'text-ink'}`}>{formatMoney(b.amountMinorUnit, region)}</span>
+                            <span className={`text-xs ${flagship ? 'text-white/50' : 'text-ink-muted'}`}>{t3('KDV Dahil', 'inkl. MwSt.', 'incl. tax')}</span>
                           </div>
-                          <div className="mt-1 text-[11px] text-ink-soft">
+                          <div className={`mt-1 text-[11px] ${flagship ? 'text-white/60' : 'text-ink-soft'}`}>
                             {t3('Ödeme sonrası kısa süre içinde başlar', 'Startet kurz nach der Zahlung', 'Starts shortly after payment')}
                           </div>
                         </>
@@ -486,7 +486,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                           href={`${API}/orders/sample-report/${b.key}?v=lansman1&region=${region.code}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-pill border border-line px-4 py-2.5 text-sm font-semibold text-ink-soft transition hover:border-brand hover:text-brand"
+                          className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-pill border px-4 py-2.5 text-sm font-semibold transition ${flagship ? 'border-white/25 text-white/80 hover:border-white hover:text-white' : 'border-line text-ink-soft hover:border-brand hover:text-brand'}`}
                         >
                           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
