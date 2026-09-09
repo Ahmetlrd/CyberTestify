@@ -77,7 +77,7 @@ export function TrustSection({ region }: { region: RegionConfig }) {
         { icon: 'card', t: 'Secure Payment', s: 'iyzico · 3D Secure · card data never stored by us' },
       ];
 
-  const sampleHref = `${API}/orders/sample-report/basit_tarama?v=trust1`;
+  const sampleHref = `${API}/orders/sample-report/basit_tarama/view?v=trust1`;
 
   return (
     <section id="guven" className="scroll-mt-20 border-t border-line bg-white py-20">

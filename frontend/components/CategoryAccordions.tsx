@@ -150,7 +150,7 @@ export function CategoryAccordions({
                           {tr ? 'Tahmini süre:' : 'Est. time:'} {tr ? cat.estTr : cat.estEn}
                         </div>
                         <a
-                          href={`${apiUrl}/orders/sample-report/${p.key}`}
+                          href={`${apiUrl}/orders/sample-report/${p.key}/view`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="mt-2.5 text-center text-xs font-semibold text-accent-600 underline underline-offset-2 hover:text-accent"
@@ -174,7 +174,7 @@ export function CategoryAccordions({
                           {tr ? 'Satın Al' : 'Buy Now'}
                         </Link>
                         <a
-                          href={`${apiUrl}/orders/sample-report/${p.key}`}
+                          href={`${apiUrl}/orders/sample-report/${p.key}/view`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="mt-2.5 text-center text-xs font-semibold text-accent-600 underline underline-offset-2 hover:text-accent"

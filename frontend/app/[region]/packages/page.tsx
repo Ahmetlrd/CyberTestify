@@ -254,7 +254,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                     {t3('Hemen Dene', 'Jetzt testen', 'Try Now')}
                   </Link>
                   <a
-                    href={`${API}/orders/sample-report/${basit.key}?v=lansman1&region=${region.code}`}
+                    href={`${API}/orders/sample-report/${basit.key}/view?v=lansman1&region=${region.code}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-pill border border-line px-4 py-2.5 text-sm font-semibold text-ink-soft transition hover:border-brand hover:text-brand"
@@ -484,7 +484,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
                           {t3('Satın Al', 'Jetzt kaufen', 'Buy Now')}
                         </Link>
                         <a
-                          href={`${API}/orders/sample-report/${b.key}?v=lansman1&region=${region.code}`}
+                          href={`${API}/orders/sample-report/${b.key}/view?v=lansman1&region=${region.code}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className={`mt-3 flex w-full items-center justify-center gap-1.5 rounded-pill border px-4 py-2.5 text-sm font-semibold transition ${flagship ? 'border-white/25 text-white/80 hover:border-white hover:text-white' : 'border-line text-ink-soft hover:border-brand hover:text-brand'}`}
@@ -583,7 +583,7 @@ export default async function PackagesPage({ params }: { params: { region: strin
               {sampleItems.map((c) => (
                 <a
                   key={c.key}
-                  href={`${API}/orders/sample-report/${c.key}?v=lansman1&region=${region.code}`}
+                  href={`${API}/orders/sample-report/${c.key}/view?v=lansman1&region=${region.code}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="card flex items-center gap-3 p-4 transition hover:-translate-y-0.5 hover:border-accent/60"

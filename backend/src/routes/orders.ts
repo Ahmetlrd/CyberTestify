@@ -166,6 +166,24 @@ ordersRouter.get('/sample-report/:packageKey', async (req, res) => {
   }
 });
 
+// (Örnek rapor SEKME görünümü) Ham PDF sekmesi about:blank + jenerik ikon gösteriyordu.
+// Bu route, PDF'i AYNI-origin bir <iframe> içinde gösteren küçük bir HTML sarmalayıcı döndürür:
+// sekme başlığı "CyberTestify | Örnek Rapor" (dile göre) + favicon (site logosu). CSP bu route için gevşetilir.
+ordersRouter.get('/sample-report/:packageKey/view', (req, res) => {
+  const allowed = ['tr', 'de', 'en', 'us', 'ae'];
+  const region = typeof req.query.region === 'string' && allowed.includes(req.query.region) ? req.query.region : 'tr';
+  const locale = localeFor(region);
+  const key = req.params.packageKey;
+  const v = typeof req.query.v === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(req.query.v) ? req.query.v : 'lansman1';
+  const pdfUrl = `/orders/sample-report/${encodeURIComponent(key)}?region=${encodeURIComponent(region)}&v=${encodeURIComponent(v)}`;
+  const title = M(locale, 'CyberTestify | Örnek Rapor', 'CyberTestify | Musterbericht', 'CyberTestify | Sample Report');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  // helmet varsayilan CSP'si iframe/inline-style/capraz-favicon'u engellerdi -> bu HTML icin gevset.
+  res.setHeader('Content-Security-Policy', "default-src 'self'; frame-src 'self'; img-src 'self' https://cybertestify.com data:; style-src 'unsafe-inline'");
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.send(`<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><link rel="icon" href="https://cybertestify.com/icon.svg" type="image/svg+xml"><style>html,body{margin:0;height:100%;background:#1b2b2a}iframe{width:100%;height:100%;border:0;display:block}</style></head><body><iframe src="${pdfUrl}" title="${title}"></iframe></body></html>`);
+});
+
 // (Faz 3) Siparise bagli Aktif Test Yetkilendirme Beyani PDF'i — kayittan re-render.
 ordersRouter.get('/:orderId/consent-pdf', requireAuth, async (req, res) => {
   const consent = await prisma.activeTestConsent.findUnique({
