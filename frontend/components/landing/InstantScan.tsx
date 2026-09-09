@@ -41,6 +41,7 @@ const IS = {
     nextTitle: 'Bir sonraki adım',
     nextSurface: 'Dış Yüzey & Yapılandırma',
     nextSurfaceHint: 'Yapılandırma ve başlık eksiklerini derinlemesine tarar, düzeltme kodları verir.',
+    getList: ['Her bulgunun platforma özel hazır düzeltme kodu', 'SSL/TLS, güvenlik başlıkları, DNS/e-posta, CORS/CSP detaylı raporu', 'İndirilebilir PDF + e-posta teslimi'],
     nextActive: 'Aktif Doğrulama',
     nextActiveHint: 'Login-sonrası ve aktif zafiyetleri gerçek problarla doğrular.',
     gapsFound: (n: number) => `Dış yüzeyinizde ${n} açık bulundu`,
@@ -116,6 +117,7 @@ const IS = {
     nextTitle: 'Nächster Schritt',
     nextSurface: 'Außenfläche & Konfiguration',
     nextSurfaceHint: 'Prüft Konfigurations- und Header-Lücken tiefgehend und liefert Fix-Codes.',
+    getList: ['Fertiger, plattformspezifischer Fix-Code für jeden Befund', 'Detailbericht: SSL/TLS, Sicherheits-Header, DNS/E-Mail, CORS/CSP', 'Herunterladbares PDF + E-Mail-Zustellung'],
     nextActive: 'Aktive Verifizierung',
     nextActiveHint: 'Verifiziert Post-Login- und aktive Schwachstellen mit echten Proben.',
     gapsFound: (n: number) => `${n} Lücken auf Ihrer Außenfläche gefunden`,
@@ -191,6 +193,7 @@ const IS = {
     nextTitle: 'Next step',
     nextSurface: 'External Surface & Config',
     nextSurfaceHint: 'Deep-scans configuration and header gaps and provides fix codes.',
+    getList: ['Ready-made, platform-specific fix code for each finding', 'Detailed report: SSL/TLS, security headers, DNS/email, CORS/CSP', 'Downloadable PDF + email delivery'],
     nextActive: 'Active Verification',
     nextActiveHint: 'Verifies post-login and active vulnerabilities with real probes.',
     gapsFound: (n: number) => `${n} gaps found on your external surface`,
@@ -659,7 +662,12 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                   <Link href={`${packagesHref}?focus=bundle_surface${domainQ}`} className="flex flex-col gap-1.5 rounded-card border-[1.5px] border-accent bg-accent-soft/40 p-3 transition hover:brightness-[0.98]">
                     <span className="text-[10px] font-extrabold uppercase tracking-wide text-accent-600">{ok.clean ? L.recommended : L.coversGaps(ok.total)}</span>
                     <span className="text-[13px] font-bold text-ink">{L.nextSurface}</span>
-                    <span className="flex-1 text-[11px] leading-snug text-ink-soft">{L.nextSurfaceHint}</span>
+                    <span className="text-[11px] leading-snug text-ink-soft">{L.nextSurfaceHint}</span>
+                    <ul className="flex-1 space-y-1">
+                      {L.getList.map((it: string) => (
+                        <li key={it} className="flex gap-1.5 text-[11px] leading-snug text-ink-soft"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="mt-0.5 shrink-0 text-accent-600" aria-hidden><path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg><span>{it}</span></li>
+                      ))}
+                    </ul>
                     <span className="mt-1 inline-flex items-center justify-center rounded-lg bg-accent px-3 py-2 text-xs font-bold text-ink">{L.viewPackage}</span>
                   </Link>
                   <Link href={`${packagesHref}?focus=bundle_active_verify${domainQ}`} className="flex flex-col gap-1.5 rounded-card border border-line bg-white p-3 transition hover:border-ink-soft">
