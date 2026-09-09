@@ -16,7 +16,7 @@ let scriptLoading = false;
 export type TurnstileHandle = { reset: () => void };
 
 /**
- * Yeniden kullanılabilir Turnstile widget'ı (bot doğrulaması). GÖRÜNÜR bir kutu render eder; çözülünce
+ * Yeniden kullanılabilir Turnstile widget'ı (bot doğrulaması). Normalde GÖRÜNMEZ (interaction-only); yalnız Cloudflare interaksiyon isterse görünür. Çözülünce
  * `onToken(token)` çağırır (süresi dolunca/hata olunca null). Parent, token gelene kadar submit'i
  * KİLİTLEMELİDİR (aksi halde token'sız istek 403 → "kutucuk yok" hissi). ref.reset() ile tek-kullanımlık
  * token yenilenir (tarama sonrası).
@@ -46,6 +46,7 @@ export const Turnstile = forwardRef<TurnstileHandle, { onToken: (t: string | nul
             sitekey: SITE_KEY,
             action,
             theme: 'auto',
+            appearance: 'interaction-only', // (MOBİL #5) yalnız gerçekten gerekince görünür; normal kullanıcıda GÖRÜNMEZ (token+bot koruması aynen)
             language: lg === 'de' ? 'de' : lg === 'en' ? 'en' : 'tr', // (çok-bölge) widget dili
 
             callback: (t: string) => onTokenRef.current(t),
@@ -82,6 +83,6 @@ export const Turnstile = forwardRef<TurnstileHandle, { onToken: (t: string | nul
       };
     }, [action]);
 
-    return <div ref={host} className="min-h-[65px]" />;
+    return <div ref={host} className="empty:hidden" />;
   },
 );
