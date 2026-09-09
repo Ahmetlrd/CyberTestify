@@ -212,7 +212,7 @@ async function Hero({ d, region }: { d: Dict; region: RegionConfig }) {
         className="pointer-events-none absolute -right-40 -top-40 h-96 w-96 rounded-full opacity-30 blur-3xl"
         style={{ background: 'radial-gradient(circle, #1C6B60, transparent 70%)' }}
       />
-      <div className="container-page relative py-20 sm:py-28">
+      <div className="container-page relative py-14 sm:py-20">
         <div className="mx-auto max-w-3xl text-center">
           <span className="badge animate-fade-up border-white/15 bg-white/10 text-white/85">
             <span className="h-1.5 w-1.5 rounded-full bg-accent" /> {d.hero.badge}
@@ -264,7 +264,7 @@ async function Hero({ d, region }: { d: Dict; region: RegionConfig }) {
 function ProblemSection({ d }: { d: Dict }) {
   return (
     <section className="border-b border-line bg-white">
-      <div className="container-page py-16 sm:py-20">
+      <div className="container-page py-12 sm:py-16">
         <div className="mx-auto max-w-2xl text-center">
           <p className="eyebrow">{d.problem.eyebrow}</p>
           <h2 className="mt-3 text-3xl font-extrabold text-brand sm:text-4xl">{d.problem.title}</h2>
@@ -292,7 +292,7 @@ const STEP_ICONS = [
 
 function HowItWorks({ d }: { d: Dict }) {
   return (
-    <section id="nasil-calisir" className="container-page scroll-mt-20 py-20">
+    <section id="nasil-calisir" className="container-page scroll-mt-20 py-14">
       <div className="mx-auto max-w-2xl text-center">
         <p className="eyebrow">{d.steps.eyebrow}</p>
         <h2 className="mt-3 text-3xl font-extrabold text-brand sm:text-4xl">{d.steps.title}</h2>
@@ -323,7 +323,7 @@ const WHY_ICONS = [
 
 function WhyUs({ d }: { d: Dict }) {
   return (
-    <section id="neden-biz" className="scroll-mt-20 bg-brand-50/60 py-20">
+    <section id="neden-biz" className="scroll-mt-20 bg-brand-50/60 py-14">
       <div className="container-page">
         <div className="mx-auto max-w-2xl text-center">
           <p className="eyebrow">{d.why.eyebrow}</p>
@@ -364,7 +364,7 @@ function SolutionSection({ region }: { region: RegionConfig }) {
     ? ['Her bulgu için platformunuza özel, hazır düzeltme kodu', 'Nginx · Apache · IIS · Vercel · Cloudflare…', 'Kopyala–yapıştır uygula, dakikalar içinde kapat']
     : ['Ready-to-apply fix code for every finding', 'Nginx · Apache · IIS · Vercel · Cloudflare…', 'Copy–paste and close the gap in minutes'];
   return (
-    <section id="cozum" className="scroll-mt-20 bg-gradient-to-b from-brand-50/50 to-white py-20">
+    <section id="cozum" className="scroll-mt-20 bg-gradient-to-b from-brand-50/50 to-white py-14">
       <div className="container-page">
         <div className="mx-auto max-w-2xl text-center">
           <p className="eyebrow">{pick3(region.lang, 'Bizi ayıran şey', 'Was uns auszeichnet', 'What sets us apart')}</p>
@@ -435,7 +435,7 @@ add_header Content-Security-Policy "default-src 'self'" always;`}
 
 function FinalCTA({ d, region }: { d: Dict; region: RegionConfig }) {
   return (
-    <section className="container-page py-8 pb-20">
+    <section className="container-page py-8 pb-14">
       <div className="relative overflow-hidden rounded-[20px] bg-brand-deep px-8 py-14 text-center text-white">
         <div className="pointer-events-none absolute inset-0" style={DOT_BG} />
         <div className="relative">
@@ -468,7 +468,7 @@ function Faq({ region }: { region: RegionConfig }) {
   };
   return (
     <section className="border-t border-line bg-white">
-      <div className="container-page py-16 sm:py-20">
+      <div className="container-page py-12 sm:py-16">
         <div className="mx-auto max-w-3xl">
           <p className="eyebrow text-center">{pick3(region.lang, 'Sık Sorulan Sorular', 'Häufige Fragen', 'FAQ')}</p>
           <h2 className="mt-2 text-center text-2xl font-extrabold text-brand sm:text-3xl">
