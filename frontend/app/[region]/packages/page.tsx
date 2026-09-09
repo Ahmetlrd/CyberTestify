@@ -196,15 +196,15 @@ export default async function PackagesPage({ params }: { params: { region: strin
   return (
     <>
       {serviceItems.length > 0 && <JsonLd data={servicesLd} />}
-      <section className="relative overflow-hidden bg-gradient-to-b from-brand-deep to-brand pt-20 pb-32 text-white sm:pt-24 sm:pb-40">
-        <div aria-hidden className="pointer-events-none absolute left-1/2 top-[-160px] h-[440px] w-[720px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(245,166,35,0.18),transparent_65%)]" />
+      <section className="relative overflow-hidden bg-gradient-to-b from-brand-deep to-brand pt-16 pb-32 text-white sm:pt-20 sm:pb-40">
+        <div aria-hidden className="pointer-events-none absolute left-1/2 top-[-200px] h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(245,166,35,0.2),transparent_65%)]" />
         <div className="container-page relative text-center">
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">{d.eyebrow}</p>
-          <h1 className="mx-auto mt-3 max-w-2xl text-4xl font-extrabold tracking-tight sm:text-5xl">{d.title}</h1>
-          <p className="mx-auto mt-4 max-w-xl text-lg leading-relaxed text-white/70">{d.subtitle}</p>
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
+          <h1 className="mx-auto mt-3.5 max-w-3xl text-[34px] font-extrabold leading-[1.08] tracking-[-0.02em] sm:text-[46px]">{d.title}</h1>
+          <p className="mx-auto mt-3 max-w-[480px] text-base leading-relaxed text-white/70">{d.subtitle}</p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
             {d.trust.map((t) => (
-              <span key={t} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-white/85">
+              <span key={t} className="inline-flex items-center gap-2 rounded-full border border-white/[0.18] bg-white/[0.06] px-3.5 py-1.5 text-[12.5px] font-semibold text-white/85">
                 <span className="h-1.5 w-1.5 rounded-full bg-accent" />{t}
               </span>
             ))}
