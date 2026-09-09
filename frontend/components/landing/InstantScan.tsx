@@ -48,6 +48,9 @@ const IS = {
     ratedHigh: (n: number) => `${n} tanesi YÜKSEK riskli`,
     summaryNote: 'Bu ekran özeti gösterir. Tam rapor her açığı ve nasıl kapatılacağını anlatır.',
     coverageNote: 'Bu skor yalnızca dışarıdan görülebilen kontrolleri (güvenlik başlıkları, SSL/TLS, sunucu/teknoloji ifşası) kapsar; login-sonrası alanlar ve API dahil değildir.',
+    coverTitle: 'Bu taramanın kapsamı', layerUnit: 'katman',
+    layers: ['HTTP başlıkları', 'SSL/TLS', 'Sunucu ifşası', 'DNS & e-posta', 'CORS / CSP derin', 'Login sonrası', 'API güvenliği', 'Enjeksiyon / IDOR', 'İş mantığı'],
+    coverNoteBottom: 'Gri katmanlar bu taramada hiç kontrol edilmedi — gerçek ihlallerin büyük çoğunluğu bu katmanlarda başlar.',
     emailBtnFull: 'Tam PDF raporumu gönder',
     emailReassure: 'Ücretsiz · ~1 dk içinde gelir · kart yok, satış görüşmesi yok',
     topFindings: 'Öne çıkan bulgular',
@@ -124,6 +127,9 @@ const IS = {
     ratedHigh: (n: number) => `${n} als HOCH eingestuft`,
     summaryNote: 'Diese Ansicht zeigt die Zusammenfassung. Der vollständige Bericht erklärt jede Lücke und wie man sie behebt.',
     coverageNote: 'Dieser Score umfasst nur von außen sichtbare Prüfungen (Sicherheits-Header, SSL/TLS, Server-/Technologie-Offenlegung); Post-Login-Bereiche und API sind nicht enthalten.',
+    coverTitle: 'Umfang dieses Scans', layerUnit: 'Ebenen',
+    layers: ['HTTP-Header', 'SSL/TLS', 'Server-Offenlegung', 'DNS & E-Mail', 'CORS / CSP tief', 'Nach dem Login', 'API-Sicherheit', 'Injektion / IDOR', 'Geschäftslogik'],
+    coverNoteBottom: 'Graue Ebenen wurden in diesem Scan nicht geprüft — die meisten echten Sicherheitsvorfälle beginnen genau dort.',
     emailBtnFull: 'Vollständigen PDF-Bericht senden',
     emailReassure: 'Kostenlos · in ~1 Min · keine Karte, kein Verkaufsgespräch',
     topFindings: 'Wichtigste Funde',
@@ -200,6 +206,9 @@ const IS = {
     ratedHigh: (n: number) => `${n} rated HIGH`,
     summaryNote: 'This page shows the summary. The full report explains each gap and how to fix it.',
     coverageNote: 'This score covers only externally-visible checks (security headers, SSL/TLS, server/tech disclosure); post-login areas and the API are not included.',
+    coverTitle: 'What this scan covers', layerUnit: 'layers',
+    layers: ['HTTP headers', 'SSL/TLS', 'Server disclosure', 'DNS & email', 'CORS / CSP deep', 'Post-login', 'API security', 'Injection / IDOR', 'Business logic'],
+    coverNoteBottom: 'The grey layers were not checked in this scan — the vast majority of real breaches start there.',
     emailBtnFull: 'Send my full PDF report',
     emailReassure: 'Free · arrives in ~1 min · no card, no sales call',
     topFindings: 'Top findings',
@@ -580,8 +589,28 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
                       )}
                     </p>
                     <p className="mt-1 text-xs leading-relaxed text-white/65">{ok.clean ? L.cleanBody : L.summaryNote}</p>
-                    <p className="mt-1.5 text-[11px] leading-relaxed text-white/45">{L.coverageNote}</p>
                   </div>
+                </div>
+                {/* (Mockup) KAPSAM PANELI — 9 katman; ucretsiz tarama GERCEKTE ilk 3'unu (baslik/SSL/ifsa) kontrol eder. */}
+                <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.06] p-3.5 sm:p-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-[13px] font-bold">{L.coverTitle}</span>
+                    <span className="shrink-0 font-mono text-[11px] font-semibold text-accent">3/{L.layers.length} {L.layerUnit}</span>
+                  </div>
+                  <div className="mt-2.5 flex gap-1">
+                    {L.layers.map((_: string, i: number) => (
+                      <div key={i} className={`h-1.5 flex-1 rounded-full ${i < 3 ? 'bg-accent' : 'bg-white/15'}`} />
+                    ))}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {L.layers.map((name: string, i: number) => (
+                      <span key={name} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${i < 3 ? 'border-accent/40 bg-accent/15 text-accent' : 'border-white/10 bg-white/[0.04] text-white/45'}`}>
+                        {i < 3 ? (<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" aria-hidden><path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>) : (<span aria-hidden className="text-white/40">·</span>)}
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[12px] leading-relaxed text-white/65">{L.coverNoteBottom}</p>
                 </div>
                 {/* E-posta formu — dark box İÇİNDE (rapor hazır olunca indir butonuna döner) */}
                 <div className="mt-4">
