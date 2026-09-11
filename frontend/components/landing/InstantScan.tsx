@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api, type InstantScanResult } from '../../lib/api';
-import { Turnstile, type TurnstileHandle } from '../Turnstile';
+import { Turnstile, type TurnstileHandle, type TurnstileStatus } from '../Turnstile';
 import { readRegionCookie } from '../../lib/region';
 import { getRegion } from '../../config/regions';
 
@@ -12,7 +12,8 @@ const IS = {
   tr: {
     heading: 'Sitenizi ücretsiz, anında tarayın',
     sub: 'Saniyeler içinde bir güvenlik skoru ve öne çıkan eksikleri görün — kart/kayıt gerekmez.',
-    scan: 'Ücretsiz Tara', waiting: 'Doğrulama bekleniyor…',
+    scan: 'Ücretsiz Tara', waiting: 'Doğrulama bekleniyor…', retryVerify: 'Tekrar dene',
+    botHint: 'Bot doğrulaması takıldı — aşağıdaki kutucuğu işaretleyin ya da “Tekrar dene”ye basın.',
     errDomain: 'Bir alan adı girin (ör. example.com).',
     scanPh: 'firmaniz.com',
     suggestLead: 'Bunu mu demek istediniz?',
@@ -100,7 +101,8 @@ const IS = {
   de: {
     heading: 'Scannen Sie Ihre Website kostenlos und sofort',
     sub: 'Sehen Sie in Sekunden einen Sicherheits-Score und die wichtigsten Schwachstellen — ohne Karte oder Registrierung.',
-    scan: 'Kostenlos scannen', waiting: 'Verifizierung ausstehend…',
+    scan: 'Kostenlos scannen', waiting: 'Verifizierung ausstehend…', retryVerify: 'Erneut versuchen',
+    botHint: 'Die Bot-Prüfung hängt — bitte das Kästchen unten anklicken oder auf „Erneut versuchen“ tippen.',
     errDomain: 'Geben Sie eine Domain ein (z. B. example.com).',
     scanPh: 'ihre-firma.de',
     suggestLead: 'Meinten Sie?',
@@ -188,7 +190,8 @@ const IS = {
   en: {
     heading: 'Scan your website for free, instantly',
     sub: 'See a security score and the top gaps in seconds — no card or sign-up required.',
-    scan: 'Scan for free', waiting: 'Awaiting verification…',
+    scan: 'Scan for free', waiting: 'Awaiting verification…', retryVerify: 'Try again',
+    botHint: 'The bot check got stuck — tick the box below or hit “Try again”.',
     errDomain: 'Enter a domain (e.g. example.com).',
     scanPh: 'yourcompany.com',
     suggestLead: 'Did you mean?',
@@ -389,6 +392,7 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
   const [url, setUrl] = useState('');
   const [website, setWebsite] = useState(''); // HONEYPOT
   const [token, setToken] = useState<string | null>(null);
+  const [tsStatus, setTsStatus] = useState<TurnstileStatus>('loading');
   const [state, setState] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
   // (İŞ 2) Login DEĞİLSE post-tarama satın-alma CTA'ları soğuk ziyaretçiyi doğrudan ödeme/register'a
   // itmesin → /paketler'e yönlendir; login İSE akış eskisi gibi (verify) devam eder. SSR uyumu için mount'ta okunur.
@@ -440,7 +444,10 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
     setError(null); setResult(null); setReachFail(false); setPhase(-1); setSuggest(null);
     const v = raw.trim();
     if (!v) { setError(L.errDomain); return; }
-    if (!token) { setError(L.errToken); return; }
+    if (!token) {
+      if (tsStatus === 'error') { setError(null); setTsStatus('loading'); turnstile.current?.retry(); return; }
+      setError(L.errToken); return;
+    }
     setState('scanning');
     // (GERÇEK TARAMA — terminal) Fazları GERÇEK Basit Tarama SÜRESİNCE ilerlet: yanıt gelene kadar her ~850ms
     // bir satır büyür (son fazda bekler). Yanıt gelince durur. Böylece süre sahte değil, gerçek taramaya bağlı.
@@ -547,11 +554,17 @@ export function InstantScan({ lang: langProp, regionCode: regionCodeProp, priceB
               <input type="text" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder={L.scanPh} className="field w-full pl-[68px]" aria-label={L.aria} />
             </div>
             <input type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} className="hidden" aria-hidden />
-            <button type="submit" disabled={!token || !url.trim()} className="btn-primary shrink-0 justify-center disabled:cursor-not-allowed disabled:opacity-60">
-              {token ? L.scan : L.waiting}
+            <button type="submit" disabled={!url.trim() || (!token && tsStatus !== 'error')} className="btn-primary shrink-0 justify-center disabled:cursor-not-allowed disabled:opacity-60">
+              {token ? L.scan : tsStatus === 'error' ? L.retryVerify : L.waiting}
             </button>
           </div>
-          <div className="mt-3"><Turnstile ref={turnstile} onToken={setToken} action="instant-scan" /></div>
+          <div className="mt-3"><Turnstile ref={turnstile} onToken={setToken} onStatus={setTsStatus} action="instant-scan" /></div>
+          {tsStatus === 'error' && !token && (
+            <p className="mt-2 flex items-start gap-1.5 text-[12px] font-medium text-amber-700">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="mt-px shrink-0" aria-hidden><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              <span>{L.botHint}</span>
+            </p>
+          )}
           {error && <p className="mt-2 text-sm font-medium text-red-600">{error}</p>}
           {suggest && (
             <p className="mt-2 text-sm text-ink-soft">
