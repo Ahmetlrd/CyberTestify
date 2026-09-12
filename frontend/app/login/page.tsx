@@ -23,6 +23,7 @@ const T = {
     verify: 'Doğrula ve gir', verifying: 'Doğrulanıyor…', back: '← Geri',
     recoveryUse: 'Telefonum yok — kurtarma kodu gir', recoveryBack: '← Authenticator kodu kullan', recoveryHint: 'Bir kurtarma kodunuzu girin.',
     errUnexpected: 'Beklenmeyen yanıt.',
+    sessionExpired: 'Güvenliğiniz için oturumunuz sonlandırıldı. Kaldığınız yerden devam etmek için lütfen tekrar giriş yapın.',
   },
   de: {
     title: 'Anmelden', subtitle: 'Greifen Sie auf Ihr Konto zu und verwalten Sie Ihren Scan.',
@@ -35,6 +36,7 @@ const T = {
     verify: 'Bestätigen und anmelden', verifying: 'Wird überprüft…', back: '← Zurück',
     recoveryUse: 'Kein Telefon — Wiederherstellungscode eingeben', recoveryBack: '← Authenticator-Code verwenden', recoveryHint: 'Geben Sie einen Wiederherstellungscode ein.',
     errUnexpected: 'Unerwartete Antwort.',
+    sessionExpired: 'Aus Sicherheitsgründen wurde Ihre Sitzung beendet. Bitte melden Sie sich erneut an, um dort weiterzumachen, wo Sie aufgehört haben.',
   },
   en: {
     title: 'Sign in', subtitle: 'Access your account and manage your scan.',
@@ -47,6 +49,7 @@ const T = {
     verify: 'Verify and sign in', verifying: 'Verifying…', back: '← Back',
     recoveryUse: 'No phone — enter a recovery code', recoveryBack: '← Use authenticator code', recoveryHint: 'Enter one of your recovery codes.',
     errUnexpected: 'Unexpected response.',
+    sessionExpired: 'For your security, your session has ended. Please sign in again to pick up where you left off.',
   },
 } as const;
 
@@ -68,6 +71,18 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [expiredNotice, setExpiredNotice] = useState(false);
+  // (OTURUM BİTTİ) api.ts, oturumu düşen kullanıcı için bayrak koyar → burada bir kez göster + temizle.
+  useEffect(() => {
+    try { if (window.sessionStorage.getItem('sess_expired')) { setExpiredNotice(true); window.sessionStorage.removeItem('sess_expired'); } } catch { /* noop */ }
+  }, []);
+  // Giriş sonrası hedef: açık ?next > kaldığı sayfa (sess_return) > /verify.
+  function postLoginDest(): string {
+    const explicit = sp.get('next');
+    if (explicit) return explicit;
+    try { const r = window.sessionStorage.getItem('sess_return'); if (r) { window.sessionStorage.removeItem('sess_return'); return r; } } catch { /* noop */ }
+    return '/verify';
+  }
   // (2FA) 2FA açık müşteride ikinci adım: stage token + kod.
   const [twofa, setTwofa] = useState<{ stageToken: string } | null>(null);
   const [code, setCode] = useState('');
@@ -88,7 +103,7 @@ export default function LoginPage() {
     try {
       const r = await api.login(email, password);
       if (r.twofaRequired && r.stageToken) { setTwofa({ stageToken: r.stageToken }); setBusy(false); return; }
-      if (r.token) { window.localStorage.setItem('token', r.token); router.push(next); return; }
+      if (r.token) { window.localStorage.setItem('token', r.token); router.push(postLoginDest()); return; }
       setError(t.errUnexpected); setBusy(false);
     } catch (err: any) {
       setError(err.message);
@@ -102,12 +117,18 @@ export default function LoginPage() {
     try {
       const { token } = await api.login2fa(twofa!.stageToken, code.trim());
       window.localStorage.setItem('token', token);
-      router.push(next);
+      router.push(postLoginDest());
     } catch (err: any) { setError(err.message); setBusy(false); }
   }
 
   return (
     <main className="container-page max-w-md py-16">
+      {expiredNotice && (
+        <div className="mb-5 flex items-start gap-2.5 rounded-card border border-amber-300 bg-amber-50 px-4 py-3.5">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-px shrink-0 text-amber-600" aria-hidden><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+          <p className="text-[13px] font-medium leading-snug text-amber-900">{t.sessionExpired}</p>
+        </div>
+      )}
       {twofa ? (
         <div className="card p-8">
           <h1 className="text-2xl font-extrabold text-brand">{t.twofaTitle}</h1>

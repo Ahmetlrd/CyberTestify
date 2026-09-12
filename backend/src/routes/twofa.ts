@@ -47,7 +47,7 @@ twofaRouter.post('/login-verify', async (req, res) => {
     return res.status(401).json({ error: ls.lockedUntil ? M(l, 'Çok fazla hatalı kod; hesap geçici olarak kilitlendi.', 'Zu viele falsche Codes; Konto vorübergehend gesperrt.', 'Too many incorrect codes; account temporarily locked.') : M(l, 'Kod hatalı.', 'Code ist falsch.', 'The code is incorrect.') });
   }
   await prisma.customer.update({ where: { id: c.id }, data: { twofaFailedAttempts: 0, twofaLockedUntil: null, ...(recoveryBlob ? { twofaRecoveryCodes: recoveryBlob } : {}) } });
-  res.json({ token: jwt.sign({ sub: c.id }, config.jwtSecret, { expiresIn: '7d' }) });
+  res.json({ token: jwt.sign({ sub: c.id }, config.jwtSecret, { expiresIn: '90d' }) });
 });
 
 // ——— Durum ———

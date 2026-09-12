@@ -127,7 +127,17 @@ async function request<T>(path: string, options: RequestInit & { timeoutMs?: num
     // Nav "giriş yapılmış" sanıp her istekte "geçersiz/süresi dolmuş oturum" döngüsüne girmesin.
     // Login/register 401'i (yanlış şifre) hariç — orada zaten token yok.
     if (res.status === 401 && typeof window !== 'undefined' && !path.startsWith('/auth/login') && !path.startsWith('/auth/register')) {
+      const hadToken = !!window.localStorage.getItem('token');
       window.localStorage.removeItem('token');
+      // (OTURUM BİTTİ — UX) Gerçekten oturumu VARDI da düştüyse: login'de düzgün, çok-dilli bir
+      // bildirim gösterebilmek + kullanıcıyı kaldığı sayfaya geri döndürebilmek için işaretle.
+      if (hadToken) {
+        try {
+          window.sessionStorage.setItem('sess_expired', '1');
+          const loc = window.location.pathname + window.location.search;
+          if (!/\/(login|register)/.test(loc)) window.sessionStorage.setItem('sess_return', loc);
+        } catch { /* noop */ }
+      }
     }
     const body = await res.json().catch(() => ({}));
     const msg = friendlyError(body, res.status);

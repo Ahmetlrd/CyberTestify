@@ -89,7 +89,7 @@ authRouter.post('/register', async (req, res) => {
       const existing = await prisma.customer.findUnique({ where: { email: parsed.data.email } });
       if (existing && (await bcrypt.compare(parsed.data.password, existing.passwordHash))) {
         // Mevcut hesap — dogrulama akisi ETKILEMEZ (eski hesaplar migration ile verified).
-        const token = jwt.sign({ sub: existing.id }, config.jwtSecret, { expiresIn: '7d' });
+        const token = jwt.sign({ sub: existing.id }, config.jwtSecret, { expiresIn: '90d' });
         return res.json({ token, autoLogin: true, emailVerified: existing.emailVerified });
       }
       // Sifre yanlis -> mevcut dostane mesaj (degistirilmedi).
@@ -100,7 +100,7 @@ authRouter.post('/register', async (req, res) => {
 
   // YENI hesap — emailVerified=false (schema varsayilani). 6 haneli dogrulama kodu gonder.
   await issueEmailVerification(customer.id, customer.email);
-  const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '7d' });
+  const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '90d' });
   res.json({ token, emailVerified: false });
 });
 
@@ -120,7 +120,7 @@ authRouter.post('/login', async (req, res) => {
     return res.json({ twofaRequired: true, stageToken });
   }
 
-  const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '7d' });
+  const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '90d' });
   res.json({ token });
 });
 
@@ -162,7 +162,7 @@ authRouter.post('/reset-password', async (req, res) => {
     data: { passwordHash, resetTokenHash: null, resetTokenExpiry: null }, // token TEK KULLANIMLIK
   });
   // Surtunmesiz: yeni sifreyle otomatik giris token'i.
-  const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '7d' });
+  const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '90d' });
   return res.json({ ok: true, token });
 });
 
@@ -309,7 +309,7 @@ authRouter.get('/google/callback', async (req, res) => {
       const stageToken = jwt.sign({ sub: customer.id, typ: 'cust-2fa' }, config.jwtSecret, { expiresIn: '10m' });
       return res.redirect(`${config.frontendUrl}/auth/google/done#twofa=1&stageToken=${stageToken}&next=${encodeURIComponent(next)}`);
     }
-    const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '7d' });
+    const token = jwt.sign({ sub: customer.id }, config.jwtSecret, { expiresIn: '90d' });
     // Token'i FRAGMENT ile frontend origin'ine tasi (localStorage orada). Query DEGIL → sunucu
     // loglarina / Referer'a sizmaz. Kucuk bir sayfa token'i saklayip 'next'e yonlendirir.
     return res.redirect(`${config.frontendUrl}/auth/google/done#token=${token}&next=${encodeURIComponent(next)}`);
