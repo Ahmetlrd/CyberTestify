@@ -30,16 +30,24 @@ function msgOf(e: unknown): string {
 
 
 // --- Baglanti durumu: kanal bagli mi, anahtar var mi ------------------------------------------
+// (429 KORUMASI) Sonucu TTL ile cache'le — panel her acilista/yenilemede Buffer'i dovmesin. Basari
+// uzun (5dk), hata KISA (60sn) tutulur ki cozulunce panel hizli yansisin.
+let statusCache: { at: number; ttl: number; body: any } | null = null;
 adminLinkedinRouter.get('/status', async (_req, res) => {
   if (!bufferEnabled()) {
     return res.json({ enabled: false, error: 'BUFFER_API_KEY tanımlı değil — sunucu .env dosyasına ekleyin.' });
   }
+  if (statusCache && Date.now() - statusCache.at < statusCache.ttl) return res.json(statusCache.body);
   try {
     const t = await resolveLinkedInTarget();
     // NOT: organizationId/channelId hassas sir DEGIL; API anahtari ASLA donmez.
-    res.json({ enabled: true, channelId: t.channelId, channelName: t.channelName, organizationId: t.organizationId });
+    const body = { enabled: true, channelId: t.channelId, channelName: t.channelName, organizationId: t.organizationId };
+    statusCache = { at: Date.now(), ttl: 5 * 60 * 1000, body };
+    res.json(body);
   } catch (e) {
-    res.json({ enabled: false, error: msgOf(e) });
+    const body = { enabled: false, error: msgOf(e) };
+    statusCache = { at: Date.now(), ttl: 60 * 1000, body };
+    res.json(body);
   }
 });
 

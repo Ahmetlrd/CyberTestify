@@ -50,6 +50,8 @@ async function gql<T>(query: string, variables?: Record<string, unknown>): Promi
     clearTimeout(timer);
   }
   const body = (await res.json().catch(() => null)) as any;
+  // 429 = Buffer istek siniri. Dostca + KISA mesaj; cagiran katman cooldown uygular (retry firtinasi yok).
+  if (res.status === 429) throw new BufferError('Buffer geçici istek sınırına ulaştı (429). Birkaç dakika içinde kendiliğinden düzelir.');
   if (!res.ok || !body) throw new BufferError(`Buffer API hatası (HTTP ${res.status}).`);
   if (Array.isArray(body.errors) && body.errors.length) {
     throw new BufferError(String(body.errors[0]?.message ?? 'Buffer API hatası.'));
@@ -59,10 +61,28 @@ async function gql<T>(query: string, variables?: Record<string, unknown>): Promi
 
 // --- Organizasyon + kanal ID'leri: bir kere cozulup CACHE'lenir (sik degismez) ----------------
 let cached: { organizationId: string; channelId: string; channelName: string } | null = null;
+// (429/HATA KORUMASI) Cozumleme basarisiz olursa KISA sure Buffer'i TEKRAR dovme — ayni hatayi don.
+// Boylece admin paneli birden cok kez /status cagirsa bile Buffer'a tek istek gider (rate-limit beslenmez).
+let resolveCooldownUntil = 0;
+let lastResolveError: BufferError | null = null;
 
 export async function resolveLinkedInTarget(force = false): Promise<{ organizationId: string; channelId: string; channelName: string }> {
   if (cached && !force) return cached;
+  if (!force && lastResolveError && Date.now() < resolveCooldownUntil) throw lastResolveError;
+  try {
+    const out = await resolveLinkedInTargetInner();
+    cached = out; lastResolveError = null;
+    return out;
+  } catch (e) {
+    const err = e instanceof BufferError ? e : new BufferError('Buffer bağlantısı çözümlenemedi.');
+    lastResolveError = err;
+    // 429/gecici hatada 90sn, diger hatalarda 30sn boyunca Buffer'a tekrar gidilmez.
+    resolveCooldownUntil = Date.now() + (/\b429\b/.test(err.message) ? 90_000 : 30_000);
+    throw err;
+  }
+}
 
+async function resolveLinkedInTargetInner(): Promise<{ organizationId: string; channelId: string; channelName: string }> {
   // env'de sabitlenmisse hic sorgulama (deploy'da tek kaynak).
   let organizationId = config.buffer.organizationId;
   if (!organizationId) {
@@ -90,8 +110,7 @@ export async function resolveLinkedInTarget(force = false): Promise<{ organizati
     channelName = li.name;
   }
 
-  cached = { organizationId, channelId, channelName };
-  return cached;
+  return { organizationId, channelId, channelName };
 }
 
 // --- Post olusturma ---------------------------------------------------------------------------
