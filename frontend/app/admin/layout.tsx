@@ -30,7 +30,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (isLogin) { setReady(true); return; }
-    if (typeof window !== 'undefined' && !window.localStorage.getItem(ADMIN_TOKEN_KEY)) {
+    // (TEMIZ YONLENDIRME) Token YOK ya da SURESI DOLMUS ise paneli hic gosterme -> dogrudan login.
+    // Boylece "panel acilir, ilk tiklamada 401 -> at" sarsintisi olmaz. exp claim'i istemcide okunur;
+    // guvenlik yine SUNUCUDA (requireAdmin) — bu yalniz UX.
+    const tok = typeof window !== 'undefined' ? window.localStorage.getItem(ADMIN_TOKEN_KEY) : null;
+    const expired = (() => {
+      if (!tok) return true;
+      try { const p = JSON.parse(atob(tok.split('.')[1] || '')); return typeof p.exp === 'number' && p.exp * 1000 <= Date.now(); } catch { return false; }
+    })();
+    if (expired) {
+      try { window.localStorage.removeItem(ADMIN_TOKEN_KEY); } catch { /* noop */ }
       router.replace('/admin/login');
       return;
     }

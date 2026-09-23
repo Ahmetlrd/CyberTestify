@@ -20,7 +20,7 @@ export const adminAuthRouter = Router();
 
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(8) });
 // Admin oturum omru — kayan yenileme ile birlikte kullanilir (requireAdmin).
-export const ADMIN_SESSION_TTL = '7d';
+export const ADMIN_SESSION_TTL = '30d';
 
 const STAGE_TTL = '10m';
 

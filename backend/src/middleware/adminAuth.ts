@@ -17,7 +17,7 @@ declare global {
  * (jwtSecret ile imzali, typ yok) burada IKI kez basarisiz olur: (1) imza farkli
  * secret'la dogrulanamaz, (2) typ !== 'admin'.
  */
-const HALF_TTL_SEC = 3.5 * 24 * 60 * 60; // 7 gunluk omrun yarisi
+const HALF_TTL_SEC = 15 * 24 * 60 * 60; // 30 gunluk omrun yarisi (aktif kullanimda oturum hic dusmez)
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const header = req.header('authorization');
@@ -33,7 +33,7 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
       const now = Math.floor(Date.now() / 1000);
       const remaining = (payload.exp ?? 0) - now;
       if (remaining > 0 && remaining < HALF_TTL_SEC) {
-        res.setHeader('X-Admin-Token-Refresh', jwt.sign({ sub: payload.sub, typ: 'admin' }, config.adminJwtSecret, { expiresIn: '7d' }));
+        res.setHeader('X-Admin-Token-Refresh', jwt.sign({ sub: payload.sub, typ: 'admin' }, config.adminJwtSecret, { expiresIn: '30d' }));
       }
     } catch { /* yenileme basarisizsa mevcut oturum aynen devam eder */ }
     next();
